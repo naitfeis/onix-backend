@@ -1,0 +1,90 @@
+// schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+/// 🟢 Статусы заказов
+enum OrderStatus {
+  PENDING // Заказ сформирован, деньги не списаны
+  PAYMENT_HOLD // Средства заблокированы (эскроу)
+  DELIVERING // Продавец отправил товар
+  COMPLETED // Сделка завершена
+  CANCELED // Отказ покупателя
+  DISPUTE // Спорная ситуация
+  REFUNDED // Возврат денег
+}
+
+/// 🟢 Статусы товаров
+enum ProductStatus {
+  ACTIVE // Доступен для продажи
+  RESERVED // Забронирован (ожидает оплаты)
+  SOLD_OUT // Уже куплен кем-то
+  ARCHIVED // Скрыт владельцем
+}
+
+/// 🟢 Пользователи
+model User {
+  id            String   @id @default(cuid())
+  email         String?  @unique
+  firstName     String?
+  lastName      String?
+
+  /// Телеграм-аккаунт
+  telegramId    BigInt?  @unique // Целое число, до 19 цифр
+  telegramNick  String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  /// 🧩 Связи
+  products      Product[] // Товары, которые выставил продавец
+  buyerOrders   Order[]  @relation("Buyer") // Заказы, сделанные покупателем
+  sellerOrders  Order[]  @relation("Seller") // Заказы, принятые продавцом
+}
+
+/// 🟢 Товары (Продукты)
+model Product {
+  id          String      @id @default(cuid())
+  title       String
+  description String
+  imageUrl    String?     // Опционально
+  price       Decimal(10, 2) // Максимальная цена 999 999,99
+
+  category    String      // standoff-gold, roblox-robux
+  quantity    Int         // Количество единиц (если ограничено)
+
+  status      ProductStatus @default(ACTIVE)
+  sellerId    String
+  seller      User        @relation(fields: [sellerId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  /// 🧩 Связи
+  orders      Order[]     // История продаж этого товара
+}
+
+/// 🟢 Заказы (Сделки)
+model Order {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id])
+
+  buyerId     String
+  buyer       User        @relation("Buyer", fields: [buyerId], references: [id])
+
+  sellerId    String
+  seller      User        @relation("Seller", fields: [sellerId], references: [id])
+
+  totalAmount Decimal(10, 2) // Может отличаться от цены товара (скидки, комиссии)
+  status      OrderStatus @default(PENDING)
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
