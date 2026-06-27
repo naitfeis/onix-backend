@@ -1,14 +1,12 @@
-// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
 
 datasource db {
   provider = "postgresql"
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-/// Статусы заказов (Жизненный цикл сделки в Гаранте)
+/// 📑 Жизненный цикл сделки в Гаранте
 enum OrderStatus {
   PENDING
   PAYMENT_HOLD
@@ -19,7 +17,7 @@ enum OrderStatus {
   REFUNDED
 }
 
-/// Статусы товаров
+/// 📑 Статусы товаров на витрине
 enum ProductStatus {
   ACTIVE
   RESERVED
@@ -27,70 +25,129 @@ enum ProductStatus {
   ARCHIVED
 }
 
-/// Таблица пользователей сайта
+/// 📑 Статусы заявок на вывод средств
+enum WithdrawalStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+/// 👥 Таблица пользователей сайта
 model User {
-  id            BigInt    @id @default(autoincrement())
+  id            BigInt    @id @default(autoincrement()) // Это и есть твой идеальный счетчик: 1, 2, 3...
   email         String?   @unique(map: "User_email_key")
+
+  /// 💸 Баланс пользователя в системе ONIX (Хранится строго в копейках для High-Load скорости!)
+  balanceCents  BigInt    @default(0)
 
   /// Telegram-интеграция
   telegramId    BigInt?   @unique(map: "User_telegramId_key")
   telegramNick  String?
   telegramToken String?   @unique(map: "User_telegramToken_key")
 
-  /// Мягкое удаление пользователя (сохраняет историю заказов)
   deletedAt     DateTime?
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   /// Связи
   products      Product[]
-  buyerOrders   Order[] @relation("Buyer")
-  sellerOrders  Order[] @relation("Seller")
+  buyerOrders   Order[]      @relation("Buyer")
+  sellerOrders  Order[]      @relation("Seller")
+  withdrawals   Withdrawal[]
 }
 
-/// Таблица товаров
+/// 📦 Таблица товаров
 model Product {
-  id            String    @id @default(cuid())
+  id          String        @id @default(cuid())
+  title       String        @db.VarChar(255)
+  description String?       @db.VarChar(1500)
 
-  title         String    @db.VarChar(255)
-  description   String?   @db.VarChar(1500) // Защита от спама в описании
+  /// 💸 Цена скина в копейках
+  priceCents  BigInt        @default(0)
 
-  price         Decimal   @db.Decimal(18, 2) @default(0.0)
+  category    String        @db.VarChar(100)
+  quantity    Int           @default(0)
+  status      ProductStatus @default(ACTIVE)
 
-  category      String    @db.VarChar(100)
-  quantity      Int       @default(0)
+  sellerId    BigInt
+  seller      User          @relation(fields: [sellerId], references: [id])
 
-  status        ProductStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  orders      Order[]
 
-  sellerId      BigInt
-  seller        User      @relation(fields: [sellerId], references: [id])
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  orders        Order[]
-
-  /// Индекс для моментальной фильтрации товаров по играм на витрине
   @@index([category, status])
 }
 
-/// Таблица сделок (Система Гаранта)
+/// 🤝 Таблица сделок (Система Гаранта)
 model Order {
-  id            BigInt    @id @default(autoincrement()) // Изменено на BigInt для экономии RAM
+  id            BigInt      @id @default(autoincrement())
 
   productId     String
-  product       Product   @relation(fields: [productId], references: [id])
+  product       Product     @relation(fields: [productId], references: [id])
 
   buyerId       BigInt
-  buyer         User      @relation("Buyer", fields: [buyerId], references: [id])
+  buyer         User        @relation("Buyer", fields: [buyerId], references: [id])
 
   sellerId      BigInt
-  seller        User      @relation("Seller", fields: [sellerId], references: [id])
+  seller        User        @relation("Seller", fields: [sellerId], references: [id])
 
-  totalAmount   Decimal   @db.Decimal(18, 2) @default(0.0)
+  /// 💸 Все финансовые потоки переведены в BigInt копейки
+  totalAmountCents BigInt   @default(0) // Полная цена лота в копейках
+  feeCents         BigInt   @default(0) // Твоя маржа 2% системы в копейках
+  payoutCents      BigInt   @default(0) // Выплата продавцу в копейках
+
   status        OrderStatus @default(PENDING)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  /// ⚡ Индексы для моментального рендеринга истории сделок у пацанов в профиле
+  @@index([buyerId, status])
+  @@index([sellerId, status])
+}
+
+/// 💳 Таблица безопасных заявок на вывод средств
+model Withdrawal {
+  id             String           @id @default(cuid())
+
+  userId         BigInt
+  user           User             @relation(fields: [userId], references: [id])
+
+  /// 💸 Вывод средств в копейках
+  amountCents    BigInt
+  feeCents       BigInt           // 30 рублей комиссии пересчитаются как 3000 копеек
+  payoutCents    BigInt           // Чистые копейки к отправке по СБП
+
+  status         WithdrawalStatus @default(PENDING) // Защищено строгим Enum!
+  idempotencyKey String           @unique           // Броня от повторных списаний
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([userId, status])
+}
+
+/// 💬 Таблица сообщений Глобального Чат-Хаба
+model GlobalChat {
+  id           String   @id @default(cuid())
+  senderId     BigInt
+  senderName   String   @db.VarChar(64)
+  receiverName String?  @db.VarChar(64)
+  text         String   @db.VarChar(1000)
+  isAdmin      Boolean  @default(false)
+  timestamp    DateTime @default(now())
+
+  @@index([timestamp])
+}
+
+/// ⭐️ Таблица отзывов клиентов платформы
+model Review {
+  id        String   @id @default(cuid())
+  authorId  BigInt
+  author    String   @db.VarChar(64)
+  text      String   @db.VarChar(1500)
+  rating    String   @db.VarChar(32)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

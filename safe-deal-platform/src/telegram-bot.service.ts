@@ -7,9 +7,11 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramBotService.name);
   private bot?: Telegraf;
 
+  // URL твоего фронтенда. Когда настроим Cloudflare, здесь будет https://onixtg.shop
+  private readonly MINI_APP_URL = 'http://localhost:5173';
+
   constructor(private readonly prisma: PrismaService) {}
 
-  // ИСПРАВЛЕНИЕ: Убрали ошибочный декоратор @
   async onModuleInit() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) {
@@ -19,64 +21,101 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
 
     this.bot = new Telegraf(token);
 
-    // ИСПРАВЛЕНИЕ: Явно указали тип Context для ctx, чтобы убрать ошибку TS7006
+    // 🚦 ГИБРИДНЫЙ ШЛЮЗ РЕГИСТРАЦИИ И ОНБОРДИНГА ONIX
     this.bot.start(async (ctx: Context) => {
       try {
-        // @ts-ignore
-        const payload = ctx.payload;
-
-        if (!payload || payload.trim() === '') {
-          return ctx.reply(
-            'Привет! Этот бот предназначен для интеграции с платформой ONIX P2P. Для привязки аккаунта используйте ссылку из личного кабинета.',
-          );
-        }
-
         if (!ctx.from) return;
         const telegramId = BigInt(ctx.from.id);
         const telegramNick = ctx.from.username ?? null;
 
-        const user = await this.prisma.user.findUnique({
-          where: { telegramToken: payload },
-        });
+        // Безопасный вытаскивание токена из Telegraf-контекста без использования @ts-ignore
+        const payload = (ctx as any).startPayload?.trim();
 
-        if (!user) {
-          return ctx.reply(
-            'Ошибка: Временный токен не найден или истёк срок действия. Пожалуйста, сгенерируйте новую ссылку на сайте.',
-          );
+        let dbUser: any = null;
+
+        // --- ВАРИАНТ А: Пацан пришел по ссылке привязки аккаунта с сайта ---
+        if (payload && payload !== '') {
+          dbUser = await this.prisma.user.findUnique({
+            where: { telegramToken: payload },
+          });
+
+          if (!dbUser) {
+            return ctx.reply(
+              '🚨 **Ошибка верификации:** Временный токен не найден или истёк. Сгенерируйте новую ссылку в личном кабинете ONIX P2P.',
+              { parse_mode: 'Markdown' }
+            );
+          }
+
+          // Намертво привязываем Telegram ID к существующей строке в Postgres (Neon.tech)
+          dbUser = await this.prisma.user.update({
+            where: { id: dbUser.id },
+            data: {
+              telegramId,
+              telegramNick,
+              telegramToken: null, // Сжигаем одноразовый токен авторизации
+            },
+          });
+          this.logger.log(`[LINK SUCCESS]: Аккаунт привязан. Порядковый ONIX-номер пацана: #${dbUser.id}`);
+        }
+        // --- ВАРИАНТ Б: Пацан пришел "с улицы" напрямую из поиска Telegram ---
+        else {
+          dbUser = await this.prisma.user.findUnique({
+            where: { telegramId: telegramId },
+          });
+
+          if (!dbUser) {
+            // База Postgres через @default(autoincrement()) автоматически выдает номер: 1, 2, 3...
+            dbUser = await this.prisma.user.create({
+              data: {
+                telegramId,
+                telegramNick,
+                balanceCents: BigInt(0),
+              },
+            });
+            this.logger.log(`[DIRECT REGISTER]: Новый юзер с улицы занесен в базу. Ему выдан номер: #${dbUser.id}`);
+          }
         }
 
-        if (user.telegramId !== undefined && user.telegramId !== null) {
-          return ctx.reply(
-            `⚠️ Ваш аккаунт уже привязан к этому Telegram-аккаунту.`,
-          );
-        }
+        // 📜 УСЛОВИЯ ПОЛЬЗОВАНИЯ И ДОГОВОР-ОФЕРТА БЕТЫ ONIX
+        const termsText =
+          `Привет, легенда! Твой профиль успешно запечатан в системе! 🏎️🥇\n\n` +
+          `🆔 **ТВОЙ УНИКАЛЬНЫЙ ONIX-НОМЕР:** \`#${dbUser.id}\` (Ты зарегистрирован ${dbUser.id}-м по счету)\n\n` +
+          `📜 **УСЛОВИЯ ПОЛЬЗОВАНИЯ (БЕТА-ТЕСТ №1):**\n` +
+          `1. Платформа ONIX удерживает фиксированную маржу 2% с каждой успешной сделки на маркете [PDF: 0.1.7].\n` +
+          `2. Комиссия на вывод средств на любые внешние платежные системы составляет 30 рублей.\n` +
+          `3. Категорически запрещено подтверждать заказ до фактического получения скина в игре Standoff 2.\n` +
+          `4. За попытку обмана Гаранта или фрод баланса — мгновенный перманентный бан по ID.\n\n` +
+          `Нажимая инлайн-кнопки ниже, ты автоматически принимаешь правила экосистемы ONIX.`;
 
-        await this.prisma.user.update({
-          where: { id: user.id },
-          data: {
-            telegramId,
-            telegramNick,
-            telegramToken: null,
-          },
+        // Выдаем красивый интерактивный инлайн-путь с нативными WebApp шторками Mini App
+        return ctx.reply(termsText, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: 'Принять условия и Перейти на маркет 🛒',
+                  web_app: { url: `${this.MINI_APP_URL}/market` }
+                }
+              ],
+              [
+                {
+                  text: 'Начать торговать ⚔️',
+                  web_app: { url: `${this.MINI_APP_URL}/trade` }
+                }
+              ]
+            ]
+          }
         });
-
-        const safeUsername = telegramNick ? `@${telegramNick}` : 'пользователь';
-
-        return ctx.reply(
-          `<strong>Успех!</strong>\n\nАккаунт пользователя ${safeUsername} успешно привязан к платформе ONIX P2P.`,
-          { parse_mode: 'HTML' }
-        );
 
       } catch (error) {
         this.logger.error(`Ошибка при обработке команды /start: ${error}`);
-        return ctx.reply('Произошла внутренняя ошибка. Попробуйте позже.');
+        return ctx.reply('🚨 Произошла внутренняя ошибка сервера ONIX Core. Попробуйте позже.');
       }
     });
 
     const env = process.env.NODE_ENV;
     if (env === 'production') {
-      // Запуск бота в продакшене через Webhook (закомментировано)
-      // this.bot.launch({ webhook: { domain: process.env.WEBHOOK_URL } });
       this.logger.log('Запуск бота в режиме Webhook (Production)');
     } else {
       this.bot.launch();
@@ -84,11 +123,30 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ИСПРАВЛЕНИЕ: Убрали ошибочный декоратор @
   async onModuleDestroy() {
     if (this.bot) {
       await this.bot.stop('SIGINT');
       this.logger.log('Telegram-бот остановлен.');
+    }
+  }
+
+  // =====================================================================
+  // 🛰️ СКВОЗНОЙ КАНАЛ ОТПРАВКИ ЧЕКОВ ГАРАНТА ИЗ ЛЮБОЙ ТОЧКИ NESTJS [PDF: 0.1.6]
+  // =====================================================================
+  async sendSystemNotification(telegramId: bigint, text: string) {
+    if (!this.bot || !telegramId) {
+      this.logger.warn('Попытка отправить уведомление, но бот не инициализирован или ID пуст.');
+      return;
+    }
+
+    try {
+      // Превращаем BigInt в строку, чтобы движок Telegraf без лагов проглотил ID
+      await this.bot.telegram.sendMessage(telegramId.toString(), text, {
+        parse_mode: 'Markdown',
+      });
+      this.logger.log(`[📩 ЧЕК ГАРАНТА]: Уведомление успешно доставлено юзеру ${telegramId}`);
+    } catch (error) {
+      this.logger.error(`[🚨 СБОЙ ОТПРАВКИ ЧЕКА]: Не удалось отправить сообщение для ${telegramId}: ${error}`);
     }
   }
 }

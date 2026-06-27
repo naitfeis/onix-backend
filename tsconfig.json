@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["esnext"],
+
+    /* Строгая типизация */
+    "strict": true,
+
+    /* Игнорируем устаревание baseUrl */
+    "ignoreDeprecations": "6.0",
+
+    /* Декораторы NestJS */
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    /* Вывод и оптимизация */
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    /* Указываем точный корень исходного кода */
+    "rootDir": "./safe-deal-platform/src",
+    "incremental": true,
+
+    /* Импорты и пути */
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@app/*": ["safe-deal-platform/src/*"],
+      "@config/*": ["safe-deal-platform/src/config/*"]
+    },
+
+    /* Проверки кода и ошибки */
+    "noImplicitAny": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+
+    /* Прочее */
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  },
+  /* Компилятор зайдёт в папку, соберёт все файлы и main.ts в том числе */
+  "include": ["safe-deal-platform/src/**/*"],
+  "exclude": ["node_modules", "dist", ".git"]
+}

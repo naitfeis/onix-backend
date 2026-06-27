@@ -1,29 +1,47 @@
 {
   "name": "safe-deal-platform",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "ONIX Secure P2P Escrow Core Engine",
+  "main": "dist/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prisma:generate": "prisma generate",
+    "build": "prisma generate && tsc",
+    "start": "node dist/main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts",
+    "start:bot": "ts-node --transpile-only safe-deal-platform/src/main.ts",
+    "test:flow": "ts-node --transpile-only safe-deal-platform/src/test-flow.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "nestjs",
+    "prisma",
+    "p2p",
+    "escrow",
+    "telegram-bot"
+  ],
+  "author": "MAX_CEO",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@nestjs/common": "^11.1.27",
     "@nestjs/core": "^11.1.27",
+    "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/platform-express": "^11.1.27",
+    "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
+    "@types/pg": "^8.20.0",
     "prisma": "^7.8.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }

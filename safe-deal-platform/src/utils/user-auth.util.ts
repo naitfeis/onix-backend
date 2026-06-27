@@ -1,7 +1,8 @@
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 
 export class UserAuthUtil {
-  static async checkUserExists(prisma: any, userId: string) {
+  // ИСПРАВЛЕНИЕ: изменили string на bigint для вашей высоконагруженной схемы
+  static async checkUserExists(prisma: any, userId: bigint) {
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: userId },
     }).catch(() => {
