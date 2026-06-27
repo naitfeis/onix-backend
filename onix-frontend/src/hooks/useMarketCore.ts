@@ -29,25 +29,24 @@ export function useMarketCore() {
   const [currentUserNick] = useState<string>("shop_rub");
 
   const [products, setProducts] = useState<IProduct[]>([
-    { id: "cuid_1", title: "M9 Bayonet Scratch", description: "Передача через рынок. Слейте любой треш-скин за эту сумму.", priceCents: "120000", category: "STANDOFF 2", sellerId: "999999", sellerNick: "Trapper_22", status: "ACTIVE" },
-    { id: "cuid_2", title: "Karambit Gold", description: "Выставлю по вашему запросу. Передача за 5 минут.", priceCents: "250000", category: "STANDOFF 2", sellerId: "888888", sellerNick: "Standoff_King", status: "ACTIVE" }
+    { id: "cuid_1", title: "M9 Bayonet Scratch", description: "Передача через рынок Standoff 2.", priceCents: "120000", category: "STANDOFF 2", sellerId: "999999", sellerNick: "Trapper_22", status: "ACTIVE" },
+    { id: "cuid_2", title: "Ключ пополнения баланса Steam", description: "Мгновенная отправка цифрового кода активации.", priceCents: "100000", category: "STEAM", sellerId: "777777", sellerNick: "SteamMaster", status: "ACTIVE" },
+    { id: "cuid_3", title: "Вирты Majestic RP (Server 4)", description: "Передача через автосалон или банк.", priceCents: "300000", category: "RP ПРОЕКТЫ", sellerId: "111111", sellerNick: "GtaPro", status: "ACTIVE" }
   ]);
   const [orders, setOrders] = useState<IOrder[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
+    const timer = setTimeout(() => setLoading(false), 200);
     return () => clearTimeout(timer);
   }, []);
 
-  // ФАЗА ВЫСТАВЛЕНИЯ С АНТИ-ФРОД ФИЛЬТРОМ ЦЕН
   const createProductLog = useCallback((title: string, description: string, price: string, category: string) => {
     const parsedPrice = parseFloat(price);
-
     if (parsedPrice < 10 || parsedPrice > 50000) {
       WebApp.HapticFeedback.notificationOccurred('error');
-      alert("🚨 Отказ ONIX Shield: Цена лота должна быть в диапазоне от 10 до 50 000 ₽");
+      alert("🚨 Отказ ONIX Shield: Цена лота должна быть от 10 до 50 000 ₽");
       return;
     }
 
@@ -67,13 +66,11 @@ export function useMarketCore() {
     WebApp.HapticFeedback.notificationOccurred('success');
   }, [currentUserId, currentUserNick]);
 
-  // ФАНПЕЙ ФАЗА 1: Покупка товара покупателем
   const handleBuyProduct = useCallback((product: IProduct) => {
     const priceRub = parseInt(product.priceCents, 10) / 100;
-
     if (liveBalanceRubles < priceRub) {
       WebApp.HapticFeedback.notificationOccurred('error');
-      alert("❌ Ошибка Гаранта: Недостаточно средств на балансе!");
+      alert("❌ Недостаточно средств на балансе!");
       return;
     }
 
@@ -94,58 +91,38 @@ export function useMarketCore() {
     setOrders(prev => [newOrder, ...prev]);
     setSelectedProduct(null);
     WebApp.HapticFeedback.notificationOccurred('success');
-    alert(`🔒 ГОЛД-ХОЛД ЗАПУЩЕН\nОрдер заблокирован в сейфе ONIX. Продавец уведомлен.`);
   }, [liveBalanceRubles, currentUserId]);
 
-  // ФАНПЕЙ ФАЗА 2: Продавец подтверждает отгрузку ножа в игре
   const handleSellerSent = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'DELIVERING' } : o));
     WebApp.HapticFeedback.impactOccurred('medium');
-    alert(`⚡ Продавец подтвердил отгрузку лота! Покупатель, проверьте инвентарь.`);
   }, []);
 
-    // 🏆 ФАНПЕЙ ФАЗА 3: Ручное мгновенное подтверждение покупателем + 5% маржа + 50 ₽ за фиатный вывод
   const handleConfirmReceive = useCallback((order: IOrder) => {
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'COMPLETED' } : o));
     setProducts(prev => prev.filter(p => p.id !== order.productId));
 
     const priceRub = parseInt(order.priceCents, 10) / 100;
-
-    // 🔥 СИНЬОР-РАСЧЁТ МАРЖИ: Скрытые 5% системы Гаранта [PDF: 0.1.7]
-    const systemFee = priceRub * 0.05;
-
-    // 💳 ФИКСИРОВАННАЯ ВЫПЛАТА: Из чистой суммы продавца вычитается 50 рублей за транзакцию банка/СБП
-    const fixWithdrawalFee = 50;
-    const finalPayoutAmount = priceRub - systemFee - fixWithdrawalFee;
+    const systemFee = priceRub * 0.05; // Скрытая маржа 5% системы ONIX
+    const finalPayout = priceRub - systemFee;
 
     WebApp.HapticFeedback.notificationOccurred('success');
-
-    if (finalPayoutAmount <= 0) {
-      alert(
-        `🚨 ВНИМАНИЕ: Лот закрыт успешно, но сумма продажи меньше банковской комиссии в 50 рублей!\n` +
-        `Чистая маржа Максима (5%): +${systemFee.toFixed(2)} ₽\n` +
-        `Деньги продавца ушли на покрытие эквайринга.`
-      );
-    } else {
-      alert(
-        `🏆 СДЕЛКА УСПЕШНО ЗАВЕРШЕНА!\n` +
-        `───────────────────\n` +
-        `Скрытая маржа Максима (5%): +${systemFee.toFixed(2)} ₽\n` +
-        `Фиксированная комиссия СБП: 50.00 ₽\n` +
-        `Чистая мгновенная выплата продавцу на карту: ${finalPayoutAmount.toFixed(2)} ₽`
-      );
-    }
+    alert(
+      `🏆 СДЕЛКА УСПЕШНО ЗАВЕРШЕНА!\n` +
+      `───────────────────\n` +
+      `Чистая прибыль системы ONIX (5%): +${systemFee.toFixed(2)} ₽\n` +
+      `Зачислено на внутренний баланс продавца: ${finalPayout.toFixed(2)} ₽\n\n` +
+      `*Внимание: При выводе этих средств на карту снимется комиссия 50 ₽.`
+    );
   }, []);
 
-  // ОТКРЫТИЕ АРБИТРАЖА (ЗАМОРОЗКА ОРДЕРА)
   const handleOpenDispute = useCallback((orderId: string) => {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'DISPUTE' } : o));
     WebApp.HapticFeedback.notificationOccurred('warning');
-    alert("🚨 СДЕЛКА ЗАМОРОЖЕНА АРБИТРАЖЕМ!\nОрдер передан на ручную проверку Максиму (CEO ONIX).");
   }, []);
 
   return {
-    liveBalanceRubles, currentUserNick, products, orders, selectedProduct, setSelectedProduct, loading,
+    liveBalanceRubles, currentUserId, currentUserNick, products, orders, selectedProduct, setSelectedProduct, loading,
     createProductLog, handleBuyProduct, handleSellerSent, handleConfirmReceive, handleOpenDispute
   };
 }
