@@ -6,6 +6,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import CreateProductScreen from './screens/CreateProductScreen';
 
 export default function App() {
+  // 🧭 СИНЬОР-ФИКС: Строгая типизация экранов по нашему ТЗ
   const [currentScreen, setCurrentScreen] = useState<'market' | 'chat' | 'profile' | 'create'>('market');
   const [user, setUser] = useState({
     name: 'Загрузка...',
@@ -17,7 +18,7 @@ export default function App() {
     try {
       if (WebApp.initData && WebApp.initDataUnsafe?.user) {
         WebApp.ready();
-        WebApp.expand();
+        WebApp.expand(); // Разворачиваем Mini App на весь экран смартфона пацанов
         const tgUser = WebApp.initDataUnsafe.user;
         setUser({
           name: tgUser.username ? `@${tgUser.username}` : `${tgUser.first_name} ${tgUser.last_name || ''}`.trim(),
@@ -38,7 +39,9 @@ export default function App() {
     const handleTabSwitch = (e: Event) => {
       const customEvent = e as CustomEvent;
       if (customEvent.detail?.tab) {
-        setCurrentScreen(customEvent.detail.tab);
+        // СИНЬОР-ФИКС: Сопоставляем события 'chat' / 'market' с нашими внутренними стейтами
+        const targetTab = customEvent.detail.tab === 'create_lot' ? 'create' : customEvent.detail.tab;
+        setCurrentScreen(targetTab);
       }
     };
 
@@ -46,29 +49,40 @@ export default function App() {
     return () => window.removeEventListener('onix.switch_tab', handleTabSwitch);
   }, []);
 
+  // Функция для тактильного отклика смартфона при клике на меню
+  const handleTabClick = (tabId: 'market' | 'chat' | 'profile' | 'create') => {
+    try {
+      WebApp.HapticFeedback.impactOccurred('light'); // Легкий физический клик в руках тестера
+    } catch (e) {
+      console.log('Haptic feedback недоступен на ПК');
+    }
+    setCurrentScreen(tabId);
+  };
+
   return (
     <div style={{
       backgroundColor: '#000000',
       color: '#ffffff',
       minHeight: '100vh',
-      fontFamily: '"Courier New", Courier, monospace, sans-serif',
+      fontFamily: 'monospace',
       padding: '16px 16px 90px 16px',
       boxSizing: 'border-box',
       letterSpacing: '0.5px'
     }}>
-      {/* BRAND HEADER */}
+
+      {/* BRAND HEADER В СТИЛЕ КИБЕРПАНК ONIX */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div style={{ border: '2px solid #ffffff', padding: '6px 24px', fontSize: '22px', fontWeight: '900', letterSpacing: '4px' }}>
           O N I X
         </div>
-        <div style={{ border: '1px solid #333', padding: '8px 12px', fontSize: '10px', color: '#888', fontWeight: 'bold' }}>
+        <div style={{ border: '1px solid #161616', background: '#0b0b0b', padding: '8px 12px', fontSize: '10px', color: '#888', fontWeight: 'bold' }}>
           {currentScreen.toUpperCase()} // USER: {user.name}
         </div>
       </div>
 
       <hr style={{ border: 'none', borderTop: '1px solid #1c1c1c', marginBottom: '20px' }} />
 
-      {/* VIEW ORCHESTRATION LAYER */}
+      {/* VIEW ORCHESTRATION LAYER (ЭКРАНЫ СИСТЕМЫ) */}
       <main style={{ minHeight: 'calc(100vh - 160px)' }}>
         {currentScreen === 'market' && <MarketScreen />}
         {currentScreen === 'chat' && <ChatScreen />}
@@ -76,42 +90,43 @@ export default function App() {
         {currentScreen === 'create' && <CreateProductScreen />}
       </main>
 
-      {/* FINTECH TAB-BAR MENU */}
+      {/* FINTECH TAB-BAR MENU (НИЖНИЙ ПУЛЬТ С НЕОНОВОЙ ПОДСВЕТКОЙ) */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, height: '68px',
-        backgroundColor: '#070707', borderTop: '1px solid #1c1c1c',
+        backgroundColor: '#030303', borderTop: '1px solid #161616',
         display: 'flex', justifyContent: 'space-around', alignItems: 'center',
-        padding: '0 12px', boxShadow: '0 -8px 25px rgba(0,0,0,0.5)', zIndex: 1000
+        padding: '0 12px', boxShadow: '0 -8px 25px rgba(0,0,0,0.8)', zIndex: 1000
       }}>
         {[
-          { id: 'market', icon: 'Ὥ', label: 'РЫНОК' },
-          { id: 'chat', icon: 'ὒ', label: 'ЧАТЫ' },
-          { id: 'create', icon: '📦', label: 'ЛОТ' },
-          { id: 'profile', icon: '⚙️', label: 'ПРОФИЛЬ' }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              if (WebApp.initData) WebApp.HapticFeedback.impactOccurred('medium');
-              setCurrentScreen(tab.id as any);
-            }}
-            style={{
-              background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center',
-              cursor: 'pointer', flex: 1, padding: '8px 0',
-              color: currentScreen === tab.id ? '#ffffff' : '#333333',
-              borderTop: currentScreen === tab.id ? '2px solid #ffffff' : '2px solid transparent',
-              transition: 'all 0.15s ease', fontFamily: 'monospace'
-            }}
-          >
-            <span style={{ fontSize: '20px', marginBottom: '3px', filter: currentScreen === tab.id ? 'none' : 'grayscale(100%)' }}>
-              {tab.icon}
-            </span>
-            <span style={{ fontSize: '10px', fontWeight: currentScreen === tab.id ? '900' : 'normal' }}>
-              {tab.label}
-            </span>
-          </button>
-        ))}
+          { id: 'market', icon: 'Ω', label: 'РЫНОК', activeColor: '#00d2d3' },
+          { id: 'chat', icon: '💬', label: 'ЧАТЫ', activeColor: '#00d2d3' },
+          { id: 'create', icon: '📦', label: 'ЛОТ', activeColor: '#1dd1a1' },
+          { id: 'profile', icon: '⚙️', label: 'ПРОФИЛЬ', activeColor: '#888888' }
+        ].map((tab) => {
+          const isSelected = currentScreen === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleTabClick(tab.id as any)}
+              style={{
+                background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center',
+                cursor: 'pointer', flex: 1, padding: '8px 0',
+                color: isSelected ? tab.activeColor : '#444444',
+                borderTop: isSelected ? `2px solid ${tab.activeColor}` : '2px solid transparent',
+                transition: 'all 0.2s ease', fontFamily: 'monospace'
+              }}
+            >
+              <span style={{ fontSize: '20px', marginBottom: '3px', filter: isSelected ? 'none' : 'grayscale(100%)' }}>
+                {tab.icon}
+              </span>
+              <span style={{ fontSize: '9px', fontWeight: isSelected ? '900' : 'normal', letterSpacing: '0.5px' }}>
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
       </div>
+
     </div>
   );
 }
