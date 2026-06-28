@@ -5,9 +5,9 @@ import { UserController } from './user.controller'; // ИМПОРТИРУЕМ Ж
 import { ChatController } from './chat.controller'; // ИМПОРТИРУЕМ ЖИВОЙ ШЛЮЗ ЧАТОВ И ОТЗЫВОВ [проф. 1]
 import { ProductService } from './product.service';
 import { PrismaService } from './prisma.service';
-import { TelegramBotService } from './telegram-bot.service';
 import { OrderNotificationListener } from './order-notification.listener'; // Наш фоновый воркер чеков Гаранта [проф. 1]
 
+// 🛡️ СИНЬОР-РЕФАКТОРИНГ: Полностью выжжен легаси-модуль TelegramBotService, ломавший Long Polling! [проф. 1]
 @Module({
   imports: [
     // Инициализируем шину асинхронных событий во всей экосистеме NestJS [проф. 1]
@@ -15,13 +15,12 @@ import { OrderNotificationListener } from './order-notification.listener'; // Н
   ],
   controllers: [
     ProductController,
-    UserController, // РЕГИСТРИРУЕМ В ЯДРЕ: Шлюз авторизации и выдачи 5000 ₽ [проф. 1]
+    UserController, // РЕГИСТРИРУЕМ В ЯДРЕ: Шлюз авторизации и выдачи баланса [проф. 1]
     ChatController  // РЕГИСТРИРУЕМ В ЯДРЕ: Живой чат-хаб и сохранение отзывов в Postgres [проф. 1]
   ],
   providers: [
     ProductService,
     PrismaService,
-    TelegramBotService,
     OrderNotificationListener, // Фоновый обработчик нотификаций [проф. 1]
   ],
 })
