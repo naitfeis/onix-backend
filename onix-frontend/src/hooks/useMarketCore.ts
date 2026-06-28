@@ -8,121 +8,80 @@ export interface IProduct {
   priceCents: string;
   category: string;
   sellerId: string;
-  sellerNick: string;
   status: 'ACTIVE' | 'RESERVED' | 'SOLD_OUT';
 }
 
-export interface IOrder {
-  id: string;
-  productId: string;
-  productTitle: string;
-  priceCents: string;
-  buyerId: string;
-  sellerId: string;
-  sellerNick: string;
-  status: 'PAYMENT_HOLD' | 'DELIVERING' | 'COMPLETED' | 'CANCELED' | 'DISPUTE';
-}
-
 export function useMarketCore() {
-  const [liveBalanceRubles, setLiveBalanceRubles] = useState<number>(5000);
-  const [currentUserId] = useState<string>("7099007790");
-  const [currentUserNick] = useState<string>("shop_rub");
-
-  const [products, setProducts] = useState<IProduct[]>([
-    { id: "cuid_1", title: "M9 Bayonet Scratch", description: "Передача через рынок Standoff 2.", priceCents: "120000", category: "STANDOFF 2", sellerId: "999999", sellerNick: "Trapper_22", status: "ACTIVE" },
-    { id: "cuid_2", title: "Ключ пополнения баланса Steam", description: "Мгновенная отправка цифрового кода активации.", priceCents: "100000", category: "STEAM", sellerId: "777777", sellerNick: "SteamMaster", status: "ACTIVE" },
-    { id: "cuid_3", title: "Вирты Majestic RP (Server 4)", description: "Передача через автосалон или банк.", priceCents: "300000", category: "RP ПРОЕКТЫ", sellerId: "111111", sellerNick: "GtaPro", status: "ACTIVE" }
-  ]);
-  const [orders, setOrders] = useState<IOrder[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
+  const [products, setProducts] = useState<IProduct[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
+
+  const getTgId = (): string => {
+    return WebApp.initDataUnsafe?.user?.id.toString() || "7099007790";
+  };
+
+  // 1. Асинхронный выкач товаров с базы для всех тестеров в реальном времени
+  const refreshMarket = async () => {
+    try {
+      const response = await fetch('https://onrender.com', {
+        headers: { 'x-telegram-init-data': WebApp.initData || '' }
+      });
+      const result = await response.json();
+      if (response.ok) setProducts(result.data);
+    } catch (e) {
+      console.error('Сбой пула витрины');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 200);
-    return () => clearTimeout(timer);
+    refreshMarket();
   }, []);
 
-  const createProductLog = useCallback((title: string, description: string, price: string, category: string) => {
+  // 2. Аппаратная публикация нового лота на всю площадку
+  const createProductLog = useCallback(async (title: string, description: string, price: string, category: string) => {
     const parsedPrice = parseFloat(price);
-    if (parsedPrice < 10 || parsedPrice > 50000) {
-      WebApp.HapticFeedback.notificationOccurred('error');
-      alert("🚨 Отказ ONIX Shield: Цена лота должна быть от 10 до 50 000 ₽");
-      return;
+    try {
+      const response = await fetch('https://onrender.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': WebApp.initData || '' },
+        body: JSON.stringify({ title, description, price: parsedPrice, category, sellerId: getTgId() })
+      });
+      if (response.ok) {
+        try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+        refreshMarket();
+      }
+    } catch {
+      alert('Ошибка базы данных при публикации контракта.');
     }
-
-    const priceCentsStr = Math.round(parsedPrice * 100).toString();
-    const newProduct: IProduct = {
-      id: `cuid_${Date.now()}`,
-      title,
-      description,
-      priceCents: priceCentsStr,
-      category,
-      sellerId: currentUserId,
-      sellerNick: currentUserNick,
-      status: 'ACTIVE'
-    };
-
-    setProducts(prev => [newProduct, ...prev]);
-    WebApp.HapticFeedback.notificationOccurred('success');
-  }, [currentUserId, currentUserNick]);
-
-  const handleBuyProduct = useCallback((product: IProduct) => {
-    const priceRub = parseInt(product.priceCents, 10) / 100;
-    if (liveBalanceRubles < priceRub) {
-      WebApp.HapticFeedback.notificationOccurred('error');
-      alert("❌ Недостаточно средств на балансе!");
-      return;
-    }
-
-    setLiveBalanceRubles(prev => prev - priceRub);
-    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, status: 'RESERVED' } : p));
-
-    const newOrder: IOrder = {
-      id: `order_${Date.now()}`,
-      productId: product.id,
-      productTitle: product.title,
-      priceCents: product.priceCents,
-      buyerId: currentUserId,
-      sellerId: product.sellerId,
-      sellerNick: product.sellerNick,
-      status: 'PAYMENT_HOLD'
-    };
-
-    setOrders(prev => [newOrder, ...prev]);
-    setSelectedProduct(null);
-    WebApp.HapticFeedback.notificationOccurred('success');
-  }, [liveBalanceRubles, currentUserId]);
-
-  const handleSellerSent = useCallback((orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'DELIVERING' } : o));
-    WebApp.HapticFeedback.impactOccurred('medium');
   }, []);
 
-  const handleConfirmReceive = useCallback((order: IOrder) => {
-    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: 'COMPLETED' } : o));
-    setProducts(prev => prev.filter(p => p.id !== order.productId));
+  // 3. Покупка лота с авто-переносом в чат
+  const handleBuyProduct = useCallback(async (product: IProduct) => {
+    try {
+      const response = await fetch('https://onrender.com', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': WebApp.initData || '' },
+        body: JSON.stringify({ buyerId: getTgId(), productId: product.id })
+      });
+      if (response.ok) {
+        try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+        setSelectedProduct(null);
 
-    const priceRub = parseInt(order.priceCents, 10) / 100;
-    const systemFee = priceRub * 0.05; // Скрытая маржа 5% системы ONIX
-    const finalPayout = priceRub - systemFee;
-
-    WebApp.HapticFeedback.notificationOccurred('success');
-    alert(
-      `🏆 СДЕЛКА УСПЕШНО ЗАВЕРШЕНА!\n` +
-      `───────────────────\n` +
-      `Чистая прибыль системы ONIX (5%): +${systemFee.toFixed(2)} ₽\n` +
-      `Зачислено на внутренний баланс продавца: ${finalPayout.toFixed(2)} ₽\n\n` +
-      `*Внимание: При выводе этих средств на карту снимется комиссия 50 ₽.`
-    );
-  }, []);
-
-  const handleOpenDispute = useCallback((orderId: string) => {
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'DISPUTE' } : o));
-    WebApp.HapticFeedback.notificationOccurred('warning');
+        // Нативный автоперенос в чат маркетплейса
+        window.dispatchEvent(new CustomEvent('onix.switch_tab', { detail: { tab: 'chat' } }));
+      } else {
+        const err = await response.json();
+        alert(err.message || 'Ошибка клиринга кассы.');
+      }
+    } catch {
+      alert('Шлюз СУБД недоступен.');
+    }
   }, []);
 
   return {
-    liveBalanceRubles, currentUserId, currentUserNick, products, orders, selectedProduct, setSelectedProduct, loading,
-    createProductLog, handleBuyProduct, handleSellerSent, handleConfirmReceive, handleOpenDispute
+    products, loading, selectedProduct, setSelectedProduct,
+    createProductLog, handleBuyProduct, refreshMarket
   };
 }
