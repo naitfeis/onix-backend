@@ -1,174 +1,182 @@
-import React, { useState, useCallback } from 'react';
-import WebApp from '@twa-dev/sdk'; // Нативно подключаем Telegram SDK для вибрации смартфона!
+import { useState } from 'react';
+import { useMarketCore } from '../hooks/useMarketCore';
+import type { IOrder } from '../hooks/useMarketCore';
+import WebApp from '@twa-dev/sdk';
 
-export const OrderStatus = {
-  PENDING: 'PENDING',
-  PAYMENT_HOLD: 'PAYMENT_HOLD',
-  DELIVERING: 'DELIVERING',
-  COMPLETED: 'COMPLETED',
-  CANCELED: 'CANCELED'
-} as const;
+interface Props { tgId: string }
 
-export type OrderStatusType = typeof OrderStatus[keyof typeof OrderStatus];
+const STATUS_LABEL: Record<string, string> = {
+  PAYMENT_HOLD: '🔒 ДЕНЬГИ В СЕЙФЕ',
+  DELIVERING:   '📦 ПРОДАВЕЦ ОТГРУЖАЕТ',
+  COMPLETED:    '✅ КОНТРАКТ ЗАКРЫТ',
+  CANCELED:     '❌ ОТМЕНЁН',
+  DISPUTE:      '⚖️ АРБИТРАЖ',
+};
 
-interface DealScreenProps {
-  orderId: string;
-  skinName: string;
-  priceRubles: number;
-  status: OrderStatusType;
-  buyerId: string;
-  sellerId: string;
-}
+const STATUS_COLOR: Record<string, string> = {
+  PAYMENT_HOLD: '#ff9f43',
+  DELIVERING:   '#00d2d3',
+  COMPLETED:    '#1dd1a1',
+  CANCELED:     '#ff4757',
+  DISPUTE:      '#ff4757',
+};
 
-export const DealScreen: React.FC<DealScreenProps> = ({
-  orderId, skinName, priceRubles, status, buyerId, sellerId
-}) => {
-  const [isItemReceived, setIsItemReceived] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
+export default function DealScreen({ tgId }: Props) {
+  const { orders, refreshOrders, confirmDelivery, completeOrder } = useMarketCore(tgId);
+  const [activeTab, setActiveTab] = useState<'buyer' | 'seller'>('buyer');
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // 🚀 Синьор-решение: Кэшируем функцию через useCallback, чтобы предотвратить лишний износ RAM смартфона
-  const handleConfirmDeal = useCallback(async () => {
-    if (loading) return; // АППАРАТНЫЙ БЛОКИРАТОР: Если запрос уже летит, второй клик полностью игнорируется!
+  const filtered = orders.filter(o => o.role === activeTab);
 
-    setLoading(true);
-    setStatusMessage('Запуск финтех-транзакции ONIX...');
+  const handleConfirmDelivery = async (order: IOrder) => {
+    if (loadingId) return;
+    setLoadingId(order.id);
+    await confirmDelivery(order.id);
+    setLoadingId(null);
+  };
 
-    // Вызываем легкую предупреждающую вибрацию на телефоне пацана перед списанием
-    WebApp.HapticFeedback.notificationOccurred('warning');
-
-    try {
-      const response = await fetch('/api/garant/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId, buyerId })
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Жесткий победный вибро-отклик (Транзакция закрыта успешно!)
-        WebApp.HapticFeedback.notificationOccurred('success');
-        setStatusMessage('🏆 Сделка успешно завершена! Деньги отправлены продавцу.');
-      } else {
-        WebApp.HapticFeedback.notificationOccurred('error');
-        setStatusMessage(`Ошибка: ${data.message}`);
-      }
-    } catch (err) {
-      WebApp.HapticFeedback.notificationOccurred('error');
-      setStatusMessage('Критический сбой сети при подтверждении сделки');
-    } finally {
-      setLoading(false);
+  const handleCompleteOrder = async (order: IOrder) => {
+    if (loadingId) return;
+    const confirmed = window.confirm(
+      `Подтвердите получение товара.\n\nПосле нажатия ОК деньги уйдут продавцу. Убедитесь что товар у вас в инвентаре!`
+    );
+    if (!confirmed) return;
+    setLoadingId(order.id);
+    const ok = await completeOrder(order.id);
+    if (ok) {
+      try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+      alert('✅ Сделка завершена! Деньги зачислены продавцу.');
     }
-  }, [loading, orderId, buyerId]);
+    setLoadingId(null);
+  };
 
   return (
-    <div style={{
-      background: '#0d0e12',
-      color: '#fff',
-      padding: '20px',
-      borderRadius: '16px',
-      fontFamily: 'sans-serif',
-      border: '1px solid #1f222c',
-      maxWidth: '400px',
-      margin: '20px auto',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
-    }}>
-      {/* Верхняя телеметрия ордера */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <span style={{ color: '#626b7e', fontSize: '13px', fontFamily: 'monospace' }}>Ордер #{orderId.slice(0, 8)}</span>
-        <span style={{
-          color: status === OrderStatus.PAYMENT_HOLD ? '#ff9f43' : '#10ac84',
-          fontSize: '13px',
-          fontWeight: 'bold'
-        }}>
-          {status === OrderStatus.PAYMENT_HOLD ? '● В ГОЛД-ХОЛДЕ' : `● ${status}`}
-        </span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+      {/* Шапка */}
+      <div style={{ background: '#0b0b0b', border: '1px solid #161616', padding: '12px', borderRadius: '4px' }}>
+        <div style={{ fontSize: '11px', color: '#fff', fontWeight: 'bold' }}>// 🔒 ESCROW ГАРАНТ</div>
+        <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>КОНТРОЛЬ ЗАМОРОЖЕННЫХ СДЕЛОК</div>
       </div>
 
-      {/* Карточка скина */}
-      <div style={{ marginBottom: '25px', textAlign: 'center' }}>
-        <h2 style={{ margin: '0 0 8px 0', fontSize: '22px', color: '#fff', letterSpacing: '0.5px' }}>{skinName}</h2>
-        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#00d2d3', fontFamily: 'monospace' }}>{priceRubles} ₽</div>
-        <div style={{ fontSize: '11px', color: '#57606f', marginTop: '6px', fontFamily: 'monospace' }}>SELLER_ID: {sellerId}</div>
+      {/* Табы */}
+      <div style={{ display: 'flex', gap: '4px', background: '#030303', border: '1px solid #1c1c1c', padding: '4px', borderRadius: '4px' }}>
+        {(['buyer', 'seller'] as const).map((role) => {
+          const label = role === 'buyer' ? '🛒 МОИ ПОКУПКИ' : '💰 МОИ ПРОДАЖИ';
+          const count = orders.filter(o => o.role === role).length;
+          const active = activeTab === role;
+          return (
+            <button
+              key={role}
+              onClick={() => { try { WebApp.HapticFeedback.impactOccurred('light'); } catch {} setActiveTab(role); }}
+              style={{
+                flex: 1, padding: '10px',
+                background: active ? '#141519' : 'transparent',
+                color: active ? (role === 'buyer' ? '#00d2d3' : '#1dd1a1') : '#555',
+                border: 'none', borderRadius: '4px',
+                fontSize: '11px', fontWeight: 'bold',
+                cursor: 'pointer', fontFamily: 'monospace',
+              }}
+            >
+              {label} ({count})
+            </button>
+          );
+        })}
       </div>
 
-      {/* 🛑 БРОНИРОВАННЫЙ UX-ЩИТ БЕЗОПАСНОСТИ */}
-      <div style={{
-        background: 'rgba(238, 82, 83, 0.08)',
-        border: '1px solid #ee5253',
-        borderRadius: '12px',
-        padding: '15px',
-        marginBottom: '25px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-          <span style={{ fontSize: '18px', marginRight: '8px' }}>🛑</span>
-          <h4 style={{ color: '#ee5253', margin: 0, fontSize: '14px', fontWeight: 'bold', letterSpacing: '0.5px' }}>ВНИМАНИЕ! ЗАЩИТА ГАРАНТА</h4>
+      {/* Список сделок */}
+      {filtered.length === 0 ? (
+        <div style={{ color: '#333', fontSize: '11px', textAlign: 'center', padding: '40px', border: '1px dashed #1a1a1a', borderRadius: '4px' }}>
+          {activeTab === 'buyer' ? 'Вы ещё ничего не покупали.' : 'Ваши лоты ещё не купили.'}
         </div>
-        <p style={{ color: '#dcdde1', margin: 0, fontSize: '12px', lineHeight: '1.5' }}>
-          **НЕ ПОДТВЕРЖДАЙТЕ** заказ до фактического получения товара в инвентаре Standoff 2!
-          После клика голда безвозвратно улетит на баланс продавца.
-        </p>
-      </div>
+      ) : (
+        filtered.map((order) => {
+          const priceRub = (parseInt(order.totalAmountCents) / 100).toFixed(2);
+          const isLoading = loadingId === order.id;
 
-      {/* Интерактивный тумблер верификации */}
-      <label style={{
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '10px',
-        cursor: 'pointer',
-        fontSize: '12px',
-        color: '#a4b0be',
-        marginBottom: '20px',
-        lineHeight: '1.4'
-      }}>
-        <input
-          type="checkbox"
-          checked={isItemReceived}
-          disabled={loading}
-          onChange={(e) => setIsItemReceived(e.target.checked)}
-          style={{ marginTop: '3px', accentColor: '#00d2d3', width: '16px', height: '16px' }}
-        />
-        <span>Я лично проверил инвентарь внутри Standoff 2 и подтверждаю полное получение предмета.</span>
-      </label>
+          return (
+            <div key={order.id} style={{ background: '#050508', border: '1px solid #1c1c1c', padding: '16px', borderRadius: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-      {/* Кнопка пуска транзакции */}
-      <button
-        onClick={handleConfirmDeal}
-        disabled={!isItemReceived || loading}
-        style={{
-          width: '100%',
-          padding: '15px',
-          borderRadius: '10px',
-          border: 'none',
-          fontSize: '15px',
-          fontWeight: 'bold',
-          cursor: isItemReceived && !loading ? 'pointer' : 'not-allowed',
-          background: isItemReceived && !loading ? 'linear-gradient(90deg, #10ac84, #1dd1a1)' : '#1f222c',
-          color: isItemReceived && !loading ? '#fff' : '#57606f',
-          transition: 'all 0.2s ease',
-          boxShadow: isItemReceived && !loading ? '0 4px 20px rgba(29, 209, 161, 0.25)' : 'none'
-        }}
-      >
-        {loading ? 'СВЯЗЬ С БЭКЕНДОМ...' : 'Получил товар, выдать деньги'}
-      </button>
+              {/* Заголовок */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '13px' }}>{order.productTitle}</span>
+                <span style={{ color: '#00d2d3', fontWeight: 'bold' }}>{priceRub} ₽</span>
+              </div>
 
-      {/* Слот системных логов */}
-      {statusMessage && (
-        <div style={{
-          marginTop: '15px',
-          padding: '10px',
-          background: '#141519',
-          borderRadius: '8px',
-          fontSize: '11px',
-          textAlign: 'center',
-          color: '#eccc68',
-          fontFamily: 'monospace',
-          border: '1px solid #2f3542'
-        }}>
-          {`> ${statusMessage}`}
-        </div>
+              {/* Контрагент */}
+              <div style={{ fontSize: '10px', color: '#444' }}>
+                {activeTab === 'buyer' ? `ПРОДАВЕЦ: @${order.counterpartyNick}` : `ПОКУПАТЕЛЬ: @${order.counterpartyNick}`}
+                {' // '}{order.category}
+              </div>
+
+              {/* Статус */}
+              <div style={{
+                background: '#000', border: '1px solid #111', padding: '8px', borderRadius: '4px',
+                fontSize: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span style={{ color: '#555' }}>ФАЗА:</span>
+                <strong style={{ color: STATUS_COLOR[order.status] ?? '#fff' }}>
+                  {STATUS_LABEL[order.status] ?? order.status}
+                </strong>
+              </div>
+
+              {/* Кнопки действий */}
+              {activeTab === 'seller' && order.status === 'PAYMENT_HOLD' && (
+                <button
+                  onClick={() => handleConfirmDelivery(order)}
+                  disabled={isLoading}
+                  style={{ padding: '12px', background: isLoading ? '#1a1a1a' : '#ff9f43', color: '#000', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: isLoading ? 'not-allowed' : 'pointer', fontFamily: 'monospace' }}
+                >
+                  {isLoading ? 'ОТПРАВКА...' : '📦 Я ПЕРЕДАЛ ТОВАР ПОКУПАТЕЛЮ'}
+                </button>
+              )}
+
+              {activeTab === 'buyer' && order.status === 'DELIVERING' && (
+                <button
+                  onClick={() => handleCompleteOrder(order)}
+                  disabled={isLoading}
+                  style={{ padding: '12px', background: isLoading ? '#1a1a1a' : '#1dd1a1', color: '#000', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: isLoading ? 'not-allowed' : 'pointer', fontFamily: 'monospace' }}
+                >
+                  {isLoading ? 'ОБРАБОТКА...' : '✅ ТОВАР ПОЛУЧЕН — ВЫДАТЬ ДЕНЬГИ'}
+                </button>
+              )}
+
+              {activeTab === 'seller' && order.status === 'DELIVERING' && (
+                <div style={{ color: '#ff9f43', fontSize: '10px', textAlign: 'center', padding: '8px', border: '1px dashed #ff9f43', borderRadius: '4px' }}>
+                  ⌛ Ожидаем подтверждение от покупателя...
+                </div>
+              )}
+
+              {activeTab === 'buyer' && order.status === 'PAYMENT_HOLD' && (
+                <div style={{ color: '#ff9f43', fontSize: '10px', textAlign: 'center', padding: '8px', border: '1px dashed #ff9f43', borderRadius: '4px' }}>
+                  🔒 Деньги заморожены. Продавец готовит товар...
+                </div>
+              )}
+
+              {order.status === 'COMPLETED' && (
+                <div style={{ color: '#1dd1a1', fontSize: '10px', textAlign: 'center', padding: '8px', border: '1px solid #1dd1a1', borderRadius: '4px' }}>
+                  🏆 Сделка закрыта успешно.
+                </div>
+              )}
+
+              {order.status === 'DISPUTE' && (
+                <div style={{ color: '#ff4757', fontSize: '10px', fontWeight: 'bold', textAlign: 'center', padding: '8px', border: '1px solid #ff4757', borderRadius: '4px' }}>
+                  ⚖️ Открыт арбитраж. Ожидайте решения администратора.
+                </div>
+              )}
+
+            </div>
+          );
+        })
       )}
+
+      {/* Кнопка обновить */}
+      <button
+        onClick={() => refreshOrders()}
+        style={{ padding: '10px', background: 'transparent', color: '#444', border: '1px dashed #1c1c1c', borderRadius: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'monospace' }}
+      >
+        🔄 ОБНОВИТЬ СПИСОК
+      </button>
     </div>
   );
-};
+}

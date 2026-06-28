@@ -1,202 +1,225 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import WebApp from '@twa-dev/sdk';
 
-// Строгий контракт данных профиля, возвращаемых NestJS [проф. 1]
-interface IOnixUser {
+interface IProfile {
   id: string;
-  telegramNick: string | null;
-  balanceMain: string;   // Реальный баланс продавца для вывода
-  balanceBonus: string;  // Бонусы Кибер-Фермы
+  telegramNick: string;
+  balanceMain: string;
 }
 
-export default function ProfileScreen() {
-  const [dbUser, setDbUser] = useState<IOnixUser | null>(null);
-  const [tgUser, setTgUser] = useState<{ name: string; photo: string }>({
-    name: 'ONIX TRADER',
-    photo: 'https://placehold.co' // Дефолтная заглушка для ПК браузера
-  });
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+interface Props {
+  tgId: string;
+  onBalanceUpdate?: () => void;
+}
 
-  // Считываем точные настройки из Telegram Web App и NestJS при старте [проф. 1]
-  useEffect(() => {
-    const initProfile = async () => {
-      try {
-        let currentTgId = "1"; // ID для тестов в обычном браузере PyCharm
+const getInitData = () => {
+  try { return WebApp.initData || ''; } catch { return ''; }
+};
 
-        // 1. Вытягиваем живую аватарку и имя из сессии Telegram Web App [проф. 1]
-        const tgWebApp = (window as any).Telegram?.WebApp;
-        if (tgWebApp) {
-          tgWebApp.ready();
-          if (tgWebApp.initDataUnsafe?.user) {
-            const user = tgWebApp.initDataUnsafe.user;
-            currentTgId = user.id.toString();
-            setTgUser({
-              name: user.username ? `@${user.username}` : `${user.first_name} ${user.last_name || ''}`.trim(),
-              photo: user.photo_url || 'https://placehold.co'
-            });
-          }
-        }
+export default function ProfileScreen({ tgId, onBalanceUpdate }: Props) {
+  const [profile, setProfile]   = useState<IProfile | null>(null);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
+  const [withdrawing, setWithdrawing] = useState(false);
 
-        // 2. Стучимся на NestJS бэкенд за балансом и ID из PostgreSQL [проф. 1]
-        const response = await fetch(`/api/users/profile?tgId=${currentTgId}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-
-        if (!response.ok) throw new Error('Ошибка клиринга профиля СУБД');
-        const result = await response.json(); // Распаковываем OnixApiResponse [проф. 1]
-
-        if (result.success) {
-          setDbUser(result.data);
-        } else {
-          throw new Error('Бэкенд отклонил запрос авторизации.');
-        }
-      } catch (err: any) {
-        setError(err.message || 'Критический сбой сети маркетплейса');
-      } finally {
-        setLoading(false);
+  const loadProfile = useCallback(async () => {
+    if (!tgId) return;
+    try {
+      const res = await fetch(`/api/users/profile?tgId=${tgId}`, {
+        headers: { 'x-telegram-init-data': getInitData() },
+      });
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setProfile(result.data);
+        setError(null);
+      } else {
+        throw new Error(result.message ?? 'Ошибка загрузки профиля');
       }
-    };
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }, [tgId]);
 
-    initProfile().catch(console.error); // Исправлено: Добавили перехват для промиса [проф. 1]
-  }, []);
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
-  // ФУНКЦИЯ МОМЕНТАЛЬНОГО ВЫВОДА КЭША СО СКРЫТОЙ МАРЖОЙ 2% [проф. 1]
   const handleWithdraw = async () => {
-    if (!dbUser) return;
-
-    const amountStr = prompt("Введите сумму вывода на карту (Минимум 100 ₽):");
+    if (!profile || withdrawing) return;
+    const amountStr = prompt('Введите сумму вывода (мин. 100 ₽):');
     if (!amountStr) return;
-
-    const amount = parseInt(amountStr);
+    const amount = parseFloat(amountStr);
     if (isNaN(amount) || amount < 100) {
-      alert("Ошибка: Минимальная сумма вывода из сети ONIX — 100 ₽");
+      alert('Минимальная сумма вывода — 100 ₽');
+      return;
+    }
+    if (amount > parseFloat(profile.balanceMain)) {
+      alert('Недостаточно средств на балансе.');
       return;
     }
 
+    setWithdrawing(true);
     try {
-      // Стучимся на наш пуленепробиваемый NestJS эндпоинт [проф. 1]
-      const response = await fetch('/api/market/complete-instant', {
+      const idempotencyKey = `wd_${tgId}_${Date.now()}`;
+      const res = await fetch('/api/products/withdraw', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          buyerId: dbUser.id, // ID пользователя, запрашивающего вывод
-          orderId: "1"        // Тестовый ID ордера для закрытия выплаты в альфа-версии
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          'x-telegram-init-data': getInitData(),
+        },
+        body: JSON.stringify({ userId: tgId, amountRubles: amount, idempotencyKey }),
       });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message ?? 'Ошибка вывода');
 
-      if (!response.ok) throw new Error('Шлюз выплат отклонил транзакцию ФЗ-115');
-      const result = await response.json();
-
-      if (result.success) {
-        alert(`⚡️ Перевод запущен! На вашу карту будет зачислено: ${result.data.finalPayoutAmount} ₽. Проверьте баланс и бот!`);
-        window.location.reload();
-      }
-    } catch (err: any) {
-      alert(`❌ Ошибка шлюза выплат: ${err.message}`);
+      try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+      alert(
+        `✅ Заявка принята!\n` +
+        `К зачислению: ${result.data.payoutRubles} ₽\n` +
+        `Комиссия банка: ${result.data.feeRubles} ₽`
+      );
+      await loadProfile();
+      onBalanceUpdate?.();
+    } catch (err) {
+      try { WebApp.HapticFeedback.notificationOccurred('error'); } catch {}
+      alert(`❌ Ошибка вывода: ${(err as Error).message}`);
+    } finally {
+      setWithdrawing(false);
     }
   };
 
-  // Проверяем роль администратора по твоему кастомному логину
-  const isAdmin = tgUser.name.toLowerCase().includes('shop_rub') || tgUser.name.toLowerCase().includes('max_ceo');
+  if (loading) return <div style={{ color: '#444', textAlign: 'center', padding: '40px', fontFamily: 'monospace' }}>ЗАГРУЗКА ПРОФИЛЯ...</div>;
+  if (error)   return <div style={{ color: '#ff4757', textAlign: 'center', padding: '40px', fontFamily: 'monospace' }}>❌ {error}</div>;
+  if (!profile) return null;
 
-  if (loading) return <div style={{ color: '#fff', textAlign: 'center', marginTop: '20px', fontFamily: 'monospace' }}>LOADING ONIX ENGINE...</div>;
-  if (error) return <div style={{ color: '#ff3333', textAlign: 'center', marginTop: '20px', fontFamily: 'monospace' }}>❌ ERROR: {error}</div>;
+  const isAdmin = tgId === (import.meta.env.VITE_ADMIN_TG_ID ?? '');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-      {/* ✅ ЖИВАЯ СИНХРОНИЗИРОВАННАЯ ШАПКА АКТИВНОГО ТРЕЙДЕРА */}
-      <div style={{
-        border: '1px solid #222',
-        padding: '14px',
-        backgroundColor: '#030303',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '12px'
-      }}>
-        {/* Левая часть: Динамическая аватарка + Никнейм + Роль */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ position: 'relative', width: '42px', height: '42px', flexShrink: 0 }}>
-            <img
-              src={tgUser.photo}
-              alt="Avatar"
-              style={{ width: '100%', height: '100%', border: '1px solid #fff', objectFit: 'cover' }}
-            />
-            <div style={{
-              position: 'absolute', top: '-6px', right: '-6px',
-              backgroundColor: '#000', border: '1px solid #fff', borderRadius: '50%',
-              width: '18px', height: '18px', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', fontSize: '10px'
-            }}>
-              {isAdmin ? '👑' : '👤'}
+      {/* Карточка трейдера */}
+      <div style={{ background: '#030303', border: '1px solid #222', padding: '16px', borderRadius: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#fff' }}>
+              {isAdmin ? '👑 ' : '👤 '}@{profile.telegramNick}
+            </div>
+            <div style={{ fontSize: '9px', color: isAdmin ? '#ff9f43' : '#555', marginTop: '3px' }}>
+              {isAdmin ? 'АДМИНИСТРАТОР ONIX' : `ACC #${profile.id}`}
             </div>
           </div>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
-              {tgUser.name}
-            </div>
-            <div style={{ fontSize: '9px', color: isAdmin ? '#b57cff' : '#81c784', fontWeight: 'bold', marginTop: '2px' }}>
-              {isAdmin ? `👑 АДМИН (ID: ${dbUser?.id})` : `👤 ACC: №${dbUser?.id || '1'}`}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '8px', color: '#555' }}>БАЛАНС</div>
+            <div style={{ fontSize: '18px', fontWeight: 900, color: '#1dd1a1' }}>
+              {parseFloat(profile.balanceMain).toFixed(2)} ₽
             </div>
           </div>
         </div>
 
-        {/* Правая часть: Динамический баланс из Prisma PostgreSQL + Моментальный вывод */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'right' }}>
-          <div>
-            <div style={{ fontSize: '8px', color: '#555', letterSpacing: '0.5px' }}>БАЛАНС</div>
-            <strong style={{ fontSize: '14px', color: '#81c784', fontWeight: '900' }}>
-              {dbUser ? parseFloat(dbUser.balanceMain || '0').toFixed(2) : '0.00'} ₽
-            </strong>
-          </div>
-          <button
-            onClick={handleWithdraw}
-            style={{
-              backgroundColor: '#000',
-              color: '#81c784',
-              border: '1px solid #81c784',
-              padding: '8px 12px',
-              fontFamily: '"Courier New", monospace',
-              fontWeight: 'bold',
-              fontSize: '11px',
-              cursor: 'pointer'
-            }}
-          >
-            💳 ВЫВОД
+        <button
+          onClick={handleWithdraw}
+          disabled={withdrawing || parseFloat(profile.balanceMain) < 100}
+          style={{
+            width: '100%', marginTop: '14px', padding: '12px',
+            background: withdrawing || parseFloat(profile.balanceMain) < 100 ? '#1a1a1a' : '#1dd1a1',
+            color: withdrawing || parseFloat(profile.balanceMain) < 100 ? '#555' : '#000',
+            border: 'none', borderRadius: '4px',
+            fontSize: '12px', fontWeight: 'bold',
+            cursor: withdrawing || parseFloat(profile.balanceMain) < 100 ? 'not-allowed' : 'pointer',
+            fontFamily: 'monospace',
+          }}
+        >
+          {withdrawing ? 'ОБРАБОТКА...' : '💳 ВЫВОД НА КАРТУ (комиссия 50 ₽)'}
+        </button>
+      </div>
+
+      {/* Секция отзывов */}
+      <ReviewsSection tgId={tgId} />
+    </div>
+  );
+}
+
+// ── Отзывы ───────────────────────────────────────────────────────────────────
+
+interface IReview { id: string; author: string; text: string; rating: string; createdAt: string }
+
+function ReviewsSection({ tgId }: { tgId: string }) {
+  const [reviews, setReviews]   = useState<IReview[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [text, setText]         = useState('');
+  const [rating, setRating]     = useState('⭐️⭐️⭐️⭐️⭐️');
+  const [sending, setSending]   = useState(false);
+
+  useEffect(() => {
+    fetch('/api/chat/reviews', { headers: { 'x-telegram-init-data': '' } })
+      .then(r => r.json())
+      .then(r => { if (r.success) setReviews(r.data); })
+      .catch(console.error);
+  }, []);
+
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim() || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch('/api/chat/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorTgId: tgId, text: text.trim(), rating }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message);
+      setReviews(prev => [result.data, ...prev]);
+      setText(''); setShowForm(false);
+    } catch (err) {
+      alert(`Ошибка: ${(err as Error).message}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ background: '#030303', border: '1px solid #222', padding: '16px', borderRadius: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ fontSize: '11px', color: '#fff', fontWeight: 'bold' }}>// ⭐️ ОТЗЫВЫ</div>
+        <button
+          onClick={() => setShowForm(f => !f)}
+          style={{ background: 'none', border: '1px solid #333', color: '#555', padding: '5px 10px', fontSize: '10px', borderRadius: '4px', cursor: 'pointer', fontFamily: 'monospace' }}
+        >
+          {showForm ? 'ОТМЕНА' : '+ НАПИСАТЬ'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={submitReview} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+          <select value={rating} onChange={e => setRating(e.target.value)}
+            style={{ background: '#000', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px' }}>
+            {['⭐️⭐️⭐️⭐️⭐️','⭐️⭐️⭐️⭐️','⭐️⭐️⭐️','⭐️⭐️','⭐️'].map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <textarea value={text} onChange={e => setText(e.target.value)} placeholder="Ваш отзыв..." maxLength={500} required
+            style={{ background: '#000', border: '1px solid #222', color: '#fff', padding: '8px', borderRadius: '4px', fontFamily: 'monospace', fontSize: '12px', height: '60px', resize: 'none' }} />
+          <button type="submit" disabled={sending}
+            style={{ padding: '10px', background: sending ? '#1a1a1a' : '#fff', color: sending ? '#555' : '#000', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', cursor: sending ? 'not-allowed' : 'pointer', fontFamily: 'monospace' }}>
+            {sending ? 'ОТПРАВКА...' : 'ОПУБЛИКОВАТЬ'}
           </button>
-        </div>
+        </form>
+      )}
 
-      </div>
-
-      {/* 📦 2. МОИ ВЫСТАВЛЕННЫЕ ПРЕДЛОЖЕНИЯ */}
-      <div style={{ border: '1px solid #222', padding: '16px', backgroundColor: '#030303' }}>
-        <div style={{ fontSize: '11px', color: '#fff', fontWeight: 'bold', marginBottom: '12px' }}>// 📦 МОИ ВЫСТАВЛЕННЫЕ ПРЕДЛОЖЕНИЯ</div>
-        {/* ИСПРАВЛЕНО: Заменили justifycontent и alignitems на валидный camelCase [проф. 1] */}
-        <div style={{ border: '1px solid #333', padding: '12px', backgroundColor: '#000', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: '13px', fontWeight: 'bold' }}>1,000 ROBUX [FAST]</div>
-            <div style={{ fontSize: '10px', color: '#555', marginTop: '2px' }}>Категория: ROBLOX // В наличии: 3 шт.</div>
-          </div>
-          <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#81c784' }}>790 ₽</span>
-        </div>
-      </div>
-
-      {/* ⭐️ 3. ПОСЛЕДНИЕ ОТЗЫВЫ КЛИЕНТОВ */}
-      <div style={{ border: '1px solid #222', padding: '16px', backgroundColor: '#030303' }}>
-        <div style={{ fontSize: '11px', color: '#fff', fontWeight: 'bold', marginBottom: '12px' }}>// ⭐️ ПОСЛЕДНИЕ ОТЗЫВЫ КЛИЕНТОВ</div>
+      {reviews.length === 0 ? (
+        <div style={{ color: '#333', fontSize: '11px', textAlign: 'center', padding: '20px' }}>Отзывов пока нет.</div>
+      ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <div style={{ borderBottom: '1px solid #1c1c1c', paddingBottom: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
-              <span style={{ color: '#81c784', fontWeight: 'bold' }}>⭐️⭐️⭐️⭐️⭐️ (5/5)</span>
-              <span style={{ color: '#444' }}>@gamer_pro</span>
+          {reviews.map(r => (
+            <div key={r.id} style={{ borderBottom: '1px solid #1a1a1a', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: '#ff9f43', fontSize: '11px' }}>{r.rating}</span>
+                <span style={{ color: '#444', fontSize: '10px' }}>@{r.author}</span>
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#aaa', lineHeight: '1.4' }}>{r.text}</p>
             </div>
-            <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#aaa' }}>Все отлично! Голда прилетела моментально, продавец вежливый.</p>
-          </div>
+          ))}
         </div>
-      </div>
-
+      )}
     </div>
   );
 }

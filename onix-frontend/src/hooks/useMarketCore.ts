@@ -4,84 +4,178 @@ import WebApp from '@twa-dev/sdk';
 export interface IProduct {
   id: string;
   title: string;
-  description: string;
+  description: string | null;
   priceCents: string;
   category: string;
+  sellerNick: string;
   sellerId: string;
   status: 'ACTIVE' | 'RESERVED' | 'SOLD_OUT';
+  createdAt: string;
 }
 
-export function useMarketCore() {
-  const [products, setProducts] = useState<IProduct[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+export interface IOrder {
+  id: string;
+  productId: string;
+  productTitle: string;
+  category: string;
+  totalAmountCents: string;
+  status: 'PAYMENT_HOLD' | 'DELIVERING' | 'COMPLETED' | 'CANCELED' | 'DISPUTE';
+  role: 'buyer' | 'seller';
+  counterpartyNick: string;
+  createdAt: string;
+}
+
+const API = '/api';
+
+const getInitData = () => {
+  try { return WebApp.initData || ''; } catch { return ''; }
+};
+
+const apiFetch = (url: string, options?: RequestInit) =>
+  fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-telegram-init-data': getInitData(),
+      ...(options?.headers ?? {}),
+    },
+  });
+
+export function useMarketCore(tgId: string) {
+  const [products, setProducts]           = useState<IProduct[]>([]);
+  const [orders, setOrders]               = useState<IOrder[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<IProduct | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
 
-  const getTgId = (): string => {
-    return WebApp.initDataUnsafe?.user?.id.toString() || "7099007790";
-  };
-
-  // 1. Асинхронный выкач товаров с базы для всех тестеров в реальном времени
-  const refreshMarket = async () => {
+  // ── Витрина ──────────────────────────────────────────────────────────────
+  const refreshMarket = useCallback(async (category?: string) => {
     try {
-      const response = await fetch('https://onrender.com', {
-        headers: { 'x-telegram-init-data': WebApp.initData || '' }
-      });
-      const result = await response.json();
-      if (response.ok) setProducts(result.data);
-    } catch (e) {
-      console.error('Сбой пула витрины');
+      const url = category
+        ? `${API}/products?category=${encodeURIComponent(category)}`
+        : `${API}/products`;
+      const res = await apiFetch(url);
+      const result = await res.json();
+      if (res.ok && result.success) setProducts(result.data);
+    } catch {
+      console.error('[MARKET] Ошибка загрузки витрины');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // ── История сделок ────────────────────────────────────────────────────────
+  const refreshOrders = useCallback(async () => {
+    if (!tgId) return;
+    try {
+      const res = await apiFetch(`${API}/users/orders?tgId=${tgId}`);
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setOrders([...result.data.purchases, ...result.data.sales]);
+      }
+    } catch {
+      console.error('[ORDERS] Ошибка загрузки сделок');
+    }
+  }, [tgId]);
 
   useEffect(() => {
     refreshMarket();
-  }, []);
+    refreshOrders();
+  }, [refreshMarket, refreshOrders]);
 
-  // 2. Аппаратная публикация нового лота на всю площадку
-  const createProductLog = useCallback(async (title: string, description: string, price: string, category: string) => {
+  // ── Создание лота ─────────────────────────────────────────────────────────
+  const createProduct = useCallback(async (
+    title: string,
+    description: string,
+    price: string,
+    category: string,
+  ): Promise<boolean> => {
     const parsedPrice = parseFloat(price);
-    try {
-      const response = await fetch('https://onrender.com', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': WebApp.initData || '' },
-        body: JSON.stringify({ title, description, price: parsedPrice, category, sellerId: getTgId() })
-      });
-      if (response.ok) {
-        try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
-        refreshMarket();
-      }
-    } catch {
-      alert('Ошибка базы данных при публикации контракта.');
+    if (parsedPrice < 10 || parsedPrice > 50000) {
+      try { WebApp.HapticFeedback.notificationOccurred('error'); } catch {}
+      alert('Цена лота должна быть от 10 до 50 000 ₽');
+      return false;
     }
-  }, []);
-
-  // 3. Покупка лота с авто-переносом в чат
-  const handleBuyProduct = useCallback(async (product: IProduct) => {
     try {
-      const response = await fetch('https://onrender.com', {
+      const res = await apiFetch(`${API}/products/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-telegram-init-data': WebApp.initData || '' },
-        body: JSON.stringify({ buyerId: getTgId(), productId: product.id })
+        body: JSON.stringify({ title, description, price: parsedPrice, quantity: 1, category, sellerId: tgId }),
       });
-      if (response.ok) {
-        try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
-        setSelectedProduct(null);
-
-        // Нативный автоперенос в чат маркетплейса
-        window.dispatchEvent(new CustomEvent('onix.switch_tab', { detail: { tab: 'chat' } }));
-      } else {
-        const err = await response.json();
-        alert(err.message || 'Ошибка клиринга кассы.');
-      }
-    } catch {
-      alert('Шлюз СУБД недоступен.');
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message ?? 'Ошибка сервера');
+      try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+      refreshMarket(categoryFilter);
+      return true;
+    } catch (err: unknown) {
+      try { WebApp.HapticFeedback.notificationOccurred('error'); } catch {}
+      alert(`Ошибка публикации: ${(err as Error).message}`);
+      return false;
     }
-  }, []);
+  }, [tgId, categoryFilter, refreshMarket]);
+
+  // ── Покупка (Фаза 1) ──────────────────────────────────────────────────────
+  const buyProduct = useCallback(async (product: IProduct): Promise<boolean> => {
+    try {
+      const res = await apiFetch(`${API}/products/purchase`, {
+        method: 'POST',
+        body: JSON.stringify({ buyerId: tgId, productId: product.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message ?? 'Ошибка кассы');
+      try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+      setSelectedProduct(null);
+      refreshMarket(categoryFilter);
+      refreshOrders();
+      window.dispatchEvent(new CustomEvent('onix.switch_tab', { detail: { tab: 'deals' } }));
+      return true;
+    } catch (err: unknown) {
+      try { WebApp.HapticFeedback.notificationOccurred('error'); } catch {}
+      alert(`Ошибка покупки: ${(err as Error).message}`);
+      return false;
+    }
+  }, [tgId, categoryFilter, refreshMarket, refreshOrders]);
+
+  // ── Подтверждение отгрузки (Фаза 2) ──────────────────────────────────────
+  const confirmDelivery = useCallback(async (orderId: string): Promise<boolean> => {
+    try {
+      const res = await apiFetch(`${API}/products/confirm-delivery`, {
+        method: 'POST',
+        body: JSON.stringify({ sellerId: tgId, orderId }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message ?? 'Ошибка');
+      try { WebApp.HapticFeedback.impactOccurred('medium'); } catch {}
+      refreshOrders();
+      return true;
+    } catch (err: unknown) {
+      alert(`Ошибка: ${(err as Error).message}`);
+      return false;
+    }
+  }, [tgId, refreshOrders]);
+
+  // ── Подтверждение получения (Фаза 3) ─────────────────────────────────────
+  const completeOrder = useCallback(async (orderId: string): Promise<boolean> => {
+    try {
+      const res = await apiFetch(`${API}/products/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ buyerId: tgId, orderId }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message ?? 'Ошибка');
+      try { WebApp.HapticFeedback.notificationOccurred('success'); } catch {}
+      refreshOrders();
+      return true;
+    } catch (err: unknown) {
+      try { WebApp.HapticFeedback.notificationOccurred('error'); } catch {}
+      alert(`Ошибка завершения: ${(err as Error).message}`);
+      return false;
+    }
+  }, [tgId, refreshOrders]);
 
   return {
-    products, loading, selectedProduct, setSelectedProduct,
-    createProductLog, handleBuyProduct, refreshMarket
+    products, orders, selectedProduct, setSelectedProduct,
+    loading, categoryFilter, setCategoryFilter,
+    refreshMarket, refreshOrders,
+    createProduct, buyProduct, confirmDelivery, completeOrder,
   };
 }

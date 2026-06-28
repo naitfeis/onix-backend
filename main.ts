@@ -14,7 +14,7 @@ import {
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import * as crypto from 'crypto';
-import { AppModule } from './app.module';
+import { AppModule } from './safe-deal-platform/src/app.module';
 
 // ─── BigInt Serializer ───────────────────────────────────────────────────────
 // Все BigInt из Prisma автоматически конвертируются в string для JSON-ответов

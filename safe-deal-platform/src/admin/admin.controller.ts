@@ -1,88 +1,134 @@
-import { Controller, Post, Delete, Body, Param, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Controller, Post, Delete, Body, Param,
+  ForbiddenException, BadRequestException, Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+
+class ApiResponse<T> {
+  readonly success = true;
+  constructor(public readonly data: T) {}
+}
 
 @Controller('admin')
 export class AdminController {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminController.name);
 
-  // 👑 Профессиональный щит: читаем ID владельца из системного файла .env
-  private getOwnerId(): bigint {
+  constructor(private readonly prisma: PrismaService) {}
+
+  private getOwnerTgId(): bigint {
     const envId = process.env.ADMIN_TELEGRAM_ID;
-    if (!envId) {
+    if (!envId || !/^\d+$/.test(envId)) {
       throw new ForbiddenException('Конфигурация безопасности сервера нарушена.');
     }
     return BigInt(envId);
   }
 
-  // Внутренний метод верификации прав и автоматического логирования действий
-  private async verifyAndLog(adminId: string, actionType: string, targetId: string, details: string) {
-    if (BigInt(adminId) !== this.getOwnerId()) {
-      throw new ForbiddenException('Доступ заблокирован. У вас нет прав Администратора ONIX.');
+  private async verifyAdmin(adminTgId: string, action: string, targetId: string): Promise<void> {
+    if (!adminTgId || !/^\d+$/.test(adminTgId.trim())) {
+      throw new BadRequestException('adminTgId должен быть числовой строкой.');
     }
-
-    // Синьор-требование: пишем каждый шаг админа в историю для полной отчетности CEO
-    await this.prisma.$executeRaw`
-      INSERT INTO "GlobalChat" (id, "senderId", "senderName", text, "isAdmin", timestamp)
-      VALUES (gen_random_uuid()::text, ${BigInt(adminId)}, 'SYSTEM_LOG', ${`[ACTION: ${actionType}] Target: ${targetId}. Details: ${details}`}, true, NOW())
-    `;
+    if (BigInt(adminTgId.trim()) !== this.getOwnerTgId()) {
+      this.logger.warn(`[ADMIN] Попытка несанкционированного доступа: tgId=${adminTgId}`);
+      throw new ForbiddenException('Нет прав администратора ONIX.');
+    }
+    // Записываем каждое действие в лог чата
+    await this.prisma.globalChat.create({
+      data: {
+        senderId: BigInt(adminTgId.trim()),
+        senderName: 'SYSTEM_LOG',
+        text: `[ADMIN ACTION: ${action}] target=${targetId}`,
+        isAdmin: true,
+      },
+    });
   }
 
-  // 1. УПРАВЛЕНИЕ БАЛАНСАМИ: Жестко выставить баланс в BigInt-копейках
+  // POST /api/admin/user/balance
   @Post('user/balance')
-  async changeUserBalance(
-    @Body('adminId') adminId: string,
-    @Body('targetUserId') targetUserId: string,
-    @Body('amountRubles') amountRubles: number
+  async setBalance(
+    @Body('adminTgId') adminTgId: string,
+    @Body('targetTgId') targetTgId: string,
+    @Body('amountRubles') amountRubles: number,
   ) {
-    if (amountRubles < 0 || isNaN(amountRubles)) {
-      throw new BadRequestException('Сумма баланса не может быть отрицательной');
+    await this.verifyAdmin(adminTgId, 'SET_BALANCE', targetTgId);
+
+    if (typeof amountRubles !== 'number' || amountRubles < 0 || isNaN(amountRubles)) {
+      throw new BadRequestException('Сумма должна быть неотрицательным числом.');
     }
 
-    const targetBigIntId = BigInt(targetUserId);
+    const telegramId = BigInt(targetTgId.trim());
     const centsAmount = BigInt(Math.round(amountRubles * 100));
 
-    // Проверяем права и пишем лог изменений
-    await this.verifyAndLog(adminId, 'CHANGE_BALANCE', targetUserId, `Установлен баланс: ${amountRubles} руб.`);
+    const user = await this.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) throw new BadRequestException('Пользователь не найден.');
 
     await this.prisma.user.update({
-      where: { id: targetBigIntId },
-      data: { balanceCents: centsAmount }
+      where: { id: user.id },
+      data: { balanceCents: centsAmount },
     });
 
-    return { success: true, message: `Баланс пользователя успешно изменен на ${amountRubles} руб.` };
+    this.logger.log(`[ADMIN] Баланс пользователя tgId=${targetTgId} установлен: ${amountRubles} ₽`);
+    return new ApiResponse({ message: `Баланс установлен: ${amountRubles} ₽` });
   }
 
-  // 2. ЖЕСТКИЙ БАН: Блокировка пользователя через метку в базе Neon
+  // POST /api/admin/user/ban
   @Post('user/ban')
   async banUser(
-    @Body('adminId') adminId: string,
-    @Body('targetUserId') targetUserId: string
+    @Body('adminTgId') adminTgId: string,
+    @Body('targetTgId') targetTgId: string,
   ) {
-    const targetBigIntId = BigInt(targetUserId);
+    await this.verifyAdmin(adminTgId, 'BAN_USER', targetTgId);
 
-    await this.verifyAndLog(adminId, 'BAN_USER', targetUserId, 'Выдан перманентный бан');
+    const telegramId = BigInt(targetTgId.trim());
+    const user = await this.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) throw new BadRequestException('Пользователь не найден.');
 
     await this.prisma.user.update({
-      where: { id: targetBigIntId },
-      data: { deletedAt: new Date() }
+      where: { id: user.id },
+      data: { deletedAt: new Date() },
     });
 
-    return { success: true, message: `Пользователь намертво забанен в ONIX.` };
+    this.logger.log(`[ADMIN] Пользователь tgId=${targetTgId} забанен`);
+    return new ApiResponse({ message: 'Пользователь заблокирован.' });
   }
 
-  // 3. МОДЕРАЦИЯ ВИТРИНЫ: Стереть объявление с маркета в архив
-  @Delete('product/:id')
-  async deleteProduct(
-    @Body('adminId') adminId: string,
-    @Param('id') productId: string
+  // POST /api/admin/user/unban
+  @Post('user/unban')
+  async unbanUser(
+    @Body('adminTgId') adminTgId: string,
+    @Body('targetTgId') targetTgId: string,
   ) {
-    await this.verifyAndLog(adminId, 'DELETE_PRODUCT', productId, 'Товар принудительно отправлен в архив');
+    await this.verifyAdmin(adminTgId, 'UNBAN_USER', targetTgId);
+
+    const telegramId = BigInt(targetTgId.trim());
+    const user = await this.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) throw new BadRequestException('Пользователь не найден.');
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { deletedAt: null },
+    });
+
+    this.logger.log(`[ADMIN] Пользователь tgId=${targetTgId} разблокирован`);
+    return new ApiResponse({ message: 'Пользователь разблокирован.' });
+  }
+
+  // DELETE /api/admin/product/:id
+  @Delete('product/:id')
+  async archiveProduct(
+    @Body('adminTgId') adminTgId: string,
+    @Param('id') productId: string,
+  ) {
+    await this.verifyAdmin(adminTgId, 'ARCHIVE_PRODUCT', productId);
+
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new BadRequestException('Товар не найден.');
 
     await this.prisma.product.update({
       where: { id: productId },
-      data: { status: 'ARCHIVED' }
+      data: { status: 'ARCHIVED' },
     });
 
-    return { success: true, message: `Объявление успешно удалено администратором.` };
+    this.logger.log(`[ADMIN] Товар id=${productId} архивирован`);
+    return new ApiResponse({ message: 'Товар снят с витрины.' });
   }
 }

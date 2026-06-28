@@ -1,135 +1,179 @@
-import { Controller, Get, Post, Body, HttpCode, HttpStatus, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Controller, Get, Post, Body, HttpCode, HttpStatus,
+  BadRequestException, Logger, Query,
+} from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 
-// СЕНИОР-ФАБРИКА ОЧИСТКИ ТЕКСТА: Защита от XSS атак [проф. 1]
-class OnixSecuritySanitizer {
-  static sanitize(text: string): string {
-    if (!text) return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#x27;')
-      .replace(/\//g, '&#x2F;')
-      .trim();
-  }
+// XSS-санитайзер для входящих сообщений
+function sanitize(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .trim();
 }
 
-// СТАФФ-ИНФРАСТРУКТУРА: Выделяем защищенные RAM-буферы для хранения данных чата и отзывов в памяти [проф. 1]
-const MEMORY_CHAT_LOGS: any[] = [
-  { id: "init_1", senderId: "0", senderName: "SYSTEM", text: "Глобальный чат ONIX | SSSF успешно запущен в RAM.", timestamp: "12:00", isAdmin: true, receiverName: null }
-];
+class ApiResponse<T> {
+  readonly success = true;
+  constructor(public readonly data: T) {}
+}
 
-const MEMORY_REVIEWS_LOGS: any[] = [
-  { id: "rev_1", author: "@sniper_pro", text: "Все отлично! Голда прилетела за пару минут.", rating: "⭐️⭐️⭐️⭐️⭐️" }
-];
-
-@Controller('api')
+// ВАЖНО: префикс 'chat' (не 'api/chat') — глобальный /api добавит main.ts
+@Controller('chat')
 export class ChatController {
   private readonly logger = new Logger(ChatController.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * 🔥 STAFF API: Выгрузка логов Чат-Хаба из RAM [проф. 1]
+   * GET /api/chat/history?limit=50
+   * История глобального чата из PostgreSQL.
    */
-  @Get('chat/history')
-  async getChatHistory() {
-    return { success: true, data: MEMORY_CHAT_LOGS };
+  @Get('history')
+  async getChatHistory(@Query('limit') limitStr?: string) {
+    const limit = Math.min(parseInt(limitStr ?? '50', 10) || 50, 100);
+
+    const messages = await this.prisma.globalChat.findMany({
+      orderBy: { timestamp: 'desc' },
+      take: limit,
+    });
+
+    // Возвращаем в хронологическом порядке (старые → новые)
+    return new ApiResponse(
+      messages.reverse().map((m) => ({
+        id: m.id,
+        senderId: m.senderId.toString(),
+        senderName: m.senderName,
+        receiverName: m.receiverName ?? null,
+        text: m.text,
+        isAdmin: m.isAdmin,
+        timestamp: m.timestamp,
+      }))
+    );
   }
 
   /**
-   * 🔥 STAFF API: Прием сообщений с авто-очисткой XSS и записью в RAM [проф. 1]
+   * POST /api/chat/send
+   * Отправка сообщения в глобальный чат.
    */
-  @Post('chat/send')
+  @Post('send')
   @HttpCode(HttpStatus.OK)
   async sendMessage(
-    @Body('senderId') senderIdStr: string,
+    @Body('senderTgId') senderTgIdStr: string,
     @Body('text') text: string,
-    @Body('receiverName') receiverName: string | null
+    @Body('receiverName') receiverName?: string,
   ) {
-    if (!text || text.trim() === "") {
-      throw new BadRequestException('Строка сообщения не может быть пустой.');
+    if (!text || text.trim().length === 0) {
+      throw new BadRequestException('Сообщение не может быть пустым.');
+    }
+    if (text.length > 1000) {
+      throw new BadRequestException('Сообщение слишком длинное (макс. 1000 символов).');
+    }
+    if (!senderTgIdStr || !/^\d+$/.test(senderTgIdStr.trim())) {
+      throw new BadRequestException('senderTgId должен быть числовой строкой.');
     }
 
     try {
-      const senderId = BigInt(senderIdStr.trim());
-      const user = await this.prisma.user.findUnique({ where: { id: senderId } }).catch(() => null);
+      const telegramId = BigInt(senderTgIdStr.trim());
+      const user = await this.prisma.user.findUnique({
+        where: { telegramId },
+        select: { id: true, telegramNick: true },
+      });
 
-      const senderName = user?.telegramNick || `ACC №${senderIdStr}`;
+      const senderName = user?.telegramNick ?? `ACC №${senderTgIdStr}`;
       const nameLower = senderName.toLowerCase();
       const isAdmin = nameLower.includes('max_ceo') || nameLower.includes('shop_rub');
 
-      const cleanText = OnixSecuritySanitizer.sanitize(text);
+      const message = await this.prisma.globalChat.create({
+        data: {
+          senderId: telegramId,
+          senderName,
+          text: sanitize(text),
+          receiverName: receiverName ? sanitize(receiverName) : null,
+          isAdmin,
+        },
+      });
 
-      const newMsg = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
-        senderId: senderIdStr,
-        senderName,
-        text: cleanText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isAdmin,
-        // ИСПРАВЛЕНО: Переменная receiverName теперь используется в объекте! Ошибка TS6133 полностью уничтожена [проф. 1]
-        receiverName: receiverName ? OnixSecuritySanitizer.sanitize(receiverName) : null
-      };
-
-      MEMORY_CHAT_LOGS.push(newMsg);
-
-      if (MEMORY_CHAT_LOGS.length > 50) {
-        MEMORY_CHAT_LOGS.shift();
-      }
-
-      return { success: true, data: { id: newMsg.id } };
-    } catch (error: any) {
-      this.logger.error(`[🚨 MESSAGE ROUTING ERROR]: ${error.message}`);
-      throw new BadRequestException('Ошибка фонового клиринга сообщения.');
+      return new ApiResponse({ id: message.id });
+    } catch (err) {
+      this.logger.error(`[CHAT SEND CRASH]: ${(err as Error).message}`);
+      throw new BadRequestException('Ошибка отправки сообщения.');
     }
   }
 
   /**
-   * 🔥 STAFF API: Выгрузка отзывов из RAM [проф. 1]
+   * GET /api/chat/reviews
+   * Последние отзывы из PostgreSQL.
    */
   @Get('reviews')
   async getReviews() {
-    return { success: true, data: MEMORY_REVIEWS_LOGS };
+    const reviews = await this.prisma.review.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    return new ApiResponse(
+      reviews.map((r) => ({
+        id: r.id,
+        author: r.author,
+        text: r.text,
+        rating: r.rating,
+        createdAt: r.createdAt,
+      }))
+    );
   }
 
   /**
-   * 🔥 STAFF API: Пуш отзыва в RAM с валидацией рейтинговой сетки [проф. 1]
+   * POST /api/chat/reviews
+   * Публикация отзыва.
    */
-  @Post('reviews/create')
+  @Post('reviews')
+  @HttpCode(HttpStatus.CREATED)
   async createReview(
-    @Body('authorId') authorIdStr: string,
+    @Body('authorTgId') authorTgIdStr: string,
     @Body('text') text: string,
-    @Body('rating') rating: string
+    @Body('rating') rating: string,
   ) {
-    if (!text || !rating) throw new BadRequestException('Все поля формы обязательны.');
+    if (!text || !rating) throw new BadRequestException('Заполните все поля отзыва.');
 
-    const validRatings = ["⭐️⭐️⭐️⭐️⭐️", "⭐️⭐️⭐️⭐️", "⭐️⭐️⭐️", "⭐️⭐️", "⭐️"];
+    const validRatings = ['⭐️', '⭐️⭐️', '⭐️⭐️⭐️', '⭐️⭐️⭐️⭐️', '⭐️⭐️⭐️⭐️⭐️'];
     if (!validRatings.includes(rating.trim())) {
-      throw new BadRequestException('Невалидный маркер звезд.');
+      throw new BadRequestException('Невалидный рейтинг.');
+    }
+
+    if (!authorTgIdStr || !/^\d+$/.test(authorTgIdStr.trim())) {
+      throw new BadRequestException('authorTgId должен быть числовой строкой.');
     }
 
     try {
-      const authorId = BigInt(authorIdStr.trim());
-      const user = await this.prisma.user.findUnique({ where: { id: authorId } }).catch(() => null);
-      const authorName = user?.telegramNick || `ACC №${authorIdStr}`;
+      const telegramId = BigInt(authorTgIdStr.trim());
+      const user = await this.prisma.user.findUnique({
+        where: { telegramId },
+        select: { id: true, telegramNick: true },
+      });
+      const authorName = user?.telegramNick ?? `ACC №${authorTgIdStr}`;
 
-      const newReview = {
-        id: Date.now(),
-        author: authorName,
-        text: OnixSecuritySanitizer.sanitize(text),
-        rating: rating.trim()
-      };
+      const review = await this.prisma.review.create({
+        data: {
+          authorId: telegramId,
+          author: authorName,
+          text: sanitize(text),
+          rating: rating.trim(),
+        },
+      });
 
-      MEMORY_REVIEWS_LOGS.unshift(newReview);
-      if (MEMORY_REVIEWS_LOGS.length > 20) MEMORY_REVIEWS_LOGS.pop();
-
-      return { success: true, data: newReview };
-    } catch (error: any) {
-      this.logger.error(`[🚨 REVIEW INJECTION CRASH]: ${error.message}`);
-      throw new BadRequestException('Не удалось зафиксировать отзыв.');
+      return new ApiResponse({
+        id: review.id,
+        author: review.author,
+        text: review.text,
+        rating: review.rating,
+        createdAt: review.createdAt,
+      });
+    } catch (err) {
+      this.logger.error(`[REVIEW CRASH]: ${(err as Error).message}`);
+      throw new BadRequestException('Ошибка публикации отзыва.');
     }
   }
 }
