@@ -1,8 +1,16 @@
-import { Controller, Post, Req, Res, HttpCode } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Req,
+  Res,
+  HttpCode,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
+import { SkipTelegramAuth } from '../main';
 import { TelegramBotService } from './telegram-bot.service';
 
 @Controller('telegram-webhook')
+@SkipTelegramAuth()
 export class TelegramWebhookController {
   constructor(
     private readonly telegramBotService: TelegramBotService,
@@ -20,7 +28,8 @@ export class TelegramWebhookController {
       return res.sendStatus(200);
     } catch (error) {
       console.error('Telegram webhook error:', error);
+
       return res.sendStatus(500);
     }
-  }
+}
 }

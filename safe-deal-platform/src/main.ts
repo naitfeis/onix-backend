@@ -57,7 +57,7 @@ class TelegramAuthGuard implements CanActivate {
     }>();
 
     // ✅ Пропускаем webhook endpoint по пути (дополнительная защита)
-    if (req.path?.startsWith('/tg-webhook/')) return true;
+    if (req.path?.startsWith('/telegram-webhook')) return true;
 
     // Dev bypass
     if (this.isDev && req.headers['x-developer-mode'] === 'onix_dev_bypass') {
@@ -137,9 +137,9 @@ async function bootstrap(): Promise<void> {
   });
 
   // ✅ Глобальный префикс /api — НО webhook будет на /tg-webhook/... (без префикса)
-  app.setGlobalPrefix('api', {
-    exclude: ['/tg-webhook/(.*)'],
-  });
+app.setGlobalPrefix('api', {
+  exclude: ['/telegram-webhook'],
+});
 
   app.useGlobalPipes(
     new ValidationPipe({
