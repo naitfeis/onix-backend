@@ -1,27 +1,37 @@
 import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+
+// Prisma
 import { PrismaService } from './prisma.service';
-import { ProductService } from './product.service';
+
+// Telegram
+import { TelegramModule } from './Telegram/telegram.module';
+import { TelegramBotService } from './Telegram/telegram-bot.service';
+import { TelegramWebhookController } from './Telegram/telegram-webhook.controller';
+
+// Controllers
 import { ProductController } from './product.controller';
 import { UserController } from './user.controller';
-import { ChatController } from './chat.controller';
-import { AdminController } from './admin/admin.controller';
-import { OrderNotificationListener } from './order-notification.listener';
+
+// Services
+import { ProductService } from './product.service';
 
 @Module({
   imports: [
-    EventEmitterModule.forRoot({ wildcard: false, maxListeners: 10 }),
+    EventEmitterModule.forRoot(),   // <-- ЭТОГО НЕ ХВАТАЛО
+    TelegramModule,
   ],
+
   controllers: [
     ProductController,
     UserController,
-    ChatController,
-    AdminController,
+    TelegramWebhookController,
   ],
+
   providers: [
     PrismaService,
     ProductService,
-    OrderNotificationListener,
+    TelegramBotService,
   ],
 })
 export class AppModule {}

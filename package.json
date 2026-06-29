@@ -23,6 +23,7 @@
   "type": "commonjs",
   "dependencies": {
     "@nestjs/common": "^11.1.27",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.27",
     "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/platform-express": "^11.1.27",
@@ -36,6 +37,7 @@
     "telegraf": "^4.16.3"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^26.0.1",
     "@types/pg": "^8.20.0",
     "prisma": "^7.8.0",

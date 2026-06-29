@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import {
   ValidationPipe,
   Logger,
@@ -10,15 +10,19 @@ import {
   CallHandler,
   CanActivate,
   UnauthorizedException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import * as crypto from 'crypto';
 import { AppModule } from './app.module';
 
-// ─── BigInt Serializer ───────────────────────────────────────────────────────
-// Все BigInt из Prisma автоматически конвертируются в string для JSON-ответов
+// ─── Декоратор для пропуска TelegramAuthGuard ────────────────────────────────
+// Используй @SkipTelegramAuth() на контроллере/методе чтобы отключить проверку
+export const SKIP_TELEGRAM_AUTH = 'skipTelegramAuth';
+export const SkipTelegramAuth = () => SetMetadata(SKIP_TELEGRAM_AUTH, true);
 
+// ─── BigInt Serializer ───────────────────────────────────────────────────────
 @Injectable()
 class BigIntSerializerInterceptor implements NestInterceptor {
   intercept(_ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -31,21 +35,31 @@ class BigIntSerializerInterceptor implements NestInterceptor {
 }
 
 // ─── Telegram Auth Guard ─────────────────────────────────────────────────────
-// Проверяет подпись Telegram Web App по алгоритму HMAC-SHA256.
-// Пропускает запросы с заголовком x-developer-mode только в dev-окружении.
-
 @Injectable()
 class TelegramAuthGuard implements CanActivate {
   private readonly logger = new Logger('TelegramAuthGuard');
-  private readonly botToken = process.env.BOT_TOKEN ?? '';
+  private readonly botToken = process.env.TELEGRAM_BOT_TOKEN ?? '';
   private readonly isDev = process.env.NODE_ENV !== 'production';
 
+  constructor(private readonly reflector: Reflector) {}
+
   canActivate(ctx: ExecutionContext): boolean {
+    // ✅ Пропускаем эндпоинты помеченные @SkipTelegramAuth() (webhook от Telegram)
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_TELEGRAM_AUTH, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+    if (skip) return true;
+
     const req = ctx.switchToHttp().getRequest<{
+      path: string;
       headers: Record<string, string | undefined>;
     }>();
 
-    // Dev bypass — только если не production
+    // ✅ Пропускаем webhook endpoint по пути (дополнительная защита)
+    if (req.path?.startsWith('/tg-webhook/')) return true;
+
+    // Dev bypass
     if (this.isDev && req.headers['x-developer-mode'] === 'onix_dev_bypass') {
       this.logger.warn('[GUARD] Dev bypass активирован (не для production!)');
       return true;
@@ -57,7 +71,7 @@ class TelegramAuthGuard implements CanActivate {
     }
 
     if (!this.botToken) {
-      this.logger.error('[GUARD] BOT_TOKEN не задан — невозможно верифицировать подпись.');
+      this.logger.error('[GUARD] TELEGRAM_BOT_TOKEN не задан.');
       throw new UnauthorizedException('Ошибка конфигурации сервера.');
     }
 
@@ -101,7 +115,6 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  // CORS — допускаем только наши домены
   const allowedOrigins: Array<string | RegExp> = [
     'http://localhost:5173',
     'https://onixtg.shop',
@@ -111,7 +124,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin) return cb(null, true); // server-to-server или curl
+      if (!origin) return cb(null, true);
       const allowed = allowedOrigins.some((o) =>
         o instanceof RegExp ? o.test(origin) : o === origin
       );
@@ -123,7 +136,10 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  app.setGlobalPrefix('api');
+  // ✅ Глобальный префикс /api — НО webhook будет на /tg-webhook/... (без префикса)
+  app.setGlobalPrefix('api', {
+    exclude: ['/tg-webhook/(.*)'],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -135,7 +151,10 @@ async function bootstrap(): Promise<void> {
   );
 
   app.useGlobalInterceptors(new BigIntSerializerInterceptor());
-  app.useGlobalGuards(new TelegramAuthGuard());
+
+  // ✅ Передаём Reflector в Guard чтобы работал @SkipTelegramAuth()
+  const reflector = app.get(Reflector);
+  app.useGlobalGuards(new TelegramAuthGuard(reflector));
 
   const port = Number(process.env.PORT) || 3000;
   await app.listen(port);
