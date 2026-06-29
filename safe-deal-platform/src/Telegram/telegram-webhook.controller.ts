@@ -21,13 +21,15 @@ export class TelegramWebhookController {
     @Res() res: Response,
   ) {
     try {
+      console.log('[WEBHOOK] Update received');
+
       await this.telegramBotService.handleWebhookUpdate(req.body);
 
       return res.sendStatus(200);
     } catch (error) {
-      console.error('Telegram webhook error:', error);
+      console.error('[WEBHOOK ERROR]', error);
 
       return res.sendStatus(500);
     }
-}
+  }
 }

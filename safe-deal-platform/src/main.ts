@@ -11,6 +11,7 @@ import {
   CanActivate,
   UnauthorizedException,
   SetMetadata,
+  RequestMethod,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -57,7 +58,11 @@ class TelegramAuthGuard implements CanActivate {
     }>();
 
     // ✅ Пропускаем webhook endpoint по пути (дополнительная защита)
-    if (req.path?.startsWith('/telegram-webhook')) return true;
+    if (
+  req.path?.includes('telegram-webhook')
+) {
+  return true;
+}
 
     // Dev bypass
     if (this.isDev && req.headers['x-developer-mode'] === 'onix_dev_bypass') {
@@ -138,7 +143,12 @@ async function bootstrap(): Promise<void> {
 
   // ✅ Глобальный префикс /api — НО webhook будет на /tg-webhook/... (без префикса)
 app.setGlobalPrefix('api', {
-  exclude: ['/telegram-webhook'],
+  exclude: [
+    {
+      path: 'telegram-webhook',
+      method: RequestMethod.POST,
+    },
+  ],
 });
 
   app.useGlobalPipes(
