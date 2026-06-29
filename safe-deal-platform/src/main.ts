@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import 'dotenv/config';
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import {
   ValidationPipe,
   Logger,
@@ -10,15 +10,18 @@ import {
   CallHandler,
   CanActivate,
   UnauthorizedException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import * as crypto from 'crypto';
-import { AppModule } from './safe-deal-platform/src/app.module';
+import { AppModule } from './app.module';
+
+// ─── Декоратор для пропуска TelegramAuthGuard ────────────────────────────────
+export const SKIP_TELEGRAM_AUTH = 'skipTelegramAuth';
+export const SkipTelegramAuth = () => SetMetadata(SKIP_TELEGRAM_AUTH, true);
 
 // ─── BigInt Serializer ───────────────────────────────────────────────────────
-// Все BigInt из Prisma автоматически конвертируются в string для JSON-ответов
-
 @Injectable()
 class BigIntSerializerInterceptor implements NestInterceptor {
   intercept(_ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
@@ -31,23 +34,29 @@ class BigIntSerializerInterceptor implements NestInterceptor {
 }
 
 // ─── Telegram Auth Guard ─────────────────────────────────────────────────────
-// Проверяет подпись Telegram Web App по алгоритму HMAC-SHA256.
-// Пропускает запросы с заголовком x-developer-mode только в dev-окружении.
-
 @Injectable()
 class TelegramAuthGuard implements CanActivate {
   private readonly logger = new Logger('TelegramAuthGuard');
   private readonly botToken = process.env.BOT_TOKEN ?? '';
   private readonly isDev = process.env.NODE_ENV !== 'production';
 
+  constructor(private readonly reflector: Reflector) {}
+
   canActivate(ctx: ExecutionContext): boolean {
+    // Пропускаем эндпоинты помеченные @SkipTelegramAuth()
+    const skip = this.reflector.getAllAndOverride<boolean>(SKIP_TELEGRAM_AUTH, [
+      ctx.getHandler(),
+      ctx.getClass(),
+    ]);
+    if (skip) return true;
+
     const req = ctx.switchToHttp().getRequest<{
-      headers: Record<string, string | undefined>;
       path: string;
+      headers: Record<string, string | undefined>;
     }>();
 
-    // Пропускаем webhook-эндпоинт — Telegram сам его вызывает, без initData
-    if (req.path?.startsWith('/api/telegram-webhook')) {
+    // Пропускаем webhook — Telegram сам его вызывает, без initData
+    if (req.path?.includes('telegram-webhook')) {
       return true;
     }
 
@@ -107,7 +116,6 @@ async function bootstrap(): Promise<void> {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
-  // CORS — допускаем только наши домены
   const allowedOrigins: Array<string | RegExp> = [
     'http://localhost:5173',
     'https://onixtg.shop',
@@ -117,7 +125,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableCors({
     origin: (origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin) return cb(null, true); // server-to-server или curl
+      if (!origin) return cb(null, true);
       const allowed = allowedOrigins.some((o) =>
         o instanceof RegExp ? o.test(origin) : o === origin
       );
@@ -141,7 +149,10 @@ async function bootstrap(): Promise<void> {
   );
 
   app.useGlobalInterceptors(new BigIntSerializerInterceptor());
-  app.useGlobalGuards(new TelegramAuthGuard());
+
+  // Передаём Reflector в Guard чтобы работал @SkipTelegramAuth()
+  const reflector = app.get(Reflector);
+  app.useGlobalGuards(new TelegramAuthGuard(reflector));
 
   const port = Number(process.env.PORT) || 3000;
   await app.listen(port);
