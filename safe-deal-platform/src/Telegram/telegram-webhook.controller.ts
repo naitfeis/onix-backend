@@ -6,11 +6,9 @@ import {
   HttpCode,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { SkipTelegramAuth } from '../main';
 import { TelegramBotService } from './telegram-bot.service';
 
 @Controller('telegram-webhook')
-@SkipTelegramAuth()
 export class TelegramWebhookController {
   constructor(
     private readonly telegramBotService: TelegramBotService,
