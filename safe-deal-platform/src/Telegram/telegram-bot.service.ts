@@ -17,7 +17,8 @@ export class TelegramBotService implements OnModuleInit {
 
     // Глобальный обработчик ошибок Telegraf
     this.bot.catch((err) => {
-      console.error('[TELEGRAF ERROR]', err);
+      console.error('[TELEGRAF ERROR]');
+      console.error(err);
     });
   }
 
@@ -26,14 +27,22 @@ export class TelegramBotService implements OnModuleInit {
     this.bot.start(async (ctx) => {
       console.log('[BOT] /start');
 
-      await ctx.reply('Бот запущен');
+      const result = await ctx.reply('Бот запущен');
+
+      console.log('[BOT REPLY RESULT]');
+      console.dir(result, { depth: null });
     });
 
     // Любое текстовое сообщение
     this.bot.on('text', async (ctx) => {
       console.log('[BOT] TEXT:', ctx.message.text);
 
-      await ctx.reply(`Ты написал: ${ctx.message.text}`);
+      const result = await ctx.reply(
+        `Ты написал: ${ctx.message.text}`,
+      );
+
+      console.log('[BOT TEXT RESULT]');
+      console.dir(result, { depth: null });
     });
 
     if (process.env.NODE_ENV === 'production') {
