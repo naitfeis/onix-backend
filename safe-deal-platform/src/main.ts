@@ -24,11 +24,62 @@ export const SkipTelegramAuth = () => SetMetadata(SKIP_TELEGRAM_AUTH, true);
 // ─── BigInt Serializer ───────────────────────────────────────────────────────
 @Injectable()
 class BigIntSerializerInterceptor implements NestInterceptor {
-  intercept(_ctx: ExecutionContext, next: CallHandler): Observable<unknown> {
+
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<any> {
+
+    const req = context.switchToHttp().getRequest();
+
+    // Telegram webhook никогда не сериализуем
+    if (
+      req.originalUrl?.includes('/telegram-webhook')
+    ) {
+      return next.handle();
+    }
+
     return next.handle().pipe(
-      map((data) => JSON.parse(JSON.stringify(data, (_key, val) =>
-        typeof val === 'bigint' ? val.toString() : val
-      )))
+      map((data) => {
+
+        // null
+        if (data == null) {
+          return data;
+        }
+
+        // Buffer
+        if (Buffer.isBuffer(data)) {
+          return data;
+        }
+
+        // Stream
+        if (
+          typeof data.pipe === 'function'
+        ) {
+          return data;
+        }
+
+        try {
+
+          return JSON.parse(
+            JSON.stringify(
+              data,
+              (_k, value) =>
+                typeof value === 'bigint'
+                  ? value.toString()
+                  : value,
+            ),
+          );
+
+        } catch {
+
+          // Если объект нельзя сериализовать —
+          // просто отдаём как есть
+          return data;
+
+        }
+
+      }),
     );
   }
 }
