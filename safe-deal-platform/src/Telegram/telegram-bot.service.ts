@@ -30,7 +30,7 @@ export class TelegramBotService implements OnModuleInit {
         throw new Error('WEBHOOK_DOMAIN отсутствует в .env');
       }
 
-      const url = `${domain}/telegram-webhook`;
+      const url = `${domain}/api/telegram-webhook`;
 
       try {
         // Проверяем текущий webhook
