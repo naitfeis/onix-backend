@@ -48,3 +48,12 @@ npm run build
 ```
 
 The SQL migration is provided in `prisma/migrations/20260712140000_onix_backend/migration.sql` but must be reviewed and applied separately. It deliberately stops if legacy users lack a Telegram identity; no production database migration is run automatically.
+
+If that baseline SQL was applied manually, verify that it completed in full and register it before deploying later migrations:
+
+```bash
+npx prisma migrate resolve --applied 20260712140000_onix_backend
+npx prisma migrate deploy
+```
+
+Do not mark the baseline as applied when any of its statements are still pending. Run both commands with the same `DATABASE_URL` used by the Render service.

@@ -86,7 +86,7 @@ test('Mini App bootstrap verifies initData and returns Bearer JWT', async () => 
 test('Mini App updates only changed Telegram profile fields', async () => {
   const persisted = {
     id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
-    firstName: 'Onix', lastName: 'User', languageCode: 'en', displayName: 'Onix User',
+    firstName: 'Onix', lastName: 'User', languageCode: 'en', displayName: 'Trusted Trader',
     avatarUrl: 'https://t.me/old.svg', deletedAt: null, isAdmin: false,
   };
   let updateData: Record<string, unknown> | undefined;
@@ -115,6 +115,30 @@ test('Mini App updates only changed Telegram profile fields', async () => {
   assert.ok(updateData?.lastSeenAt instanceof Date);
   for (const unchanged of ['telegramNick', 'firstName', 'lastName', 'displayName']) {
     assert.equal(Object.hasOwn(updateData ?? {}, unchanged), false);
+  }
+});
+
+test('Mini App preserves optional profile data omitted by Telegram', async () => {
+  const persisted = {
+    id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
+    firstName: 'Onix', lastName: 'User', languageCode: 'ru', displayName: 'Trusted Trader',
+    avatarUrl: 'https://t.me/avatar.svg', deletedAt: null, isAdmin: false,
+  };
+  let updateData: Record<string, unknown> | undefined;
+  const prisma = {
+    user: {
+      findUnique: async () => persisted,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        updateData = data;
+        return { ...persisted, ...data };
+      },
+    },
+  };
+
+  await new AuthService(prisma as never).miniApp(miniAppInitData({ id: 42 }));
+
+  for (const omitted of ['telegramNick', 'firstName', 'lastName', 'languageCode', 'displayName', 'avatarUrl']) {
+    assert.equal(Object.hasOwn(updateData ?? {}, omitted), false);
   }
 });
 
@@ -184,6 +208,39 @@ test('Mini App repeat login reuses the Telegram user', async () => {
   assert.equal(first.user.onixId, second.user.onixId);
   assert.match(first.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
   assert.match(second.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
+});
+
+test('Mini App retries profile synchronization after a concurrent first login', async () => {
+  const persisted = {
+    id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
+    firstName: 'Onix', lastName: null, languageCode: 'ru', displayName: 'Onix',
+    avatarUrl: null, deletedAt: null, isAdmin: false,
+  };
+  let findCount = 0;
+  let updateCount = 0;
+  const prisma = {
+    user: {
+      findUnique: async () => {
+        findCount += 1;
+        return findCount === 1 ? null : persisted;
+      },
+      update: async () => {
+        updateCount += 1;
+        return persisted;
+      },
+    },
+    $transaction: async () => {
+      throw { code: 'P2002' };
+    },
+  };
+
+  const result = await new AuthService(prisma as never).miniApp(miniAppInitData({
+    id: 42, username: 'onix_user', first_name: 'Onix', language_code: 'ru',
+  }));
+
+  assert.equal(findCount, 2);
+  assert.equal(updateCount, 1);
+  assert.equal(result.user.onixId, 'ONIX-000007');
 });
 
 test('ledger response maps canonical entries without BigInt leakage', () => {

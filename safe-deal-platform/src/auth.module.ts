@@ -53,11 +53,11 @@ export class AuthService {
     const value = JSON.parse(userJson) as Record<string, unknown>;
     return this.issue(await this.upsert({
       id: BigInt(String(value.id)),
-      username: typeof value.username === 'string' ? value.username : null,
-      firstName: typeof value.first_name === 'string' ? value.first_name : null,
-      lastName: typeof value.last_name === 'string' ? value.last_name : null,
-      photoUrl: typeof value.photo_url === 'string' ? value.photo_url : null,
-      languageCode: typeof value.language_code === 'string' ? value.language_code : null,
+      username: typeof value.username === 'string' ? value.username : undefined,
+      firstName: typeof value.first_name === 'string' ? value.first_name : undefined,
+      lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
+      photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
+      languageCode: typeof value.language_code === 'string' ? value.language_code : undefined,
     }));
   }
 
@@ -71,8 +71,8 @@ export class AuthService {
       .join('\n');
     this.verifyHash(check, hash, createHash('sha256').update(this.botToken()).digest());
     return this.issue(await this.upsert({
-      id: BigInt(dto.id), username: dto.username ?? null, firstName: dto.first_name,
-      lastName: dto.last_name ?? null, photoUrl: dto.photo_url ?? null,
+      id: BigInt(dto.id), username: dto.username, firstName: dto.first_name,
+      lastName: dto.last_name, photoUrl: dto.photo_url,
     }));
   }
 
@@ -100,13 +100,16 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
     if (existing?.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
     const loggedInAt = new Date();
-    const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || null;
-    const user = existing
-      ? await this.prisma.user.update({
-          where: { id: existing.id },
-          data: this.profileChanges(existing, identity, displayName, loggedInAt),
-        })
-      : await this.prisma.$transaction(async (tx) => {
+    const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || undefined;
+    let user;
+    if (existing) {
+      user = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: this.profileChanges(existing, identity, loggedInAt),
+      });
+    } else {
+      try {
+        user = await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
             data: {
               telegramId: identity.id, onixId: `PENDING-${identity.id}`,
@@ -121,6 +124,11 @@ export class AuthService {
             data: { onixId: `ONIX-${created.id.toString().padStart(6, '0')}` },
           });
         });
+      } catch (error) {
+        if (this.isUniqueConstraint(error)) return this.upsert(identity);
+        throw error;
+      }
+    }
     if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
     return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
   }
@@ -131,11 +139,9 @@ export class AuthService {
       firstName: string | null;
       lastName: string | null;
       languageCode: string | null;
-      displayName: string | null;
       avatarUrl: string | null;
     },
     identity: TelegramIdentity,
-    displayName: string | null,
     loggedInAt: Date,
   ): Prisma.UserUpdateInput {
     const data: Prisma.UserUpdateInput = { lastSeenAt: loggedInAt, lastLoginAt: loggedInAt };
@@ -144,10 +150,11 @@ export class AuthService {
     if (identity.lastName !== undefined && identity.lastName !== existing.lastName) data.lastName = identity.lastName;
     if (identity.languageCode !== undefined && identity.languageCode !== existing.languageCode) data.languageCode = identity.languageCode;
     if (identity.photoUrl !== undefined && identity.photoUrl !== existing.avatarUrl) data.avatarUrl = identity.photoUrl;
-    if ((identity.firstName !== undefined || identity.lastName !== undefined) && displayName !== existing.displayName) {
-      data.displayName = displayName;
-    }
     return data;
+  }
+
+  private isUniqueConstraint(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   private async issue(user: AuthUser) {
