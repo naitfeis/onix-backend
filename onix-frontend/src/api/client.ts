@@ -2,10 +2,12 @@ import WebApp from '@twa-dev/sdk';
 import type { ApiEnvelope } from './contracts';
 
 const TOKEN_KEY = 'onix.accessToken';
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
 
 function apiUrl(path: string): string {
-  console.log("API BASE =", import.meta.env.VITE_API_URL);
-  return typeof window === 'undefined' ? path : new URL(path, window.location.origin).toString();
+  console.log("API BASE =", API_BASE);
+  if (!API_BASE) throw new Error('VITE_API_URL is not configured');
+  return `${API_BASE}${path}`;
 }
 
 export class ApiError extends Error {
@@ -44,6 +46,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   const url = apiUrl(path);
   console.log("POST URL =", url);
   console.log("fetch() full URL =", url);
+  console.log("FINAL REQUEST URL", url);
   const response = await fetch(url, { ...options, headers });
   let payload: ApiEnvelope<T> | undefined;
   try {

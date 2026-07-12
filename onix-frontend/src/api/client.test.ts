@@ -27,7 +27,7 @@ describe('Bearer auth bootstrap', () => {
 
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('jwt-token');
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-mini', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
       method: 'POST',
       body: expect.stringContaining('"initData"'),
     }));
@@ -45,7 +45,7 @@ describe('Bearer auth bootstrap', () => {
 
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('fresh-token');
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-mini', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
       method: 'POST',
     }));
   });
@@ -62,7 +62,7 @@ describe('Bearer auth bootstrap', () => {
 
     await loginWithTelegram(payload);
     expect(storage.get('onix.accessToken')).toBe('widget-token');
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-login', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-login', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify(payload),
     }));
