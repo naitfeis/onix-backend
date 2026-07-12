@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Prisma } from '@prisma/client';
 import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'class-validator';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
@@ -10,10 +11,11 @@ import { AuthRequest, AuthUser, Public } from './common';
 
 interface TelegramIdentity {
   id: bigint;
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-  photoUrl?: string;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  photoUrl?: string | null;
+  languageCode?: string | null;
 }
 
 class MiniAppDto {
@@ -55,6 +57,7 @@ export class AuthService {
       firstName: typeof value.first_name === 'string' ? value.first_name : undefined,
       lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
       photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
+      languageCode: typeof value.language_code === 'string' ? value.language_code : undefined,
     }));
   }
 
@@ -95,17 +98,24 @@ export class AuthService {
 
   private async upsert(identity: TelegramIdentity): Promise<AuthUser> {
     const existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
+    if (existing?.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
+    const loggedInAt = new Date();
     const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || undefined;
-    const user = existing
-      ? await this.prisma.user.update({
-          where: { id: existing.id },
-          data: { telegramNick: identity.username, displayName, avatarUrl: identity.photoUrl, lastSeenAt: new Date() },
-        })
-      : await this.prisma.$transaction(async (tx) => {
+    let user;
+    if (existing) {
+      user = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: this.profileChanges(existing, identity, loggedInAt),
+      });
+    } else {
+      try {
+        user = await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
             data: {
               telegramId: identity.id, onixId: `PENDING-${identity.id}`,
-              telegramNick: identity.username, displayName, avatarUrl: identity.photoUrl,
+              telegramNick: identity.username, firstName: identity.firstName, lastName: identity.lastName,
+              languageCode: identity.languageCode, displayName, avatarUrl: identity.photoUrl,
+              lastSeenAt: loggedInAt, lastLoginAt: loggedInAt,
               isAdmin: process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
             },
           });
@@ -114,8 +124,37 @@ export class AuthService {
             data: { onixId: `ONIX-${created.id.toString().padStart(6, '0')}` },
           });
         });
+      } catch (error) {
+        if (this.isUniqueConstraint(error)) return this.upsert(identity);
+        throw error;
+      }
+    }
     if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
     return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
+  }
+
+  private profileChanges(
+    existing: {
+      telegramNick: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      languageCode: string | null;
+      avatarUrl: string | null;
+    },
+    identity: TelegramIdentity,
+    loggedInAt: Date,
+  ): Prisma.UserUpdateInput {
+    const data: Prisma.UserUpdateInput = { lastSeenAt: loggedInAt, lastLoginAt: loggedInAt };
+    if (identity.username !== undefined && identity.username !== existing.telegramNick) data.telegramNick = identity.username;
+    if (identity.firstName !== undefined && identity.firstName !== existing.firstName) data.firstName = identity.firstName;
+    if (identity.lastName !== undefined && identity.lastName !== existing.lastName) data.lastName = identity.lastName;
+    if (identity.languageCode !== undefined && identity.languageCode !== existing.languageCode) data.languageCode = identity.languageCode;
+    if (identity.photoUrl !== undefined && identity.photoUrl !== existing.avatarUrl) data.avatarUrl = identity.photoUrl;
+    return data;
+  }
+
+  private isUniqueConstraint(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
   }
 
   private async issue(user: AuthUser) {
