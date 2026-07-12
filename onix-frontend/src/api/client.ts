@@ -64,8 +64,12 @@ interface AuthResult {
 export async function bootstrapAuth(): Promise<boolean> {
   console.log("bootstrapAuth started");
   const data = initData();
-  if (!data) return Boolean(getAccessToken());
-  console.log("Calling /telegram-mini");
+  console.log("initData =", data);
+  if (!data) {
+    console.log("initData is EMPTY");
+    return false;
+  }
+  console.log("Calling telegram-mini endpoint");
   const result = await api.post<AuthResult>('/api/auth/telegram-mini', { initData: data });
   setAccessToken(result.accessToken);
   console.log("JWT received");
