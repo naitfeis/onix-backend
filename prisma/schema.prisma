@@ -11,6 +11,9 @@ model User {
   telegramId     BigInt    @unique
   onixId         String    @unique @db.VarChar(20)
   telegramNick   String?   @db.VarChar(64)
+  firstName      String?   @db.VarChar(120)
+  lastName       String?   @db.VarChar(120)
+  languageCode   String?   @db.VarChar(16)
   displayName    String?   @db.VarChar(120)
   avatarUrl      String?   @db.VarChar(500)
   bio            String?   @db.VarChar(500)
@@ -19,6 +22,7 @@ model User {
   ratingCount    Int       @default(0)
   completedSales Int       @default(0)
   lastSeenAt     DateTime  @default(now())
+  lastLoginAt    DateTime?
   isAdmin        Boolean   @default(false)
   deletedAt      DateTime?
   createdAt      DateTime  @default(now())
