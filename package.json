@@ -4,12 +4,15 @@
   "description": "ONIX Secure P2P Escrow Core Engine",
   "main": "dist/main.js",
   "scripts": {
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
-    "build": "prisma generate && tsc",
+    "typecheck": "tsc --noEmit --incremental false",
+    "lint": "tsc --noEmit --incremental false",
+    "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",
+    "build": "prisma generate && tsc --incremental false",
     "start": "node dist/main.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts",
-    "start:bot": "ts-node --transpile-only safe-deal-platform/src/main.ts",
-    "test:flow": "ts-node --transpile-only safe-deal-platform/src/test-flow.ts"
+    "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts"
   },
   "keywords": [
     "nestjs",
@@ -25,7 +28,6 @@
     "@nestjs/common": "^11.1.27",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.27",
-    "@nestjs/event-emitter": "^3.1.0",
     "@nestjs/platform-express": "^11.1.27",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -34,8 +36,7 @@
     "class-validator": "^0.15.1",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "telegraf": "^4.16.3"
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",

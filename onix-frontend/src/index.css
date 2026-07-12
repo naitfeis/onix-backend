@@ -1,27 +1,11 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body, #root {
-  height: 100%;
-  background: #000;
-  color: #fff;
-  font-family: 'Courier New', Courier, monospace;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
-}
-
-/* Убираем стандартный скролл-бар */
-::-webkit-scrollbar { width: 4px; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-width: 320px; min-height: 100%; color-scheme: dark; background: #000; scroll-behavior: smooth; }
+body, #root { min-height: 100dvh; }
+body { overflow-x: hidden; color: #f4f4f5; background: #000; font-family: "SFMono-Regular", Consolas, "Liberation Mono", "Courier New", monospace; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+button, input, textarea, select { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+:focus-visible { outline: 2px solid #b9f9fa !important; outline-offset: 3px; }
+::selection { color: #000; background: #b9f9fa; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: #1c1c1c; border-radius: 2px; }
-
-/* Убираем outline на кнопках внутри Mini App */
-button:focus { outline: none; }
-input:focus, textarea:focus, select:focus { outline: none; }
-
-/* Нативный выбор цвета для чекбоксов */
-input[type="checkbox"] { accent-color: #00d2d3; }
+::-webkit-scrollbar-thumb { background: #25252a; border-radius: 999px; }

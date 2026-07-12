@@ -41,10 +41,7 @@ export default ({ mode }: { mode: string }) => {
     server: {
       port: Number(env.VITE_DEV_PORT) || 5173,
       proxy: {
-        // Пробрасываем шлюз для профилей, чата и отзывов [проф. 1]
         '/api': apiProxyConfig,
-        // ДОБАВЛЕНО: Прямой прокси-канал для лотов Гаранта (/products/purchase и т.д.) [проф. 1]
-        '/products': apiProxyConfig,
         '/ws': apiProxyConfig,
       },
     },

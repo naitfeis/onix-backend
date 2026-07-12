@@ -1,29 +1,19 @@
 import { Module } from '@nestjs/common';
-import { EventEmitterModule } from '@nestjs/event-emitter';
-
-import { PrismaService } from './prisma.service';
-
-import { TelegramModule } from './Telegram/telegram.module';
-
-import { ProductController } from './product.controller';
-import { UserController } from './user.controller';
-
-import { ProductService } from './product.service';
+import { APP_GUARD } from '@nestjs/core';
+import { AuthGuard, AuthModule } from './auth.module';
+import { DatabaseModule } from './database.module';
+import { EngagementModule } from './engagement.module';
+import { EscrowModule } from './escrow.module';
+import { MarketplaceModule } from './marketplace.module';
+import { OperationsModule } from './operations.module';
+import { ProfilesModule } from './profiles.module';
+import { SocialModule } from './social.module';
 
 @Module({
   imports: [
-    EventEmitterModule.forRoot(),
-    TelegramModule,
+    DatabaseModule, AuthModule, ProfilesModule, MarketplaceModule, SocialModule,
+    EscrowModule, EngagementModule, OperationsModule,
   ],
-
-  controllers: [
-    ProductController,
-    UserController,
-  ],
-
-  providers: [
-    PrismaService,
-    ProductService,
-  ],
+  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

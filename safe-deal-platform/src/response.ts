@@ -1,0 +1,195 @@
+import { Prisma } from '@prisma/client';
+import { AuthUser } from './common';
+
+type PublicUser = {
+  id: bigint;
+  onixId: string;
+  telegramNick: string | null;
+  displayName: string | null;
+  avatarUrl: string | null;
+  ratingAverage: Prisma.Decimal;
+  ratingCount: number;
+  completedSales: number;
+  lastSeenAt: Date;
+  _count?: { followers: number };
+};
+
+export interface ProfileDto {
+  id: string;
+  onixId: string;
+  username: string;
+  avatarUrl?: string;
+  rating: number;
+  reviewCount: number;
+  salesCount: number;
+  followersCount: number;
+  lastOnline: string;
+  isAdmin: boolean;
+  roles: Array<'USER' | 'ADMIN'>;
+  balanceCents: string;
+  walletHistory: LedgerDto[];
+}
+
+export interface LedgerDto {
+  id: string;
+  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL';
+  amountCents: string;
+  status: 'COMPLETED';
+  createdAt: string;
+}
+
+export interface ProductDto {
+  id: string;
+  title: string;
+  description?: string;
+  priceCents: string;
+  quantity: number;
+  category: string;
+  subcategory?: string;
+  status: string;
+  seller: ReturnType<typeof sellerDto>;
+  favorite: boolean;
+  createdAt: string;
+}
+
+export function sellerDto(user: PublicUser) {
+  return {
+    id: user.id.toString(),
+    onixId: user.onixId,
+    username: user.telegramNick ?? user.displayName ?? user.onixId,
+    ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+    rating: Number(user.ratingAverage),
+    reviewCount: user.ratingCount,
+    salesCount: user.completedSales,
+    followersCount: user._count?.followers ?? 0,
+    lastOnline: user.lastSeenAt.toISOString(),
+  };
+}
+
+export function profileDto(
+  user: PublicUser & { balanceCents: bigint; isAdmin: boolean },
+  ledger: Array<{ id: bigint; type: string; amountCents: bigint; createdAt: Date }>,
+): ProfileDto {
+  return {
+    ...sellerDto(user),
+    balanceCents: user.balanceCents.toString(),
+    isAdmin: user.isAdmin,
+    roles: user.isAdmin ? ['USER', 'ADMIN'] : ['USER'],
+    walletHistory: ledger.map(ledgerDto),
+  };
+}
+
+export function ledgerDto(entry: { id: bigint; type: string; amountCents: bigint; createdAt: Date }): LedgerDto {
+  return {
+    id: entry.id.toString(),
+    type: entry.type as LedgerDto['type'],
+    amountCents: entry.amountCents.toString(),
+    status: 'COMPLETED',
+    createdAt: entry.createdAt.toISOString(),
+  };
+}
+
+export function productDto(product: {
+  id: string;
+  title: string;
+  description: string | null;
+  priceCents: bigint;
+  quantity: number;
+  category: string;
+  subcategory: string | null;
+  status: string;
+  createdAt: Date;
+  seller: PublicUser;
+  favorites?: Array<{ userId: bigint }>;
+}, viewerId?: bigint): ProductDto {
+  return {
+    id: product.id,
+    title: product.title,
+    ...(product.description ? { description: product.description } : {}),
+    priceCents: product.priceCents.toString(),
+    quantity: product.quantity,
+    category: product.category,
+    ...(product.subcategory ? { subcategory: product.subcategory } : {}),
+    status: product.status,
+    seller: sellerDto(product.seller),
+    favorite: Boolean(viewerId && product.favorites?.some((item) => item.userId === viewerId)),
+    createdAt: product.createdAt.toISOString(),
+  };
+}
+
+export function dealDto(order: {
+  id: bigint;
+  buyerId: bigint;
+  sellerId: bigint;
+  totalAmountCents: bigint;
+  status: string;
+  createdAt: Date;
+  product: { id: string; title: string; category: string };
+  buyer: PublicUser;
+  seller: PublicUser;
+  reviews: Array<{ authorId: bigint }>;
+}, viewer: AuthUser) {
+  const buyer = order.buyerId === viewer.id;
+  return {
+    id: order.id.toString(),
+    product: order.product,
+    totalAmountCents: order.totalAmountCents.toString(),
+    status: order.status,
+    role: buyer ? 'buyer' as const : 'seller' as const,
+    counterparty: sellerDto(buyer ? order.seller : order.buyer),
+    createdAt: order.createdAt.toISOString(),
+    canReview: order.status === 'COMPLETED' && !order.reviews.some((review) => review.authorId === viewer.id),
+  };
+}
+
+export function messageDto(message: {
+  id: bigint;
+  chatId: string;
+  senderId: bigint;
+  text: string;
+  createdAt: Date;
+  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'>;
+}, viewerId: bigint) {
+  return {
+    id: message.id.toString(),
+    threadId: message.chatId,
+    sender: {
+      id: message.sender.id.toString(),
+      username: message.sender.telegramNick ?? message.sender.displayName ?? message.sender.onixId,
+    },
+    text: message.text,
+    createdAt: message.createdAt.toISOString(),
+    mine: message.senderId === viewerId,
+  };
+}
+
+export function notificationDto(item: {
+  id: bigint; title: string; body: string; readAt: Date | null; createdAt: Date;
+}) {
+  return {
+    id: item.id.toString(),
+    title: item.title,
+    body: item.body,
+    read: Boolean(item.readAt),
+    createdAt: item.createdAt.toISOString(),
+  };
+}
+
+export function reviewDto(item: {
+  id: bigint;
+  rating: number;
+  text: string | null;
+  createdAt: Date;
+  author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'>;
+}) {
+  return {
+    id: item.id.toString(),
+    author: {
+      id: item.author.id.toString(),
+      username: item.author.telegramNick ?? item.author.displayName ?? item.author.onixId,
+    },
+    rating: item.rating,
+    text: item.text ?? '',
+    createdAt: item.createdAt.toISOString(),
+  };
+}
