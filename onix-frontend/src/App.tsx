@@ -3,6 +3,7 @@ import WebApp from '@twa-dev/sdk';
 import { loginWithTelegram, money } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, type Deal, type Product, type ProductDraft } from './api/contracts';
 import OnixBackground from './components/OnixBackground';
+import UserAvatar from './components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Input, Modal, Select, Skeleton, StateView, Textarea, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import { validateDraft } from './utils/productValidation';
@@ -146,14 +147,14 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
           <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
-          <div className="seller-row"><span>@{product.seller.username} · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span><strong>{money(product.priceCents)}</strong></div>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} /><span>@{product.seller.username} · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => core.toggleFavorite(product)} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
       </Card>)}</div>}
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
-        <Card><div className="seller-row"><div><b>@{selected.seller.username}</b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок</p></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username}</b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <Button variant="secondary" onClick={() => void core.toggleFollow(selected.seller.onixId, selected.seller.followed)}>+ Подписаться</Button></Card>
         <div className="modal__actions"><Button variant="secondary" onClick={async () => {
           if (await core.startChat(selected.seller.onixId)) switchTo('chat');
@@ -198,7 +199,7 @@ function Deals({ core, setToast }: { core: Core; setToast: (text: string) => voi
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => <Card key={deal.id} className="deal-card"><div className="seller-row"><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} // {deal.product.category}</p></div><strong>{money(deal.totalAmountCents)}</strong></div>
+      deals.map(deal => <Card key={deal.id} className="deal-card"><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
@@ -258,13 +259,13 @@ function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: 
   const ownProducts = core.products.filter(product => product.seller.id === profile.id);
   const profileSections: Array<'overview' | 'listings' | 'favorites' | 'notifications' | 'reviews' | 'admin'> =
     profile.roles.includes('ADMIN') ? ['overview', 'listings', 'favorites', 'notifications', 'reviews', 'admin'] : ['overview', 'listings', 'favorites', 'notifications', 'reviews'];
-  return <div className="stack"><Card className="profile-card"><div className="avatar">{profile.username.slice(0, 2).toUpperCase()}</div><div className="profile-main"><h1>@{profile.username}</h1><p>{profile.onixId} · был(а) недавно</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username}</h1><p>{profile.onixId} · был(а) недавно</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
       <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><Button variant="secondary" onClick={() => setWithdrawOpen(true)}>Вывести</Button></div></Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', notifications: 'УВЕДОМЛЕНИЯ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
     {section === 'favorites' && (favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
-      <div className="product-grid">{favoriteProducts.map(item => <Card key={item.id}><h2>{item.title}</h2><div className="seller-row"><span>@{item.seller.username}</span><strong>{money(item.priceCents)}</strong></div></Card>)}</div>)}
+      <div className="product-grid">{favoriteProducts.map(item => <Card key={item.id}><h2>{item.title}</h2><div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} /><span>@{item.seller.username}</span></span><strong>{money(item.priceCents)}</strong></div></Card>)}</div>)}
     {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
       <div className="product-grid">{ownProducts.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><strong>{money(item.priceCents)}</strong><Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button></div></Card>)}</div>)}
     {section === 'notifications' && (core.notifications.length === 0 ? <StateView title="Нет уведомлений" text="Здесь появятся сообщения о товарах, сделках и отзывах." /> :
