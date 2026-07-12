@@ -40,6 +40,8 @@ export class ApiEnvelopeInterceptor implements NestInterceptor {
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
+    console.error(error);
+    if (error instanceof Error) console.error(error.stack);
     const response = host.switchToHttp().getResponse();
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const raw = error instanceof HttpException ? error.getResponse() : null;

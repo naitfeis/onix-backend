@@ -86,7 +86,9 @@ export class AuthService {
       const user = await this.prisma.user.findUnique({ where: { id: BigInt(payload.sub) } });
       if (!user || user.deletedAt) throw new Error('inactive');
       return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
-    } catch {
+    } catch (error) {
+      console.error(error);
+      if (error instanceof Error) console.error(error.stack);
       throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
     }
   }
