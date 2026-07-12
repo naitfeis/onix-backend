@@ -5,6 +5,7 @@ const TOKEN_KEY = 'onix.accessToken';
 
 function apiUrl(path: string): string {
   const baseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
+  console.log("API BASE =", import.meta.env.VITE_API_URL);
   return baseUrl ? `${baseUrl}${path}` : path;
 }
 
@@ -41,7 +42,10 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (options.body) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(apiUrl(path), { ...options, headers });
+  const url = apiUrl(path);
+  console.log("POST URL =", url);
+  console.log("fetch() full URL =", url);
+  const response = await fetch(url, { ...options, headers });
   let payload: ApiEnvelope<T> | undefined;
   try {
     payload = await response.json() as ApiEnvelope<T>;
