@@ -4,9 +4,8 @@ import type { ApiEnvelope } from './contracts';
 const TOKEN_KEY = 'onix.accessToken';
 
 function apiUrl(path: string): string {
-  const baseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
   console.log("API BASE =", import.meta.env.VITE_API_URL);
-  return baseUrl ? `${baseUrl}${path}` : path;
+  return typeof window === 'undefined' ? path : new URL(path, window.location.origin).toString();
 }
 
 export class ApiError extends Error {
