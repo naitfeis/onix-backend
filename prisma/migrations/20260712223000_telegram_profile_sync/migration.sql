@@ -1,0 +1,5 @@
+ALTER TABLE "User"
+  ADD COLUMN "firstName" VARCHAR(120),
+  ADD COLUMN "lastName" VARCHAR(120),
+  ADD COLUMN "languageCode" VARCHAR(16),
+  ADD COLUMN "lastLoginAt" TIMESTAMP(3);
