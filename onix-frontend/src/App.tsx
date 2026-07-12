@@ -95,6 +95,7 @@ function TelegramLogin() {
     const callback = `onixTelegramAuth_${crypto.randomUUID().replaceAll('-', '')}`;
     const scope = window as unknown as Record<string, unknown>;
     scope[callback] = async (payload: Record<string, string | number>) => {
+      console.log("Telegram callback", payload);
       try {
         await loginWithTelegram(payload);
         location.reload();

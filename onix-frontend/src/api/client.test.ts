@@ -8,6 +8,7 @@ vi.mock('@twa-dev/sdk', () => ({
 
 beforeEach(() => {
   storage.clear();
+  vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
   vi.stubGlobal('sessionStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
@@ -26,9 +27,44 @@ describe('Bearer auth bootstrap', () => {
 
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('jwt-token');
-    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-mini', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
       method: 'POST',
       body: expect.stringContaining('"initData"'),
+    }));
+  });
+
+  it('refreshes an existing JWT from current Mini App initData', async () => {
+    storage.set('onix.accessToken', 'stale-token');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { accessToken: 'fresh-token', tokenType: 'Bearer' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { bootstrapAuth } = await import('./client');
+
+    await expect(bootstrapAuth()).resolves.toBe(true);
+    expect(storage.get('onix.accessToken')).toBe('fresh-token');
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
+      method: 'POST',
+    }));
+  });
+
+  it('sends Telegram Login Widget payload and stores its JWT', async () => {
+    const payload = { id: 1, first_name: 'ONIX', auth_date: 1, hash: 'a'.repeat(64) };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { accessToken: 'widget-token', tokenType: 'Bearer' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { loginWithTelegram } = await import('./client');
+
+    await loginWithTelegram(payload);
+    expect(storage.get('onix.accessToken')).toBe('widget-token');
+    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-login', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(payload),
     }));
   });
 

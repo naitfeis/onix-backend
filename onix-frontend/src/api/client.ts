@@ -3,6 +3,11 @@ import type { ApiEnvelope } from './contracts';
 
 const TOKEN_KEY = 'onix.accessToken';
 
+function apiUrl(path: string): string {
+  const baseUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
+  return baseUrl ? `${baseUrl}${path}` : path;
+}
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -36,7 +41,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (options.body) headers.set('Content-Type', 'application/json');
 
-  const response = await fetch(path, { ...options, headers });
+  const response = await fetch(apiUrl(path), { ...options, headers });
   let payload: ApiEnvelope<T> | undefined;
   try {
     payload = await response.json() as ApiEnvelope<T>;
@@ -57,17 +62,21 @@ interface AuthResult {
 }
 
 export async function bootstrapAuth(): Promise<boolean> {
-  if (getAccessToken()) return true;
+  console.log("bootstrapAuth started");
   const data = initData();
-  if (!data) return false;
+  if (!data) return Boolean(getAccessToken());
+  console.log("Calling /telegram-mini");
   const result = await api.post<AuthResult>('/api/auth/telegram-mini', { initData: data });
   setAccessToken(result.accessToken);
+  console.log("JWT received");
   return true;
 }
 
 export async function loginWithTelegram(payload: Record<string, string | number>): Promise<void> {
+  console.log("Calling /telegram-login");
   const result = await api.post<AuthResult>('/api/auth/telegram-login', payload);
   setAccessToken(result.accessToken);
+  console.log("JWT received");
 }
 
 export const api = {

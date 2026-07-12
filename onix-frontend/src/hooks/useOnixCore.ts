@@ -43,6 +43,7 @@ export function useOnixCore() {
   const loadProfile = useCallback(async () => {
     setStates(previous => ({ ...previous, profile: 'loading' }));
     try {
+      console.log("Profile request started");
       const [data, walletHistory] = await Promise.all([
         api.get<Profile>(API_PATHS.me),
         api.get<WalletOperation[]>(API_PATHS.ledger),
