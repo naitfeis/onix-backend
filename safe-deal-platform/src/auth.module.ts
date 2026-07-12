@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Prisma } from '@prisma/client';
 import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'class-validator';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
@@ -10,10 +11,11 @@ import { AuthRequest, AuthUser, Public } from './common';
 
 interface TelegramIdentity {
   id: bigint;
-  username?: string;
-  firstName?: string;
-  lastName?: string;
-  photoUrl?: string;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  photoUrl?: string | null;
+  languageCode?: string | null;
 }
 
 class MiniAppDto {
@@ -51,10 +53,11 @@ export class AuthService {
     const value = JSON.parse(userJson) as Record<string, unknown>;
     return this.issue(await this.upsert({
       id: BigInt(String(value.id)),
-      username: typeof value.username === 'string' ? value.username : undefined,
-      firstName: typeof value.first_name === 'string' ? value.first_name : undefined,
-      lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
-      photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
+      username: typeof value.username === 'string' ? value.username : null,
+      firstName: typeof value.first_name === 'string' ? value.first_name : null,
+      lastName: typeof value.last_name === 'string' ? value.last_name : null,
+      photoUrl: typeof value.photo_url === 'string' ? value.photo_url : null,
+      languageCode: typeof value.language_code === 'string' ? value.language_code : null,
     }));
   }
 
@@ -68,8 +71,8 @@ export class AuthService {
       .join('\n');
     this.verifyHash(check, hash, createHash('sha256').update(this.botToken()).digest());
     return this.issue(await this.upsert({
-      id: BigInt(dto.id), username: dto.username, firstName: dto.first_name,
-      lastName: dto.last_name, photoUrl: dto.photo_url,
+      id: BigInt(dto.id), username: dto.username ?? null, firstName: dto.first_name,
+      lastName: dto.last_name ?? null, photoUrl: dto.photo_url ?? null,
     }));
   }
 
@@ -95,17 +98,20 @@ export class AuthService {
 
   private async upsert(identity: TelegramIdentity): Promise<AuthUser> {
     const existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
-    const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || undefined;
+    const loggedInAt = new Date();
+    const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || null;
     const user = existing
       ? await this.prisma.user.update({
           where: { id: existing.id },
-          data: { telegramNick: identity.username, displayName, avatarUrl: identity.photoUrl, lastSeenAt: new Date() },
+          data: this.profileChanges(existing, identity, displayName, loggedInAt),
         })
       : await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
             data: {
               telegramId: identity.id, onixId: `PENDING-${identity.id}`,
-              telegramNick: identity.username, displayName, avatarUrl: identity.photoUrl,
+              telegramNick: identity.username, firstName: identity.firstName, lastName: identity.lastName,
+              languageCode: identity.languageCode, displayName, avatarUrl: identity.photoUrl,
+              lastSeenAt: loggedInAt, lastLoginAt: loggedInAt,
               isAdmin: process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
             },
           });
@@ -116,6 +122,31 @@ export class AuthService {
         });
     if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
     return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
+  }
+
+  private profileChanges(
+    existing: {
+      telegramNick: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      languageCode: string | null;
+      displayName: string | null;
+      avatarUrl: string | null;
+    },
+    identity: TelegramIdentity,
+    displayName: string | null,
+    loggedInAt: Date,
+  ): Prisma.UserUpdateInput {
+    const data: Prisma.UserUpdateInput = { lastSeenAt: loggedInAt, lastLoginAt: loggedInAt };
+    if (identity.username !== undefined && identity.username !== existing.telegramNick) data.telegramNick = identity.username;
+    if (identity.firstName !== undefined && identity.firstName !== existing.firstName) data.firstName = identity.firstName;
+    if (identity.lastName !== undefined && identity.lastName !== existing.lastName) data.lastName = identity.lastName;
+    if (identity.languageCode !== undefined && identity.languageCode !== existing.languageCode) data.languageCode = identity.languageCode;
+    if (identity.photoUrl !== undefined && identity.photoUrl !== existing.avatarUrl) data.avatarUrl = identity.photoUrl;
+    if ((identity.firstName !== undefined || identity.lastName !== undefined) && displayName !== existing.displayName) {
+      data.displayName = displayName;
+    }
+    return data;
   }
 
   private async issue(user: AuthUser) {

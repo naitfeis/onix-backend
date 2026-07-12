@@ -8,6 +8,22 @@ import { AuthGuard, AuthService } from '../src/auth.module';
 import { parseId } from '../src/common';
 import { ledgerDto } from '../src/response';
 
+function miniAppInitData(user: Record<string, unknown>): string {
+  process.env.BOT_TOKEN = '123:test-token';
+  process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-characters';
+  const params = new URLSearchParams({
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    user: JSON.stringify(user),
+  });
+  const check = [...params.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  const secret = createHmac('sha256', 'WebAppData').update(process.env.BOT_TOKEN).digest();
+  params.set('hash', createHmac('sha256', secret).update(check).digest('hex'));
+  return params.toString();
+}
+
 test('parseId accepts decimal BigInt identifiers', () => {
   assert.equal(parseId('9223372036854775807'), 9223372036854775807n);
 });
@@ -48,16 +64,10 @@ test('AuthGuard derives current user only from verified bearer token', async () 
 });
 
 test('Mini App bootstrap verifies initData and returns Bearer JWT', async () => {
-  process.env.BOT_TOKEN = '123:test-token';
-  process.env.JWT_SECRET = 'test-secret-that-is-at-least-32-characters';
-  const now = Math.floor(Date.now() / 1000);
-  const user = encodeURIComponent(JSON.stringify({ id: 42, username: 'onix_user', first_name: 'Onix' }));
-  const check = `auth_date=${now}\nuser=${decodeURIComponent(user)}`;
-  const secret = createHmac('sha256', 'WebAppData').update(process.env.BOT_TOKEN).digest();
-  const hash = createHmac('sha256', secret).update(check).digest('hex');
   const persisted = {
     id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
-    displayName: 'Onix', avatarUrl: null, deletedAt: null, isAdmin: false,
+    firstName: 'Onix', lastName: null, languageCode: 'ru', displayName: 'Onix',
+    avatarUrl: null, deletedAt: null, isAdmin: false,
   };
   const prisma = {
     user: {
@@ -66,9 +76,89 @@ test('Mini App bootstrap verifies initData and returns Bearer JWT', async () => 
     },
   };
   const auth = new AuthService(prisma as never);
-  const result = await auth.miniApp(`auth_date=${now}&user=${user}&hash=${hash}`);
+  const result = await auth.miniApp(miniAppInitData({
+    id: 42, username: 'onix_user', first_name: 'Onix', language_code: 'ru',
+  }));
   assert.equal(result.tokenType, 'Bearer');
   assert.match(result.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
+});
+
+test('Mini App updates only changed Telegram profile fields', async () => {
+  const persisted = {
+    id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
+    firstName: 'Onix', lastName: 'User', languageCode: 'en', displayName: 'Onix User',
+    avatarUrl: 'https://t.me/old.svg', deletedAt: null, isAdmin: false,
+  };
+  let updateData: Record<string, unknown> | undefined;
+  const prisma = {
+    user: {
+      findUnique: async () => persisted,
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        updateData = data;
+        return { ...persisted, ...data };
+      },
+    },
+  };
+
+  await new AuthService(prisma as never).miniApp(miniAppInitData({
+    id: 42,
+    username: 'onix_user',
+    first_name: 'Onix',
+    last_name: 'User',
+    language_code: 'ru',
+    photo_url: 'https://t.me/new.svg',
+  }));
+
+  assert.equal(updateData?.languageCode, 'ru');
+  assert.equal(updateData?.avatarUrl, 'https://t.me/new.svg');
+  assert.ok(updateData?.lastLoginAt instanceof Date);
+  assert.ok(updateData?.lastSeenAt instanceof Date);
+  for (const unchanged of ['telegramNick', 'firstName', 'lastName', 'displayName']) {
+    assert.equal(Object.hasOwn(updateData ?? {}, unchanged), false);
+  }
+});
+
+test('Mini App repeat login reuses the Telegram user', async () => {
+  let persisted: Record<string, unknown> | null = null;
+  let createCount = 0;
+  const finalUser = {
+    id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
+    firstName: 'Onix', lastName: null, languageCode: 'ru', displayName: 'Onix',
+    avatarUrl: null, deletedAt: null, isAdmin: false,
+  };
+  const prisma = {
+    user: {
+      findUnique: async () => persisted,
+      update: async () => finalUser,
+    },
+    $transaction: async (callback: (tx: {
+      user: {
+        create: (args: unknown) => Promise<typeof finalUser>;
+        update: (args: unknown) => Promise<typeof finalUser>;
+      };
+    }) => Promise<typeof finalUser>) => callback({
+      user: {
+        create: async () => {
+          createCount += 1;
+          persisted = finalUser;
+          return finalUser;
+        },
+        update: async () => finalUser,
+      },
+    }),
+  };
+  const auth = new AuthService(prisma as never);
+  const initData = miniAppInitData({
+    id: 42, username: 'onix_user', first_name: 'Onix', language_code: 'ru',
+  });
+
+  const first = await auth.miniApp(initData);
+  const second = await auth.miniApp(initData);
+
+  assert.equal(createCount, 1);
+  assert.equal(first.user.onixId, second.user.onixId);
+  assert.match(first.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
+  assert.match(second.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
 });
 
 test('ledger response maps canonical entries without BigInt leakage', () => {
