@@ -98,6 +98,7 @@ export class AuthService {
 
   private async upsert(identity: TelegramIdentity): Promise<AuthUser> {
     const existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
+    if (existing?.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
     const loggedInAt = new Date();
     const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || null;
     const user = existing

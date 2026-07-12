@@ -118,6 +118,31 @@ test('Mini App updates only changed Telegram profile fields', async () => {
   }
 });
 
+test('Mini App does not record a login for a blocked user', async () => {
+  let updateCalled = false;
+  const prisma = {
+    user: {
+      findUnique: async () => ({
+        id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
+        firstName: 'Onix', lastName: null, languageCode: 'ru', displayName: 'Onix',
+        avatarUrl: null, deletedAt: new Date(), isAdmin: false,
+      }),
+      update: async () => {
+        updateCalled = true;
+        throw new Error('Blocked users must not be updated');
+      },
+    },
+  };
+
+  await assert.rejects(
+    () => new AuthService(prisma as never).miniApp(miniAppInitData({
+      id: 42, username: 'onix_user', first_name: 'Onix', language_code: 'ru',
+    })),
+    UnauthorizedException,
+  );
+  assert.equal(updateCalled, false);
+});
+
 test('Mini App repeat login reuses the Telegram user', async () => {
   let persisted: Record<string, unknown> | null = null;
   let createCount = 0;
