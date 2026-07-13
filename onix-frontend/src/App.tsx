@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { loginWithTelegram, money } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, type Deal, type Product, type ProductDraft } from './api/contracts';
@@ -89,13 +89,14 @@ function AuthNotice({ miniApp, message }: { miniApp: boolean; message?: string }
 function TelegramLogin() {
   const bot = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
   const [error, setError] = useState('');
+  const hostRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!bot) return;
-    const host = document.getElementById('telegram-login');
+    const host = hostRef.current;
     if (!host) return;
-    const callback = `onixTelegramAuth_${crypto.randomUUID().replaceAll('-', '')}`;
+    const callbackName = 'onixTelegramAuth';
     const scope = window as unknown as Record<string, unknown>;
-    scope[callback] = async (payload: Record<string, string | number>) => {
+    const authCallback = async (payload: Record<string, string | number>) => {
       console.log("Telegram callback", payload);
       try {
         await loginWithTelegram(payload);
@@ -104,18 +105,31 @@ function TelegramLogin() {
         setError('Telegram вход не выполнен.');
       }
     };
+    scope[callbackName] = authCallback;
+
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
     script.async = true;
-    script.dataset.telegramLogin = bot.replace(/^@/, '');
-    script.dataset.size = 'large';
-    script.dataset.userpic = 'false';
-    script.dataset.onauth = `${callback}(user)`;
-    host.replaceChildren(script);
-    return () => { delete scope[callback]; host.replaceChildren(); };
+    script.setAttribute('data-telegram-login', bot.replace(/^@/, ''));
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-userpic', 'false');
+    script.setAttribute('data-onauth', `${callbackName}(user)`);
+    const handleLoad = () => { scope[callbackName] = authCallback; };
+    const handleError = () => setError('Telegram Login Widget не загрузился.');
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+    host.appendChild(script);
+
+    return () => {
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+      script.remove();
+      host.replaceChildren();
+      if (scope[callbackName] === authCallback) delete scope[callbackName];
+    };
   }, [bot]);
   if (!bot) return <span>Настройте VITE_TELEGRAM_BOT_USERNAME</span>;
-  return <div><div id="telegram-login" />{error && <small>{error}</small>}</div>;
+  return <div><div ref={hostRef} />{error && <small>{error}</small>}</div>;
 }
 
 function SectionHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
