@@ -14,8 +14,28 @@ type TelegramLoginPayload = Record<string, string | number>;
 declare global {
   interface Window {
     onixTelegramAuth?: (user: TelegramLoginPayload) => Promise<void>;
+    Telegram?: Record<string, unknown>;
+    TelegramLoginWidget?: unknown;
   }
 }
+
+let reportTelegramLoginError: (message: string) => void = () => {};
+
+function registerOnixTelegramAuth() {
+  if (window.onixTelegramAuth) return;
+  window.onixTelegramAuth = async (user: TelegramLoginPayload) => {
+    console.log("Telegram callback fired", user);
+    try {
+      console.log("Sending /api/auth/telegram-login");
+      await loginWithTelegram(user);
+      location.reload();
+    } catch {
+      reportTelegramLoginError('Telegram вход не выполнен.');
+    }
+  };
+}
+
+registerOnixTelegramAuth();
 
 type Screen = 'market' | 'deals' | 'create' | 'chat' | 'profile';
 const TABS: Array<{ id: Screen; icon: string; label: string }> = [
@@ -94,6 +114,19 @@ function AuthNotice({ miniApp, message }: { miniApp: boolean; message?: string }
   </div>;
 }
 
+function logTelegramWidgetDiagnostics(phase: string) {
+  const script = document.querySelector('script[data-telegram-login]');
+  const botName = script?.getAttribute('data-telegram-login')?.replace(/[^a-z0-9_]/ig, '-');
+  const iframe = botName ? document.getElementById(`telegram-login-${botName}`) : null;
+  console.log(`Telegram widget diagnostics [${phase}]`, {
+    typeofOnixTelegramAuth: typeof window.onixTelegramAuth,
+    dataOnauth: script?.getAttribute('data-onauth'),
+    iframeSrc: iframe?.getAttribute('src'),
+    windowTelegram: window.Telegram,
+    windowTelegramLoginWidget: window.TelegramLoginWidget,
+  });
+}
+
 function TelegramLogin() {
   const bot = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
   const [error, setError] = useState('');
@@ -102,18 +135,14 @@ function TelegramLogin() {
     if (!bot) return;
     const host = hostRef.current;
     if (!host) return;
-    const authCallback = async (user: TelegramLoginPayload) => {
-      console.log("Telegram callback fired", user);
-      try {
-        console.log("Sending /api/auth/telegram-login");
-        await loginWithTelegram(user);
-        location.reload();
-      } catch {
-        setError('Telegram вход не выполнен.');
-      }
-    };
-    window.onixTelegramAuth = authCallback;
+    reportTelegramLoginError = setError;
+    registerOnixTelegramAuth();
     console.log("Telegram callback registered", typeof window.onixTelegramAuth);
+
+    const handleWindowMessage = (event: MessageEvent) => {
+      console.log("WINDOW MESSAGE", event.origin, event.data, event);
+    };
+    window.addEventListener('message', handleWindowMessage);
 
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -123,8 +152,8 @@ function TelegramLogin() {
     script.setAttribute('data-userpic', 'false');
     script.setAttribute('data-onauth', 'onixTelegramAuth(user)');
     const handleLoad = () => {
-      window.onixTelegramAuth = authCallback;
       console.log("Telegram widget loaded");
+      logTelegramWidgetDiagnostics('after-script-load');
     };
     const handleError = () => setError('Telegram Login Widget не загрузился.');
     script.addEventListener('load', handleLoad);
@@ -133,11 +162,12 @@ function TelegramLogin() {
     console.log("Telegram widget injected");
 
     return () => {
+      window.removeEventListener('message', handleWindowMessage);
+      reportTelegramLoginError = () => {};
       script.removeEventListener('load', handleLoad);
       script.removeEventListener('error', handleError);
       script.remove();
       host.replaceChildren();
-      if (window.onixTelegramAuth === authCallback) delete window.onixTelegramAuth;
     };
   }, [bot]);
   if (!bot) return <span>Настройте VITE_TELEGRAM_BOT_USERNAME</span>;
