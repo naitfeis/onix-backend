@@ -9,6 +9,14 @@ import { useOnixCore } from './hooks/useOnixCore';
 import { validateDraft } from './utils/productValidation';
 import './App.css';
 
+type TelegramLoginPayload = Record<string, string | number>;
+
+declare global {
+  interface Window {
+    onixTelegramAuth?: (user: TelegramLoginPayload) => Promise<void>;
+  }
+}
+
 type Screen = 'market' | 'deals' | 'create' | 'chat' | 'profile';
 const TABS: Array<{ id: Screen; icon: string; label: string }> = [
   { id: 'market', icon: '🛒', label: 'РЫНОК' }, { id: 'deals', icon: '🔒', label: 'СДЕЛКИ' },
@@ -94,18 +102,18 @@ function TelegramLogin() {
     if (!bot) return;
     const host = hostRef.current;
     if (!host) return;
-    const callbackName = 'onixTelegramAuth';
-    const scope = window as unknown as Record<string, unknown>;
-    const authCallback = async (payload: Record<string, string | number>) => {
-      console.log("Telegram callback", payload);
+    const authCallback = async (user: TelegramLoginPayload) => {
+      console.log("Telegram callback fired", user);
       try {
-        await loginWithTelegram(payload);
+        console.log("Sending /api/auth/telegram-login");
+        await loginWithTelegram(user);
         location.reload();
       } catch {
         setError('Telegram вход не выполнен.');
       }
     };
-    scope[callbackName] = authCallback;
+    window.onixTelegramAuth = authCallback;
+    console.log("Telegram callback registered", typeof window.onixTelegramAuth);
 
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -113,19 +121,23 @@ function TelegramLogin() {
     script.setAttribute('data-telegram-login', bot.replace(/^@/, ''));
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-userpic', 'false');
-    script.setAttribute('data-onauth', `${callbackName}(user)`);
-    const handleLoad = () => { scope[callbackName] = authCallback; };
+    script.setAttribute('data-onauth', 'onixTelegramAuth(user)');
+    const handleLoad = () => {
+      window.onixTelegramAuth = authCallback;
+      console.log("Telegram widget loaded");
+    };
     const handleError = () => setError('Telegram Login Widget не загрузился.');
     script.addEventListener('load', handleLoad);
     script.addEventListener('error', handleError);
     host.appendChild(script);
+    console.log("Telegram widget injected");
 
     return () => {
       script.removeEventListener('load', handleLoad);
       script.removeEventListener('error', handleError);
       script.remove();
       host.replaceChildren();
-      if (scope[callbackName] === authCallback) delete scope[callbackName];
+      if (window.onixTelegramAuth === authCallback) delete window.onixTelegramAuth;
     };
   }, [bot]);
   if (!bot) return <span>Настройте VITE_TELEGRAM_BOT_USERNAME</span>;
