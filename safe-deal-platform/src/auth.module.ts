@@ -1,5 +1,5 @@
 import {
-  Body, CanActivate, Controller, ExecutionContext, Injectable, Module, Post,
+  Body, CanActivate, Controller, ExecutionContext, Injectable, Module, Optional, Post,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -8,6 +8,9 @@ import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'cla
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AuthRequest, AuthUser, Public } from './common';
+import { AuthPlatformError } from './auth-v2/auth-errors';
+import { AuthV2Module } from './auth-v2/auth-v2.module';
+import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
 
 interface TelegramIdentity {
@@ -221,15 +224,46 @@ export class AuthService {
   }
 }
 
+/**
+ * Global APP_GUARD — Dual Authentication Layer (Phase 3.1).
+ * Controllers see only AuthUser; they never branch on HS256 vs EdDSA.
+ *
+ * - HS256 (legacy Mini App / telegram-login): AuthService.verifyToken (unchanged)
+ * - EdDSA (v2 access): DualAccessService when AUTH_ACCEPT_V2_ACCESS=true; else rejected
+ * - USE_NEW_AUTH is independent and stays false until Website cutover
+ */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector, private readonly auth: AuthService) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly auth: AuthService,
+    @Optional() private readonly dualAccess?: DualAccessService,
+  ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (this.reflector.getAllAndOverride<boolean>('public', [context.getHandler(), context.getClass()])) return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
     const value = request.headers.authorization;
     if (!value?.startsWith('Bearer ')) throw new UnauthorizedException('Требуется подтверждённая сессия.');
-    request.user = await this.auth.verifyToken(value.slice(7));
+    const token = value.slice('Bearer '.length).trim();
+
+    const isEdDsa = this.dualAccess?.isEdDsaAccessToken(token) ?? peekJwtAlg(token) === 'EdDSA';
+    if (isEdDsa) {
+      if (!this.dualAccess?.isAcceptEnabled()) {
+        throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
+      }
+      try {
+        request.user = await this.dualAccess.verifyEd25519AccessToken(token);
+        return true;
+      } catch (error) {
+        if (error instanceof AuthPlatformError) {
+          throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
+        }
+        throw error;
+      }
+    }
+
+    request.user = await this.auth.verifyToken(token);
     return true;
   }
 }
@@ -251,6 +285,7 @@ export class AuthController {
 }
 
 @Module({
+  imports: [AuthV2Module],
   controllers: [AuthController],
   providers: [AuthService, AuthGuard],
   exports: [AuthService, AuthGuard],

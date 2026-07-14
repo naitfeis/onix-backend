@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AuthPlatformError, authErrorBody } from '../src/auth-v2/auth-errors';
-import { isNewAuthEnabled } from '../src/auth-v2/auth-v2.flags';
+import { isAcceptV2AccessEnabled, isNewAuthEnabled } from '../src/auth-v2/auth-v2.flags';
 import { EnvSecretsProvider } from '../src/auth-v2/secrets.provider';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import {
@@ -33,6 +33,14 @@ test('USE_NEW_AUTH defaults to false', () => {
   process.env.USE_NEW_AUTH = 'true';
   assert.equal(isNewAuthEnabled(), true);
   delete process.env.USE_NEW_AUTH;
+});
+
+test('AUTH_ACCEPT_V2_ACCESS defaults to false (Phase 3.1)', () => {
+  delete process.env.AUTH_ACCEPT_V2_ACCESS;
+  assert.equal(isAcceptV2AccessEnabled(), false);
+  process.env.AUTH_ACCEPT_V2_ACCESS = 'true';
+  assert.equal(isAcceptV2AccessEnabled(), true);
+  delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });
 
 test('EnvSecretsProvider require throws when missing', () => {

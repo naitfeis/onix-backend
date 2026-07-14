@@ -3,6 +3,7 @@ import { AuthOrchestrator } from './auth-orchestrator.service';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
 import { AuthV2Controller } from './auth-v2.controller';
 import { AuthV2Guard, PermissionGuard, RolesGuard } from './auth-v2.guards';
+import { DualAccessService } from './dual-access.service';
 import { IdentityService } from './identity.service';
 import { RbacService } from './rbac.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
@@ -14,6 +15,7 @@ import { TokenService } from './token.service';
 /**
  * Website auth v2 (Phase 2 complete surface).
  * USE_NEW_AUTH defaults to false — legacy Mini App /telegram-* remain the production default client path.
+ * Phase 3.1: DualAccessService enables AUTH_ACCEPT_V2_ACCESS for global AuthGuard (still default off).
  */
 @Module({
   controllers: [AuthV2Controller],
@@ -23,6 +25,7 @@ import { TokenService } from './token.service';
     SigningKeyService,
     TokenService,
     SessionService,
+    DualAccessService,
     IdentityService,
     TelegramLoginVerifier,
     AuthOrchestrator,
@@ -35,6 +38,7 @@ import { TokenService } from './token.service';
     TokenService,
     SigningKeyService,
     SessionService,
+    DualAccessService,
     AuthOrchestrator,
     AuthV2Guard,
     RolesGuard,
