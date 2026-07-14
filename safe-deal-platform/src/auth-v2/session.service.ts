@@ -61,6 +61,71 @@ export class SessionService {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
 
+    const prepared = await this.prepareSessionMaterial(user, input);
+    const session = await this.prisma.$transaction(async (tx) => (
+      this.persistPreparedSession(tx, user, input, prepared)
+    ));
+
+    return this.toAuthResult(user, session, prepared.refresh.token, input.amr, prepared.trusted);
+  }
+
+  /**
+   * Persist session rows inside an outer transaction (ADR-031 login TX).
+   * Caller must issue no domain events until after COMMIT.
+   */
+  async createSessionInTransaction(
+    tx: Prisma.TransactionClient,
+    user: User,
+    input: CreateSessionInput,
+  ): Promise<{ session: Session; refreshToken: string; trustedDevice: boolean }> {
+    if (user.deletedAt) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
+    }
+    const prepared = await this.prepareSessionMaterial(user, input, tx);
+    const session = await this.persistPreparedSession(tx, user, input, prepared);
+    return {
+      session,
+      refreshToken: prepared.refresh.token,
+      trustedDevice: Boolean(prepared.trusted),
+    };
+  }
+
+  issueTokensForSession(
+    user: Pick<User, 'id' | 'sessionVersion' | 'permissionVersion'>,
+    sessionId: string,
+    refreshToken: string,
+    amr?: string[],
+    trustedDevice = false,
+  ): Omit<SessionAuthResult, 'session' | 'user'> & { accessToken: string; refreshToken: string; trustedDevice: boolean } {
+    return {
+      accessToken: this.tokens.issueAccessToken({
+        userId: user.id,
+        sessionId,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+        amr,
+      }),
+      refreshToken,
+      trustedDevice,
+    };
+  }
+
+  private async prepareSessionMaterial(
+    user: User,
+    input: CreateSessionInput,
+    db: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<{
+    refresh: { token: string; hash: string };
+    trusted: { id: string } | null;
+    riskScore: number;
+    rememberMe: boolean;
+    idleMs: number;
+    now: Date;
+    device: DeviceContext;
+    fingerprintHash: string | null;
+    familyId: string;
+    sessionId: string;
+  }> {
     const rememberMe = input.rememberMe === true;
     const now = new Date();
     const idleMs = rememberMe ? SESSION_REMEMBER_IDLE_TTL_MS : SESSION_IDLE_TTL_MS;
@@ -68,99 +133,118 @@ export class SessionService {
     const fingerprintHash = device.fingerprintHash ?? null;
 
     const trusted = fingerprintHash
-      ? await this.prisma.trustedDevice.findFirst({
+      ? await db.trustedDevice.findFirst({
         where: {
           userId: user.id,
           fingerprintHash,
           revokedAt: null,
           OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
         },
+        select: { id: true },
       })
       : null;
 
-    const riskScore = trusted ? TRUSTED_DEVICE_RISK_SCORE : DEFAULT_SESSION_RISK_SCORE;
-    const refresh = this.tokens.issueRefreshToken();
-    const familyId = newId();
-    const sessionId = newId();
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      await this.enforceSessionLimit(tx, user.id, now);
-
-      const session = await tx.session.create({
-        data: {
-          id: sessionId,
-          userId: user.id,
-          familyId,
-          clientType: input.clientType ?? 'WEB',
-          refreshGeneration: 0,
-          refreshTokenHash: refresh.hash,
-          previousRefreshHash: null,
-          lockVersion: 0,
-          riskScore,
-          riskUpdatedAt: now,
-          rememberMe,
-          deviceName: device.deviceName ?? null,
-          browser: device.browser ?? null,
-          os: device.os ?? null,
-          platform: device.platform ?? null,
-          timezone: device.timezone ?? null,
-          language: device.language ?? null,
-          userAgent: device.userAgent ?? null,
-          fingerprintHash,
-          screenResolution: device.screenResolution ?? null,
-          webglHash: device.webglHash ?? null,
-          canvasHash: device.canvasHash ?? null,
-          ipAddress: device.ipAddress ?? null,
-          asn: device.asn ?? null,
-          country: device.country ?? null,
-          city: device.city ?? null,
-          createdAt: now,
-          lastSeenAt: now,
-          refreshExpiresAt: new Date(now.getTime() + idleMs),
-          absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_TTL_MS),
-          revokedAt: null,
-          revokeReason: null,
-        },
-      });
-
-      if (trusted) {
-        await tx.trustedDevice.update({
-          where: { id: trusted.id },
-          data: { lastSeenAt: now },
-        });
-      }
-
-      await tx.authAuditLog.create({
-        data: {
-          userId: user.id,
-          sessionId: session.id,
-          action: 'LOGIN_SUCCESS',
-          provider: input.provider ?? null,
-          ipAddress: device.ipAddress ?? null,
-          country: device.country ?? null,
-          userAgent: device.userAgent ?? null,
-          fingerprint: fingerprintHash,
-          metadata: {
-            rememberMe,
-            trustedDevice: Boolean(trusted),
-            familyId,
-          },
-        },
-      });
-
-      return session;
-    });
-
-    const accessToken = this.tokens.issueAccessToken({
-      userId: user.id,
-      sessionId: result.id,
-      sessionVersion: user.sessionVersion,
-      permissionVersion: user.permissionVersion,
-      amr: input.amr,
-    });
-
     return {
-      session: result,
+      refresh: this.tokens.issueRefreshToken(),
+      trusted,
+      riskScore: trusted ? TRUSTED_DEVICE_RISK_SCORE : DEFAULT_SESSION_RISK_SCORE,
+      rememberMe,
+      idleMs,
+      now,
+      device,
+      fingerprintHash,
+      familyId: newId(),
+      sessionId: newId(),
+    };
+  }
+
+  private async persistPreparedSession(
+    tx: Prisma.TransactionClient,
+    user: User,
+    input: CreateSessionInput,
+    prepared: Awaited<ReturnType<SessionService['prepareSessionMaterial']>>,
+  ): Promise<Session> {
+    const {
+      refresh, trusted, riskScore, rememberMe, idleMs, now, device, fingerprintHash, familyId, sessionId,
+    } = prepared;
+
+    await this.enforceSessionLimit(tx, user.id, now);
+
+    const session = await tx.session.create({
+      data: {
+        id: sessionId,
+        userId: user.id,
+        familyId,
+        clientType: input.clientType ?? 'WEB',
+        refreshGeneration: 0,
+        refreshTokenHash: refresh.hash,
+        previousRefreshHash: null,
+        lockVersion: 0,
+        riskScore,
+        riskUpdatedAt: now,
+        rememberMe,
+        deviceName: device.deviceName ?? null,
+        browser: device.browser ?? null,
+        os: device.os ?? null,
+        platform: device.platform ?? null,
+        timezone: device.timezone ?? null,
+        language: device.language ?? null,
+        userAgent: device.userAgent ?? null,
+        fingerprintHash,
+        screenResolution: device.screenResolution ?? null,
+        webglHash: device.webglHash ?? null,
+        canvasHash: device.canvasHash ?? null,
+        ipAddress: device.ipAddress ?? null,
+        asn: device.asn ?? null,
+        country: device.country ?? null,
+        city: device.city ?? null,
+        createdAt: now,
+        lastSeenAt: now,
+        refreshExpiresAt: new Date(now.getTime() + idleMs),
+        absoluteExpiresAt: new Date(now.getTime() + SESSION_ABSOLUTE_TTL_MS),
+        revokedAt: null,
+        revokeReason: null,
+      },
+    });
+
+    if (trusted) {
+      await tx.trustedDevice.update({
+        where: { id: trusted.id },
+        data: { lastSeenAt: now },
+      });
+    }
+
+    await tx.authAuditLog.create({
+      data: {
+        userId: user.id,
+        sessionId: session.id,
+        action: 'LOGIN_SUCCESS',
+        provider: input.provider ?? null,
+        ipAddress: device.ipAddress ?? null,
+        country: device.country ?? null,
+        userAgent: device.userAgent ?? null,
+        fingerprint: fingerprintHash,
+        metadata: {
+          rememberMe,
+          trustedDevice: Boolean(trusted),
+          familyId,
+        },
+      },
+    });
+
+    return session;
+  }
+
+  private toAuthResult(
+    user: User,
+    session: Session,
+    refreshToken: string,
+    amr: string[] | undefined,
+    trusted: { id: string } | null | boolean,
+  ): SessionAuthResult {
+    const trustedDevice = typeof trusted === 'boolean' ? trusted : Boolean(trusted);
+    return {
+      session,
       user: {
         id: user.id,
         onixId: user.onixId,
@@ -169,9 +253,15 @@ export class SessionService {
         isAdmin: user.isAdmin,
         deletedAt: user.deletedAt,
       },
-      accessToken,
-      refreshToken: refresh.token,
-      trustedDevice: Boolean(trusted),
+      accessToken: this.tokens.issueAccessToken({
+        userId: user.id,
+        sessionId: session.id,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+        amr,
+      }),
+      refreshToken,
+      trustedDevice,
     };
   }
 

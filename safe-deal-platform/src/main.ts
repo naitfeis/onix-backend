@@ -3,11 +3,13 @@ import 'dotenv/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  app.use(requestIdMiddleware);
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
@@ -21,7 +23,8 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: origins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-ONIX-CSRF', 'Cookie', 'X-Request-Id'],
+    exposedHeaders: ['Set-Cookie', 'X-Request-Id'],
     credentials: true,
   });
   app.enableShutdownHooks();

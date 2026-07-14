@@ -1,21 +1,47 @@
 import { Module } from '@nestjs/common';
-import { SigningKeyService } from './signing-key.service';
+import { AuthOrchestrator } from './auth-orchestrator.service';
+import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
+import { AuthV2Controller } from './auth-v2.controller';
+import { AuthV2Guard, PermissionGuard, RolesGuard } from './auth-v2.guards';
+import { IdentityService } from './identity.service';
+import { RbacService } from './rbac.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
 import { SessionService } from './session.service';
+import { SigningKeyService } from './signing-key.service';
+import { TelegramLoginVerifier } from './telegram-login.verifier';
 import { TokenService } from './token.service';
 
 /**
- * Website auth v2 foundation (Phase 2).
- * Controllers are added in later Phase 2 increments.
- * USE_NEW_AUTH defaults to false — registering this module does not change legacy behaviour.
+ * Website auth v2 (Phase 2 complete surface).
+ * USE_NEW_AUTH defaults to false — legacy Mini App /telegram-* remain the production default client path.
  */
 @Module({
+  controllers: [AuthV2Controller],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
+    { provide: AUTH_EVENT_PUBLISHER, useValue: new AuthEventPublisher() },
     SigningKeyService,
     TokenService,
     SessionService,
+    IdentityService,
+    TelegramLoginVerifier,
+    AuthOrchestrator,
+    RbacService,
+    AuthV2Guard,
+    RolesGuard,
+    PermissionGuard,
   ],
-  exports: [TokenService, SigningKeyService, SessionService, SECRETS_PROVIDER],
+  exports: [
+    TokenService,
+    SigningKeyService,
+    SessionService,
+    AuthOrchestrator,
+    AuthV2Guard,
+    RolesGuard,
+    PermissionGuard,
+    RbacService,
+    SECRETS_PROVIDER,
+    AUTH_EVENT_PUBLISHER,
+  ],
 })
 export class AuthV2Module {}

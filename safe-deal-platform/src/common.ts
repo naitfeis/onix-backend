@@ -4,6 +4,7 @@ import {
   NestInterceptor, SetMetadata,
 } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
+import { AuthPlatformError, authErrorBody } from './auth-v2/auth-errors';
 
 export interface AuthUser {
   id: bigint;
@@ -43,6 +44,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
     console.error(error);
     if (error instanceof Error) console.error(error.stack);
     const response = host.switchToHttp().getResponse();
+
+    if (error instanceof AuthPlatformError) {
+      response.status(error.httpStatus).json(authErrorBody(error));
+      return;
+    }
+
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const raw = error instanceof HttpException ? error.getResponse() : null;
     const details = typeof raw === 'object' && raw ? raw : undefined;
