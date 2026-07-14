@@ -11,6 +11,7 @@ import { AuthRequest, AuthUser, Public } from './common';
 import { AuthPlatformError } from './auth-v2/auth-errors';
 import { AuthOrchestrator, type LegacyAuthSource } from './auth-v2/auth-orchestrator.service';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
+import { AuthRolloutService } from './auth-v2/auth-rollout.service';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
 
@@ -255,6 +256,7 @@ export class AuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly auth: AuthService,
     @Optional() private readonly dualAccess?: DualAccessService,
+    @Optional() private readonly rollout?: AuthRolloutService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -271,6 +273,7 @@ export class AuthGuard implements CanActivate {
       }
       try {
         request.user = await this.dualAccess.verifyEd25519AccessToken(token);
+        this.rollout?.observeAuthPath('v2_access', { userId: request.user.id.toString() });
         return true;
       } catch (error) {
         if (error instanceof AuthPlatformError) {
@@ -281,6 +284,7 @@ export class AuthGuard implements CanActivate {
     }
 
     request.user = await this.auth.verifyToken(token);
+    this.rollout?.observeAuthPath('legacy_hs256', { userId: request.user.id.toString() });
     return true;
   }
 }

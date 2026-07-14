@@ -1,9 +1,7 @@
 /** Feature flags for Website auth v2 (ADR-035). Defaults keep production behaviour unchanged. */
 
 export function isNewAuthEnabled(): boolean {
-  const value = process.env.USE_NEW_AUTH;
-  if (value === undefined || value === '') return false;
-  return value === '1' || value.toLowerCase() === 'true';
+  return parseBoolEnv(process.env.USE_NEW_AUTH, false);
 }
 
 /**
@@ -12,9 +10,7 @@ export function isNewAuthEnabled(): boolean {
  * Default: false (EdDSA rejected on legacy-protected routes).
  */
 export function isAcceptV2AccessEnabled(): boolean {
-  const value = process.env.AUTH_ACCEPT_V2_ACCESS;
-  if (value === undefined || value === '') return false;
-  return value === '1' || value.toLowerCase() === 'true';
+  return parseBoolEnv(process.env.AUTH_ACCEPT_V2_ACCESS, false);
 }
 
 /**
@@ -23,9 +19,7 @@ export function isAcceptV2AccessEnabled(): boolean {
  * Default: false (legacy login behaviour unchanged).
  */
 export function isDualIssueSessionEnabled(): boolean {
-  const value = process.env.AUTH_DUAL_ISSUE_SESSION;
-  if (value === undefined || value === '') return false;
-  return value === '1' || value.toLowerCase() === 'true';
+  return parseBoolEnv(process.env.AUTH_DUAL_ISSUE_SESSION, false);
 }
 
 /**
@@ -33,7 +27,32 @@ export function isDualIssueSessionEnabled(): boolean {
  * Never enabled for Mini App responses in Phase 3.2. Default: false.
  */
 export function isDualIssueRefreshCookieEnabled(): boolean {
-  const value = process.env.AUTH_DUAL_ISSUE_SET_COOKIE;
-  if (value === undefined || value === '') return false;
+  return parseBoolEnv(process.env.AUTH_DUAL_ISSUE_SET_COOKIE, false);
+}
+
+/**
+ * Phase 3.3 — canary percentage for Website new-auth cutover (0–100).
+ * Default: 0 (nobody in canary). Independent of Mini App frozen path.
+ */
+export function getNewAuthCanaryPercent(): number {
+  const raw = process.env.AUTH_NEW_AUTH_CANARY_PERCENT;
+  if (raw === undefined || raw === '') return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  if (n <= 0) return 0;
+  if (n >= 100) return 100;
+  return Math.floor(n);
+}
+
+/**
+ * Phase 3.3 — emit structured rollout observation logs (Legacy/V2 path, canary hits).
+ * Default: false (no extra log volume in production until ops enable it).
+ */
+export function isRolloutObserveEnabled(): boolean {
+  return parseBoolEnv(process.env.AUTH_ROLLOUT_OBSERVE, false);
+}
+
+function parseBoolEnv(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined || value === '') return defaultValue;
   return value === '1' || value.toLowerCase() === 'true';
 }

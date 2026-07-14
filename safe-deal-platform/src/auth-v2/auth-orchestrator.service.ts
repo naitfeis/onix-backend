@@ -1,8 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AuthPlatformError } from './auth-errors';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
 import { isDualIssueSessionEnabled } from './auth-v2.flags';
+import { AuthRolloutService } from './auth-rollout.service';
 import { IdentityService } from './identity.service';
 import { SESSION_ABSOLUTE_TTL_MS, SESSION_IDLE_TTL_MS, SESSION_REMEMBER_IDLE_TTL_MS } from './session.constants';
 import { type DeviceContext, type SessionAuthResult, SessionService } from './session.service';
@@ -34,6 +35,7 @@ export class AuthOrchestrator {
     private readonly identities: IdentityService,
     private readonly sessions: SessionService,
     @Inject(AUTH_EVENT_PUBLISHER) private readonly events: AuthEventPublisher,
+    @Optional() private readonly rollout?: AuthRolloutService,
   ) {}
 
   async loginWithTelegram(command: LoginTelegramCommand): Promise<SessionAuthResult & {
@@ -139,6 +141,12 @@ export class AuthOrchestrator {
         source,
         familyId: result.session.familyId,
       }));
+
+      this.rollout?.observeAuthPath('dual_issue_session', {
+        userId: userId.toString(),
+        sessionId: result.session.id,
+        source,
+      });
 
       await this.events.publish('SessionCreated.v1', {
         userId: userId.toString(),
