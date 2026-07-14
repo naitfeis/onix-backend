@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SigningKeyService } from './signing-key.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
+import { SessionService } from './session.service';
 import { TokenService } from './token.service';
 
 /**
@@ -13,7 +14,8 @@ import { TokenService } from './token.service';
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
     SigningKeyService,
     TokenService,
+    SessionService,
   ],
-  exports: [TokenService, SigningKeyService, SECRETS_PROVIDER],
+  exports: [TokenService, SigningKeyService, SessionService, SECRETS_PROVIDER],
 })
 export class AuthV2Module {}
