@@ -7,6 +7,7 @@
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
+    "auth:backfill-identity": "tsx safe-deal-platform/scripts/backfill-identity-links.ts",
     "typecheck": "tsc --noEmit --incremental false",
     "lint": "tsc --noEmit --incremental false",
     "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",

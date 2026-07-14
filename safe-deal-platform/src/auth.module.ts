@@ -8,6 +8,7 @@ import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'cla
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AuthRequest, AuthUser, Public } from './common';
+import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
 
 interface TelegramIdentity {
   id: bigint;
@@ -119,17 +120,35 @@ export class AuthService {
               isAdmin: process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
             },
           });
-          return tx.user.update({
+          const withOnixId = await tx.user.update({
             where: { id: created.id },
             data: { onixId: `ONIX-${created.id.toString().padStart(6, '0')}` },
           });
+          if (isDualWriteIdentityEnabled()) {
+            await dualWriteTelegramIdentity(tx, {
+              userId: withOnixId.id,
+              telegramId: withOnixId.telegramId,
+              username: withOnixId.telegramNick,
+              displayName: withOnixId.displayName,
+              avatarUrl: withOnixId.avatarUrl,
+            });
+          }
+          return withOnixId;
         });
       } catch (error) {
         if (this.isUniqueConstraint(error)) return this.upsert(identity);
         throw error;
       }
+      return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
     }
     if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
+    await dualWriteTelegramIdentity(this.prisma, {
+      userId: user.id,
+      telegramId: user.telegramId,
+      username: identity.username !== undefined ? identity.username : user.telegramNick,
+      displayName: user.displayName,
+      avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
+    });
     return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
   }
 

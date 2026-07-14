@@ -1,0 +1,102 @@
+import { createHash, randomBytes } from 'crypto';
+import type { AuthProvider, Prisma, PrismaClient } from '@prisma/client';
+
+export type IdentityDualWriteClient = Pick<PrismaClient, 'identityLink'> | Prisma.TransactionClient;
+
+export function isDualWriteIdentityEnabled(): boolean {
+  const value = process.env.AUTH_DUAL_WRITE_IDENTITY;
+  if (value === undefined || value === '') return true;
+  return value !== '0' && value.toLowerCase() !== 'false';
+}
+
+export function telegramProviderUserId(telegramId: bigint): string {
+  return telegramId.toString();
+}
+
+/** Deterministic id for backfill/dual-write stability across retries. */
+export function stableTelegramIdentityLinkId(userId: bigint, telegramId: bigint): string {
+  return createHash('md5').update(`tg:${userId}:${telegramId}`).digest('hex');
+}
+
+export async function dualWriteTelegramIdentity(
+  db: IdentityDualWriteClient,
+  input: {
+    userId: bigint;
+    telegramId: bigint;
+    username?: string | null;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+  },
+): Promise<void> {
+  if (!isDualWriteIdentityEnabled()) return;
+
+  const providerUserId = telegramProviderUserId(input.telegramId);
+  const now = new Date();
+  await db.identityLink.upsert({
+    where: {
+      provider_providerUserId: {
+        provider: 'TELEGRAM' satisfies AuthProvider,
+        providerUserId,
+      },
+    },
+    create: {
+      id: stableTelegramIdentityLinkId(input.userId, input.telegramId),
+      userId: input.userId,
+      provider: 'TELEGRAM',
+      providerUserId,
+      username: input.username ?? undefined,
+      displayName: input.displayName ?? undefined,
+      avatarUrl: input.avatarUrl ?? undefined,
+      linkedAt: now,
+      lastUsedAt: now,
+    },
+    update: {
+      userId: input.userId,
+      username: input.username === undefined ? undefined : input.username,
+      displayName: input.displayName === undefined ? undefined : input.displayName,
+      avatarUrl: input.avatarUrl === undefined ? undefined : input.avatarUrl,
+      lastUsedAt: now,
+      deletedAt: null,
+    },
+  });
+}
+
+/** Re-runnable backfill used by scripts/tests (migration also backfills). */
+export async function backfillTelegramIdentityLinks(
+  prisma: PrismaClient,
+): Promise<{ insertedOrUpdated: number }> {
+  const users = await prisma.user.findMany({
+    select: {
+      id: true,
+      telegramId: true,
+      telegramNick: true,
+      displayName: true,
+      avatarUrl: true,
+    },
+  });
+
+  let insertedOrUpdated = 0;
+  for (const user of users) {
+    const before = await prisma.identityLink.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: 'TELEGRAM',
+          providerUserId: user.telegramId.toString(),
+        },
+      },
+    });
+    await dualWriteTelegramIdentity(prisma, {
+      userId: user.id,
+      telegramId: user.telegramId,
+      username: user.telegramNick,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+    });
+    if (!before) insertedOrUpdated += 1;
+  }
+  return { insertedOrUpdated };
+}
+
+export function newOpaqueTokenId(): string {
+  return randomBytes(16).toString('hex');
+}
