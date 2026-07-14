@@ -14,6 +14,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { AuthRolloutService } from './auth-v2/auth-rollout.service';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
+import { formatErrorForLog } from './safe-error-log';
 
 interface TelegramIdentity {
   id: bigint;
@@ -103,8 +104,7 @@ export class AuthService {
       if (!user || user.deletedAt) throw new Error('inactive');
       return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
     } catch (error) {
-      console.error(error);
-      if (error instanceof Error) console.error(error.stack);
+      console.error(formatErrorForLog(error));
       throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
     }
   }

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
 import { AuthPlatformError, authErrorBody } from './auth-v2/auth-errors';
+import { formatErrorForLog } from './safe-error-log';
 
 export interface AuthUser {
   id: bigint;
@@ -41,8 +42,8 @@ export class ApiEnvelopeInterceptor implements NestInterceptor {
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
-    console.error(error);
-    if (error instanceof Error) console.error(error.stack);
+    // Never log raw Authorization / tokens / cookies / PEM — redact first.
+    console.error(formatErrorForLog(error));
     const response = host.switchToHttp().getResponse();
 
     if (error instanceof AuthPlatformError) {

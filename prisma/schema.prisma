@@ -391,6 +391,7 @@ model Session {
   @@index([refreshExpiresAt])
   @@index([fingerprintHash])
   @@index([familyId])
+  @@index([previousRefreshHash])
 }
 
 model AuthAuditLog {

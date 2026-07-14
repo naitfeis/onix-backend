@@ -18,6 +18,18 @@ export function stableTelegramIdentityLinkId(userId: bigint, telegramId: bigint)
   return createHash('md5').update(`tg:${userId}:${telegramId}`).digest('hex');
 }
 
+/**
+ * Upsert TELEGRAM IdentityLink for a User (Phase 1 dual-write).
+ *
+ * TODO(Phase 4 — soft-unlink correctness / ADR soft-delete):
+ * Current `update.deletedAt: null` reactivates a soft-deleted TELEGRAM link on every
+ * successful Telegram login. That preserves Phase 1–3 production behaviour (login always
+ * restores the active TELEGRAM factor) and MUST NOT change until:
+ *   1. Unlink API exists with "last factor" guards
+ *   2. AUTH_ENFORCE_IDENTITY_LINK read-path is live
+ *   3. Explicit product rule: login-after-unlink = RELINK vs reject
+ * Do not clear deletedAt blindly in Phase 4; branch on unlink intent + IdentityHistory.
+ */
 export async function dualWriteTelegramIdentity(
   db: IdentityDualWriteClient,
   input: {
@@ -56,6 +68,8 @@ export async function dualWriteTelegramIdentity(
       displayName: input.displayName === undefined ? undefined : input.displayName,
       avatarUrl: input.avatarUrl === undefined ? undefined : input.avatarUrl,
       lastUsedAt: now,
+      // Runtime unchanged (Phase 1–3): soft-deleted TELEGRAM links are reactivated on login.
+      // See TODO(Phase 4 — soft-unlink correctness) above before changing this.
       deletedAt: null,
     },
   });
