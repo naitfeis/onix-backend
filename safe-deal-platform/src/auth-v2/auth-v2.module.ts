@@ -16,6 +16,7 @@ import { TokenService } from './token.service';
  * Website auth v2 (Phase 2 complete surface).
  * USE_NEW_AUTH defaults to false — legacy Mini App /telegram-* remain the production default client path.
  * Phase 3.1: DualAccessService enables AUTH_ACCEPT_V2_ACCESS for global AuthGuard (still default off).
+ * Phase 3.2: AuthOrchestrator.dualIssueSessionAfterLegacyLogin behind AUTH_DUAL_ISSUE_SESSION (default off).
  */
 @Module({
   controllers: [AuthV2Controller],

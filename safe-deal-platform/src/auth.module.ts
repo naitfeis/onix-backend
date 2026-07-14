@@ -9,6 +9,7 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AuthRequest, AuthUser, Public } from './common';
 import { AuthPlatformError } from './auth-v2/auth-errors';
+import { AuthOrchestrator, type LegacyAuthSource } from './auth-v2/auth-orchestrator.service';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
@@ -40,7 +41,10 @@ class TelegramLoginDto {
 export class AuthService {
   private readonly maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS ?? 3600);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly orchestrator?: AuthOrchestrator,
+  ) {}
 
   async miniApp(initData: string) {
     const params = new URLSearchParams(initData);
@@ -55,14 +59,16 @@ export class AuthService {
       createHmac('sha256', 'WebAppData').update(this.botToken()).digest(),
     );
     const value = JSON.parse(userJson) as Record<string, unknown>;
-    return this.issue(await this.upsert({
+    const user = await this.upsert({
       id: BigInt(String(value.id)),
       username: typeof value.username === 'string' ? value.username : undefined,
       firstName: typeof value.first_name === 'string' ? value.first_name : undefined,
       lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
       photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
       languageCode: typeof value.language_code === 'string' ? value.language_code : undefined,
-    }));
+    });
+    await this.dualIssueSession(user, 'telegram-mini');
+    return this.issue(user);
   }
 
   async telegramLogin(dto: TelegramLoginDto) {
@@ -74,10 +80,12 @@ export class AuthService {
       .map(([key, value]) => `${key}=${value}`)
       .join('\n');
     this.verifyHash(check, hash, createHash('sha256').update(this.botToken()).digest());
-    return this.issue(await this.upsert({
+    const user = await this.upsert({
       id: BigInt(dto.id), username: dto.username, firstName: dto.first_name,
       lastName: dto.last_name, photoUrl: dto.photo_url,
-    }));
+    });
+    await this.dualIssueSession(user, 'telegram-login');
+    return this.issue(user);
   }
 
   async verifyToken(token: string): Promise<AuthUser> {
@@ -194,6 +202,15 @@ export class AuthService {
       expiresIn: `${days}d`,
       user,
     };
+  }
+
+  /**
+   * Phase 3.2 — optional Website Session after legacy Telegram auth.
+   * Fail-open; never mutates the HS256 response contract.
+   */
+  private async dualIssueSession(user: AuthUser, source: LegacyAuthSource): Promise<void> {
+    if (!this.orchestrator) return;
+    await this.orchestrator.dualIssueSessionAfterLegacyLogin(user.id, source);
   }
 
   private verifyHash(check: string, received: string, secret: Buffer): void {

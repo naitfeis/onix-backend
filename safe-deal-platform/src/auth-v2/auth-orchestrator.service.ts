@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AuthPlatformError } from './auth-errors';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
+import { isDualIssueSessionEnabled } from './auth-v2.flags';
 import { IdentityService } from './identity.service';
 import { SESSION_ABSOLUTE_TTL_MS, SESSION_IDLE_TTL_MS, SESSION_REMEMBER_IDLE_TTL_MS } from './session.constants';
 import { type DeviceContext, type SessionAuthResult, SessionService } from './session.service';
@@ -11,6 +12,16 @@ export interface LoginTelegramCommand {
   telegram: TelegramLoginPayload;
   rememberMe?: boolean;
   device?: DeviceContext;
+}
+
+/** Legacy Telegram entry surfaces that may dual-issue a Website Session (Phase 3.2). */
+export type LegacyAuthSource = 'telegram-mini' | 'telegram-login';
+
+export interface DualIssueSessionResult {
+  sessionId: string;
+  familyId: string;
+  /** Opaque refresh exists only in-process; never attached to Mini App responses in 3.2. */
+  refreshTokenIssued: true;
 }
 
 @Injectable()
@@ -89,6 +100,67 @@ export class AuthOrchestrator {
         reason: error instanceof AuthPlatformError ? error.code : 'AUTH_INTERNAL',
       });
       throw error;
+    }
+  }
+
+  /**
+   * Phase 3.2 — Session dual-issue for legacy Telegram login paths.
+   *
+   * When AUTH_DUAL_ISSUE_SESSION=true, creates one Website Session for the already-upserted User
+   * (refresh hash + LOGIN_SUCCESS audit via SessionService). Fail-open: never breaks Mini App /
+   * telegram-login contracts. Opaque refresh and Ed25519 access are discarded (not returned).
+   *
+   * Cookie Set-Cookie is intentionally not applied here (AUTH_DUAL_ISSUE_SET_COOKIE reserved).
+   */
+  async dualIssueSessionAfterLegacyLogin(
+    userId: bigint,
+    source: LegacyAuthSource,
+    device?: DeviceContext,
+  ): Promise<DualIssueSessionResult | null> {
+    if (!isDualIssueSessionEnabled()) return null;
+
+    try {
+      const result = await this.sessions.createSession({
+        userId,
+        clientType: source === 'telegram-mini' ? 'MINI_APP' : 'TELEGRAM_WIDGET',
+        provider: 'TELEGRAM',
+        amr: ['telegram'],
+        device,
+      });
+
+      // Opaque refresh is created + hashed inside SessionService; discard plaintext deliberately.
+      void result.refreshToken;
+      void result.accessToken;
+
+      this.logger.log(JSON.stringify({
+        msg: 'auth_dual_issue_session_success',
+        userId: userId.toString(),
+        sessionId: result.session.id,
+        source,
+        familyId: result.session.familyId,
+      }));
+
+      await this.events.publish('SessionCreated.v1', {
+        userId: userId.toString(),
+        sessionId: result.session.id,
+        familyId: result.session.familyId,
+        source,
+        dualIssue: true,
+      });
+
+      return {
+        sessionId: result.session.id,
+        familyId: result.session.familyId,
+        refreshTokenIssued: true,
+      };
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        msg: 'auth_dual_issue_session_failed',
+        userId: userId.toString(),
+        source,
+        code: error instanceof AuthPlatformError ? error.code : 'AUTH_INTERNAL',
+      }));
+      return null;
     }
   }
 
