@@ -51,15 +51,19 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
 async function bootstrapAuthenticatedUser(
   loadProfile: () => Promise<Profile | null>,
   load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
-): Promise<void> {
-  const current = await loadProfile();
-  await Promise.all([
+): Promise<Profile | null> {
+  // Hot path in parallel: profile + market/deals/chats (notifications UI removed — skip).
+  const [current] = await Promise.all([
+    loadProfile(),
     load('products', API_PATHS.productsList({ limit: 100 })),
     load('deals', API_PATHS.orders),
     load('chats', API_PATHS.chats),
-    load('notifications', API_PATHS.notifications),
-    ...(current ? [load('reviews', API_PATHS.reviews(current.onixId))] : []),
   ]);
+  // Reviews need onixId — do not block Marketplace first paint.
+  if (current) {
+    void load('reviews', API_PATHS.reviews(current.onixId));
+  }
+  return current;
 }
 
 export function useOnixCore() {
@@ -124,6 +128,8 @@ export function useOnixCore() {
 
       // Guest → Loading User → Authenticated (same bootstrap for Mini App, Website bot, legacy).
       await bootstrapAuthenticatedUser(loadProfile, load);
+      // Badge uses chat unread only — skip notifications network on cold start.
+      setStates((previous) => ({ ...previous, notifications: 'idle' }));
     } catch (error) {
       setProfile(null);
       setStates(previous => ({ ...previous, profile: 'error' }));
@@ -159,8 +165,8 @@ export function useOnixCore() {
 
   const cents = (rubles: string | number) => Math.round(Number(rubles) * 100).toString();
 
-  const listProducts = useCallback((query: ProductListQuery = {}) =>
-    api.get<Product[]>(API_PATHS.productsList(query)), []);
+  const listProducts = useCallback((query: ProductListQuery = {}, signal?: AbortSignal) =>
+    api.get<Product[]>(API_PATHS.productsList(query), signal), []);
 
   const listFavorites = useCallback(() =>
     api.get<Product[]>(API_PATHS.favorites), []);
@@ -202,8 +208,20 @@ export function useOnixCore() {
       item.id === product.id ? { ...item, favorite: !item.favorite } : item) }));
     void run(`favorite-${product.id}`, () => product.favorite
       ? api.delete(API_PATHS.favorite(product.id))
-      : api.post(API_PATHS.favorite(product.id)), () => void load('products', API_PATHS.productsList({ limit: 100 })));
-  }, [load, run]);
+      : api.post(API_PATHS.favorite(product.id)), () => {
+      // Optimistic UI already applied — no full products?limit=100 refetch.
+    }).then((ok) => {
+      if (ok === null) {
+        // Revert on failure.
+        setStore((previous) => ({
+          ...previous,
+          products: previous.products.map((item) => (
+            item.id === product.id ? { ...item, favorite: product.favorite } : item
+          )),
+        }));
+      }
+    });
+  }, [run]);
 
   const toggleFollow = useCallback((onixId: string, followed = false) => {
     const delta = followed ? -1 : 1;
@@ -227,12 +245,24 @@ export function useOnixCore() {
       () => (followed
         ? api.delete<{ onixId: string; followed: boolean; followersCount: number }>(API_PATHS.follow(onixId))
         : api.post<{ onixId: string; followed: boolean; followersCount: number }>(API_PATHS.follow(onixId))),
-      () => {
-        void load('products', API_PATHS.productsList({ limit: 100 }));
-      },
     ).then((result) => {
       if (!result) {
-        void load('products', API_PATHS.productsList({ limit: 100 }));
+        // Revert optimistic patch — avoid refetching 100 products.
+        setStore((previous) => ({
+          ...previous,
+          products: previous.products.map((item) => (
+            item.seller.onixId === onixId
+              ? {
+                ...item,
+                seller: {
+                  ...item.seller,
+                  followed,
+                  followersCount: Math.max(0, item.seller.followersCount - delta),
+                },
+              }
+              : item
+          )),
+        }));
         return null;
       }
       setStore((previous) => ({
@@ -252,10 +282,11 @@ export function useOnixCore() {
       }));
       return result;
     });
-  }, [load, run]);
+  }, [run]);
 
   const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
     api.post<Deal>(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
+      // Sold-out listing: refresh market; deals/chats needed for Escrow + SYSTEM message.
       void load('products', API_PATHS.productsList({ limit: 100 }));
       void load('deals', API_PATHS.orders);
       void load('chats', API_PATHS.chats);
@@ -299,10 +330,10 @@ export function useOnixCore() {
           ? previous
           : { ...previous, chats: [thread, ...previous.chats] };
       });
-      void load('chats', API_PATHS.chats);
+      // Thread already in store — skip full chats list refetch on open.
     }
     return thread;
-  }), [load, run]);
+  }), [run]);
 
   const openSupport = useCallback((dealId: string, reason?: string) => run(`support-${dealId}`, () =>
     api.post<{ ticketId: string; chatId: string }>(API_PATHS.orderSupport(dealId), {

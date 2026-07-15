@@ -75,8 +75,23 @@ export class ChatService {
     });
     if (chats.length === 0) return [];
 
-    const threads = await Promise.all(chats.map(async (chat) => {
-      const me = chat.members.find((member) => member.userId === user.id);
+    // One grouped unread query instead of N× message.count (was up to 50 round-trips).
+    const chatIds = chats.map((chat) => chat.id);
+    const unreadRows = await this.prisma.$queryRaw<Array<{ chatId: string; cnt: bigint }>>`
+      SELECT m."chatId" AS "chatId", COUNT(*)::bigint AS cnt
+      FROM "Message" m
+      INNER JOIN "ChatMember" cm
+        ON cm."chatId" = m."chatId" AND cm."userId" = ${user.id}
+      WHERE m."chatId" IN (${Prisma.join(chatIds)})
+        AND m.kind = 'USER'
+        AND m."senderId" IS NOT NULL
+        AND m."senderId" <> ${user.id}
+        AND (cm."lastReadAt" IS NULL OR m."createdAt" > cm."lastReadAt")
+      GROUP BY m."chatId"
+    `;
+    const unreadByChat = new Map(unreadRows.map((row) => [row.chatId, Number(row.cnt)]));
+
+    return chats.map((chat) => {
       // Prefer counterparty over support/admin who joined via ChatMember.
       const other = chat.members.find((member) => (
         member.userId !== user.id
@@ -84,19 +99,11 @@ export class ChatService {
         && !member.user.isSupport
       )) ?? chat.members.find((member) => member.userId !== user.id);
       const latestOrder = chat.orders[0];
-      const unreadCount = await this.prisma.message.count({
-        where: {
-          chatId: chat.id,
-          kind: 'USER',
-          senderId: { not: user.id },
-          ...(me?.lastReadAt ? { createdAt: { gt: me.lastReadAt } } : {}),
-        },
-      });
       return {
         id: chat.id,
         title: other?.user.displayName ?? other?.user.telegramNick ?? other?.user.onixId ?? 'Диалог',
         subtitle: chat.messages[0]?.text,
-        unreadCount,
+        unreadCount: unreadByChat.get(chat.id) ?? 0,
         peerOnixId: other?.user.onixId,
         peerLastOnline: other?.user.lastSeenAt?.toISOString(),
         ...(other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
@@ -112,8 +119,7 @@ export class ChatService {
           },
         } : {}),
       };
-    }));
-    return threads;
+    });
   }
 
   async direct(user: AuthUser, onixId: string) {

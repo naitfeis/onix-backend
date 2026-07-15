@@ -8,6 +8,7 @@ import { BAN_REASON_LABELS } from './ban-policy';
 import { AuthUser, CurrentUser } from './common';
 import { pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
+import { productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
 
 class ReportUserDto {
@@ -48,15 +49,11 @@ export class FavoritesService {
   async favorites(user: AuthUser) {
     const rows = await this.prisma.favorite.findMany({
       where: { userId: user.id, product: { status: 'ACTIVE' } },
-      include: {
+      select: {
         product: {
-          include: {
-            seller: {
-              include: {
-                _count: { select: { followers: true } },
-                followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
-              },
-            },
+          select: {
+            ...productListSelect,
+            seller: { select: sellerPublicSelect(user.id) },
             favorites: { where: { userId: user.id }, select: { userId: true } },
           },
         },

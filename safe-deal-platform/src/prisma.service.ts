@@ -20,9 +20,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     }
 
     if (!PrismaService.pool) {
+      // Neon + single Render instance: keep pool small (PgBouncer-friendly).
       PrismaService.pool = new Pool({
         connectionString,
-        max: 10,
+        max: Number(process.env.PG_POOL_MAX ?? 5),
         idleTimeoutMillis: 30_000,
         connectionTimeoutMillis: 5_000,
       });

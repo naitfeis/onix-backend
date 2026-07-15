@@ -3,11 +3,14 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-// Умный сплиттинг framework-зависимостей для ускорения кэширования браузером [проф. 1]
+// Long-cache vendor chunks: React (framework) + Telegram SDK (optional Mini App path).
 const manualChunks = (id: string) => {
   if (id.includes('node_modules')) {
     if (id.includes('react') || id.includes('react-dom')) {
       return 'framework';
+    }
+    if (id.includes('@twa-dev/sdk')) {
+      return 'telegram';
     }
   }
 };

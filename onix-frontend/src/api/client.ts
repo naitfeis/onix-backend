@@ -103,13 +103,28 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
   return payload.data;
 }
 
+/** In-flight GET dedupe — one network request, many subscribers (bootstrap / StrictMode). */
+const inflightGets = new Map<string, Promise<unknown>>();
+
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const manager = peekSharedAuthManager();
-  // Website Auth V2 / bot session: single-flight refresh + one 401 retry via AuthManager.
-  if (manager?.getAccessToken()) {
-    return manager.withAccessToken((accessToken) => executeApiRequest<T>(path, options, accessToken));
-  }
-  return executeApiRequest<T>(path, options, getAccessToken());
+  const method = (options.method ?? 'GET').toUpperCase();
+  const dedupe = method === 'GET' && !options.signal;
+  const run = async (): Promise<T> => {
+    const manager = peekSharedAuthManager();
+    // Website Auth V2 / bot session: single-flight refresh + one 401 retry via AuthManager.
+    if (manager?.getAccessToken()) {
+      return manager.withAccessToken((accessToken) => executeApiRequest<T>(path, options, accessToken));
+    }
+    return executeApiRequest<T>(path, options, getAccessToken());
+  };
+  if (!dedupe) return run();
+  const existing = inflightGets.get(path);
+  if (existing) return existing as Promise<T>;
+  const promise = run().finally(() => {
+    if (inflightGets.get(path) === promise) inflightGets.delete(path);
+  });
+  inflightGets.set(path, promise);
+  return promise;
 }
 
 interface AuthResult {

@@ -10,6 +10,7 @@ import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
+import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
 
 class PurchaseDto {
@@ -62,10 +63,16 @@ export class EscrowService {
       { createdAt: 'desc' };
     const orders = await this.prisma.order.findMany({
       where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
-      include: {
-        product: true,
-        buyer: { include: { _count: { select: { followers: true } } } },
-        seller: { include: { _count: { select: { followers: true } } } },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        totalAmountCents: true,
+        status: true,
+        createdAt: true,
+        product: { select: dealProductSelect },
+        buyer: { select: dealPartySelect },
+        seller: { select: dealPartySelect },
         reviews: { select: { authorId: true } },
         chat: { select: { id: true } },
       },
@@ -450,11 +457,18 @@ export class EscrowService {
     if (canActAsSupport(actor)) {
       const order = await this.prisma.order.findUniqueOrThrow({
         where: { id },
-        include: {
-          product: true,
-          buyer: { include: { _count: { select: { followers: true } } } },
-          seller: { include: { _count: { select: { followers: true } } } },
+        select: {
+          id: true,
+          buyerId: true,
+          sellerId: true,
+          totalAmountCents: true,
+          status: true,
+          createdAt: true,
+          product: { select: dealProductSelect },
+          buyer: { select: dealPartySelect },
+          seller: { select: dealPartySelect },
           reviews: { select: { authorId: true } },
+          chat: { select: { id: true } },
         },
       });
       return dealDto(order, actor);
@@ -493,10 +507,16 @@ export class EscrowService {
   private async one(user: AuthUser, id: bigint) {
     const order = await this.prisma.order.findFirstOrThrow({
       where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
-      include: {
-        product: true,
-        buyer: { include: { _count: { select: { followers: true } } } },
-        seller: { include: { _count: { select: { followers: true } } } },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        totalAmountCents: true,
+        status: true,
+        createdAt: true,
+        product: { select: dealProductSelect },
+        buyer: { select: dealPartySelect },
+        seller: { select: dealPartySelect },
         reviews: { select: { authorId: true } },
         chat: { select: { id: true } },
       },

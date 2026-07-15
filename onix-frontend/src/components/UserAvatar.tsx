@@ -17,7 +17,13 @@ export default function UserAvatar({ avatarUrl, name, size = 'small' }: UserAvat
 
   return <span className={`user-avatar user-avatar--${size}`}>
     {showImage
-      ? <img src={avatarUrl} alt="" onError={() => setFailedUrl(avatarUrl ?? null)} />
+      ? <img
+        src={avatarUrl}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailedUrl(avatarUrl ?? null)}
+      />
       : <span aria-hidden="true">{initials(name)}</span>}
   </span>;
 }

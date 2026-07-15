@@ -13,6 +13,7 @@ import { AuthUser, CurrentUser, Public } from './common';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
 import { PrismaService } from './prisma.service';
+import { productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
 
@@ -141,13 +142,9 @@ export class MarketplaceService {
       { createdAt: 'desc' };
     const products = await this.prisma.product.findMany({
       where, orderBy, take: query.limit, skip: query.offset,
-      include: {
-        seller: {
-          include: {
-            _count: { select: { followers: true } },
-            followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
-          },
-        },
+      select: {
+        ...productListSelect,
+        seller: { select: sellerPublicSelect(user.id) },
         favorites: { where: { userId: user.id }, select: { userId: true } },
       },
     });
@@ -157,13 +154,10 @@ export class MarketplaceService {
   async get(user: AuthUser, id: string) {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: {
-        seller: {
-          include: {
-            _count: { select: { followers: true } },
-            followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
-          },
-        },
+      select: {
+        ...productListSelect,
+        sellerId: true,
+        seller: { select: sellerPublicSelect(user.id) },
         favorites: { where: { userId: user.id }, select: { userId: true } },
       },
     });

@@ -92,6 +92,8 @@ model Product {
   @@index([category, subcategory, status])
   @@index([sellerId, status])
   @@index([title])
+  @@index([status, createdAt])
+  @@index([status, priceCents])
 }
 
 model Favorite {
@@ -112,6 +114,7 @@ model Follow {
   seller     User     @relation("Followers", fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@id([followerId, sellerId])
+  @@index([sellerId])
 }
 
 model Order {
@@ -145,6 +148,9 @@ model Order {
   @@index([buyerId, status])
   @@index([sellerId, status])
   @@index([chatId])
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([chatId, createdAt])
 }
 
 model OrderTransition {
@@ -187,6 +193,8 @@ model Chat {
   members   ChatMember[]
   messages  Message[]
   tickets   SupportTicket[]
+
+  @@index([updatedAt])
 }
 
 model ChatMember {

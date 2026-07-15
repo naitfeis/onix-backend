@@ -78,9 +78,11 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     };
     addEventListener('pointermove', move, { passive: true });
     let frame = 0;
+    let running = !document.hidden;
     const started = performance.now();
     const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1 : 1.4);
     const render = (now: number) => {
+      if (!running) return;
       const width = Math.floor(canvas.clientWidth * quality);
       const height = Math.floor(canvas.clientHeight * quality);
       if (canvas.width !== width || canvas.height !== height) {
@@ -93,9 +95,21 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       if (!reduced) frame = requestAnimationFrame(render);
     };
+    const onVisibility = () => {
+      running = !document.hidden;
+      if (running && !reduced) {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(render);
+      } else {
+        cancelAnimationFrame(frame);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     render(performance.now());
     return () => {
+      running = false;
       cancelAnimationFrame(frame);
+      document.removeEventListener('visibilitychange', onVisibility);
       removeEventListener('pointermove', move);
       gl.deleteProgram(program);
       gl.deleteBuffer(buffer);

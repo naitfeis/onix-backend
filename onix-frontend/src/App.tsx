@@ -467,7 +467,7 @@ function Market({
     if (core.states.profile === 'loading' || !core.profile) return;
     if (isDefaultView) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
       setMarketState('loading');
@@ -479,19 +479,18 @@ function Market({
         sort: serverSort,
         limit: 30,
         offset: 0,
-      }).then((data) => {
-        if (cancelled) return;
+      }, controller.signal).then((data) => {
         setItems(data);
         setMarketError(undefined);
         setMarketState('success');
       }).catch((error: unknown) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setItems([]);
         setMarketError(friendlyError(error));
         setMarketState('error');
       });
     }, debounceMs);
-    return () => { cancelled = true; window.clearTimeout(timer); };
+    return () => { controller.abort(); window.clearTimeout(timer); };
   }, [category, core.listProducts, core.profile, core.states.profile, isDefaultView, query, sort, subcategory]);
 
   useEffect(() => {
@@ -694,8 +693,16 @@ function Deals({
   const listQuery: OrderListQuery = {
     ...(activeFilter.status ? { status: activeFilter.status } : {}),
   };
+  const skipBootstrappedAll = useRef(true);
   useEffect(() => {
-    if (core.profile) void core.listDeals(listQuery);
+    if (!core.profile) return;
+    // Bootstrap already loaded GET /orders — skip duplicate on first Deals mount with filter=all.
+    if (dealFilter === 'all' && skipBootstrappedAll.current) {
+      skipBootstrappedAll.current = false;
+      return;
+    }
+    skipBootstrappedAll.current = false;
+    void core.listDeals(listQuery);
   }, [core.listDeals, core.profile, dealFilter]);
   useEffect(() => {
     if (!focusDealId) return;
