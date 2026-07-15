@@ -55,7 +55,7 @@ export interface ProductDto {
   createdAt: string;
 }
 
-export function sellerDto(user: PublicUser) {
+export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: bigint }> }) {
   return {
     id: user.id.toString(),
     onixId: user.onixId,
@@ -66,6 +66,8 @@ export function sellerDto(user: PublicUser) {
     salesCount: user.completedSales,
     followersCount: user._count?.followers ?? 0,
     lastOnline: user.lastSeenAt.toISOString(),
+    // Present when marketplace includes viewer-scoped Follow rows (take: 1).
+    followed: Boolean(user.followers?.length),
   };
 }
 

@@ -119,7 +119,12 @@ export class MarketplaceService {
     const products = await this.prisma.product.findMany({
       where, orderBy, take: query.limit, skip: query.offset,
       include: {
-        seller: { include: { _count: { select: { followers: true } } } },
+        seller: {
+          include: {
+            _count: { select: { followers: true } },
+            followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
+          },
+        },
         favorites: { where: { userId: user.id }, select: { userId: true } },
       },
     });
@@ -130,7 +135,12 @@ export class MarketplaceService {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
-        seller: { include: { _count: { select: { followers: true } } } },
+        seller: {
+          include: {
+            _count: { select: { followers: true } },
+            followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
+          },
+        },
         favorites: { where: { userId: user.id }, select: { userId: true } },
       },
     });

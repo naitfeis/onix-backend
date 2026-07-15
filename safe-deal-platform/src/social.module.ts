@@ -61,14 +61,18 @@ export class SocialService {
   async follow(user: AuthUser, onixId: string) {
     const seller = await this.target(onixId);
     if (seller.id === user.id) throw new BadRequestException('Нельзя подписаться на себя.');
-    return this.prisma.follow.upsert({
+    await this.prisma.follow.upsert({
       where: { followerId_sellerId: { followerId: user.id, sellerId: seller.id } },
       create: { followerId: user.id, sellerId: seller.id }, update: {},
     });
+    const followersCount = await this.prisma.follow.count({ where: { sellerId: seller.id } });
+    return { onixId, followed: true, followersCount };
   }
   async unfollow(user: AuthUser, onixId: string) {
     const seller = await this.target(onixId);
-    return this.prisma.follow.deleteMany({ where: { followerId: user.id, sellerId: seller.id } });
+    await this.prisma.follow.deleteMany({ where: { followerId: user.id, sellerId: seller.id } });
+    const followersCount = await this.prisma.follow.count({ where: { sellerId: seller.id } });
+    return { onixId, followed: false, followersCount };
   }
   async block(user: AuthUser, onixId: string) {
     const target = await this.target(onixId);

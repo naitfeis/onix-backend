@@ -109,7 +109,7 @@
 
 @media (max-width: 699px) { .chat-layout .mobile-hidden { display: none; } }
 @media (min-width: 560px) {
-  .app-shell { padding-inline: 22px; }.search-row { grid-template-columns: minmax(0,1fr) 180px; }.form-grid { grid-template-columns: 1fr 1fr; }.product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .app-shell { padding-inline: 22px; }.search-row { grid-template-columns: minmax(0,1fr) 180px auto; }.form-grid { grid-template-columns: 1fr 1fr; }.product-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .profile-card { grid-template-columns: auto 1fr auto; }.balance { grid-column: auto; grid-row: 1; border: 0; padding: 0; min-width: 180px; }.stats { grid-column: 2; }
 }
 @media (min-width: 820px) {

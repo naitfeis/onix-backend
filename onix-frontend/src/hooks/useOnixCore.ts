@@ -192,9 +192,54 @@ export function useOnixCore() {
       : api.post(API_PATHS.favorite(product.id)), () => void load('products', API_PATHS.productsList({ limit: 100 })));
   }, [load, run]);
 
-  const toggleFollow = useCallback((onixId: string, followed = false) => run(`follow-${onixId}`, () =>
-    followed ? api.delete(API_PATHS.follow(onixId)) : api.post(API_PATHS.follow(onixId)),
-  () => void loadProfile()), [loadProfile, run]);
+  const toggleFollow = useCallback((onixId: string, followed = false) => {
+    const delta = followed ? -1 : 1;
+    setStore((previous) => ({
+      ...previous,
+      products: previous.products.map((item) => (
+        item.seller.onixId === onixId
+          ? {
+            ...item,
+            seller: {
+              ...item.seller,
+              followed: !followed,
+              followersCount: Math.max(0, item.seller.followersCount + delta),
+            },
+          }
+          : item
+      )),
+    }));
+    return run(
+      `follow-${onixId}`,
+      () => (followed
+        ? api.delete<{ onixId: string; followed: boolean; followersCount: number }>(API_PATHS.follow(onixId))
+        : api.post<{ onixId: string; followed: boolean; followersCount: number }>(API_PATHS.follow(onixId))),
+      () => {
+        void load('products', API_PATHS.productsList({ limit: 100 }));
+      },
+    ).then((result) => {
+      if (!result) {
+        void load('products', API_PATHS.productsList({ limit: 100 }));
+        return null;
+      }
+      setStore((previous) => ({
+        ...previous,
+        products: previous.products.map((item) => (
+          item.seller.onixId === onixId
+            ? {
+              ...item,
+              seller: {
+                ...item.seller,
+                followed: result.followed,
+                followersCount: result.followersCount,
+              },
+            }
+            : item
+        )),
+      }));
+      return result;
+    });
+  }, [load, run]);
 
   const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
     api.post(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
