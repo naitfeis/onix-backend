@@ -22,6 +22,7 @@ export {
 
 export { LegacyWebsiteAuthProvider } from './LegacyWebsiteAuthProvider';
 export { AuthV2WebsiteAuthProvider } from './AuthV2WebsiteAuthProvider';
+export type { AuthV2WebsiteAuthProviderOptions } from './AuthV2WebsiteAuthProvider';
 
 export { AuthManager } from './AuthManager';
 export type { AuthManagerOptions } from './AuthManager';
@@ -40,3 +41,17 @@ export {
 } from './memoryAccessToken';
 
 export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
+
+export {
+  AuthV2ApiError,
+  getAuthV2Me,
+  postAuthV2Login,
+} from './v2AuthApi';
+export type {
+  AuthV2LoginData,
+  AuthV2LoginRequest,
+  AuthV2MeData,
+} from './v2AuthApi';
+
+export { normalizeTelegramLoginPayload } from './telegramPayload';
+export { collectDeviceInfo } from './deviceInfo';

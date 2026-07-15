@@ -4,7 +4,7 @@
 | --- | --- |
 | **Document** | ONIX-WEBSITE-AUTH-CUTOVER |
 | **Date** | 2026-07-15 |
-| **Status** | Phase A ✅ · Phase B ✅ · C–E pending |
+| **Status** | Phase A ✅ · Phase B ✅ · Phase C ✅ · D–E pending |
 | **Backend** | Phase 1–3 **FROZEN** |
 
 Companion checklist: `ONIX-WEBSITE-AUTH-TESTS.md`.

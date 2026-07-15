@@ -1,46 +1,125 @@
 import { AuthManager } from './AuthManager';
+import { collectDeviceInfo } from './deviceInfo';
 import { getSharedAuthManager } from './sharedAuthManager';
+import { normalizeTelegramLoginPayload } from './telegramPayload';
 import type {
   WebsiteAuthProvider,
   WebsiteAuthSessionSummary,
   WebsiteAuthUser,
 } from './types';
+import {
+  AuthV2ApiError,
+  getAuthV2Me,
+  postAuthV2Login,
+  type AuthV2Fetch,
+  type AuthV2MeData,
+} from './v2AuthApi';
+import { resolveApiBase } from './apiConfig';
+
+export type AuthV2WebsiteAuthProviderOptions = {
+  manager?: AuthManager;
+  fetchImpl?: AuthV2Fetch;
+  apiBase?: string;
+};
 
 /**
- * Auth V2 Website provider — fully backed by AuthManager (Phase B).
- * Not activated by default (`VITE_WEBSITE_AUTH_MODE` defaults to legacy).
- * Login → /api/v2/auth/login remains Phase C (App.tsx still on Legacy).
+ * Auth V2 Website provider (Phase C login wired).
+ * Default mode remains legacy via VITE_WEBSITE_AUTH_MODE — this provider activates only when mode=auth_v2.
+ *
+ * Login flow (mandatory):
+ *   Widget → POST /api/v2/auth/login → setSession → GET /api/v2/auth/me
+ *   If /me fails → clearSession → unauthenticated (no half-state).
  */
 export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
   readonly mode = 'auth_v2' as const;
   private readonly manager: AuthManager;
+  private readonly fetchImpl: AuthV2Fetch;
+  private readonly apiBase: string;
+  private cachedUser: WebsiteAuthUser | null = null;
 
-  constructor(manager: AuthManager = getSharedAuthManager()) {
-    this.manager = manager;
+  constructor(options: AuthV2WebsiteAuthProviderOptions | AuthManager = {}) {
+    if (options instanceof AuthManager) {
+      this.manager = options;
+      this.fetchImpl = fetch;
+      this.apiBase = resolveApiBase();
+    } else {
+      this.manager = options.manager ?? getSharedAuthManager();
+      this.fetchImpl = options.fetchImpl ?? fetch;
+      this.apiBase = options.apiBase ?? resolveApiBase();
+    }
   }
+
   getAccessToken(): string | null {
     return this.manager.getAccessToken();
   }
 
   async restoreSession(): Promise<boolean> {
-    return this.manager.restoreSession();
+    const restored = await this.manager.restoreSession();
+    if (!restored) {
+      this.cachedUser = null;
+      return false;
+    }
+    try {
+      const me = await this.fetchMeOrThrow();
+      this.cachedUser = toWebsiteUser(me);
+      return true;
+    } catch {
+      this.manager.clearSession('force-reauth');
+      this.cachedUser = null;
+      return false;
+    }
   }
 
-  async loginWithTelegram(): Promise<void> {
-    throw new Error('AuthV2WebsiteAuthProvider.loginWithTelegram is not implemented until Phase C.');
+  async loginWithTelegram(
+    payload: Record<string, string | number>,
+    options?: { rememberMe?: boolean },
+  ): Promise<void> {
+    const telegram = normalizeTelegramLoginPayload(payload);
+    const login = await postAuthV2Login(
+      {
+        telegram,
+        rememberMe: options?.rememberMe,
+        device: collectDeviceInfo(),
+      },
+      this.fetchImpl,
+      this.apiBase,
+    );
+
+    this.manager.setSession(login.accessToken, login.expiresIn);
+
+    try {
+      const me = await this.fetchMeOrThrow();
+      this.cachedUser = toWebsiteUser(me);
+    } catch (error) {
+      this.manager.clearSession('force-reauth');
+      this.cachedUser = null;
+      throw error;
+    }
   }
 
-  /** Local session clear + cross-tab logout. Server logout API lands in Phase D. */
   async logout(): Promise<void> {
+    this.cachedUser = null;
     this.manager.clearSession('logout');
   }
 
   async logoutAll(): Promise<void> {
+    this.cachedUser = null;
     this.manager.clearSession('logout');
   }
 
   async getMe(): Promise<WebsiteAuthUser | null> {
-    return null;
+    if (this.cachedUser) return this.cachedUser;
+    const token = this.manager.getAccessToken();
+    if (!token) return null;
+    try {
+      const me = await this.fetchMeOrThrow();
+      this.cachedUser = toWebsiteUser(me);
+      return this.cachedUser;
+    } catch {
+      this.manager.clearSession('force-reauth');
+      this.cachedUser = null;
+      return null;
+    }
   }
 
   async listSessions(): Promise<WebsiteAuthSessionSummary[]> {
@@ -51,8 +130,26 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
     throw new Error('AuthV2WebsiteAuthProvider.revokeSession is not implemented until Phase D.');
   }
 
-  /** Expose manager for Phase B/C wiring tests — not used by Legacy App. */
   getAuthManager(): AuthManager {
     return this.manager;
   }
+
+  private async fetchMeOrThrow(): Promise<AuthV2MeData> {
+    const token = this.manager.getAccessToken();
+    if (!token) {
+      throw new AuthV2ApiError('Missing access token before /me.', 401, 'AUTH_INVALID_TOKEN');
+    }
+    return getAuthV2Me(token, this.fetchImpl, this.apiBase);
+  }
+}
+
+function toWebsiteUser(me: AuthV2MeData): WebsiteAuthUser {
+  return {
+    id: me.id,
+    onixId: me.onixId,
+    isAdmin: me.isAdmin,
+    sessionId: me.sessionId,
+    sessionVersion: me.sessionVersion,
+    permissionVersion: me.permissionVersion,
+  };
 }

@@ -58,12 +58,15 @@
 
 | ID | Test | Status |
 | --- | --- | --- |
-| C-T01 | Widget → `POST /api/v2/auth/login` with coerced telegram `id` string | ☐ |
-| C-T02 | After login **always** `GET /api/v2/auth/me` | ☐ |
-| C-T03 | Set-Cookie refresh received on same-origin | ☐ |
-| C-T04 | Access only in memory after login | ☐ |
-| C-T05 | `VITE_WEBSITE_AUTH_MODE=legacy` still uses `/telegram-login` | ☐ |
-| C-T06 | Mini App path unchanged (`/telegram-mini` + sessionStorage) | ☐ |
+| C-T01 | Widget → `POST /api/v2/auth/login` with coerced telegram `id` string | ✅ Phase C |
+| C-T02 | After login **always** `GET /api/v2/auth/me` | ✅ Phase C |
+| C-T03 | Set-Cookie refresh received on same-origin | ✅ credentials include |
+| C-T04 | Access only in memory after login | ✅ Phase C |
+| C-T05 | `VITE_WEBSITE_AUTH_MODE=legacy` still uses `/telegram-login` | ✅ Phase C |
+| C-T06 | Mini App path unchanged (`/telegram-mini` + sessionStorage) | ✅ Phase C |
+| C-T07 | Login failure → empty AuthManager | ✅ Phase C |
+| C-T08 | /me failure → clear session | ✅ Phase C |
+| C-T09 | Logout clears AuthManager | ✅ Phase C |
 
 ### Phase D (interceptors + sessions UX)
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { loginWithTelegram, money } from './api/client';
+import { loginWithTelegram as legacyLoginWithTelegram, money } from './api/client';
+import { getWebsiteAuthProvider, isWebsiteAuthV2 } from './auth';
 import { CATEGORIES, CATEGORY_LABELS, type Deal, type Product, type ProductDraft } from './api/contracts';
 import OnixBackground from './components/OnixBackground';
 import UserAvatar from './components/UserAvatar';
@@ -24,10 +25,15 @@ let reportTelegramLoginError: (message: string) => void = () => {};
 function registerOnixTelegramAuth() {
   if (window.onixTelegramAuth) return;
   window.onixTelegramAuth = async (user: TelegramLoginPayload) => {
-    console.log("Telegram callback fired", user);
+    console.log('Telegram callback fired', user);
     try {
-      console.log("Sending /api/auth/telegram-login");
-      await loginWithTelegram(user);
+      if (isWebsiteAuthV2()) {
+        console.log('Sending /api/v2/auth/login (Auth V2)');
+        await getWebsiteAuthProvider().loginWithTelegram(user);
+      } else {
+        console.log('Sending /api/auth/telegram-login');
+        await legacyLoginWithTelegram(user);
+      }
       location.reload();
     } catch {
       reportTelegramLoginError('Telegram вход не выполнен.');

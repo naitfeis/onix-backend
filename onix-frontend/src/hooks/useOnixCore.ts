@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { api, bootstrapAuth, friendlyError } from '../api/client';
+import { api, bootstrapAuth, friendlyError, getAccessToken } from '../api/client';
+import { getWebsiteAuthProvider, isWebsiteAuthV2 } from '../auth';
 import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type Profile, type Review, type WalletOperation } from '../api/contracts';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
@@ -16,6 +17,44 @@ const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [
 const notify = (kind: 'success' | 'error') => {
   try { WebApp.HapticFeedback.notificationOccurred(kind); } catch { /* Browser client. */ }
 };
+
+function profileFromAuthMe(user: { id: string; onixId: string; isAdmin?: boolean }): Profile {
+  return {
+    id: user.id,
+    onixId: user.onixId,
+    username: user.onixId,
+    rating: 0,
+    reviewCount: 0,
+    salesCount: 0,
+    followersCount: 0,
+    isAdmin: Boolean(user.isAdmin),
+    roles: user.isAdmin ? ['USER', 'ADMIN'] : ['USER'],
+    balanceCents: '0',
+    walletHistory: [],
+  };
+}
+
+/**
+ * Mini App: bootstrapAuth (unchanged).
+ * Website legacy: sessionStorage JWT from /telegram-login.
+ * Website auth_v2: AuthManager silent refresh + mandatory /me (no marketplace APIs yet).
+ */
+async function ensureWebsiteOrMiniAuth(): Promise<'mini' | 'legacy' | 'auth_v2' | null> {
+  const miniOk = await bootstrapAuth();
+  if (miniOk) return 'mini';
+
+  if (isWebsiteAuthV2()) {
+    const provider = getWebsiteAuthProvider();
+    const restored = await provider.restoreSession();
+    if (!restored) return null;
+    const me = await provider.getMe();
+    if (!me) return null;
+    return 'auth_v2';
+  }
+
+  if (getAccessToken()) return 'legacy';
+  return null;
+}
 
 export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -63,12 +102,37 @@ export function useOnixCore() {
 
   const refreshAll = useCallback(async () => {
     try {
-      const authenticated = await bootstrapAuth();
-      if (!authenticated) {
+      const mode = await ensureWebsiteOrMiniAuth();
+      if (!mode) {
+        setProfile(null);
         setStates(previous => ({ ...previous, profile: 'error' }));
         setErrors(previous => ({ ...previous, profile: 'Войдите через Telegram, чтобы продолжить.' }));
         return;
       }
+
+      if (mode === 'auth_v2') {
+        // Phase C: auth identity from /api/v2/auth/me only — no Marketplace/Orders/Wallet wiring.
+        const me = await getWebsiteAuthProvider().getMe();
+        if (!me) {
+          setProfile(null);
+          setStates(previous => ({ ...previous, profile: 'error' }));
+          setErrors(previous => ({ ...previous, profile: 'Войдите через Telegram, чтобы продолжить.' }));
+          return;
+        }
+        setProfile(profileFromAuthMe(me));
+        setErrors(previous => ({ ...previous, profile: undefined }));
+        setStates(previous => ({
+          ...previous,
+          profile: 'success',
+          products: 'idle',
+          deals: 'idle',
+          chats: 'idle',
+          notifications: 'idle',
+          reviews: 'idle',
+        }));
+        return;
+      }
+
       const current = await loadProfile();
       await Promise.all([
         load('products', API_PATHS.products),
