@@ -6,6 +6,7 @@ import { ProductCategory, ProductStatus, Prisma } from '@prisma/client';
 import {
   IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { AuthUser, CurrentUser } from './common';
 import { PrismaService } from './prisma.service';
 import { productDto } from './response';
@@ -34,8 +35,8 @@ class ProductQuery {
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
   @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating']) sort: string = 'newest';
-  @IsOptional() @IsInt() @Min(1) @Max(100) limit = 30;
-  @IsOptional() @IsInt() @Min(0) @Max(10_000) offset = 0;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 30;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
 
 @Injectable()

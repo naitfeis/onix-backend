@@ -245,6 +245,52 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
   const [marketTick, setMarketTick] = useState(0);
 
   useEffect(() => {
+    // Domain catalog only after auth bootstrap / session restore (no racing 401s).
+    if (core.states.profile === 'loading') {
+      setMarketState('loading');
+      return;
+    }
+    if (!core.profile) {
+      setItems([]);
+      setMarketError(core.errors.profile || 'Войдите через Telegram, чтобы продолжить.');
+      setMarketState('error');
+      return;
+    }
+
+    const isDefault = query.trim() === '' && category === 'Все' && sort === 'new';
+    if (!isDefault) return;
+
+    // Default vitrine: reuse bootstrap products — avoid duplicate GET /api/products.
+    if (core.states.products === 'loading' || core.states.products === 'idle') {
+      setMarketState('loading');
+      return;
+    }
+    if (core.states.products === 'error') {
+      setItems([]);
+      setMarketError(core.errors.products || 'Витрина недоступна');
+      setMarketState('error');
+      return;
+    }
+    setItems(core.products);
+    setMarketError(undefined);
+    setMarketState('success');
+  }, [
+    category,
+    core.errors.products,
+    core.errors.profile,
+    core.products,
+    core.profile,
+    core.states.products,
+    core.states.profile,
+    query,
+    sort,
+  ]);
+
+  useEffect(() => {
+    if (core.states.profile === 'loading' || !core.profile) return;
+    const isDefault = query.trim() === '' && category === 'Все' && sort === 'new';
+    if (isDefault) return;
+
     let cancelled = false;
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
@@ -269,16 +315,22 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
       });
     }, debounceMs);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [category, core.listProducts, marketTick, query, sort]);
+  }, [category, core.listProducts, core.profile, core.states.profile, marketTick, query, sort]);
 
   return <div className="stack">
-    <SectionHeader title="ВИТРИНА ONIX MARKETPLACE" subtitle="БЕЗОПАСНЫЕ ЦИФРОВЫЕ СДЕЛКИ" action={<Button variant="ghost" onClick={() => { void core.refreshAll(); setMarketTick((tick) => tick + 1); }}>↻</Button>} />
+    <SectionHeader title="ВИТРИНА ONIX MARKETPLACE" subtitle="БЕЗОПАСНЫЕ ЦИФРОВЫЕ СДЕЛКИ" action={<Button variant="ghost" onClick={() => {
+      void core.refreshAll();
+      if (query.trim() || category !== 'Все' || sort !== 'new') setMarketTick((tick) => tick + 1);
+    }}>↻</Button>} />
     <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
       <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select></div>
     <div className="chips" role="list" aria-label="Категории">{['Все', ...CATEGORIES].map(item =>
       <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => setCategory(item)}>{item === 'Все' ? item.toUpperCase() : CATEGORY_LABELS[item as keyof typeof CATEGORY_LABELS].toUpperCase()}</button>)}</div>
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
-      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => setMarketTick((tick) => tick + 1)}>Попробовать снова</Button>} /> :
+      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => {
+        if (query.trim() || category !== 'Все' || sort !== 'new') setMarketTick((tick) => tick + 1);
+        else void core.refreshAll();
+      }}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid">{items.map(product => <Card key={product.id} interactive className="product-card">
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
