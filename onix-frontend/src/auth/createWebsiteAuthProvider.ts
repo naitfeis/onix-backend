@@ -1,6 +1,7 @@
 import { AuthV2WebsiteAuthProvider } from './AuthV2WebsiteAuthProvider';
 import { LegacyWebsiteAuthProvider } from './LegacyWebsiteAuthProvider';
 import { resolveWebsiteAuthMode } from './mode';
+import { resetSharedAuthManager } from './sharedAuthManager';
 import type { WebsiteAuthMode, WebsiteAuthProvider } from './types';
 
 let cached: WebsiteAuthProvider | null = null;
@@ -28,4 +29,5 @@ export function getWebsiteAuthProvider(): WebsiteAuthProvider {
 export function resetWebsiteAuthProvider(): void {
   cached = null;
   cachedMode = null;
+  resetSharedAuthManager();
 }

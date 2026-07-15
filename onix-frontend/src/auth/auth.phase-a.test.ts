@@ -60,11 +60,10 @@ describe('createWebsiteAuthProvider', () => {
     expect(provider.mode).toBe('legacy');
   });
 
-  it('returns auth_v2 stub that does not invent a second backend', async () => {
+  it('returns auth_v2 provider backed by AuthManager but login still Phase C', async () => {
     const provider = createWebsiteAuthProvider('auth_v2');
     expect(provider.mode).toBe('auth_v2');
     expect(provider.getAccessToken()).toBeNull();
-    await expect(provider.restoreSession()).resolves.toBe(false);
     await expect(provider.loginWithTelegram({})).rejects.toThrow(/Phase C/);
   });
 });

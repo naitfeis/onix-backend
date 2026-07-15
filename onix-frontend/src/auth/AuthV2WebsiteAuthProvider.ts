@@ -1,3 +1,5 @@
+import { AuthManager } from './AuthManager';
+import { getSharedAuthManager } from './sharedAuthManager';
 import type {
   WebsiteAuthProvider,
   WebsiteAuthSessionSummary,
@@ -5,31 +7,36 @@ import type {
 } from './types';
 
 /**
- * Phase A stub: Auth V2 provider surface.
- * Real memory token + cookie refresh + /api/v2/auth wiring lands in Phases B–D.
- * Calling mutating methods before Phase C must fail loudly in development.
+ * Auth V2 Website provider — fully backed by AuthManager (Phase B).
+ * Not activated by default (`VITE_WEBSITE_AUTH_MODE` defaults to legacy).
+ * Login → /api/v2/auth/login remains Phase C (App.tsx still on Legacy).
  */
 export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
   readonly mode = 'auth_v2' as const;
+  private readonly manager: AuthManager;
 
+  constructor(manager: AuthManager = getSharedAuthManager()) {
+    this.manager = manager;
+  }
   getAccessToken(): string | null {
-    return null;
+    return this.manager.getAccessToken();
   }
 
   async restoreSession(): Promise<boolean> {
-    return false;
+    return this.manager.restoreSession();
   }
 
   async loginWithTelegram(): Promise<void> {
     throw new Error('AuthV2WebsiteAuthProvider.loginWithTelegram is not implemented until Phase C.');
   }
 
+  /** Local session clear + cross-tab logout. Server logout API lands in Phase D. */
   async logout(): Promise<void> {
-    throw new Error('AuthV2WebsiteAuthProvider.logout is not implemented until Phase D.');
+    this.manager.clearSession('logout');
   }
 
   async logoutAll(): Promise<void> {
-    throw new Error('AuthV2WebsiteAuthProvider.logoutAll is not implemented until Phase D.');
+    this.manager.clearSession('logout');
   }
 
   async getMe(): Promise<WebsiteAuthUser | null> {
@@ -42,5 +49,10 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
 
   async revokeSession(): Promise<void> {
     throw new Error('AuthV2WebsiteAuthProvider.revokeSession is not implemented until Phase D.');
+  }
+
+  /** Expose manager for Phase B/C wiring tests — not used by Legacy App. */
+  getAuthManager(): AuthManager {
+    return this.manager;
   }
 }

@@ -39,13 +39,16 @@
 
 | ID | Test | Status |
 | --- | --- | --- |
-| B-T01 | Access token stored in memory only (not local/session storage) | ☐ |
-| B-T02 | Single-flight refresh mutex | ☐ |
-| B-T03 | **Refresh storm:** 15 parallel 401s → exactly **1** refresh call | ☐ |
-| B-T04 | Refresh sends `X-ONIX-CSRF: 1` + credentials | ☐ |
-| B-T05 | Missing refresh cookie → clear session / re-login | ☐ |
-| B-T06 | Cross-tab BroadcastChannel logout / token update | ☐ |
-| B-T07 | Proactive refresh before access expiry | ☐ |
+| B-T01 | Access token stored in memory only (not local/session storage) | ✅ Phase B |
+| B-T02 | Single-flight refresh mutex | ✅ Phase B |
+| B-T03 | **Refresh storm:** 20 parallel callers → exactly **1** refresh call | ✅ Phase B |
+| B-T04 | Refresh sends `X-ONIX-CSRF: 1` + credentials | ✅ Phase B |
+| B-T05 | Missing refresh cookie → clear session / re-login | ✅ Phase B |
+| B-T06 | Cross-tab BroadcastChannel logout / token update | ✅ Phase B |
+| B-T07 | Proactive refresh before access expiry | ✅ Phase B |
+| B-T08 | 401 → refresh → retry → success | ✅ Phase B |
+| B-T09 | 401 → refresh 401 → logout, no loops | ✅ Phase B |
+| B-T10 | Silent refresh after reload restores session | ✅ Phase B |
 
 ### Phase C (V2 login)
 
