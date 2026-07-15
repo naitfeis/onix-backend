@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import WebApp from '@twa-dev/sdk';
 import { loginWithTelegram as legacyLoginWithTelegram, money } from './api/client';
 import {
+  continueBotLogin,
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
   isWebsiteAuthV2,
@@ -93,11 +94,26 @@ export default function App() {
     <header className="topbar">
       <div className="brand" aria-label="ONIX">O N I X</div>
       <div className="identity">
-        {core.profile ? <><strong>{money(core.profile.balanceCents)}</strong><span>// @{core.profile.username}</span></> :
-          <><strong>ГОСТЬ</strong><span>// БЕЗ СЕССИИ</span></>}
+        {core.states.profile === 'loading' && !core.profile ? (
+          <><strong>…</strong><span>// ЗАГРУЗКА</span></>
+        ) : core.profile ? (
+          <span className="user-summary identity-user">
+            <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} />
+            <strong>{money(core.profile.balanceCents)}</strong>
+            <span>// @{core.profile.username} · {core.profile.onixId}</span>
+          </span>
+        ) : (
+          <><strong>ГОСТЬ</strong><span>// БЕЗ СЕССИИ</span></>
+        )}
       </div>
     </header>
-    {core.states.profile === 'error' && <AuthNotice miniApp={isTelegramMiniApp()} message={core.errors.profile} />}
+    {core.states.profile === 'error' && (
+      <AuthNotice
+        miniApp={isTelegramMiniApp()}
+        message={core.errors.profile}
+        onAuthenticated={core.refreshAll}
+      />
+    )}
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
       <div key={screen} className="screen-transition">
         {screen === 'market' && <Market core={core} switchTo={switchTo} setToast={setToast} />}
@@ -119,72 +135,84 @@ export default function App() {
 }
 
 type Core = ReturnType<typeof useOnixCore>;
-function AuthNotice({ miniApp, message }: { miniApp: boolean; message?: string }) {
+function AuthNotice({
+  miniApp,
+  message,
+  onAuthenticated,
+}: {
+  miniApp: boolean;
+  message?: string;
+  onAuthenticated: () => void;
+}) {
   return <div className="auth-notice" role="alert"><div><strong>{miniApp ? 'Не удалось подтвердить Telegram' : 'Войдите через Telegram'}</strong>
     <span>{message || 'Авторизация нужна для сделок и сообщений.'}</span></div>
     {miniApp ? <Button variant="secondary" onClick={() => location.reload()}>Повторить</Button> :
-      <WebsiteLoginEntry />}
+      <WebsiteLoginEntry onAuthenticated={onAuthenticated} />}
   </div>;
 }
 
-function WebsiteLoginEntry() {
+function WebsiteLoginEntry({ onAuthenticated }: { onAuthenticated: () => void }) {
   const provider = getWebsiteLoginProvider();
   if (provider === 'widget') return <TelegramLogin />;
-  return <BotTelegramLogin />;
+  return <BotTelegramLogin onAuthenticated={onAuthenticated} />;
 }
 
-function BotTelegramLogin() {
+function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+  const onAuthenticatedRef = useRef(onAuthenticated);
+  onAuthenticatedRef.current = onAuthenticated;
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+  }, []);
 
   const onLogin = async () => {
     setError('');
     setBusy(true);
     setHint('Откройте Telegram и подтвердите вход…');
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const started = await startBotLogin();
+      const started = await startBotLogin(controller.signal);
       openTelegramBotLogin(started.deepLink, started.webDeepLink);
-      await waitAndCompleteBotLogin(started.challengeId);
-      location.reload();
+      await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
+      setHint('');
+      onAuthenticatedRef.current();
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось войти через Telegram.');
       setHint('Если подтвердили в боте — нажмите «Вернуться в ONIX» в Telegram.');
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
 
-  // Support return link ?x=exchangeCode from bot "Вернуться в ONIX"
+  // Return link ?x=exchangeCode from bot "Вернуться в ONIX" — no reload.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const x = params.get('x');
     if (!x) return;
-    let cancelled = false;
+    const controller = new AbortController();
+    abortRef.current = controller;
     (async () => {
       setBusy(true);
       try {
-        const response = await fetch('/api/v2/auth/telegram-bot/continue', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ exchangeCode: x }),
-        });
-        const payload = await response.json() as { success?: boolean; data?: { accessToken: string; expiresIn: number } };
-        if (!response.ok || !payload.success || !payload.data) throw new Error('Exchange failed');
-        const { getSharedAuthManager } = await import('./auth');
-        getSharedAuthManager().setSession(payload.data.accessToken, payload.data.expiresIn);
-        if (!cancelled) {
+        await continueBotLogin(x, controller.signal);
+        if (!controller.signal.aborted) {
           history.replaceState({}, '', location.pathname);
-          location.reload();
+          onAuthenticatedRef.current();
         }
       } catch {
-        if (!cancelled) setError('Не удалось завершить вход по ссылке из бота.');
+        if (!controller.signal.aborted) setError('Не удалось завершить вход по ссылке из бота.');
       } finally {
-        if (!cancelled) setBusy(false);
+        if (!controller.signal.aborted) setBusy(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { controller.abort(); };
   }, []);
 
   return <div>

@@ -62,6 +62,8 @@ export {
   startBotLogin,
   waitAndCompleteBotLogin,
   completeBotLogin,
+  continueBotLogin,
   pollBotLoginStatus,
+  BotLoginError,
 } from './botLogin';
 export type { BotLoginStartResult, WebsiteLoginProvider } from './botLogin';

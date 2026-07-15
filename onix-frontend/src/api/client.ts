@@ -1,5 +1,6 @@
 import WebApp from '@twa-dev/sdk';
 import { buildApiUrl, resolveApiBase, shouldIncludeCredentials } from '../auth/apiConfig';
+import { peekSharedAuthManager } from '../auth/sharedAuthManager';
 import type { ApiEnvelope } from './contracts';
 
 const TOKEN_KEY = 'onix.accessToken';
@@ -20,8 +21,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Legacy Mini App / widget sessionStorage token. */
 export function getAccessToken(): string | null {
   try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; }
+}
+
+/**
+ * Bearer for API calls: AuthManager memory (Website bot / V2) wins when present,
+ * otherwise legacy sessionStorage (Mini App). Does not create AuthManager.
+ */
+export function getBearerToken(): string | null {
+  const memory = peekSharedAuthManager()?.getAccessToken() ?? null;
+  if (memory) return memory;
+  return getAccessToken();
 }
 
 export function setAccessToken(token: string): void {
@@ -40,10 +52,9 @@ function initData(): string {
   }
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function executeApiRequest<T>(path: string, options: RequestInit, token: string | null): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
-  const token = getAccessToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);
   if (options.body) headers.set('Content-Type', 'application/json');
 
@@ -54,7 +65,6 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   const response = await fetch(url, {
     ...options,
     headers,
-    // Same-origin only: enables future __Host- refresh cookie without cross-origin CORS credentials.
     credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
   });
   let payload: ApiEnvelope<T> | undefined;
@@ -69,6 +79,15 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
     throw new ApiError(message || payload.message || 'Не удалось выполнить действие. Повторите попытку.', response.status);
   }
   return payload.data;
+}
+
+export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const manager = peekSharedAuthManager();
+  // Website Auth V2 / bot session: single-flight refresh + one 401 retry via AuthManager.
+  if (manager?.getAccessToken()) {
+    return manager.withAccessToken((accessToken) => executeApiRequest<T>(path, options, accessToken));
+  }
+  return executeApiRequest<T>(path, options, getAccessToken());
 }
 
 interface AuthResult {
