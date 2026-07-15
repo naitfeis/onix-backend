@@ -13,7 +13,9 @@
     "lint": "tsc --noEmit --incremental false",
     "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",
     "build": "prisma generate && tsc --incremental false",
+    "migrate:deploy": "prisma migrate deploy",
     "start": "node dist/main.js",
+    "start:prod": "node dist/main.js",
     "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts"
   },
   "keywords": [

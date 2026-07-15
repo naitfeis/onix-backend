@@ -1,0 +1,19 @@
+# ONIX API — Render Blueprint
+# Critical: migrate runs in preDeploy (separate one-shot), NOT in startCommand.
+# startCommand must be a single Node process (no npm wrapper, no migrate&&start).
+services:
+  - type: web
+    name: onix-api
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    preDeployCommand: npx prisma migrate deploy
+    startCommand: node dist/main.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Prevent accidental multi-worker wrappers (Heroku-style) from forking Nest.
+      - key: WEB_CONCURRENCY
+        value: "1"

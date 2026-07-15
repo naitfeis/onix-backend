@@ -2,11 +2,15 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
-import 'dotenv/config';
 
+/**
+ * Nest-scoped Prisma singleton (provided once via @Global DatabaseModule).
+ * Static Pool is created at most once per process — never recreated in constructor.
+ */
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  private static pool: Pool;
+  private static pool: Pool | undefined;
+  private static connectPromise: Promise<void> | undefined;
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
@@ -15,25 +19,34 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       throw new Error('[FATAL] DATABASE_URL не найден в .env');
     }
 
-    PrismaService.pool = new Pool({
-      connectionString,
-      max: 10,                  // максимум соединений в пуле
-      idleTimeoutMillis: 30000, // закрываем idle-соединения через 30 сек
-      connectionTimeoutMillis: 5000,
-    });
+    if (!PrismaService.pool) {
+      PrismaService.pool = new Pool({
+        connectionString,
+        max: 10,
+        idleTimeoutMillis: 30_000,
+        connectionTimeoutMillis: 5_000,
+      });
+    }
 
-    const adapter = new PrismaPg(PrismaService.pool);
-    super({ adapter });
+    super({ adapter: new PrismaPg(PrismaService.pool) });
   }
 
   async onModuleInit(): Promise<void> {
-    await this.$connect();
-    this.logger.log('[PRISMA] Подключение к PostgreSQL Neon.tech установлено');
+    // Dedupe $connect if Nest ever invokes init more than once.
+    if (!PrismaService.connectPromise) {
+      PrismaService.connectPromise = this.$connect().then(() => {
+        this.logger.log('Prisma connected');
+      });
+    }
+    await PrismaService.connectPromise;
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.$disconnect();
-    await PrismaService.pool.end();
-    this.logger.log('[PRISMA] Соединение с PostgreSQL закрыто');
+    if (PrismaService.pool) {
+      await PrismaService.pool.end();
+      PrismaService.pool = undefined;
+      PrismaService.connectPromise = undefined;
+    }
   }
 }
