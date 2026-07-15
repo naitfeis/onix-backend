@@ -9,7 +9,8 @@ vi.mock('@twa-dev/sdk', () => ({
 beforeEach(() => {
   storage.clear();
   vi.resetModules();
-  vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
+  // Single-origin: even if misconfigured absolute URL is present, resolveApiBase strips it.
+  vi.stubEnv('VITE_API_URL', '');
   vi.stubGlobal('sessionStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
@@ -29,9 +30,10 @@ describe('Bearer auth bootstrap', () => {
 
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('jwt-token');
-    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-mini', expect.objectContaining({
       method: 'POST',
       body: expect.stringContaining('"initData"'),
+      credentials: 'include',
     }));
   });
 
@@ -47,7 +49,7 @@ describe('Bearer auth bootstrap', () => {
 
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('fresh-token');
-    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-mini', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-mini', expect.objectContaining({
       method: 'POST',
     }));
   });
@@ -64,7 +66,7 @@ describe('Bearer auth bootstrap', () => {
 
     await loginWithTelegram(payload);
     expect(storage.get('onix.accessToken')).toBe('widget-token');
-    expect(fetchMock).toHaveBeenCalledWith('https://onix-api-47tj.onrender.com/api/auth/telegram-login', expect.objectContaining({
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/telegram-login', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify(payload),
     }));
@@ -85,15 +87,15 @@ describe('Bearer auth bootstrap', () => {
     await api.get('/api/users/me');
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(request.headers).get('Authorization')).toBe('Bearer jwt-token');
-    expect(request.credentials).toBe('same-origin');
+    expect(request.credentials).toBe('include');
     await expect(api.get('/api/failure')).rejects.toEqual(expect.objectContaining({
       message: 'Контракт нарушен',
       status: 400,
     }));
   });
 
-  it('uses same-origin relative /api when VITE_API_URL is empty', async () => {
-    vi.stubEnv('VITE_API_URL', '');
+  it('ignores absolute Render VITE_API_URL and still uses relative /api', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,

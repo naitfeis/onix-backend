@@ -262,14 +262,14 @@ describe('Phase C — Auth V2 Telegram login', () => {
       json: async () => ({ success: true, data: { accessToken: 'legacy-jwt', tokenType: 'Bearer' } }),
     });
     vi.stubGlobal('fetch', fetchMock);
-    vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
+    vi.stubEnv('VITE_API_URL', '');
     vi.resetModules();
 
     const { LegacyWebsiteAuthProvider: Legacy } = await import('./LegacyWebsiteAuthProvider');
     const legacy = new Legacy();
     await legacy.loginWithTelegram(widgetPayload);
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://onix-api-47tj.onrender.com/api/auth/telegram-login',
+      '/api/auth/telegram-login',
       expect.objectContaining({ method: 'POST' }),
     );
     expect(sessionStore.get('onix.accessToken')).toBe('legacy-jwt');
@@ -280,7 +280,7 @@ describe('Mini App Regression', () => {
   it('bootstrapAuth still posts /api/auth/telegram-mini and uses sessionStorage', async () => {
     const storage = new Map<string, string>();
     vi.resetModules();
-    vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
+    vi.stubEnv('VITE_API_URL', '');
     vi.doMock('@twa-dev/sdk', () => ({
       default: { initData: 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test' },
     }));
@@ -300,7 +300,7 @@ describe('Mini App Regression', () => {
     await expect(bootstrapAuth()).resolves.toBe(true);
     expect(storage.get('onix.accessToken')).toBe('mini-jwt');
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://onix-api-47tj.onrender.com/api/auth/telegram-mini',
+      '/api/auth/telegram-mini',
       expect.objectContaining({ method: 'POST' }),
     );
   });

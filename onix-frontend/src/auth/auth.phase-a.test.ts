@@ -45,12 +45,13 @@ describe('apiConfig same-origin', () => {
     expect(buildApiUrl('/api/v2/auth/me', '')).toBe('/api/v2/auth/me');
   });
 
-  it('keeps absolute bases without credential forcing', () => {
+  it('strips absolute Render/API hosts so the browser never calls them', () => {
     const base = 'https://onix-api-47tj.onrender.com';
-    expect(resolveApiBase(`${base}/`)).toBe(base);
-    expect(isSameOriginApi(base)).toBe(false);
-    expect(shouldIncludeCredentials(base)).toBe(false);
-    expect(buildApiUrl('/api/auth/telegram-mini', base)).toBe(`${base}/api/auth/telegram-mini`);
+    expect(resolveApiBase(`${base}/`)).toBe('');
+    expect(resolveApiBase('/api')).toBe('');
+    expect(isSameOriginApi('')).toBe(true);
+    expect(shouldIncludeCredentials('')).toBe(true);
+    expect(buildApiUrl('/api/auth/telegram-mini', '')).toBe('/api/auth/telegram-mini');
   });
 });
 

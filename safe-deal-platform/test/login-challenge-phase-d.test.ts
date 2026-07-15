@@ -20,12 +20,29 @@ test('WEBSITE_LOGIN_PROVIDER defaults to bot', () => {
   process.env.WEBSITE_LOGIN_PROVIDER = prev;
 });
 
-test('login session cookie is HttpOnly SameSite and readable', () => {
+test('login session cookie is HttpOnly SameSite=Lax and readable (local insecure)', () => {
   process.env.AUTH_COOKIE_SECURE = 'false';
   const header = buildLoginSessionCookieHeader('abc123', 120);
   assert.match(header, /HttpOnly/);
   assert.match(header, /SameSite=Lax/);
+  assert.match(header, /^onix_ls=/);
+  assert.doesNotMatch(header, /Secure/);
+  assert.doesNotMatch(header, /Domain=/);
   assert.equal(readLoginSessionId(`${loginSessionCookieName()}=abc123`), 'abc123');
+});
+
+test('login session cookie uses SameSite=Lax Secure for single-origin prod', () => {
+  const prev = process.env.AUTH_COOKIE_SECURE;
+  delete process.env.AUTH_COOKIE_SECURE;
+  const header = buildLoginSessionCookieHeader('sess99', 120);
+  assert.match(header, /^__Host-onix_ls=/);
+  assert.match(header, /SameSite=Lax/);
+  assert.match(header, /Secure/);
+  assert.match(header, /Path=\//);
+  assert.match(header, /HttpOnly/);
+  assert.match(header, /Max-Age=120/);
+  assert.doesNotMatch(header, /Domain=/);
+  process.env.AUTH_COOKIE_SECURE = prev;
 });
 
 test('LoginChallenge TTL is 2 minutes', () => {

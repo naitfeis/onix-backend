@@ -14,15 +14,17 @@ const manualChunks = (id: string) => {
 
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
-  const targetServer = env.VITE_API_URL || 'http://localhost:3000';
+  // Browser always uses relative /api (empty VITE_API_URL). Proxy target is separate.
+  const proxyTarget =
+    env.VITE_API_PROXY_TARGET?.trim()
+    || (env.VITE_API_URL?.trim().startsWith('http') ? env.VITE_API_URL.trim() : '')
+    || 'http://localhost:3000';
 
-  // БРОНИРОВАННЫЙ СЕТЕВОЙ КАНАЛ API ПЛАТФОРМЫ [проф. 1]
   const apiProxyConfig = {
-    target: targetServer,
+    target: proxyTarget,
     changeOrigin: true,
     secure: false,
     ws: true,
-    // ИСПРАВЛЕНО: Убрали деструктивный rewrite, теперь префикс /api сохраняется для NestJS СУБД [проф. 1]
     onError: (err: Error, _req: IncomingMessage, res: ServerResponse) => {
       console.error('[🚨 ONIX PROXY ERROR]:', err);
       if (!res.headersSent) {

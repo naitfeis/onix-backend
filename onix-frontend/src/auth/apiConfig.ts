@@ -1,27 +1,37 @@
 /**
- * API origin resolution for Website same-origin cookies (__Host-onix_rt).
+ * API origin for Website — single-origin production.
  *
- * - Empty / unset VITE_API_URL → relative "/api/..." (SPA origin; Vercel rewrite / Vite proxy)
- * - Absolute URL → legacy cross-origin (works today; cookies will NOT stick for Auth V2)
+ * Browser always uses relative `/api/...` on https://www.onixtg.shop
+ * (Vercel rewrite → Render). Absolute backends (e.g. onrender.com) are ignored
+ * so the Network panel never shows Render.
  *
- * vercel.json is intentionally not modified in Phase A: existing /api rewrite is correct.
+ * Local: empty base + Vite `/api` proxy → Nest (or VITE_API_PROXY_TARGET).
  */
+
+function normalizeConfiguredBase(raw: string | undefined): string {
+  const base = raw?.trim().replace(/\/+$/, '') ?? '';
+  if (!base) return '';
+  // Never let the browser call an absolute API host (Render, etc.).
+  if (/^https?:\/\//i.test(base)) return '';
+  // `/api` as base would produce `/api/api/...` with buildApiUrl — treat as empty.
+  if (base === '/api') return '';
+  return base;
+}
 
 export function resolveApiBase(explicit?: string): string {
   const raw = explicit !== undefined
     ? explicit
     : (import.meta.env.VITE_API_URL as string | undefined);
-  return raw?.trim().replace(/\/+$/, '') ?? '';
+  return normalizeConfiguredBase(raw);
 }
 
-/** Same-origin relative API (required for __Host- refresh cookie). */
+/** Same-origin relative API (required for __Host- cookies on www.onixtg.shop). */
 export function isSameOriginApi(base: string = resolveApiBase()): boolean {
   return base === '';
 }
 
 /**
- * Send cookies only on same-origin API calls.
- * Never force credentials on absolute cross-origin bases (avoids CORS credential failures).
+ * Send cookies on same-origin API calls (always true after single-origin migration).
  */
 export function shouldIncludeCredentials(base: string = resolveApiBase()): boolean {
   return isSameOriginApi(base);
