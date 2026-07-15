@@ -3,6 +3,7 @@ import {
   Module, NotFoundException, Param, Post,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
+import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { PrismaService } from './prisma.service';
@@ -10,13 +11,24 @@ import { dealDto } from './response';
 
 class PurchaseDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
-  @IsOptional() @IsInt() @Min(1) @Max(10000) quantity = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity = 1;
 }
 class ReasonDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
   @IsString() @Length(16, 100) idempotencyKey!: string;
 }
 
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+/**
+ * Escrow state machine (canonical Prisma OrderStatus):
+ *   PENDING (create transition only) → PAYMENT_HOLD → DELIVERING → COMPLETED
+ *   PAYMENT_HOLD → CANCELED (refund buyer)
+ *   PAYMENT_HOLD | DELIVERING → DISPUTE (funds stay held)
+ *   PAYMENT_HOLD | DELIVERING | DISPUTE → REFUNDED (admin)
+ *
+ * Money: buyer debit on purchase (PURCHASE_HOLD); seller credit only on COMPLETED (SALE_PAYOUT).
+ */
 @Injectable()
 export class EscrowService {
   constructor(private readonly prisma: PrismaService) {}
@@ -31,6 +43,7 @@ export class EscrowService {
         reviews: { select: { authorId: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     return orders.map((order) => dealDto(order, user));
   }
@@ -49,7 +62,9 @@ export class EscrowService {
         throw new ConflictException('Товар недоступен.');
       }
       if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
+      if (product.priceCents <= 0n) throw new BadRequestException('Некорректная цена товара.');
       const totalAmountCents = product.priceCents * BigInt(quantity);
+      // Optimistic lock: only one buyer can reserve an ACTIVE listing.
       const reserved = await tx.product.updateMany({
         where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
         data: { status: 'RESERVED' },
@@ -61,7 +76,7 @@ export class EscrowService {
       });
       if (!debited.count) throw new BadRequestException('Недостаточно средств.');
       const balance = await tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { balanceCents: true } });
-      const order = await tx.order.create({
+      const created = await tx.order.create({
         data: {
           productId, buyerId: user.id, sellerId: product.sellerId,
           totalAmountCents, payoutCents: totalAmountCents, quantity,
@@ -77,10 +92,10 @@ export class EscrowService {
           chat: { create: { members: { create: [{ userId: user.id }, { userId: product.sellerId }] } } },
         },
       });
-      await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, order.id);
-      await this.audit(tx, user.id, 'ORDER_PURCHASE', order.id, { productId });
-      return order;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
+      await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
+      return created;
+    }, SERIALIZABLE);
     return this.one(user, order.id);
   }
 
@@ -101,24 +116,27 @@ export class EscrowService {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       if (order.buyerId !== user.id) throw new BadRequestException('Только покупатель подтверждает получение.');
+      if (order.status === 'COMPLETED') return;
       const changed = await tx.order.updateMany({
         where: { id, status: 'DELIVERING' },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
       if (!changed.count) {
-        if (order.status === 'COMPLETED') return order;
         throw new ConflictException('Сделку нельзя завершить в текущем статусе.');
       }
-      const seller = await tx.user.update({
-        where: { id: order.sellerId },
-        data: { balanceCents: { increment: order.payoutCents }, completedSales: { increment: 1 } },
-      });
-      await tx.ledgerEntry.create({
-        data: {
-          userId: order.sellerId, orderId: id, type: 'SALE_PAYOUT', amountCents: order.payoutCents,
-          balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:payout`,
-        },
-      });
+      const existingPayout = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: `order:${id}:payout` } });
+      if (!existingPayout) {
+        const seller = await tx.user.update({
+          where: { id: order.sellerId },
+          data: { balanceCents: { increment: order.payoutCents }, completedSales: { increment: 1 } },
+        });
+        await tx.ledgerEntry.create({
+          data: {
+            userId: order.sellerId, orderId: id, type: 'SALE_PAYOUT', amountCents: order.payoutCents,
+            balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:payout`,
+          },
+        });
+      }
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
       await tx.product.update({
         where: { id: order.productId },
@@ -131,27 +149,31 @@ export class EscrowService {
       });
       await this.notify(tx, order.sellerId, 'ORDER_UPDATE', 'Сделка завершена', 'Средства зачислены на баланс.', id);
       await this.audit(tx, user.id, 'ORDER_COMPLETE', id);
-      return tx.order.findUniqueOrThrow({ where: { id } });
-    });
+    }, SERIALIZABLE);
     return this.one(user, id);
   }
 
-  async cancel(user: AuthUser, id: bigint, reason?: string) {
-    return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', reason);
+  async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
+    return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
   }
 
   async dispute(user: AuthUser, id: bigint, key: string, reason?: string) {
-    const replay = await this.prisma.orderTransition.findUnique({ where: { idempotencyKey: key } });
-    if (replay) {
-      if (replay.orderId !== id || replay.to !== 'DISPUTE') {
-        throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
-      }
-      return this.one(user, id);
-    }
-    const order = await this.memberOrder(user, id);
-    if (order.status === 'DISPUTE') return this.one(user, id);
-    if (!['PAYMENT_HOLD', 'DELIVERING'].includes(order.status)) throw new ConflictException('Спор сейчас открыть нельзя.');
     await this.prisma.$transaction(async (tx) => {
+      const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
+      if (replay) {
+        if (replay.orderId !== id || replay.to !== 'DISPUTE') {
+          throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
+        }
+        return;
+      }
+      const order = await tx.order.findFirst({
+        where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
+      });
+      if (!order) throw new NotFoundException('Сделка не найдена.');
+      if (order.status === 'DISPUTE') return;
+      if (!['PAYMENT_HOLD', 'DELIVERING'].includes(order.status)) {
+        throw new ConflictException('Спор сейчас открыть нельзя.');
+      }
       const changed = await tx.order.updateMany({
         where: { id, status: order.status },
         data: { status: 'DISPUTE', disputeReason: reason },
@@ -161,76 +183,106 @@ export class EscrowService {
         data: { orderId: id, from: order.status, to: 'DISPUTE', actorId: user.id, idempotencyKey: key, reason },
       });
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
-      return tx.order.findUniqueOrThrow({ where: { id } });
-    });
+    }, SERIALIZABLE);
     return this.one(user, id);
   }
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
-    return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'], 'REFUNDED', reason);
+    const key = `order:${id}:admin-refund`;
+    return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'], 'REFUNDED', key, reason);
   }
 
-  private refund(actor: AuthUser, id: bigint, allowed: OrderStatus[], target: 'CANCELED' | 'REFUNDED', reason?: string) {
-    return this.prisma.$transaction(async (tx) => {
+  private async refund(
+    actor: AuthUser,
+    id: bigint,
+    allowed: OrderStatus[],
+    target: 'CANCELED' | 'REFUNDED',
+    key: string,
+    reason?: string,
+  ) {
+    await this.prisma.$transaction(async (tx) => {
+      const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
+      if (replay) {
+        if (replay.orderId !== id || replay.to !== target) {
+          throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
+        }
+        return;
+      }
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const participant = order.buyerId === actor.id || order.sellerId === actor.id;
       if (!participant && !actor.isAdmin) throw new BadRequestException('Нет доступа к сделке.');
+      if (order.status === target) return;
       const changed = await tx.order.updateMany({
         where: { id, status: { in: allowed } },
         data: { status: target, canceledAt: new Date(), disputeReason: reason },
       });
       if (!changed.count) {
-        if (order.status === target) return order;
         throw new ConflictException('Возврат невозможен в текущем статусе.');
       }
-      const buyer = await tx.user.update({
-        where: { id: order.buyerId }, data: { balanceCents: { increment: order.totalAmountCents } },
+      const ledgerKey = `order:${id}:${target.toLowerCase()}`;
+      const existingRefund = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: ledgerKey } });
+      if (!existingRefund) {
+        const buyer = await tx.user.update({
+          where: { id: order.buyerId }, data: { balanceCents: { increment: order.totalAmountCents } },
+        });
+        await tx.ledgerEntry.create({
+          data: {
+            userId: order.buyerId, orderId: id, type: 'REFUND', amountCents: order.totalAmountCents,
+            balanceAfterCents: buyer.balanceCents, idempotencyKey: ledgerKey,
+          },
+        });
+      }
+      await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
+      await tx.orderTransition.create({
+        data: { orderId: id, from: order.status, to: target, actorId: actor.id, idempotencyKey: key, reason },
       });
-      await tx.ledgerEntry.create({
-        data: {
-          userId: order.buyerId, orderId: id, type: 'REFUND', amountCents: order.totalAmountCents,
-          balanceAfterCents: buyer.balanceCents, idempotencyKey: `order:${id}:${target.toLowerCase()}`,
+      await this.audit(tx, actor.id, `ORDER_${target}`, id, reason ? { reason } : undefined);
+    }, SERIALIZABLE);
+
+    if (actor.isAdmin) {
+      const order = await this.prisma.order.findUniqueOrThrow({
+        where: { id },
+        include: {
+          product: true,
+          buyer: { include: { _count: { select: { followers: true } } } },
+          seller: { include: { _count: { select: { followers: true } } } },
+          reviews: { select: { authorId: true } },
         },
       });
-      await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
-      await tx.orderTransition.create({ data: { orderId: id, from: order.status, to: target, actorId: actor.id, reason } });
-      await this.audit(tx, actor.id, `ORDER_${target}`, id, reason ? { reason } : undefined);
-      return tx.order.findUniqueOrThrow({ where: { id } });
-    });
+      return dealDto(order, actor);
+    }
+    return this.one(actor, id);
   }
 
   private async transition(
     id: bigint, actor: AuthUser, from: OrderStatus, to: OrderStatus,
     role: 'seller' | 'buyer', key: string,
   ) {
-    const replay = await this.prisma.orderTransition.findUnique({ where: { idempotencyKey: key } });
-    if (replay) {
-      if (replay.orderId !== id || replay.to !== to) {
-        throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
+    return this.prisma.$transaction(async (tx) => {
+      const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
+      if (replay) {
+        if (replay.orderId !== id || replay.to !== to) {
+          throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
+        }
+        return tx.order.findUniqueOrThrow({ where: { id } });
       }
-      return this.prisma.order.findUniqueOrThrow({ where: { id } });
-    }
-    const order = await this.prisma.order.findUnique({ where: { id } });
-    if (!order) throw new NotFoundException('Сделка не найдена.');
-    const ownerId = role === 'seller' ? order.sellerId : order.buyerId;
-    if (ownerId !== actor.id) throw new BadRequestException('Нет прав на это действие.');
-    const changed = await this.prisma.order.updateMany({ where: { id, status: from }, data: { status: to } });
-    if (!changed.count) {
+      const order = await tx.order.findUnique({ where: { id } });
+      if (!order) throw new NotFoundException('Сделка не найдена.');
+      const ownerId = role === 'seller' ? order.sellerId : order.buyerId;
+      if (ownerId !== actor.id) throw new BadRequestException('Нет прав на это действие.');
       if (order.status === to) return order;
-      throw new ConflictException('Недопустимый переход состояния сделки.');
-    }
-    await this.prisma.orderTransition.create({
-      data: { orderId: id, from, to, actorId: actor.id, idempotencyKey: key },
-    });
-    return this.prisma.order.findUniqueOrThrow({ where: { id } });
+      const changed = await tx.order.updateMany({ where: { id, status: from }, data: { status: to } });
+      if (!changed.count) {
+        throw new ConflictException('Недопустимый переход состояния сделки.');
+      }
+      await tx.orderTransition.create({
+        data: { orderId: id, from, to, actorId: actor.id, idempotencyKey: key },
+      });
+      return tx.order.findUniqueOrThrow({ where: { id } });
+    }, SERIALIZABLE);
   }
 
-  private async memberOrder(user: AuthUser, id: bigint) {
-    const order = await this.prisma.order.findFirst({ where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] } });
-    if (!order) throw new NotFoundException('Сделка не найдена.');
-    return order;
-  }
   private async one(user: AuthUser, id: bigint) {
     const order = await this.prisma.order.findFirstOrThrow({
       where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
@@ -258,10 +310,18 @@ export class EscrowController {
   @Post('product/:productId') purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {
     return this.service.purchase(user, id, dto.idempotencyKey, dto.quantity);
   }
-  @Post(':id/deliver') deliver(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) { return this.service.deliver(user, parseId(id), dto.idempotencyKey); }
-  @Post(':id/complete') complete(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) { return this.service.complete(user, parseId(id), dto.idempotencyKey); }
-  @Post(':id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) { return this.service.cancel(user, parseId(id), dto.reason); }
-  @Post(':id/dispute') dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) { return this.service.dispute(user, parseId(id), dto.idempotencyKey, dto.reason); }
+  @Post(':id/deliver') deliver(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    return this.service.deliver(user, parseId(id), dto.idempotencyKey);
+  }
+  @Post(':id/complete') complete(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    return this.service.complete(user, parseId(id), dto.idempotencyKey);
+  }
+  @Post(':id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    return this.service.cancel(user, parseId(id), dto.idempotencyKey, dto.reason);
+  }
+  @Post(':id/dispute') dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    return this.service.dispute(user, parseId(id), dto.idempotencyKey, dto.reason);
+  }
 }
 
 @Module({ controllers: [EscrowController], providers: [EscrowService], exports: [EscrowService] })
