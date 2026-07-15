@@ -68,15 +68,18 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const raw = error instanceof HttpException ? error.getResponse() : null;
-    const details = typeof raw === 'object' && raw ? raw : undefined;
+    const details = typeof raw === 'object' && raw ? (raw as Record<string, unknown>) : undefined;
     const message = typeof raw === 'string'
       ? raw
       : (details as { message?: string | string[] } | undefined)?.message ?? 'Внутренняя ошибка сервера.';
+    const field = typeof details?.field === 'string' ? details.field : undefined;
+    const fieldError = typeof details?.error === 'string' ? details.error : undefined;
     response.status(status).json({
       success: false,
       error: {
         code: error instanceof HttpException ? error.name : 'InternalServerError',
         message,
+        ...(field ? { field, error: fieldError ?? (typeof message === 'string' ? message : field) } : {}),
         ...(details ? { details } : {}),
       },
     });

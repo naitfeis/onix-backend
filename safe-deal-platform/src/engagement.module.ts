@@ -59,7 +59,14 @@ export class ChatService {
             },
           },
         },
-        messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { text: true, kind: true } },
+        messages: {
+          where: {
+            OR: [{ visibleToUserId: null }, { visibleToUserId: user.id }],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { text: true, kind: true },
+        },
         order: { select: { id: true, status: true, totalAmountCents: true, product: { select: { title: true } } } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -152,6 +159,7 @@ export class ChatService {
     const rows = await this.prisma.message.findMany({
       where: {
         chatId,
+        OR: [{ visibleToUserId: null }, { visibleToUserId: user.id }],
         ...(beforeId !== undefined ? { id: { lt: beforeId } } : {}),
       },
       orderBy: { createdAt: 'desc' },

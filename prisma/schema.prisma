@@ -47,11 +47,14 @@ model User {
   followers       Follow[]       @relation("Followers")
   chatMembers     ChatMember[]
   sentMessages    Message[]
+  visibleMessages Message[]      @relation("MessageVisibleTo")
   blocksMade      UserBlock[]    @relation("Blocker")
   blocksReceived  UserBlock[]    @relation("Blocked")
   notifications   Notification[]
   reviewsAuthored Review[]       @relation("ReviewAuthor")
   reviewsReceived Review[]       @relation("ReviewSubject")
+  reportsMade     UserReport[]   @relation("ReportAuthor")
+  reportsReceived UserReport[]   @relation("ReportTarget")
   auditLogs       AuditLog[]     @relation("AuditActor")
   supportTickets  SupportTicket[]
   identityLinks   IdentityLink[]
@@ -197,16 +200,34 @@ model ChatMember {
 }
 
 model Message {
-  id        BigInt      @id @default(autoincrement())
-  chatId    String
-  senderId  BigInt?
-  kind      MessageKind @default(USER)
-  text      String      @db.VarChar(2000)
-  createdAt DateTime    @default(now())
-  chat      Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender    User?       @relation(fields: [senderId], references: [id])
+  id              BigInt      @id @default(autoincrement())
+  chatId          String
+  senderId        BigInt?
+  /** When set, only this user (buyer) can read the message — used for auto-delivery secrets. */
+  visibleToUserId BigInt?
+  kind            MessageKind @default(USER)
+  text            String      @db.VarChar(4500)
+  createdAt       DateTime    @default(now())
+  chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender          User?       @relation(fields: [senderId], references: [id])
+  visibleTo       User?       @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
 
   @@index([chatId, createdAt])
+  @@index([visibleToUserId])
+}
+
+model UserReport {
+  id         String    @id @default(cuid())
+  reporterId BigInt
+  targetId   BigInt
+  reason     BanReason
+  comment    String    @db.VarChar(1000)
+  createdAt  DateTime  @default(now())
+  reporter   User      @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: Cascade)
+  target     User      @relation("ReportTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, createdAt])
+  @@index([reporterId, createdAt])
 }
 
 model SupportTicket {

@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
+import { validationExceptionFactory } from './validation-errors';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -15,6 +16,7 @@ async function bootstrap(): Promise<void> {
     forbidNonWhitelisted: true,
     transform: true,
     transformOptions: { enableImplicitConversion: true },
+    exceptionFactory: validationExceptionFactory,
   }));
   app.useGlobalInterceptors(new ApiEnvelopeInterceptor());
   app.useGlobalFilters(new ApiExceptionFilter());

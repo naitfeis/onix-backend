@@ -1,10 +1,19 @@
 import {
-  BadRequestException, Controller, Delete, Get, Injectable, Module,
+  BadRequestException, Body, Controller, Delete, Get, Injectable, Module,
   NotFoundException, Param, Post,
 } from '@nestjs/common';
+import { BanReason } from '@prisma/client';
+import { IsEnum, IsString, MaxLength, MinLength } from 'class-validator';
+import { BAN_REASON_LABELS } from './ban-policy';
 import { AuthUser, CurrentUser } from './common';
+import { pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
 import { productDto } from './response';
+
+class ReportUserDto {
+  @IsEnum(BanReason) reason!: BanReason;
+  @IsString() @MinLength(1) @MaxLength(1000) comment!: string;
+}
 
 /**
  * Favorites — own userId only; ACTIVE products only; composite PK prevents duplicates.
@@ -91,6 +100,46 @@ export class SocialService {
     const target = await this.target(onixId);
     return this.prisma.userBlock.deleteMany({ where: { blockerId: user.id, blockedId: target.id } });
   }
+
+  /** User report → DB + Telegram admin notify (no admin UI). */
+  async report(user: AuthUser, onixId: string, dto: ReportUserDto) {
+    const target = await this.target(onixId);
+    if (target.id === user.id) throw new BadRequestException('Нельзя пожаловаться на себя.');
+    const comment = dto.comment.trim();
+    if (!comment) throw new BadRequestException('Укажите комментарий к жалобе.');
+    const report = await this.prisma.userReport.create({
+      data: {
+        reporterId: user.id,
+        targetId: target.id,
+        reason: dto.reason,
+        comment,
+      },
+    });
+    const adminTg = process.env.ADMIN_TELEGRAM_ID?.trim();
+    if (adminTg && /^\d+$/.test(adminTg)) {
+      const appBase = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',')[0]?.trim();
+      const openUrl = appBase
+        ? `${appBase.replace(/\/$/, '')}/?profile=${encodeURIComponent(target.onixId)}`
+        : undefined;
+      const body = [
+        `От:\n${user.onixId}`,
+        '',
+        `На:\n${target.onixId}`,
+        '',
+        `Причина:\n${BAN_REASON_LABELS[dto.reason]}`,
+        '',
+        `Комментарий:\n${comment}`,
+      ].join('\n');
+      void pushTelegramToChatId(
+        BigInt(adminTg),
+        '🚨 Новая жалоба',
+        body,
+        openUrl ? { inline_keyboard: [[{ text: 'Открыть профиль', url: openUrl }]] } : undefined,
+      );
+    }
+    return { id: report.id, targetOnixId: target.onixId };
+  }
+
   private async target(onixId: string) {
     const user = await this.prisma.user.findUnique({ where: { onixId } });
     if (!user) throw new NotFoundException('Пользователь не найден.');
@@ -124,6 +173,13 @@ export class SocialController {
   }
   @Delete('users/:onixId/block') unblock(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.unblock(user, id);
+  }
+  @Post('users/:onixId/report') report(
+    @CurrentUser() user: AuthUser,
+    @Param('onixId') id: string,
+    @Body() dto: ReportUserDto,
+  ) {
+    return this.social.report(user, id, dto);
   }
 }
 

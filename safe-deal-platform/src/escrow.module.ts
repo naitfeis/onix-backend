@@ -131,9 +131,16 @@ export class EscrowService {
           text: [
             'Заказ создан.',
             '',
-            'Не подтверждайте получение товара, пока полностью его не проверите.',
+            'Не подтверждайте получение товара,',
+            'пока полностью его не проверите.',
             '',
-            'При любых проблемах нажмите «Обратиться в поддержку».',
+            'При любых проблемах',
+            'нажмите',
+            '«Обратиться в поддержку».',
+            '',
+            `Заказ #${created.id}`,
+            'Товар:',
+            product.title,
           ].join('\n'),
         },
       });
@@ -152,11 +159,25 @@ export class EscrowService {
         } catch {
           throw new BadRequestException('Автовыдача недоступна: ошибка расшифровки (PRODUCT_DELIVERY_KEY).');
         }
+        if (payload.length > 4200) {
+          throw new BadRequestException('Текст автовыдачи слишком длинный для выдачи в чат.');
+        }
+        // Shared notice (no secret) — seller + buyer.
         await tx.message.create({
           data: {
             chatId,
             kind: 'SYSTEM',
             senderId: null,
+            text: 'Товар выдан автоматически (автовыдача).',
+          },
+        });
+        // Secret only for buyer — never returned by product API; cannot re-fetch after consume.
+        await tx.message.create({
+          data: {
+            chatId,
+            kind: 'SYSTEM',
+            senderId: null,
+            visibleToUserId: user.id,
             text: `Автовыдача товара:\n\n${payload}`,
           },
         });

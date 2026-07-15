@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { api, loginWithTelegram as legacyLoginWithTelegram, money, friendlyError } from './api/client';
+import { api, loginWithTelegram as legacyLoginWithTelegram, money, friendlyError, ApiError } from './api/client';
 import {
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
@@ -37,13 +37,15 @@ let reportTelegramLoginError: (message: string) => void = () => {};
 let reportTelegramBan: (ban: BanInfo) => void = () => {};
 
 function extractBanFromError(error: unknown): BanInfo | undefined {
-  const details = error instanceof AuthV2ApiError || error instanceof BotLoginError
-    ? error.details
-    : undefined;
-  if (!details || typeof details !== 'object') return undefined;
-  const ban = (details as { ban?: BanInfo }).ban;
-  const code = error instanceof AuthV2ApiError ? error.code : (error as BotLoginError).code;
-  if (code === 'AUTH_ACCOUNT_LOCKED' && ban) return ban;
+  if (error instanceof AuthV2ApiError || error instanceof BotLoginError) {
+    const ban = (error.details as { ban?: BanInfo } | undefined)?.ban;
+    if (error.code === 'AUTH_ACCOUNT_LOCKED' && ban) return ban;
+  }
+  if (error instanceof ApiError) {
+    const details = error.details as { ban?: BanInfo } | undefined;
+    const ban = details?.ban;
+    if (error.code === 'AUTH_ACCOUNT_LOCKED' && ban) return ban;
+  }
   return undefined;
 }
 
@@ -102,6 +104,7 @@ export default function App() {
   const [banNotice, setBanNotice] = useState<BanInfo | undefined>();
   const [focusChatId, setFocusChatId] = useState<string | null>(null);
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
+  const [focusDealId, setFocusDealId] = useState<string | null>(null);
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
     const to = TABS.findIndex(tab => tab.id === next);
@@ -121,6 +124,9 @@ export default function App() {
   useEffect(() => {
     if (core.profile) setBanNotice(undefined);
   }, [core.profile]);
+  useEffect(() => {
+    if (core.banFromAuth) setBanNotice(core.banFromAuth);
+  }, [core.banFromAuth]);
   useEffect(() => {
     if (!banNotice || banNotice.permanent) return;
     const tick = () => setBanNotice((prev) => (prev ? refreshBanInfo(prev) : prev));
@@ -142,6 +148,10 @@ export default function App() {
   const openProductCard = (productId: string) => {
     setFocusProductId(productId);
     switchTo('market');
+  };
+  const openDeal = (dealId: string) => {
+    setFocusDealId(dealId);
+    switchTo('deals');
   };
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
@@ -186,15 +196,16 @@ export default function App() {
           openDirectChat={openDirectChat}
           openProductCard={openProductCard}
         />}
-        {screen === 'deals' && <Deals core={core} switchTo={switchTo} setToast={setToast} />}
+        {screen === 'deals' && <Deals core={core} switchTo={switchTo} setToast={setToast} focusDealId={focusDealId} onFocusDealHandled={() => setFocusDealId(null)} />}
         {screen === 'create' && <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />}
         {screen === 'chat' && <Chats
           core={core}
-          switchTo={switchTo}
           focusChatId={focusChatId}
           onFocusChatHandled={() => setFocusChatId(null)}
           openDirectChat={openDirectChat}
           openProductCard={openProductCard}
+          openDeal={openDeal}
+          setToast={setToast}
         />}
         {screen === 'profile' && <Profile
           core={core}
@@ -587,6 +598,7 @@ function Market({
         setSellerProfile(null);
         openProductCard(productId);
       }}
+      setToast={setToast}
     />
     <Confirm open={Boolean(confirm)} title="Подтвердите покупку" text={confirm ? `${money(confirm.priceCents)} будут безопасно заморожены до получения товара.` : ''} busy={core.actionBusy?.startsWith('purchase')} onCancel={() => setConfirm(null)}
       onConfirm={async () => { if (confirm && await core.purchase(confirm.id)) { setConfirm(null); setSelected(null); setToast('Сделка создана. Деньги в сейфе.'); switchTo('deals'); } }} />
@@ -607,6 +619,7 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
   return <div className="stack narrow"><SectionHeader title="РАЗМЕСТИТЬ ЛОТ" subtitle="ОДНА ФОРМА · БЕЗ ЛИШНИХ ШАГОВ" />
     <Card><form className="form" onSubmit={submit}>
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
+      {core.errors['product-form'] && <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>}
       <Field label="Название"><Input required minLength={5} maxLength={80} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Например, Butterfly | Fade" /></Field>
       <Field label="Описание" hint="Не публикуйте пароли в описании — используйте автовыдачу"><Textarea required maxLength={1500} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
       <Field label="Категория"><Select value={draft.category} onChange={event => {
@@ -636,13 +649,22 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
     </form></Card></div>;
 }
 
-function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
+function Deals({
+  core, switchTo, setToast, focusDealId, onFocusDealHandled,
+}: {
+  core: Core;
+  switchTo: (screen: Screen) => void;
+  setToast: (text: string) => void;
+  focusDealId: string | null;
+  onFocusDealHandled: () => void;
+}) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [dealFilter, setDealFilter] = useState('all');
   const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'dispute' } | null>(null);
   const [reviewDeal, setReviewDeal] = useState<Deal | null>(null);
   const [refundDeal, setRefundDeal] = useState<Deal | null>(null);
   const [refundReason, setRefundReason] = useState('');
+  const [highlightedDealId, setHighlightedDealId] = useState<string | null>(null);
   const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter) ?? DEAL_FILTERS[0];
   const listQuery: OrderListQuery = {
     ...(activeFilter.status ? { status: activeFilter.status } : {}),
@@ -650,6 +672,14 @@ function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Sc
   useEffect(() => {
     if (core.profile) void core.listDeals(listQuery);
   }, [core.listDeals, core.profile, dealFilter]);
+  useEffect(() => {
+    if (!focusDealId) return;
+    setDealFilter('all');
+    setHighlightedDealId(focusDealId);
+    const deal = core.deals.find((item) => item.id === focusDealId);
+    if (deal) setRole(deal.role);
+    onFocusDealHandled();
+  }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
   const isSupport = Boolean(core.profile?.roles.includes('SUPPORT') || core.profile?.roles.includes('ADMIN'));
   return <div className="stack"><SectionHeader title="ESCROW ГАРАНТ" subtitle="КОНТРОЛЬ ЗАМОРОЖЕННЫХ СДЕЛОК" />
@@ -658,7 +688,7 @@ function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Sc
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => <Card key={deal.id} className="deal-card"><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
+      deals.map(deal => <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
@@ -702,18 +732,20 @@ function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core
 }
 
 function Chats({
-  core, switchTo, focusChatId, onFocusChatHandled, openDirectChat, openProductCard,
+  core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast,
 }: {
   core: Core;
-  switchTo: (screen: Screen) => void;
   focusChatId: string | null;
   onFocusChatHandled: () => void;
   openDirectChat: (onixId: string) => Promise<boolean>;
   openProductCard: (productId: string) => void;
+  openDeal: (dealId: string) => void;
+  setToast: (text: string) => void;
 }) {
   const [threadId, setThreadId] = useState('');
   const [text, setText] = useState('');
   const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
+  const [reportOnixId, setReportOnixId] = useState<string | null>(null);
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
   const openOnixProfile = async (onixId: string) => {
@@ -742,19 +774,26 @@ function Chats({
         if (peerProfile?.onixId === thread.peerOnixId) return;
         try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
       }}><b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b></button>
-      <small>{formatLastSeen(thread.peerLastOnline)}</small></div></div>
+      <small>{formatLastSeen(thread.peerLastOnline)}</small></div>
+      {thread.peerOnixId && core.profile?.onixId !== thread.peerOnixId && (
+        <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
+      )}
+      </div>
       {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
         <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
           <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · Escrow</span></div>
-        <Button variant="secondary" onClick={() => switchTo('deals')}>Открыть заказ</Button>
+        <Button variant="secondary" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
       </div>}
       <div className="messages">{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
         <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
           {!message.mine && <UserAvatar avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
           <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
             {message.kind !== 'SYSTEM' && <small>@{message.sender.username} <StaffBadge badge={message.sender.badge} /></small>}
-            {message.kind === 'SYSTEM' && <small>ONIX</small>}
+            {message.kind === 'SYSTEM' && <small>🛡 ONIX</small>}
             <p><MessageText text={message.text} onOpenOnix={openOnixProfile} /></p>
+            {message.kind === 'SYSTEM' && thread.orderCard && message.text.includes('Заказ создан') && (
+              <Button variant="secondary" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
+            )}
             <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
           </div>
         </div>)}</div>
@@ -773,12 +812,20 @@ function Chats({
         setPeerProfile(null);
         openProductCard(productId);
       }}
+      onReport={(onixId) => setReportOnixId(onixId)}
+      setToast={setToast}
+    />
+    <ReportUserModal
+      onixId={reportOnixId}
+      core={core}
+      onClose={() => setReportOnixId(null)}
+      setToast={setToast}
     />
   </div>;
 }
 
 function PublicProfileModal({
-  profile, onClose, core, onOpenOnix, onWrite, onOpenProduct,
+  profile, onClose, core, onOpenOnix, onWrite, onOpenProduct, onReport, setToast,
 }: {
   profile: PublicProfile | null;
   onClose: () => void;
@@ -786,15 +833,19 @@ function PublicProfileModal({
   onOpenOnix?: (onixId: string) => void;
   onWrite?: (onixId: string) => void | Promise<void>;
   onOpenProduct?: (productId: string) => void;
+  onReport?: (onixId: string) => void;
+  setToast?: (text: string) => void;
 }) {
   const [section, setSection] = useState<'products' | 'reviews'>('products');
   const [followed, setFollowed] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
+  const [reportOpen, setReportOpen] = useState(false);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
     setFollowersCount(profile.followersCount);
     setSection('products');
+    setReportOpen(false);
   }, [profile?.onixId, profile?.followed, profile?.followersCount]);
   if (!profile) return null;
   const products = profile.products ?? [];
@@ -839,6 +890,13 @@ function PublicProfileModal({
               setFollowersCount(result.followersCount);
             }}
           >{followed ? 'Отписаться' : 'Подписаться'}</Button>}
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (onReport) onReport(profile.onixId);
+              else setReportOpen(true);
+            }}
+          >Пожаловаться</Button>
         </div>}
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
@@ -877,6 +935,52 @@ function PublicProfileModal({
           <span>{'★'.repeat(review.rating)}</span>
         </div><p className="muted">{review.text}</p></Card>))}
     </div>
+    {core && setToast && reportOpen && (
+      <ReportUserModal
+        onixId={profile.onixId}
+        core={core}
+        onClose={() => setReportOpen(false)}
+        setToast={setToast}
+      />
+    )}
+  </Modal>;
+}
+
+function ReportUserModal({
+  onixId, core, onClose, setToast,
+}: {
+  onixId: string | null;
+  core: Core;
+  onClose: () => void;
+  setToast: (text: string) => void;
+}) {
+  const [reason, setReason] = useState<BanReasonCode>('FRAUD');
+  const [comment, setComment] = useState('');
+  if (!onixId) return null;
+  return <Modal open title="Пожаловаться" onClose={onClose}>
+    <form className="form" onSubmit={async (event) => {
+      event.preventDefault();
+      if (!comment.trim()) return;
+      if (await core.reportUser(onixId, reason, comment.trim())) {
+        setToast('Жалоба отправлена.');
+        onClose();
+      }
+    }}>
+      <Field label="Причина">
+        <Select value={reason} onChange={(event) => setReason(event.target.value as BanReasonCode)}>
+          {BAN_REASON_OPTIONS.map((item) => (
+            <option key={item.value} value={item.value}>{item.label}</option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Комментарий">
+        <Textarea required maxLength={1000} value={comment} onChange={(event) => setComment(event.target.value)} />
+      </Field>
+      <div className="modal__actions">
+        <Button type="button" variant="secondary" onClick={onClose}>Отмена</Button>
+        <Button type="submit" busy={core.actionBusy === `report-${onixId}`} disabled={!comment.trim()}>Отправить</Button>
+      </div>
+    </form>
   </Modal>;
 }
 
@@ -894,10 +998,26 @@ function Profile({
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
+  const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
+  const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const profile = core.profile;
+  useEffect(() => {
+    if (section !== 'favorites' || !core.profile) return;
+    let cancelled = false;
+    setFavoritesState('loading');
+    void core.listFavorites().then((rows) => {
+      if (cancelled) return;
+      setFavoriteProducts(rows);
+      setFavoritesState('success');
+    }).catch(() => {
+      if (cancelled) return;
+      setFavoriteProducts([]);
+      setFavoritesState('error');
+    });
+    return () => { cancelled = true; };
+  }, [core.listFavorites, core.profile, section]);
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
-  const favoriteProducts = core.products.filter(product => product.favorite);
   const ownProducts = core.products.filter(product => product.seller.id === profile.id);
   const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'admin'> =
     profile.roles.includes('ADMIN') ? ['overview', 'listings', 'favorites', 'reviews', 'admin'] : ['overview', 'listings', 'favorites', 'reviews'];
@@ -910,7 +1030,9 @@ function Profile({
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
-    {section === 'favorites' && (favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
+    {section === 'favorites' && (favoritesState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
+      favoritesState === 'error' ? <StateView title="Избранное недоступно" text="Не удалось загрузить список." /> :
+      favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
       <div className="product-grid">{favoriteProducts.map(item => (
         <Card key={item.id} interactive className="product-card">
           <button
@@ -953,6 +1075,7 @@ function Profile({
         setAuthorProfile(null);
         openProductCard(productId);
       }}
+      setToast={setToast}
     />
     <EditProduct product={editing} core={core} onClose={() => setEditing(null)} setToast={setToast} />
     <Modal open={withdrawOpen} title="Вывод средств" onClose={() => setWithdrawOpen(false)}><div className="form"><p className="modal__text">Сумма и комиссия будут подтверждены сервером до списания.</p><Field label="Сумма, ₽"><Input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></Field><div className="modal__actions"><Button variant="secondary" onClick={() => setWithdrawOpen(false)}>Отмена</Button><Button busy={core.actionBusy === 'withdraw'} disabled={Number(amount) < 100} onClick={async () => { if (await core.withdraw(Number(amount))) { setWithdrawOpen(false); setToast('Заявка на вывод создана.'); } }}>Продолжить</Button></div></div></Modal>

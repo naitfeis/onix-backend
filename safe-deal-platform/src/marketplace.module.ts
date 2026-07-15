@@ -5,14 +5,24 @@ import {
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
 import { PrismaService } from './prisma.service';
 import { productDto } from './response';
+import { fieldBadRequest } from './validation-errors';
+
+function toBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value === 'boolean') return value;
+  if (value === 'true' || value === 1 || value === '1') return true;
+  if (value === 'false' || value === 0 || value === '0') return false;
+  return Boolean(value);
+}
 
 class ProductDto {
   @IsString() @Length(5, 255) title!: string;
@@ -20,10 +30,13 @@ class ProductDto {
   @IsString() @Matches(/^[1-9]\d*$/) priceCents!: string;
   @IsEnum(ProductCategory) category!: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
-  @IsInt() @Min(1) @Max(10000) quantity!: number;
-  @IsOptional() @IsBoolean() autoDeliver?: boolean;
+  @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity!: number;
+  @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
   /** Write-only plaintext for auto-delivery. Never returned in productDto. */
-  @IsOptional() @IsString() @MaxLength(4000) deliveryText?: string;
+  @ValidateIf((o: ProductDto) => o.autoDeliver === true)
+  @IsString({ message: 'required when autoDeliver=true' })
+  @Length(1, 4000, { message: 'required when autoDeliver=true' })
+  deliveryText?: string;
 }
 
 class UpdateProductDto {
@@ -32,8 +45,8 @@ class UpdateProductDto {
   @IsOptional() @IsString() @Matches(/^[1-9]\d*$/) priceCents?: string;
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
-  @IsOptional() @IsInt() @Min(1) @Max(10000) quantity?: number;
-  @IsOptional() @IsBoolean() autoDeliver?: boolean;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity?: number;
+  @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
   @IsOptional() @IsString() @MaxLength(4000) deliveryText?: string;
 }
 
@@ -60,7 +73,7 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
   }
   const text = dto.deliveryText?.trim();
   if (!text) {
-    throw new BadRequestException('Для автовыдачи укажите текст товара (deliveryText).');
+    throw fieldBadRequest('deliveryText', 'required when autoDeliver=true');
   }
   try {
     const enc = encryptDeliverySecret(text);
@@ -71,10 +84,11 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
       deliveryConsumedAt: null as Date | null,
     };
   } catch (error) {
-    throw new BadRequestException(
+    throw fieldBadRequest(
+      'autoDeliver',
       (error as Error).message.includes('PRODUCT_DELIVERY_KEY')
-        ? 'Автовыдача временно недоступна (ключ шифрования не настроен).'
-        : 'Не удалось зашифровать текст автовыдачи.',
+        ? 'encryption key not configured (PRODUCT_DELIVERY_KEY)'
+        : 'failed to encrypt deliveryText',
     );
   }
 }
@@ -164,7 +178,7 @@ export class MarketplaceService {
     try {
       assertSubcategoryForCategory(dto.category, dto.subcategory);
     } catch (e) {
-      throw new BadRequestException((e as Error).message);
+      throw fieldBadRequest('subcategory', (e as Error).message);
     }
     const secret = deliveryFields(dto);
     const { deliveryText: _omit, autoDeliver: _a, ...rest } = dto;
@@ -204,7 +218,7 @@ export class MarketplaceService {
     try {
       assertSubcategoryForCategory(category, subcategory);
     } catch (e) {
-      throw new BadRequestException((e as Error).message);
+      throw fieldBadRequest('subcategory', (e as Error).message);
     }
     const { priceCents, deliveryText, autoDeliver, ...data } = dto;
     const patch: Prisma.ProductUpdateInput = {
@@ -213,7 +227,7 @@ export class MarketplaceService {
     };
     if (autoDeliver !== undefined || deliveryText !== undefined) {
       if (item.deliveryConsumedAt) {
-        throw new BadRequestException('Текст автовыдачи уже выдан и не может быть изменён.');
+        throw fieldBadRequest('deliveryText', 'already consumed and cannot be changed');
       }
       const wantAuto = autoDeliver ?? item.autoDeliver;
       if (!wantAuto) {
@@ -228,7 +242,7 @@ export class MarketplaceService {
       } else if (item.deliveryCiphertext && item.deliveryIv) {
         Object.assign(patch, { autoDeliver: true });
       } else {
-        throw new BadRequestException('Для автовыдачи укажите текст товара (deliveryText).');
+        throw fieldBadRequest('deliveryText', 'required when autoDeliver=true');
       }
     }
     await this.prisma.product.update({ where: { id }, data: patch });

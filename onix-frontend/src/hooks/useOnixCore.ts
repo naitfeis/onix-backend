@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { api, bootstrapAuth, friendlyError, getAccessToken } from '../api/client';
+import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
 import {
   getAuthV2Me,
   getSharedAuthManager,
   resolveApiBase,
 } from '../auth';
-import { API_PATHS, type AsyncState, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
+import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -71,6 +71,7 @@ export function useOnixCore() {
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
 
   const load = useCallback(async <K extends CollectionKey>(key: K, path: string) => {
     setStates(previous => ({ ...previous, [key]: 'loading' }));
@@ -103,6 +104,7 @@ export function useOnixCore() {
 
   const refreshAll = useCallback(async () => {
     try {
+      setBanFromAuth(undefined);
       const mode = await ensureWebsiteOrMiniAuth();
       if (!mode) {
         setProfile(null);
@@ -125,6 +127,10 @@ export function useOnixCore() {
     } catch (error) {
       setProfile(null);
       setStates(previous => ({ ...previous, profile: 'error' }));
+      if (error instanceof ApiError && error.code === 'AUTH_ACCOUNT_LOCKED') {
+        const ban = (error.details as { ban?: BanInfo } | undefined)?.ban;
+        if (ban) setBanFromAuth(ban);
+      }
       setErrors(previous => ({ ...previous, profile: friendlyError(error) }));
     }
   }, [load, loadProfile]);
@@ -155,6 +161,13 @@ export function useOnixCore() {
 
   const listProducts = useCallback((query: ProductListQuery = {}) =>
     api.get<Product[]>(API_PATHS.productsList(query)), []);
+
+  const listFavorites = useCallback(() =>
+    api.get<Product[]>(API_PATHS.favorites), []);
+
+  const reportUser = useCallback((onixId: string, reason: BanReasonCode, comment: string) =>
+    run(`report-${onixId}`, () =>
+      api.post(API_PATHS.userReport(onixId), { reason, comment })), []);
 
   const createProduct = useCallback((draft: ProductDraft) => run('product-form', () =>
     api.post<Product>(API_PATHS.productCreate, {
@@ -356,9 +369,9 @@ export function useOnixCore() {
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
-    profile, ...store, states, errors, messages, actionBusy, unread,
-    refreshAll, loadProfile, loadMessages, listProducts, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    profile, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    refreshAll, loadProfile, loadMessages, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, sellerRefund, startChat, sendMessage, withdraw, submitReview,
-    markNotificationRead, adminAction,
+    markNotificationRead, adminAction, reportUser,
   };
 }

@@ -11,11 +11,23 @@ function apiUrl(path: string): string {
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+  readonly field?: string;
+  readonly fieldError?: string;
 
-  constructor(message: string, status: number) {
+  constructor(
+    message: string,
+    status: number,
+    opts?: { code?: string; details?: unknown; field?: string; fieldError?: string },
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = opts?.code;
+    this.details = opts?.details;
+    this.field = opts?.field;
+    this.fieldError = opts?.fieldError;
   }
 }
 
@@ -71,7 +83,22 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
   if (!response.ok || !payload.success) {
     const detail = payload.error?.message;
     const message = Array.isArray(detail) ? detail.join(' ') : detail;
-    throw new ApiError(message || payload.message || 'Не удалось выполнить действие. Повторите попытку.', response.status);
+    const errObj = payload.error as { code?: string; details?: unknown; field?: string; error?: string } | undefined;
+    const field = typeof errObj?.field === 'string' ? errObj.field : undefined;
+    const fieldError = typeof errObj?.error === 'string' ? errObj.error : undefined;
+    throw new ApiError(
+      (field && fieldError ? `${field}: ${fieldError}` : undefined)
+        || message
+        || payload.message
+        || 'Не удалось выполнить действие. Повторите попытку.',
+      response.status,
+      {
+        code: errObj?.code,
+        details: errObj?.details,
+        field,
+        fieldError,
+      },
+    );
   }
   return payload.data;
 }

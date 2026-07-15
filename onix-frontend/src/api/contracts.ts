@@ -140,7 +140,13 @@ export interface ApiEnvelope<T> {
   success: boolean;
   data: T;
   message?: string;
-  error?: { code: string; message: string | string[]; details?: unknown };
+  error?: {
+    code: string;
+    message: string | string[];
+    details?: unknown;
+    field?: string;
+    error?: string;
+  };
 }
 
 export interface ProductDraft {
@@ -208,6 +214,8 @@ export const API_PATHS = {
   productDelete: (id: string) => `/api/products/${encodeURIComponent(id)}`,
   productPurchase: (id: string) => `/api/orders/product/${encodeURIComponent(id)}`,
   favorite: (id: string) => `/api/favorites/${encodeURIComponent(id)}`,
+  favorites: '/api/favorites',
+  userReport: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/report`,
   follow: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/follow`,
   orders: '/api/orders',
   ordersList: ordersListPath,

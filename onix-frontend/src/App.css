@@ -31,6 +31,7 @@
 .auth-notice > div { display: grid; gap: 4px; min-width: 0; flex: 1 1 180px; }.auth-notice span, .auth-notice strong { color: #9b8668; overflow-wrap: anywhere; word-break: break-word; }
 .auth-notice strong { color: #d4b896; }
 .ban-notice__row { display: block; }
+.deal-card--focus { outline: 2px solid var(--accent, #3d7eff); outline-offset: 2px; }
 .viewport { padding-top: 14px; }.screen-transition { animation: fluid-in 240ms var(--ease) both; }
 @keyframes fluid-in { from { opacity: 0; transform: translateX(calc(var(--direction) * 18px)); } to { opacity: 1; transform: translateX(0); } }
 .stack { display: flex; flex-direction: column; gap: 12px; }.stack.compact { gap: 10px; }.narrow { max-width: 720px; margin: 0 auto; }

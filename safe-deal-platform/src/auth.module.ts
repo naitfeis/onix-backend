@@ -13,6 +13,7 @@ import { AuthOrchestrator, type LegacyAuthSource } from './auth-v2/auth-orchestr
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { AuthRolloutService } from './auth-v2/auth-rollout.service';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
+import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from './ban-policy';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
 import { RiskScoreService } from './risk-score.service';
 import { formatErrorForLog } from './safe-error-log';
@@ -118,8 +119,20 @@ export class AuthService {
   }
 
   private async upsert(identity: TelegramIdentity): Promise<AuthUser> {
-    const existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
-    if (existing?.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
+    let existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
+    if (existing?.deletedAt) {
+      if (!isBanActive(existing)) {
+        existing = await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { ...BAN_CLEAR_DATA },
+        });
+      } else {
+        // Same BanResponse DTO as Auth V2 / Web (AUTH_ACCOUNT_LOCKED + banPublicInfo).
+        throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked.', {
+          ban: banPublicInfo(existing),
+        });
+      }
+    }
     const loggedInAt = new Date();
     const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || undefined;
     let user;
@@ -168,7 +181,11 @@ export class AuthService {
       }
       return this.toAuthUser(user);
     }
-    if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
+    if (user.deletedAt && isBanActive(user)) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked.', {
+        ban: banPublicInfo(user),
+      });
+    }
     // Keep isSupport in sync with env (additive — does not change Auth V2).
     const isSupport = resolveIsSupport(user.telegramId, user.isAdmin);
     if (user.isSupport !== isSupport) {
