@@ -6,7 +6,7 @@ import {
   getSharedAuthManager,
   resolveApiBase,
 } from '../auth';
-import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type Profile, type Review } from '../api/contracts';
+import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -54,7 +54,7 @@ async function bootstrapAuthenticatedUser(
 ): Promise<void> {
   const current = await loadProfile();
   await Promise.all([
-    load('products', API_PATHS.products),
+    load('products', API_PATHS.productsList({ limit: 100 })),
     load('deals', API_PATHS.orders),
     load('chats', API_PATHS.chats),
     load('notifications', API_PATHS.notifications),
@@ -153,6 +153,9 @@ export function useOnixCore() {
 
   const cents = (rubles: string | number) => Math.round(Number(rubles) * 100).toString();
 
+  const listProducts = useCallback((query: ProductListQuery = {}) =>
+    api.get<Product[]>(API_PATHS.productsList(query)), []);
+
   const createProduct = useCallback((draft: ProductDraft) => run('product-form', () =>
     api.post<Product>(API_PATHS.productCreate, {
       title: draft.title.trim(),
@@ -161,24 +164,24 @@ export function useOnixCore() {
       quantity: draft.quantity,
       category: draft.category,
       subcategory: draft.subcategory.trim() || undefined,
-    }), () => void load('products', API_PATHS.products)), [load, run]);
+    }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
 
   const updateProduct = useCallback((id: string, draft: ProductDraft) => run('product-form', () =>
     api.patch<Product>(API_PATHS.productUpdate(id), {
       title: draft.title.trim(), description: draft.description.trim(), priceCents: cents(draft.priceRubles),
       quantity: draft.quantity, category: draft.category, subcategory: draft.subcategory.trim() || undefined,
-    }), () => void load('products', API_PATHS.products)), [load, run]);
+    }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
 
   const archiveProduct = useCallback((id: string) => run(`archive-${id}`, () =>
     api.delete<Product>(API_PATHS.productDelete(id)),
-  () => void load('products', API_PATHS.products)), [load, run]);
+  () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
 
   const toggleFavorite = useCallback((product: Product) => {
     setStore(previous => ({ ...previous, products: previous.products.map(item =>
       item.id === product.id ? { ...item, favorite: !item.favorite } : item) }));
     void run(`favorite-${product.id}`, () => product.favorite
       ? api.delete(API_PATHS.favorite(product.id))
-      : api.post(API_PATHS.favorite(product.id)), () => void load('products', API_PATHS.products));
+      : api.post(API_PATHS.favorite(product.id)), () => void load('products', API_PATHS.productsList({ limit: 100 })));
   }, [load, run]);
 
   const toggleFollow = useCallback((onixId: string, followed = false) => run(`follow-${onixId}`, () =>
@@ -187,7 +190,7 @@ export function useOnixCore() {
 
   const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
     api.post(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
-      void load('products', API_PATHS.products); void load('deals', API_PATHS.orders);
+      void load('products', API_PATHS.productsList({ limit: 100 })); void load('deals', API_PATHS.orders);
     }), [load, run]);
 
   const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'dispute') => {
@@ -246,7 +249,7 @@ export function useOnixCore() {
 
   return {
     profile, ...store, states, errors, messages, actionBusy, unread,
-    refreshAll, loadProfile, loadMessages, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    refreshAll, loadProfile, loadMessages, listProducts, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction,
   };

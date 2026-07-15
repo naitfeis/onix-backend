@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_PATHS, CATEGORIES } from './contracts';
+import { API_PATHS, CATEGORIES, productsListPath } from './contracts';
 
 describe('ONIX API paths', () => {
   it('matches backend resource routes', () => {
@@ -11,6 +11,14 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.reviewCreate('42')).toBe('/api/orders/42/reviews');
     expect(API_PATHS.walletWithdraw).toBe('/api/wallet/withdrawals');
     expect(API_PATHS.adminBan('ONIX-000007')).toBe('/api/admin/users/ONIX-000007/ban');
+  });
+
+  it('builds marketplace list query without empty search', () => {
+    expect(productsListPath({})).toBe('/api/products');
+    expect(productsListPath({ search: '  ', category: 'STEAM', sort: 'rating', limit: 30, offset: 0 }))
+      .toBe('/api/products?category=STEAM&sort=rating&limit=30&offset=0');
+    expect(productsListPath({ search: 'Knife', minPriceCents: '1000', maxPriceCents: '50000' }))
+      .toBe('/api/products?search=Knife&minPriceCents=1000&maxPriceCents=50000');
   });
 
   it('uses canonical backend category enum values', () => {

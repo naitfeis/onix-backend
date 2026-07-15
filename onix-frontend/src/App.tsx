@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { loginWithTelegram as legacyLoginWithTelegram, money } from './api/client';
+import { loginWithTelegram as legacyLoginWithTelegram, money, friendlyError } from './api/client';
 import {
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
@@ -269,28 +269,57 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
   const [sort, setSort] = useState('new');
   const [selected, setSelected] = useState<Product | null>(null);
   const [confirm, setConfirm] = useState<Product | null>(null);
-  const filtered = useMemo(() => core.products.filter(product => {
-    const text = `${product.title} ${product.seller.username} ${product.seller.onixId}`.toLowerCase();
-    return (category === 'Все' || product.category === category) && text.includes(query.trim().toLowerCase());
-  }).sort((a, b) => sort === 'price' ? Number(a.priceCents) - Number(b.priceCents) :
-    sort === 'rating' ? b.seller.rating - a.seller.rating : Date.parse(b.createdAt) - Date.parse(a.createdAt)), [category, core.products, query, sort]);
+  const [items, setItems] = useState<Product[]>([]);
+  const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
+  const [marketError, setMarketError] = useState<string | undefined>();
+  const [marketTick, setMarketTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const debounceMs = query.trim() ? 300 : 0;
+    const timer = window.setTimeout(() => {
+      setMarketState('loading');
+      const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
+      void core.listProducts({
+        search: query.trim() || undefined,
+        category: category === 'Все' ? undefined : category,
+        sort: serverSort,
+        limit: 30,
+        offset: 0,
+      }).then((data) => {
+        if (cancelled) return;
+        setItems(data);
+        setMarketError(undefined);
+        setMarketState('success');
+      }).catch((error: unknown) => {
+        if (cancelled) return;
+        setItems([]);
+        setMarketError(friendlyError(error));
+        setMarketState('error');
+      });
+    }, debounceMs);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [category, core.listProducts, marketTick, query, sort]);
 
   return <div className="stack">
-    <SectionHeader title="ВИТРИНА ONIX MARKETPLACE" subtitle="БЕЗОПАСНЫЕ ЦИФРОВЫЕ СДЕЛКИ" action={<Button variant="ghost" onClick={() => core.refreshAll()}>↻</Button>} />
+    <SectionHeader title="ВИТРИНА ONIX MARKETPLACE" subtitle="БЕЗОПАСНЫЕ ЦИФРОВЫЕ СДЕЛКИ" action={<Button variant="ghost" onClick={() => { void core.refreshAll(); setMarketTick((tick) => tick + 1); }}>↻</Button>} />
     <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
       <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select></div>
     <div className="chips" role="list" aria-label="Категории">{['Все', ...CATEGORIES].map(item =>
       <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => setCategory(item)}>{item === 'Все' ? item.toUpperCase() : CATEGORY_LABELS[item as keyof typeof CATEGORY_LABELS].toUpperCase()}</button>)}</div>
-    {core.states.products === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
-      core.states.products === 'error' ? <StateView title="Витрина недоступна" text={core.errors.products || ''} action={<Button onClick={() => core.refreshAll()}>Попробовать снова</Button>} /> :
-      filtered.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
-      <div className="product-grid">{filtered.map(product => <Card key={product.id} interactive className="product-card">
+    {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
+      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => setMarketTick((tick) => tick + 1)}>Попробовать снова</Button>} /> :
+      items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
+      <div className="product-grid">{items.map(product => <Card key={product.id} interactive className="product-card">
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
           <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
           <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} /><span>@{product.seller.username} · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
-        <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => core.toggleFavorite(product)} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
+        <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
+          setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
+          void core.toggleFavorite(product);
+        }} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
       </Card>)}</div>}
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>

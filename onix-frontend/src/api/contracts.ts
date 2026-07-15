@@ -105,10 +105,37 @@ export interface ProductDraft {
   subcategory: string;
 }
 
+export type ProductListSort = 'newest' | 'price_asc' | 'price_desc' | 'rating';
+
+export type ProductListQuery = {
+  search?: string;
+  category?: string;
+  minPriceCents?: string;
+  maxPriceCents?: string;
+  sort?: ProductListSort;
+  limit?: number;
+  offset?: number;
+};
+
+export function productsListPath(query: ProductListQuery = {}): string {
+  const params = new URLSearchParams();
+  const search = query.search?.trim();
+  if (search) params.set('search', search.slice(0, 100));
+  if (query.category) params.set('category', query.category);
+  if (query.minPriceCents) params.set('minPriceCents', query.minPriceCents);
+  if (query.maxPriceCents) params.set('maxPriceCents', query.maxPriceCents);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.limit != null) params.set('limit', String(query.limit));
+  if (query.offset != null) params.set('offset', String(query.offset));
+  const qs = params.toString();
+  return qs ? `/api/products?${qs}` : '/api/products';
+}
+
 export const API_PATHS = {
   me: '/api/users/me',
   ledger: '/api/wallet/ledger',
   products: '/api/products',
+  productsList: productsListPath,
   productCreate: '/api/products',
   productUpdate: (id: string) => `/api/products/${encodeURIComponent(id)}`,
   productDelete: (id: string) => `/api/products/${encodeURIComponent(id)}`,

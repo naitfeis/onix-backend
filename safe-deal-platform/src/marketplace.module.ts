@@ -33,8 +33,9 @@ class ProductQuery {
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
-  @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc']) sort: string = 'newest';
+  @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating']) sort: string = 'newest';
   @IsOptional() @IsInt() @Min(1) @Max(100) limit = 30;
+  @IsOptional() @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
 
 @Injectable()
@@ -61,9 +62,11 @@ export class MarketplaceService {
     };
     const orderBy: Prisma.ProductOrderByWithRelationInput =
       query.sort === 'price_asc' ? { priceCents: 'asc' } :
-      query.sort === 'price_desc' ? { priceCents: 'desc' } : { createdAt: 'desc' };
+      query.sort === 'price_desc' ? { priceCents: 'desc' } :
+      query.sort === 'rating' ? { seller: { ratingAverage: 'desc' } } :
+      { createdAt: 'desc' };
     const products = await this.prisma.product.findMany({
-      where, orderBy, take: query.limit,
+      where, orderBy, take: query.limit, skip: query.offset,
       include: {
         seller: { include: { _count: { select: { followers: true } } } },
         favorites: { where: { userId: user.id }, select: { userId: true } },
