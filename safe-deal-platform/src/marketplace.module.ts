@@ -2,12 +2,14 @@ import {
   BadRequestException, Body, Controller, Delete, Get, Injectable, Module,
   NotFoundException, Param, Patch, Post, Query,
 } from '@nestjs/common';
-import { ProductCategory, ProductStatus, Prisma } from '@prisma/client';
+import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
 import {
-  IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, Min,
+  IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { AuthUser, CurrentUser } from './common';
+import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
+import { AuthUser, CurrentUser, Public } from './common';
+import { encryptDeliverySecret } from './delivery-crypto';
 import { PrismaService } from './prisma.service';
 import { productDto } from './response';
 
@@ -16,8 +18,11 @@ class ProductDto {
   @IsOptional() @IsString() @Length(0, 1500) description?: string;
   @IsString() @Matches(/^[1-9]\d*$/) priceCents!: string;
   @IsEnum(ProductCategory) category!: ProductCategory;
-  @IsOptional() @IsString() @Length(1, 100) subcategory?: string;
+  @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsInt() @Min(1) @Max(10000) quantity!: number;
+  @IsOptional() @IsBoolean() autoDeliver?: boolean;
+  /** Write-only plaintext for auto-delivery. Never returned in productDto. */
+  @IsOptional() @IsString() @MaxLength(4000) deliveryText?: string;
 }
 
 class UpdateProductDto {
@@ -25,13 +30,16 @@ class UpdateProductDto {
   @IsOptional() @IsString() @Length(0, 1500) description?: string;
   @IsOptional() @IsString() @Matches(/^[1-9]\d*$/) priceCents?: string;
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
-  @IsOptional() @IsString() @Length(1, 100) subcategory?: string;
+  @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @IsInt() @Min(1) @Max(10000) quantity?: number;
+  @IsOptional() @IsBoolean() autoDeliver?: boolean;
+  @IsOptional() @IsString() @MaxLength(4000) deliveryText?: string;
 }
 
 class ProductQuery {
   @IsOptional() @IsString() @Length(1, 100) search?: string;
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
+  @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
   @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating']) sort: string = 'newest';
@@ -39,9 +47,36 @@ class ProductQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
 
+function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
+  const autoDeliver = Boolean(dto.autoDeliver);
+  if (!autoDeliver) {
+    return {
+      autoDeliver: false,
+      deliveryCiphertext: null as string | null,
+      deliveryIv: null as string | null,
+      deliveryConsumedAt: null as Date | null,
+    };
+  }
+  const text = dto.deliveryText?.trim();
+  if (!text) {
+    throw new BadRequestException('Для автовыдачи укажите текст товара (deliveryText).');
+  }
+  const enc = encryptDeliverySecret(text);
+  return {
+    autoDeliver: true,
+    deliveryCiphertext: enc.ciphertext,
+    deliveryIv: enc.iv,
+    deliveryConsumedAt: null as Date | null,
+  };
+}
+
 @Injectable()
 export class MarketplaceService {
   constructor(private readonly prisma: PrismaService) {}
+
+  catalog() {
+    return SUBCATEGORIES_BY_CATEGORY;
+  }
 
   async list(user: AuthUser, query: ProductQuery) {
     if (
@@ -51,9 +86,17 @@ export class MarketplaceService {
     ) {
       throw new BadRequestException('minPriceCents не может быть больше maxPriceCents.');
     }
+    if (query.category && query.subcategory) {
+      try {
+        assertSubcategoryForCategory(query.category, query.subcategory);
+      } catch (e) {
+        throw new BadRequestException((e as Error).message);
+      }
+    }
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       ...(query.category ? { category: query.category } : {}),
+      ...(query.subcategory ? { subcategory: query.subcategory } : {}),
       ...(query.search ? {
         OR: [
           { title: { contains: query.search, mode: 'insensitive' } },
@@ -92,7 +135,6 @@ export class MarketplaceService {
       },
     });
     if (!product) throw new NotFoundException('Товар не найден.');
-    // Public catalog surface: non-ACTIVE listings are owner-only (ARCHIVED/RESERVED/SOLD_OUT).
     if (product.status !== ProductStatus.ACTIVE && product.sellerId !== user.id) {
       throw new NotFoundException('Товар не найден.');
     }
@@ -100,13 +142,27 @@ export class MarketplaceService {
   }
 
   async create(user: AuthUser, dto: ProductDto) {
+    try {
+      assertSubcategoryForCategory(dto.category, dto.subcategory);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+    const secret = deliveryFields(dto);
+    const { deliveryText: _omit, autoDeliver: _a, ...rest } = dto;
     const product = await this.prisma.product.create({
       data: {
-        ...dto, priceCents: BigInt(dto.priceCents), sellerId: user.id,
+        ...rest,
+        priceCents: BigInt(dto.priceCents),
+        sellerId: user.id,
         expiresAt: new Date(Date.now() + 30 * 86400_000),
+        ...secret,
       },
     });
-    const followers = await this.prisma.follow.findMany({ where: { sellerId: user.id }, select: { followerId: true } });
+    const followers = await this.prisma.follow.findMany({
+      where: { sellerId: user.id },
+      select: { followerId: true },
+      take: 500,
+    });
     if (followers.length) {
       await this.prisma.notification.createMany({
         data: followers.map(({ followerId }) => ({
@@ -119,12 +175,40 @@ export class MarketplaceService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateProductDto) {
-    await this.ownedActive(user, id);
-    const { priceCents, ...data } = dto;
-    await this.prisma.product.update({
-      where: { id },
-      data: { ...data, ...(priceCents ? { priceCents: BigInt(priceCents) } : {}) },
-    });
+    const item = await this.ownedActive(user, id);
+    const category = dto.category ?? item.category;
+    const subcategory = dto.subcategory !== undefined ? dto.subcategory : item.subcategory;
+    try {
+      assertSubcategoryForCategory(category, subcategory);
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+    const { priceCents, deliveryText, autoDeliver, ...data } = dto;
+    const patch: Prisma.ProductUpdateInput = {
+      ...data,
+      ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
+    };
+    if (autoDeliver !== undefined || deliveryText !== undefined) {
+      if (item.deliveryConsumedAt) {
+        throw new BadRequestException('Текст автовыдачи уже выдан и не может быть изменён.');
+      }
+      const wantAuto = autoDeliver ?? item.autoDeliver;
+      if (!wantAuto) {
+        Object.assign(patch, {
+          autoDeliver: false,
+          deliveryCiphertext: null,
+          deliveryIv: null,
+          deliveryConsumedAt: null,
+        });
+      } else if (deliveryText?.trim()) {
+        Object.assign(patch, deliveryFields({ autoDeliver: true, deliveryText }));
+      } else if (item.deliveryCiphertext && item.deliveryIv) {
+        Object.assign(patch, { autoDeliver: true });
+      } else {
+        throw new BadRequestException('Для автовыдачи укажите текст товара (deliveryText).');
+      }
+    }
+    await this.prisma.product.update({ where: { id }, data: patch });
     return this.get(user, id);
   }
 
@@ -140,7 +224,9 @@ export class MarketplaceService {
   }
 
   private async ownedActive(user: AuthUser, id: string) {
-    const item = await this.prisma.product.findFirst({ where: { id, sellerId: user.id, status: { in: ['ACTIVE', 'ARCHIVED'] } } });
+    const item = await this.prisma.product.findFirst({
+      where: { id, sellerId: user.id, status: { in: ['ACTIVE', 'ARCHIVED'] } },
+    });
     if (!item) throw new NotFoundException('Доступный для редактирования товар не найден.');
     return item;
   }
@@ -149,14 +235,31 @@ export class MarketplaceService {
 @Controller('products')
 export class MarketplaceController {
   constructor(private readonly service: MarketplaceService) {}
-  @Get() list(@CurrentUser() user: AuthUser, @Query() query: ProductQuery) { return this.service.list(user, query); }
-  @Get(':id') get(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.get(user, id); }
-  @Post() create(@CurrentUser() user: AuthUser, @Body() dto: ProductDto) { return this.service.create(user, dto); }
+
+  @Public()
+  @Get('catalog/subcategories')
+  catalog() {
+    return this.service.catalog();
+  }
+
+  @Get() list(@CurrentUser() user: AuthUser, @Query() query: ProductQuery) {
+    return this.service.list(user, query);
+  }
+  @Get(':id') get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.get(user, id);
+  }
+  @Post() create(@CurrentUser() user: AuthUser, @Body() dto: ProductDto) {
+    return this.service.create(user, dto);
+  }
   @Patch(':id') update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.service.update(user, id, dto);
   }
-  @Post(':id/publish') publish(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.status(user, id, 'ACTIVE'); }
-  @Delete(':id') archive(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.service.status(user, id, 'ARCHIVED'); }
+  @Post(':id/publish') publish(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.status(user, id, 'ACTIVE');
+  }
+  @Delete(':id') archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.status(user, id, 'ARCHIVED');
+  }
 }
 
 @Module({ controllers: [MarketplaceController], providers: [MarketplaceService] })

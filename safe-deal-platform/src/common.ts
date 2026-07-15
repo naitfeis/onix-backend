@@ -12,6 +12,21 @@ export interface AuthUser {
   telegramId: bigint;
   onixId: string;
   isAdmin: boolean;
+  /** SUPPORT staff (or admin). Used for tickets/refunds — not a bypass of Escrow. */
+  isSupport: boolean;
+}
+
+/** Admin or dedicated SUPPORT agent. */
+export function canActAsSupport(user: Pick<AuthUser, 'isAdmin' | 'isSupport'>): boolean {
+  return user.isAdmin || user.isSupport;
+}
+
+/** Resolve SUPPORT flag from env (comma-separated Telegram IDs) + admin. */
+export function resolveIsSupport(telegramId: bigint, isAdmin: boolean): boolean {
+  if (isAdmin) return true;
+  const raw = process.env.SUPPORT_TELEGRAM_IDS ?? '';
+  const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return ids.includes(telegramId.toString());
 }
 
 export type AuthRequest = { user: AuthUser; headers: Record<string, string | undefined> };

@@ -28,6 +28,7 @@ model User {
   lastSeenAt        DateTime  @default(now())
   lastLoginAt       DateTime?
   isAdmin           Boolean   @default(false)
+  isSupport         Boolean   @default(false)
   deletedAt         DateTime?
   mergedIntoUserId  BigInt?
   createdAt         DateTime  @default(now())
@@ -48,6 +49,7 @@ model User {
   reviewsAuthored Review[]       @relation("ReviewAuthor")
   reviewsReceived Review[]       @relation("ReviewSubject")
   auditLogs       AuditLog[]     @relation("AuditActor")
+  supportTickets  SupportTicket[]
   identityLinks   IdentityLink[]
   sessions        Session[]
   userRoles       UserRole[]
@@ -57,25 +59,30 @@ model User {
 }
 
 model Product {
-  id          String          @id @default(cuid())
-  title       String          @db.VarChar(255)
-  description String?         @db.VarChar(1500)
-  priceCents  BigInt
-  category    ProductCategory
-  subcategory String?         @db.VarChar(100)
-  quantity    Int             @default(1)
-  status      ProductStatus   @default(ACTIVE)
-  sellerId    BigInt
-  publishedAt DateTime        @default(now())
-  expiresAt   DateTime
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                 String              @id @default(cuid())
+  title              String              @db.VarChar(255)
+  description        String?             @db.VarChar(1500)
+  priceCents         BigInt
+  category           ProductCategory
+  subcategory        ProductSubcategory?
+  quantity           Int                 @default(1)
+  status             ProductStatus       @default(ACTIVE)
+  autoDeliver         Boolean             @default(false)
+  deliveryCiphertext String?             @db.Text
+  deliveryIv         String?             @db.VarChar(64)
+  deliveryConsumedAt DateTime?
+  sellerId           BigInt
+  publishedAt        DateTime            @default(now())
+  expiresAt          DateTime
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   seller    User       @relation(fields: [sellerId], references: [id])
   orders    Order[]
   favorites Favorite[]
 
   @@index([category, status, createdAt])
+  @@index([category, subcategory, status])
   @@index([sellerId, status])
   @@index([title])
 }
@@ -124,6 +131,7 @@ model Order {
   ledgerEntries LedgerEntry[]
   chat          Chat?
   reviews       Review[]
+  supportTickets SupportTicket[]
 
   @@index([buyerId, status])
   @@index([sellerId, status])
@@ -160,13 +168,14 @@ model LedgerEntry {
 }
 
 model Chat {
-  id        String       @id @default(cuid())
-  orderId   BigInt?      @unique
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
-  order     Order?       @relation(fields: [orderId], references: [id])
+  id        String          @id @default(cuid())
+  orderId   BigInt?         @unique
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  order     Order?          @relation(fields: [orderId], references: [id])
   members   ChatMember[]
   messages  Message[]
+  tickets   SupportTicket[]
 }
 
 model ChatMember {
@@ -182,15 +191,33 @@ model ChatMember {
 }
 
 model Message {
-  id        BigInt   @id @default(autoincrement())
+  id        BigInt      @id @default(autoincrement())
   chatId    String
-  senderId  BigInt
-  text      String   @db.VarChar(2000)
-  createdAt DateTime @default(now())
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender    User     @relation(fields: [senderId], references: [id])
+  senderId  BigInt?
+  kind      MessageKind @default(USER)
+  text      String      @db.VarChar(2000)
+  createdAt DateTime    @default(now())
+  chat      Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User?       @relation(fields: [senderId], references: [id])
 
   @@index([chatId, createdAt])
+}
+
+model SupportTicket {
+  id         String              @id @default(cuid())
+  orderId    BigInt
+  chatId     String
+  openedById BigInt
+  status     SupportTicketStatus @default(OPEN)
+  createdAt  DateTime            @default(now())
+  closedAt   DateTime?
+  order      Order               @relation(fields: [orderId], references: [id])
+  chat       Chat                @relation(fields: [chatId], references: [id])
+  openedBy   User                @relation(fields: [openedById], references: [id])
+
+  @@index([orderId, status])
+  @@index([chatId])
+  @@index([status, createdAt])
 }
 
 model UserBlock {
@@ -616,6 +643,44 @@ enum ProductCategory {
   RP_PROJECTS
   BRAWL_STARS
   OTHER
+}
+
+enum ProductSubcategory {
+  STANDOFF_GOLD
+  STANDOFF_ACCOUNTS
+  STANDOFF_SKINS
+  STANDOFF_OTHER
+  STEAM_TOPUP
+  STEAM_ACCOUNTS
+  STEAM_KEYS
+  STEAM_SKINS
+  STEAM_OTHER
+  ROBLOX_ROBUX
+  ROBLOX_ACCOUNTS
+  ROBLOX_ITEMS
+  ROBLOX_OTHER
+  RP_VIRTS
+  RP_ACCOUNTS
+  RP_ITEMS
+  RP_OTHER
+  BRAWL_DONATE
+  BRAWL_ACCOUNTS
+  BRAWL_BOOST
+  BRAWL_OTHER
+  OTHER_ACCOUNTS
+  OTHER_ITEMS
+  OTHER_BOOST
+  OTHER_MISC
+}
+
+enum MessageKind {
+  USER
+  SYSTEM
+}
+
+enum SupportTicketStatus {
+  OPEN
+  CLOSED
 }
 
 enum OrderStatus {

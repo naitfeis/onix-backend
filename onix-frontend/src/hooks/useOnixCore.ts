@@ -164,12 +164,20 @@ export function useOnixCore() {
       quantity: draft.quantity,
       category: draft.category,
       subcategory: draft.subcategory.trim() || undefined,
+      autoDeliver: Boolean(draft.autoDeliver),
+      ...(draft.autoDeliver && draft.deliveryText?.trim()
+        ? { deliveryText: draft.deliveryText.trim() }
+        : {}),
     }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
 
   const updateProduct = useCallback((id: string, draft: ProductDraft) => run('product-form', () =>
     api.patch<Product>(API_PATHS.productUpdate(id), {
       title: draft.title.trim(), description: draft.description.trim(), priceCents: cents(draft.priceRubles),
       quantity: draft.quantity, category: draft.category, subcategory: draft.subcategory.trim() || undefined,
+      autoDeliver: Boolean(draft.autoDeliver),
+      ...(draft.autoDeliver && draft.deliveryText?.trim()
+        ? { deliveryText: draft.deliveryText.trim() }
+        : {}),
     }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
 
   const archiveProduct = useCallback((id: string) => run(`archive-${id}`, () =>
@@ -225,6 +233,18 @@ export function useOnixCore() {
     api.post<ChatThread>(API_PATHS.directChat, { onixId }),
   () => void load('chats', API_PATHS.chats)), [load, run]);
 
+  const openSupport = useCallback((dealId: string, reason?: string) => run(`support-${dealId}`, () =>
+    api.post<{ ticketId: string; chatId: string }>(API_PATHS.orderSupport(dealId), {
+      ...(reason ? { reason } : {}),
+    }), () => {
+      void load('chats', API_PATHS.chats);
+      void load('deals', API_PATHS.orders);
+    }), [load, run]);
+
+  const supportRefund = useCallback((dealId: string, reason?: string) => run(`refund-${dealId}`, () =>
+    api.post(API_PATHS.supportRefund(dealId), { ...(reason ? { reason } : {}) }),
+  () => void load('deals', API_PATHS.orders)), [load, run]);
+
   const withdraw = useCallback((amountRubles: number) => run('withdraw', () =>
     api.post(API_PATHS.walletWithdraw, { amountCents: cents(amountRubles), idempotencyKey: crypto.randomUUID() }), loadProfile), [loadProfile, run]);
 
@@ -244,13 +264,13 @@ export function useOnixCore() {
   const adminAction = useCallback((action: 'ban' | 'unban', userId: string) => run(`admin-${action}`, () =>
     api.patch(API_PATHS.adminBan(userId), { banned: action === 'ban' })), [run]);
 
-  const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0) +
-    store.notifications.filter(item => !item.read).length, [store.chats, store.notifications]);
+  // Badge: chat unread only (in-app notifications stay for API/history; UI tab removed).
+  const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
     profile, ...store, states, errors, messages, actionBusy, unread,
     refreshAll, loadProfile, loadMessages, listProducts, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, startChat, sendMessage, withdraw, submitReview,
+    toggleFollow, purchase, dealAction, openSupport, supportRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction,
   };
 }

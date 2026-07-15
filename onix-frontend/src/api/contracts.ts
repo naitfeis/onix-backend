@@ -24,6 +24,7 @@ export interface Product {
   category: string;
   subcategory?: string;
   status: ProductStatus;
+  autoDeliver?: boolean;
   seller: Seller;
   favorite?: boolean;
   createdAt: string;
@@ -40,17 +41,29 @@ export interface Deal {
   canReview?: boolean;
 }
 
+export interface OrderCard {
+  id: string;
+  productTitle: string;
+  totalAmountCents: string;
+  status: DealStatus;
+  escrow: boolean;
+}
+
 export interface ChatThread {
   id: string;
   title: string;
   subtitle?: string;
   unreadCount: number;
   dealId?: string;
+  peerOnixId?: string;
+  peerLastOnline?: string;
+  orderCard?: OrderCard;
 }
 
 export interface Message {
   id: string;
   threadId: string;
+  kind?: 'USER' | 'SYSTEM';
   sender: Pick<Seller, 'id' | 'username'>;
   text: string;
   createdAt: string;
@@ -79,8 +92,13 @@ export interface Profile extends Seller {
   bio?: string;
   balanceCents: string;
   isAdmin: boolean;
-  roles: Array<'USER' | 'ADMIN'>;
+  roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
   walletHistory: WalletOperation[];
+}
+
+export interface PublicProfile extends Seller {
+  bio?: string | null;
+  createdAt?: string;
 }
 
 export interface Review {
@@ -105,6 +123,8 @@ export interface ProductDraft {
   quantity: number;
   category: string;
   subcategory: string;
+  autoDeliver?: boolean;
+  deliveryText?: string;
 }
 
 export type ProductListSort = 'newest' | 'price_asc' | 'price_desc' | 'rating';
@@ -148,14 +168,19 @@ export const API_PATHS = {
   dealDeliver: (id: string) => `/api/orders/${encodeURIComponent(id)}/deliver`,
   dealComplete: (id: string) => `/api/orders/${encodeURIComponent(id)}/complete`,
   dealDispute: (id: string) => `/api/orders/${encodeURIComponent(id)}/dispute`,
+  orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
+  supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
+  supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   chats: '/api/chats',
   directChat: '/api/chats/direct',
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
+  userPublic: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}`,
   reviews: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/reviews`,
   reviewCreate: (orderId: string) => `/api/orders/${encodeURIComponent(orderId)}/reviews`,
   walletWithdraw: '/api/wallet/withdrawals',
   notifications: '/api/notifications',
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
+  subcategories: '/api/products/catalog/subcategories',
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
 } as const;
 
@@ -164,3 +189,36 @@ export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
   STANDOFF_2: 'Standoff 2', STEAM: 'Steam', ROBLOX: 'Roblox',
   RP_PROJECTS: 'RP проекты', BRAWL_STARS: 'Brawl Stars', OTHER: 'Другое',
 };
+
+/** Prisma ProductSubcategory labels (not free-text). */
+export const SUBCATEGORIES_BY_CATEGORY: Record<(typeof CATEGORIES)[number], string[]> = {
+  STANDOFF_2: ['STANDOFF_GOLD', 'STANDOFF_ACCOUNTS', 'STANDOFF_SKINS', 'STANDOFF_OTHER'],
+  STEAM: ['STEAM_TOPUP', 'STEAM_ACCOUNTS', 'STEAM_KEYS', 'STEAM_SKINS', 'STEAM_OTHER'],
+  ROBLOX: ['ROBLOX_ROBUX', 'ROBLOX_ACCOUNTS', 'ROBLOX_ITEMS', 'ROBLOX_OTHER'],
+  RP_PROJECTS: ['RP_VIRTS', 'RP_ACCOUNTS', 'RP_ITEMS', 'RP_OTHER'],
+  BRAWL_STARS: ['BRAWL_DONATE', 'BRAWL_ACCOUNTS', 'BRAWL_BOOST', 'BRAWL_OTHER'],
+  OTHER: ['OTHER_ACCOUNTS', 'OTHER_ITEMS', 'OTHER_BOOST', 'OTHER_MISC'],
+};
+
+export const SUBCATEGORY_LABELS: Record<string, string> = {
+  STANDOFF_GOLD: 'Gold', STANDOFF_ACCOUNTS: 'Аккаунты', STANDOFF_SKINS: 'Скины', STANDOFF_OTHER: 'Другое',
+  STEAM_TOPUP: 'Пополнение', STEAM_ACCOUNTS: 'Аккаунты', STEAM_KEYS: 'Ключи', STEAM_SKINS: 'Скины', STEAM_OTHER: 'Другое',
+  ROBLOX_ROBUX: 'Robux', ROBLOX_ACCOUNTS: 'Аккаунты', ROBLOX_ITEMS: 'Предметы', ROBLOX_OTHER: 'Другое',
+  RP_VIRTS: 'Вирты', RP_ACCOUNTS: 'Аккаунты', RP_ITEMS: 'Предметы', RP_OTHER: 'Другое',
+  BRAWL_DONATE: 'Донат', BRAWL_ACCOUNTS: 'Аккаунты', BRAWL_BOOST: 'Буст', BRAWL_OTHER: 'Другое',
+  OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
+};
+
+/** lastSeen display — precise online arrives with WebSocket (5.6). */
+export function formatLastSeen(iso?: string | null): string {
+  if (!iso) return 'был(а) недавно';
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return 'был(а) недавно';
+  const diffMs = Date.now() - at;
+  if (diffMs < 2 * 60_000) return 'Online';
+  if (diffMs < 60 * 60_000) return `Был ${Math.max(1, Math.round(diffMs / 60_000))} минут назад`;
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  if (at >= dayStart.getTime() - 86400_000 && at < dayStart.getTime()) return 'Был вчера';
+  return `Был ${new Date(iso).toLocaleDateString('ru-RU')}`;
+}

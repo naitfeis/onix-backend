@@ -1,0 +1,35 @@
+﻿CREATE TYPE "ProductSubcategory" AS ENUM (
+  'STANDOFF_GOLD','STANDOFF_ACCOUNTS','STANDOFF_SKINS','STANDOFF_OTHER',
+  'STEAM_TOPUP','STEAM_ACCOUNTS','STEAM_KEYS','STEAM_SKINS','STEAM_OTHER',
+  'ROBLOX_ROBUX','ROBLOX_ACCOUNTS','ROBLOX_ITEMS','ROBLOX_OTHER',
+  'RP_VIRTS','RP_ACCOUNTS','RP_ITEMS','RP_OTHER',
+  'BRAWL_DONATE','BRAWL_ACCOUNTS','BRAWL_BOOST','BRAWL_OTHER',
+  'OTHER_ACCOUNTS','OTHER_ITEMS','OTHER_BOOST','OTHER_MISC'
+);
+CREATE TYPE "MessageKind" AS ENUM ('USER','SYSTEM');
+CREATE TYPE "SupportTicketStatus" AS ENUM ('OPEN','CLOSED');
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isSupport" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "autoDeliver" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "deliveryCiphertext" TEXT;
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "deliveryIv" VARCHAR(64);
+ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "deliveryConsumedAt" TIMESTAMP(3);
+UPDATE "Product" SET "subcategory" = NULL;
+ALTER TABLE "Product" ALTER COLUMN "subcategory" TYPE "ProductSubcategory" USING NULL;
+CREATE INDEX IF NOT EXISTS "Product_category_subcategory_status_idx" ON "Product"("category","subcategory","status");
+ALTER TABLE "Message" ALTER COLUMN "senderId" DROP NOT NULL;
+ALTER TABLE "Message" ADD COLUMN IF NOT EXISTS "kind" "MessageKind" NOT NULL DEFAULT 'USER';
+CREATE TABLE IF NOT EXISTS "SupportTicket" (
+  "id" TEXT PRIMARY KEY,
+  "orderId" BIGINT NOT NULL,
+  "chatId" TEXT NOT NULL,
+  "openedById" BIGINT NOT NULL,
+  "status" "SupportTicketStatus" NOT NULL DEFAULT 'OPEN',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "closedAt" TIMESTAMP(3),
+  CONSTRAINT "SupportTicket_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "SupportTicket_chatId_fkey" FOREIGN KEY ("chatId") REFERENCES "Chat"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "SupportTicket_openedById_fkey" FOREIGN KEY ("openedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "SupportTicket_orderId_status_idx" ON "SupportTicket"("orderId","status");
+CREATE INDEX IF NOT EXISTS "SupportTicket_chatId_idx" ON "SupportTicket"("chatId");
+CREATE INDEX IF NOT EXISTS "SupportTicket_status_createdAt_idx" ON "SupportTicket"("status","createdAt");

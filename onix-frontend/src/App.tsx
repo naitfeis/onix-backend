@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
-import { loginWithTelegram as legacyLoginWithTelegram, money, friendlyError } from './api/client';
+import { api, loginWithTelegram as legacyLoginWithTelegram, money, friendlyError } from './api/client';
 import {
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
@@ -9,7 +9,10 @@ import {
   startBotLogin,
   waitAndCompleteBotLogin,
 } from './auth';
-import { CATEGORIES, CATEGORY_LABELS, type Deal, type Product, type ProductDraft } from './api/contracts';
+import {
+  API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
+  formatLastSeen, type Deal, type Product, type ProductDraft, type PublicProfile,
+} from './api/contracts';
 import OnixBackground from './components/OnixBackground';
 import UserAvatar from './components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Input, Modal, Select, Skeleton, StateView, Textarea, Toast } from './design-system';
@@ -54,7 +57,11 @@ const TABS: Array<{ id: Screen; icon: string; label: string }> = [
   { id: 'profile', icon: '◉', label: 'ПРОФИЛЬ' },
 ];
 
-const emptyDraft: ProductDraft = { title: '', description: '', priceRubles: '', quantity: 1, category: CATEGORIES[0], subcategory: '' };
+const emptyDraft: ProductDraft = {
+  title: '', description: '', priceRubles: '', quantity: 1,
+  category: CATEGORIES[0], subcategory: SUBCATEGORIES_BY_CATEGORY[CATEGORIES[0]][0],
+  autoDeliver: false, deliveryText: '',
+};
 const dealLabels: Record<Deal['status'], string> = {
   PENDING: 'Ожидает оплаты', PAYMENT_HOLD: 'Деньги в сейфе', DELIVERING: 'Передача товара',
   COMPLETED: 'Завершено', CANCELED: 'Отменено', DISPUTE: 'Открыт спор', REFUNDED: 'Возвращено',
@@ -113,9 +120,9 @@ export default function App() {
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
       <div key={screen} className="screen-transition">
         {screen === 'market' && <Market core={core} switchTo={switchTo} setToast={setToast} />}
-        {screen === 'deals' && <Deals core={core} setToast={setToast} />}
+        {screen === 'deals' && <Deals core={core} switchTo={switchTo} setToast={setToast} />}
         {screen === 'create' && <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />}
-        {screen === 'chat' && <Chats core={core} />}
+        {screen === 'chat' && <Chats core={core} switchTo={switchTo} />}
         {screen === 'profile' && <Profile core={core} switchTo={switchTo} setToast={setToast} />}
       </div>
     </main>
@@ -234,11 +241,12 @@ function SectionHeader({ title, subtitle, action }: { title: string; subtitle: s
 }
 
 function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
+  const [selected, setSelected] = useState<Product | null>(null);
+  const [confirm, setConfirm] = useState<Product | null>(null);
+  const [sellerProfile, setSellerProfile] = useState<PublicProfile | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Все');
   const [sort, setSort] = useState('new');
-  const [selected, setSelected] = useState<Product | null>(null);
-  const [confirm, setConfirm] = useState<Product | null>(null);
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
@@ -346,13 +354,19 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username}</b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
-          <Button variant="secondary" onClick={() => void core.toggleFollow(selected.seller.onixId, selected.seller.followed)}>+ Подписаться</Button></Card>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username}</b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+          <div className="card-actions">
+            <Button variant="secondary" onClick={async () => {
+              try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }
+            }}>Профиль продавца</Button>
+            <Button variant="secondary" onClick={() => void core.toggleFollow(selected.seller.onixId, selected.seller.followed)}>+ Подписаться</Button>
+          </div></Card>
         <div className="modal__actions"><Button variant="secondary" onClick={async () => {
           if (await core.startChat(selected.seller.onixId)) switchTo('chat');
         }}>Написать</Button><Button disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>
       </div>}
     </Modal>
+    <PublicProfileModal profile={sellerProfile} onClose={() => setSellerProfile(null)} />
     <Confirm open={Boolean(confirm)} title="Подтвердите покупку" text={confirm ? `${money(confirm.priceCents)} будут безопасно заморожены до получения товара.` : ''} busy={core.actionBusy?.startsWith('purchase')} onCancel={() => setConfirm(null)}
       onConfirm={async () => { if (confirm && await core.purchase(confirm.id)) { setConfirm(null); setSelected(null); setToast('Сделка создана. Деньги в сейфе.'); switchTo('deals'); } }} />
   </div>;
@@ -361,6 +375,7 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
 function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   const [errors, setErrors] = useState<string[]>([]);
+  const subs = SUBCATEGORIES_BY_CATEGORY[draft.category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const next = validateDraft(draft);
@@ -372,21 +387,30 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
     <Card><form className="form" onSubmit={submit}>
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
       <Field label="Название"><Input required minLength={5} maxLength={80} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Например, Butterfly | Fade" /></Field>
-      <Field label="Описание" hint="Не публикуйте пароли и контактные данные"><Textarea required maxLength={1500} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
-      <div className="form-grid"><Field label="Категория"><Select value={draft.category} onChange={event => setDraft({ ...draft, category: event.target.value })}>{CATEGORIES.map(item => <option key={item}>{item}</option>)}</Select></Field>
-        <Field label="Подкатегория"><Input value={draft.subcategory} onChange={event => setDraft({ ...draft, subcategory: event.target.value })} /></Field></div>
+      <Field label="Описание" hint="Не публикуйте пароли в описании — используйте автовыдачу"><Textarea required maxLength={1500} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
+      <div className="form-grid"><Field label="Категория"><Select value={draft.category} onChange={event => {
+        const category = event.target.value;
+        const nextSubs = SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
+        setDraft({ ...draft, category, subcategory: nextSubs[0] });
+      }}>{CATEGORIES.map(item => <option key={item} value={item}>{CATEGORY_LABELS[item]}</option>)}</Select></Field>
+        <Field label="Подкатегория"><Select value={draft.subcategory} onChange={event => setDraft({ ...draft, subcategory: event.target.value })}>
+          {subs.map(item => <option key={item} value={item}>{SUBCATEGORY_LABELS[item] ?? item}</option>)}
+        </Select></Field></div>
       <div className="form-grid"><Field label="Цена, ₽"><Input required inputMode="decimal" value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field>
         <Field label="Количество"><Input required type="number" min={1} max={999} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
+      <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
+      {draft.autoDeliver && <Field label="Текст товара" hint="login / password / код / ссылка — выдаётся только после оплаты"><Textarea required maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} /></Field>}
       <div className="summary-line"><span>К получению</span><strong>{draft.priceRubles && Number.isFinite(Number(draft.priceRubles)) ? `${Number(draft.priceRubles).toFixed(2)} ₽` : '—'}</strong></div>
       <Button type="submit" busy={core.actionBusy === 'product-form'}>ОПУБЛИКОВАТЬ ЛОТ</Button>
     </form></Card></div>;
 }
 
-function Deals({ core, setToast }: { core: Core; setToast: (text: string) => void }) {
+function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'dispute' } | null>(null);
   const [reviewDeal, setReviewDeal] = useState<Deal | null>(null);
   const deals = core.deals.filter(deal => deal.role === role);
+  const isSupport = Boolean(core.profile?.roles.includes('SUPPORT') || core.profile?.roles.includes('ADMIN'));
   return <div className="stack"><SectionHeader title="ESCROW ГАРАНТ" subtitle="КОНТРОЛЬ ЗАМОРОЖЕННЫХ СДЕЛОК" />
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
@@ -396,7 +420,14 @@ function Deals({ core, setToast }: { core: Core; setToast: (text: string) => voi
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
-          {!['COMPLETED', 'CANCELED', 'DISPUTE'].includes(deal.status) && <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>}</div>
+          {!['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>}
+          <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
+            if (await core.openSupport(deal.id)) { setToast('Обращение создано. Поддержка в чате.'); switchTo('chat'); }
+          }}>Обратиться в поддержку</Button>
+          {isSupport && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="danger" busy={core.actionBusy === `refund-${deal.id}`} onClick={async () => {
+            if (await core.supportRefund(deal.id, 'Возврат поддержкой')) setToast('Возврат через Escrow выполнен.');
+          }}>Refund</Button>}
+        </div>
         {deal.status === 'COMPLETED' && deal.canReview && <Button variant="secondary" onClick={() => setReviewDeal(deal)}>Оставить отзыв</Button>}
       </Card>)}
     <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : 'Подтвердить передачу?'}
@@ -420,27 +451,53 @@ function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core
   </form></Modal>;
 }
 
-function Chats({ core }: { core: Core }) {
+function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => void }) {
   const [threadId, setThreadId] = useState('');
   const [text, setText] = useState('');
+  const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
   useEffect(() => { if (threadId) void core.loadMessages(threadId); }, [core.loadMessages, threadId]);
   if (core.states.chats === 'loading') return <Card><Skeleton lines={6} /></Card>;
   return <div className="chat-layout">
-    <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}><SectionHeader title="ЧАТЫ" subtitle="СООБЩЕНИЯ И УВЕДОМЛЕНИЯ" />
+    <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}><SectionHeader title="ЧАТЫ" subtitle="СООБЩЕНИЯ СДЕЛОК" />
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
         core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}><span><b>{chat.title}</b><small>{chat.subtitle || 'Открыть диалог'}</small></span>{chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}</button>)}</div>
-    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button><div><b>{thread.title}</b><small>{thread.subtitle}</small></div></div>
+    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button><div>
+      <button type="button" className="linkish" onClick={async () => {
+        if (!thread.peerOnixId) return;
+        try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
+      }}><b>{thread.title}</b></button>
+      <small>{formatLastSeen(thread.peerLastOnline)}</small></div></div>
+      {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
+        <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
+          <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · Escrow</span></div>
+        <Button variant="secondary" onClick={() => switchTo('deals')}>Открыть заказ</Button>
+      </div>}
       <div className="messages">{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
-        <div className={`message ${message.mine ? 'mine' : ''}`} key={message.id}><small>@{message.sender.username}</small><p>{message.text}</p><time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time></div>)}</div>
+        <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
+          {message.kind !== 'SYSTEM' && <small>@{message.sender.username}</small>}
+          {message.kind === 'SYSTEM' && <small>ONIX</small>}
+          <p>{message.text}</p>
+          <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
+        </div>)}</div>
       <form className="composer" onSubmit={async event => { event.preventDefault(); if (await core.sendMessage(thread.id, text)) setText(''); }}><Input value={text} onChange={event => setText(event.target.value)} maxLength={1000} placeholder="Сообщение..." aria-label="Сообщение" /><Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>➤</Button></form>
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
+    <PublicProfileModal profile={peerProfile} onClose={() => setPeerProfile(null)} />
   </div>;
 }
 
+function PublicProfileModal({ profile, onClose }: { profile: PublicProfile | null; onClose: () => void }) {
+  return <Modal open={Boolean(profile)} title="Профиль" onClose={onClose}>
+    {profile && <div className="stack"><div className="seller-row"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} /><div><b>@{profile.username}</b><p className="muted">{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p></div></div>
+      {profile.bio && <p className="muted">{profile.bio}</p>}
+      <div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b></span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div>
+    </div>}
+  </Modal>;
+}
+
 function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
-  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'notifications' | 'reviews' | 'admin'>('overview');
+  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'admin'>('overview');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
@@ -449,21 +506,17 @@ function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: 
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
   const favoriteProducts = core.products.filter(product => product.favorite);
   const ownProducts = core.products.filter(product => product.seller.id === profile.id);
-  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'notifications' | 'reviews' | 'admin'> =
-    profile.roles.includes('ADMIN') ? ['overview', 'listings', 'favorites', 'notifications', 'reviews', 'admin'] : ['overview', 'listings', 'favorites', 'notifications', 'reviews'];
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username}</h1><p>{profile.onixId} · был(а) недавно</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
+  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'admin'> =
+    profile.roles.includes('ADMIN') ? ['overview', 'listings', 'favorites', 'reviews', 'admin'] : ['overview', 'listings', 'favorites', 'reviews'];
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username}</h1><p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
       <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><Button variant="secondary" onClick={() => setWithdrawOpen(true)}>Вывести</Button></div></Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
-      <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', notifications: 'УВЕДОМЛЕНИЯ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
+      <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
     {section === 'favorites' && (favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
       <div className="product-grid">{favoriteProducts.map(item => <Card key={item.id}><h2>{item.title}</h2><div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} /><span>@{item.seller.username}</span></span><strong>{money(item.priceCents)}</strong></div></Card>)}</div>)}
     {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
       <div className="product-grid">{ownProducts.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><strong>{money(item.priceCents)}</strong><Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button></div></Card>)}</div>)}
-    {section === 'notifications' && (core.notifications.length === 0 ? <StateView title="Нет уведомлений" text="Здесь появятся сообщения о товарах, сделках и отзывах." /> :
-      core.notifications.map(item => <Card key={item.id} interactive={!item.read} className={item.read ? 'muted-card' : ''} onClick={() => {
-        if (!item.read) void core.markNotificationRead(item.id);
-      }}><Badge tone={item.read ? 'neutral' : 'warning'}>{item.read ? 'Прочитано' : 'Новое'}</Badge><h2>{item.title}</h2><p className="muted">{item.body}</p></Card>))}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
       core.reviews.map(review => <Card key={review.id}><div className="seller-row"><b>@{review.author.username}</b><span>{'★'.repeat(review.rating)}</span></div><p className="muted">{review.text}</p></Card>))}
     {section === 'admin' && profile.roles.includes('ADMIN') && <Admin core={core} setToast={setToast} />}

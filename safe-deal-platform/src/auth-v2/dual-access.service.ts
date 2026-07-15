@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { AuthUser } from '../common';
+import { resolveIsSupport } from '../common';
 import { isAcceptV2AccessEnabled } from './auth-v2.flags';
 import { SessionService } from './session.service';
 import { TokenService } from './token.service';
@@ -40,6 +41,7 @@ export class DualAccessService {
       telegramId: user.telegramId,
       onixId: user.onixId,
       isAdmin: user.isAdmin,
+      isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
     };
   }
 }

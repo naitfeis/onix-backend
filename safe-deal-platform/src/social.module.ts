@@ -5,27 +5,59 @@ import {
 import { AuthUser, CurrentUser } from './common';
 import { PrismaService } from './prisma.service';
 
+/**
+ * Favorites — own userId only; ACTIVE products only; composite PK prevents duplicates.
+ */
 @Injectable()
-export class SocialService {
+export class FavoritesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  favorite(user: AuthUser, productId: string) {
+  async favorite(user: AuthUser, productId: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, status: true },
+    });
+    if (!product) throw new NotFoundException('Товар не найден.');
+    if (product.status !== 'ACTIVE') {
+      throw new BadRequestException('В избранное можно добавить только активный товар.');
+    }
     return this.prisma.favorite.upsert({
       where: { userId_productId: { userId: user.id, productId } },
-      create: { userId: user.id, productId }, update: {},
+      create: { userId: user.id, productId },
+      update: {},
     });
   }
+
   unfavorite(user: AuthUser, productId: string) {
     return this.prisma.favorite.deleteMany({ where: { userId: user.id, productId } });
   }
+
   favorites(user: AuthUser) {
     return this.prisma.favorite.findMany({
       where: { userId: user.id, product: { status: 'ACTIVE' } },
-      include: { product: { include: { seller: { select: { onixId: true, telegramNick: true } } } } },
+      select: {
+        createdAt: true,
+        product: {
+          select: {
+            id: true,
+            title: true,
+            priceCents: true,
+            status: true,
+            category: true,
+            seller: { select: { onixId: true, telegramNick: true, displayName: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
   }
+}
+
+@Injectable()
+export class SocialService {
+  constructor(private readonly prisma: PrismaService) {}
+
   async follow(user: AuthUser, onixId: string) {
     const seller = await this.target(onixId);
     if (seller.id === user.id) throw new BadRequestException('Нельзя подписаться на себя.');
@@ -59,15 +91,36 @@ export class SocialService {
 
 @Controller()
 export class SocialController {
-  constructor(private readonly service: SocialService) {}
-  @Get('favorites') favorites(@CurrentUser() user: AuthUser) { return this.service.favorites(user); }
-  @Post('favorites/:productId') favorite(@CurrentUser() user: AuthUser, @Param('productId') id: string) { return this.service.favorite(user, id); }
-  @Delete('favorites/:productId') unfavorite(@CurrentUser() user: AuthUser, @Param('productId') id: string) { return this.service.unfavorite(user, id); }
-  @Post('users/:onixId/follow') follow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) { return this.service.follow(user, id); }
-  @Delete('users/:onixId/follow') unfollow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) { return this.service.unfollow(user, id); }
-  @Post('users/:onixId/block') block(@CurrentUser() user: AuthUser, @Param('onixId') id: string) { return this.service.block(user, id); }
-  @Delete('users/:onixId/block') unblock(@CurrentUser() user: AuthUser, @Param('onixId') id: string) { return this.service.unblock(user, id); }
+  constructor(
+    private readonly social: SocialService,
+    private readonly favorites: FavoritesService,
+  ) {}
+
+  @Get('favorites') listFavorites(@CurrentUser() user: AuthUser) { return this.favorites.favorites(user); }
+  @Post('favorites/:productId') addFavorite(@CurrentUser() user: AuthUser, @Param('productId') id: string) {
+    return this.favorites.favorite(user, id);
+  }
+  @Delete('favorites/:productId') removeFavorite(@CurrentUser() user: AuthUser, @Param('productId') id: string) {
+    return this.favorites.unfavorite(user, id);
+  }
+
+  @Post('users/:onixId/follow') follow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.follow(user, id);
+  }
+  @Delete('users/:onixId/follow') unfollow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.unfollow(user, id);
+  }
+  @Post('users/:onixId/block') block(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.block(user, id);
+  }
+  @Delete('users/:onixId/block') unblock(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.unblock(user, id);
+  }
 }
 
-@Module({ controllers: [SocialController], providers: [SocialService] })
+@Module({
+  controllers: [SocialController],
+  providers: [SocialService, FavoritesService],
+  exports: [FavoritesService],
+})
 export class SocialModule {}

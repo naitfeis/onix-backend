@@ -16,13 +16,17 @@ export class ProfilesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getMe(user: AuthUser) {
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastSeenAt: new Date() },
+    });
     const [profile, ledger] = await this.prisma.$transaction([
       this.prisma.user.findUniqueOrThrow({
       where: { id: user.id },
       select: {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         balanceCents: true, ratingAverage: true, ratingCount: true, completedSales: true,
-        lastSeenAt: true, isAdmin: true, _count: { select: { followers: true } },
+        lastSeenAt: true, isAdmin: true, isSupport: true, _count: { select: { followers: true } },
       },
       }),
       this.prisma.ledgerEntry.findMany({

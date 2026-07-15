@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { IsBoolean, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
-import { AuthRequest, AuthUser, CurrentUser, Public, parseId } from './common';
+import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { PrismaService } from './prisma.service';
 
@@ -25,6 +25,18 @@ class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     if (!context.switchToHttp().getRequest<AuthRequest>().user?.isAdmin) {
       throw new ForbiddenException('Требуются права администратора ONIX.');
+    }
+    return true;
+  }
+}
+
+/** Admin or SUPPORT staff — Escrow refund only (no direct balance edits). */
+@Injectable()
+class SupportGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const user = context.switchToHttp().getRequest<AuthRequest>().user;
+    if (!user || !canActAsSupport(user)) {
+      throw new ForbiddenException('Требуются права поддержки ONIX.');
     }
     return true;
   }
@@ -121,7 +133,7 @@ class WalletController {
 @Controller('admin')
 @UseGuards(AdminGuard)
 class AdminController {
-  constructor(private readonly service: OperationsService, private readonly escrow: EscrowService) {}
+  constructor(private readonly service: OperationsService) {}
   @Post('users/:onixId/balance')
   balance(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BalanceDto) {
     return this.service.adjust(actor, id, dto);
@@ -130,6 +142,25 @@ class AdminController {
   ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {
     return this.service.ban(actor, id, dto.banned);
   }
+}
+
+@Controller('support')
+@UseGuards(SupportGuard)
+class SupportOpsController {
+  constructor(private readonly escrow: EscrowService) {}
+
+  /** Refund via Escrow ledger only (incl. COMPLETED clawback). */
+  @Post('orders/:id/refund')
+  refund(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
+    return this.escrow.refundByAdmin(actor, parseId(id), dto.reason);
+  }
+}
+
+/** Backward-compatible admin refund path (same Escrow service). */
+@Controller('admin')
+@UseGuards(SupportGuard)
+class AdminRefundController {
+  constructor(private readonly escrow: EscrowService) {}
   @Post('orders/:id/refund')
   refund(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
     return this.escrow.refundByAdmin(actor, parseId(id), dto.reason);
@@ -147,8 +178,8 @@ class HealthController {
 }
 
 @Module({
-  controllers: [AdminController, HealthController, WalletController],
-  providers: [AdminGuard, OperationsService],
+  controllers: [AdminController, AdminRefundController, SupportOpsController, HealthController, WalletController],
+  providers: [AdminGuard, SupportGuard, OperationsService],
   imports: [EscrowModule],
 })
 export class OperationsModule {}

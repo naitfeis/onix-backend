@@ -5,7 +5,9 @@ import {
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
-import { AuthUser, CurrentUser, parseId } from './common';
+import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
+import { decryptDeliverySecret } from './delivery-crypto';
+import { pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
 import { dealDto } from './response';
 
@@ -91,11 +93,81 @@ export class EscrowService {
           } },
           chat: { create: { members: { create: [{ userId: user.id }, { userId: product.sellerId }] } } },
         },
+        include: { chat: true },
       });
+      const chatId = created.chat!.id;
+      await tx.message.create({
+        data: {
+          chatId,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: [
+            'Заказ создан.',
+            '',
+            'Не подтверждайте получение товара, пока полностью его не проверите.',
+            '',
+            'При любых проблемах нажмите «Обратиться в поддержку».',
+          ].join('\n'),
+        },
+      });
+
+      // Auto-delivery after payment hold — one-time, never via public product API.
+      if (
+        product.autoDeliver
+        && product.deliveryCiphertext
+        && product.deliveryIv
+        && !product.deliveryConsumedAt
+      ) {
+        const payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
+        await tx.message.create({
+          data: {
+            chatId,
+            kind: 'SYSTEM',
+            senderId: null,
+            text: `Автовыдача товара:\n\n${payload}`,
+          },
+        });
+        await tx.product.update({
+          where: { id: product.id },
+          data: {
+            deliveryCiphertext: null,
+            deliveryIv: null,
+            deliveryConsumedAt: new Date(),
+            quantity: 0,
+            status: 'SOLD_OUT',
+          },
+        });
+        await tx.order.update({
+          where: { id: created.id },
+          data: { status: 'DELIVERING' },
+        });
+        await tx.orderTransition.create({
+          data: {
+            orderId: created.id,
+            from: 'PAYMENT_HOLD',
+            to: 'DELIVERING',
+            actorId: null,
+            idempotencyKey: `order:${key}:auto-deliver`,
+            reason: 'AUTO_DELIVER',
+          },
+        });
+      }
+
       await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
       await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
       return created;
     }, SERIALIZABLE);
+
+    // Best-effort Telegram (after commit).
+    void this.prisma.user.findUnique({ where: { id: order.sellerId }, select: { telegramId: true } })
+      .then((seller) => {
+        if (seller) void pushTelegramToChatId(seller.telegramId, 'Новая покупка', 'Покупатель оплатил заказ — средства в Escrow.');
+      });
+    void this.prisma.user.findUnique({ where: { id: user.id }, select: { telegramId: true } })
+      .then((buyer) => {
+        if (buyer) void pushTelegramToChatId(buyer.telegramId, 'Заказ создан', 'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.');
+      });
+
     return this.one(user, order.id);
   }
 
@@ -150,6 +222,11 @@ export class EscrowService {
       await this.notify(tx, order.sellerId, 'ORDER_UPDATE', 'Сделка завершена', 'Средства зачислены на баланс.', id);
       await this.audit(tx, user.id, 'ORDER_COMPLETE', id);
     }, SERIALIZABLE);
+    const seller = await this.prisma.user.findUnique({
+      where: { id: (await this.prisma.order.findUniqueOrThrow({ where: { id }, select: { sellerId: true } })).sellerId },
+      select: { telegramId: true },
+    });
+    if (seller) void pushTelegramToChatId(seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
     return this.one(user, id);
   }
 
@@ -184,12 +261,25 @@ export class EscrowService {
       });
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
     }, SERIALIZABLE);
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id },
+      select: { buyerId: true, sellerId: true },
+    });
+    const peers = await this.prisma.user.findMany({
+      where: { id: { in: [order.buyerId, order.sellerId].filter((x) => x !== user.id) } },
+      select: { telegramId: true },
+      take: 2,
+    });
+    for (const peer of peers) {
+      void pushTelegramToChatId(peer.telegramId, 'Открыт спор', reason?.slice(0, 200) ?? 'По сделке открыт спор.');
+    }
     return this.one(user, id);
   }
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
     const key = `order:${id}:admin-refund`;
-    return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'], 'REFUNDED', key, reason);
+    // Support may refund even after COMPLETED (clawback via Escrow ledger only).
+    return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'], 'REFUNDED', key, reason);
   }
 
   private async refund(
@@ -211,7 +301,11 @@ export class EscrowService {
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const participant = order.buyerId === actor.id || order.sellerId === actor.id;
-      if (!participant && !actor.isAdmin) throw new BadRequestException('Нет доступа к сделке.');
+      const support = canActAsSupport(actor);
+      if (!participant && !support) throw new BadRequestException('Нет доступа к сделке.');
+      if (order.status === 'COMPLETED' && !support) {
+        throw new BadRequestException('После завершения возврат доступен только поддержке.');
+      }
       if (order.status === target) return;
       const changed = await tx.order.updateMany({
         where: { id, status: { in: allowed } },
@@ -220,6 +314,24 @@ export class EscrowService {
       if (!changed.count) {
         throw new ConflictException('Возврат невозможен в текущем статусе.');
       }
+
+      // After COMPLETED payout already left escrow → clawback from seller then credit buyer.
+      if (order.status === 'COMPLETED') {
+        const claw = await tx.user.updateMany({
+          where: { id: order.sellerId, balanceCents: { gte: order.payoutCents } },
+          data: { balanceCents: { decrement: order.payoutCents } },
+        });
+        if (!claw.count) throw new BadRequestException('Недостаточно средств у продавца для возврата.');
+        const seller = await tx.user.findUniqueOrThrow({ where: { id: order.sellerId }, select: { balanceCents: true } });
+        await tx.ledgerEntry.create({
+          data: {
+            userId: order.sellerId, orderId: id, type: 'ADMIN_ADJUSTMENT', amountCents: -order.payoutCents,
+            balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:clawback`,
+            description: 'Возврат после COMPLETED (поддержка)',
+          },
+        });
+      }
+
       const ledgerKey = `order:${id}:${target.toLowerCase()}`;
       const existingRefund = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: ledgerKey } });
       if (!existingRefund) {
@@ -233,14 +345,16 @@ export class EscrowService {
           },
         });
       }
-      await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
+      if (order.status !== 'COMPLETED') {
+        await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
+      }
       await tx.orderTransition.create({
         data: { orderId: id, from: order.status, to: target, actorId: actor.id, idempotencyKey: key, reason },
       });
       await this.audit(tx, actor.id, `ORDER_${target}`, id, reason ? { reason } : undefined);
     }, SERIALIZABLE);
 
-    if (actor.isAdmin) {
+    if (canActAsSupport(actor)) {
       const order = await this.prisma.order.findUniqueOrThrow({
         where: { id },
         include: {

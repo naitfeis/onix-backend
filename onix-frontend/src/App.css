@@ -78,6 +78,14 @@
 .chat-layout { min-height: calc(100dvh - 166px); display: grid; grid-template-columns: 1fr; gap: 10px; }.thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .thread { width: 100%; padding: 13px; display: flex; align-items: center; justify-content: space-between; text-align: left; border: 1px solid var(--line); border-radius: 15px; background: #060607; color: var(--text); font: 10px inherit; cursor: pointer; }
 .thread span { display: grid; gap: 4px; }.thread small, .conversation__head small { color: var(--muted); }.thread em, .nav-count { min-width: 18px; height: 18px; padding: 3px; color: #000; background: var(--cyan); border-radius: 50%; font-style: normal; font-size: 8px; text-align: center; }
+.message.system { align-self: stretch; background: transparent; border: 1px dashed color-mix(in srgb, var(--cyan) 35%, transparent); color: var(--muted); text-align: center; }
+.message.system small { color: var(--cyan); }
+.order-card-inline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 12px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--cyan) 25%, transparent); background: color-mix(in srgb, #0a0a0c 88%, var(--cyan)); }
+.order-card-inline div { display: grid; gap: 2px; font-size: 11px; }
+.order-card-inline small { color: var(--muted); }
+.order-card-inline span { color: var(--muted); font-size: 10px; }
+.linkish { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .conversation { min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(2,2,3,.95); overflow: hidden; }.conversation__head { padding: 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }.conversation__head > div { display: grid; gap: 3px; font-size: 10px; }
 .messages { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; }.message { align-self: flex-start; max-width: 84%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px 14px 14px; background: #0a0a0c; font-size: 10px; }
 .message.mine { align-self: flex-end; border-radius: 14px 4px 14px 14px; background: #d8d8db; color: #050505; }.message small { display: block; color: var(--muted); font-size: 8px; margin-bottom: 3px; }.message p { line-height: 1.45; word-break: break-word; }.message time { display: block; text-align: right; opacity: .5; font-size: 7px; margin-top: 4px; }

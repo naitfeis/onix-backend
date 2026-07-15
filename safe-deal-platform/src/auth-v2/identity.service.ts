@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, User } from '@prisma/client';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from '../identity-link';
+import { resolveIsSupport } from '../common';
 import { AuthPlatformError } from './auth-errors';
 import type { VerifiedTelegramIdentity } from './telegram-login.verifier';
 
@@ -20,11 +21,14 @@ export class IdentityService {
 
     let user: User;
     if (existing) {
+      const isAdmin = existing.isAdmin;
+      const isSupport = resolveIsSupport(existing.telegramId, isAdmin);
       user = await tx.user.update({
         where: { id: existing.id },
         data: {
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
+          ...(existing.isSupport !== isSupport ? { isSupport } : {}),
           ...(identity.username !== undefined && identity.username !== existing.telegramNick
             ? { telegramNick: identity.username } : {}),
           ...(identity.firstName !== undefined && identity.firstName !== existing.firstName
@@ -36,6 +40,7 @@ export class IdentityService {
         },
       });
     } else {
+      const isAdmin = process.env.ADMIN_TELEGRAM_ID === identity.telegramId.toString();
       const created = await tx.user.create({
         data: {
           telegramId: identity.telegramId,
@@ -47,7 +52,8 @@ export class IdentityService {
           avatarUrl: identity.photoUrl,
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
-          isAdmin: process.env.ADMIN_TELEGRAM_ID === identity.telegramId.toString(),
+          isAdmin,
+          isSupport: resolveIsSupport(identity.telegramId, isAdmin),
         },
       });
       user = await tx.user.update({

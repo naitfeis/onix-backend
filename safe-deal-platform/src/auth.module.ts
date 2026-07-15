@@ -7,7 +7,7 @@ import type { Prisma } from '@prisma/client';
 import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'class-validator';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
-import { AuthRequest, AuthUser, Public } from './common';
+import { AuthRequest, AuthUser, Public, resolveIsSupport } from './common';
 import { AuthPlatformError } from './auth-v2/auth-errors';
 import { AuthOrchestrator, type LegacyAuthSource } from './auth-v2/auth-orchestrator.service';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
@@ -102,7 +102,13 @@ export class AuthService {
       if (payload.exp <= Math.floor(Date.now() / 1000)) throw new Error('expired');
       const user = await this.prisma.user.findUnique({ where: { id: BigInt(payload.sub) } });
       if (!user || user.deletedAt) throw new Error('inactive');
-      return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
+      return {
+        id: user.id,
+        telegramId: user.telegramId,
+        onixId: user.onixId,
+        isAdmin: user.isAdmin,
+        isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
+      };
     } catch (error) {
       console.error(formatErrorForLog(error));
       throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
@@ -130,6 +136,10 @@ export class AuthService {
               languageCode: identity.languageCode, displayName, avatarUrl: identity.photoUrl,
               lastSeenAt: loggedInAt, lastLoginAt: loggedInAt,
               isAdmin: process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
+              isSupport: resolveIsSupport(
+                identity.id,
+                process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
+              ),
             },
           });
           const withOnixId = await tx.user.update({
@@ -151,9 +161,17 @@ export class AuthService {
         if (this.isUniqueConstraint(error)) return this.upsert(identity);
         throw error;
       }
-      return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
+      return this.toAuthUser(user);
     }
     if (user.deletedAt) throw new UnauthorizedException('Аккаунт заблокирован.');
+    // Keep isSupport in sync with env (additive — does not change Auth V2).
+    const isSupport = resolveIsSupport(user.telegramId, user.isAdmin);
+    if (user.isSupport !== isSupport) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { isSupport },
+      });
+    }
     await dualWriteTelegramIdentity(this.prisma, {
       userId: user.id,
       telegramId: user.telegramId,
@@ -161,7 +179,17 @@ export class AuthService {
       displayName: user.displayName,
       avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
     });
-    return { id: user.id, telegramId: user.telegramId, onixId: user.onixId, isAdmin: user.isAdmin };
+    return this.toAuthUser(user);
+  }
+
+  private toAuthUser(user: { id: bigint; telegramId: bigint; onixId: string; isAdmin: boolean; isSupport: boolean }): AuthUser {
+    return {
+      id: user.id,
+      telegramId: user.telegramId,
+      onixId: user.onixId,
+      isAdmin: user.isAdmin,
+      isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
+    };
   }
 
   private profileChanges(

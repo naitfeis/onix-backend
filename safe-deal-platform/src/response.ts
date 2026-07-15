@@ -26,7 +26,7 @@ export interface ProfileDto {
   followersCount: number;
   lastOnline: string;
   isAdmin: boolean;
-  roles: Array<'USER' | 'ADMIN'>;
+  roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
   balanceCents: string;
   walletHistory: LedgerDto[];
 }
@@ -49,6 +49,7 @@ export interface ProductDto {
   category: string;
   subcategory?: string;
   status: string;
+  autoDeliver?: boolean;
   seller: ReturnType<typeof sellerDto>;
   favorite: boolean;
   createdAt: string;
@@ -69,15 +70,23 @@ export function sellerDto(user: PublicUser) {
 }
 
 export function profileDto(
-  user: PublicUser & { balanceCents: bigint; isAdmin: boolean; bio?: string | null },
+  user: PublicUser & {
+    balanceCents: bigint;
+    isAdmin: boolean;
+    isSupport?: boolean;
+    bio?: string | null;
+  },
   ledger: Array<{ id: bigint; type: string; amountCents: bigint; createdAt: Date }>,
 ): ProfileDto {
+  const roles: ProfileDto['roles'] = ['USER'];
+  if (user.isAdmin) roles.push('ADMIN');
+  if (user.isSupport || user.isAdmin) roles.push('SUPPORT');
   return {
     ...sellerDto(user),
     ...(user.bio ? { bio: user.bio } : {}),
     balanceCents: user.balanceCents.toString(),
     isAdmin: user.isAdmin,
-    roles: user.isAdmin ? ['USER', 'ADMIN'] : ['USER'],
+    roles,
     walletHistory: ledger.map(ledgerDto),
   };
 }
@@ -101,6 +110,7 @@ export function productDto(product: {
   category: string;
   subcategory: string | null;
   status: string;
+  autoDeliver?: boolean;
   createdAt: Date;
   seller: PublicUser;
   favorites?: Array<{ userId: bigint }>;
@@ -114,6 +124,7 @@ export function productDto(product: {
     category: product.category,
     ...(product.subcategory ? { subcategory: product.subcategory } : {}),
     status: product.status,
+    autoDeliver: Boolean(product.autoDeliver),
     seller: sellerDto(product.seller),
     favorite: Boolean(viewerId && product.favorites?.some((item) => item.userId === viewerId)),
     createdAt: product.createdAt.toISOString(),
@@ -148,21 +159,24 @@ export function dealDto(order: {
 export function messageDto(message: {
   id: bigint;
   chatId: string;
-  senderId: bigint;
+  senderId: bigint | null;
+  kind?: string;
   text: string;
   createdAt: Date;
-  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'>;
+  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'> | null;
 }, viewerId: bigint) {
+  const system = message.kind === 'SYSTEM' || message.senderId == null;
   return {
     id: message.id.toString(),
     threadId: message.chatId,
+    kind: system ? 'SYSTEM' as const : 'USER' as const,
     sender: {
-      id: message.sender.id.toString(),
-      username: message.sender.telegramNick ?? message.sender.displayName ?? message.sender.onixId,
+      id: system ? '0' : message.sender!.id.toString(),
+      username: system ? 'ONIX' : (message.sender!.telegramNick ?? message.sender!.displayName ?? message.sender!.onixId),
     },
     text: message.text,
     createdAt: message.createdAt.toISOString(),
-    mine: message.senderId === viewerId,
+    mine: !system && message.senderId === viewerId,
   };
 }
 
