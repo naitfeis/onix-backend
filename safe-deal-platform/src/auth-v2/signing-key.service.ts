@@ -66,13 +66,17 @@ export class SigningKeyService {
       return this.cached;
     }
 
+    // Render one-line env: literal "\n" must become real newlines before OpenSSL decode.
+    const privateKeyPem = normalizePem(privatePem);
+    const publicKeyPem = normalizePem(publicPem);
+
     const keys: ResolvedSigningKey[] = [
       {
         kid,
         algorithm: 'EdDSA',
         role: 'CURRENT',
-        privateKey: createPrivateKey(privatePem),
-        publicKey: createPublicKey(publicPem),
+        privateKey: createPrivateKey(privateKeyPem),
+        publicKey: createPublicKey(publicKeyPem),
       },
     ];
 
@@ -83,11 +87,16 @@ export class SigningKeyService {
         kid: prevKid,
         algorithm: 'EdDSA',
         role: 'PREVIOUS',
-        publicKey: createPublicKey(prevPublic),
+        publicKey: createPublicKey(normalizePem(prevPublic)),
       });
     }
 
     this.cached = keys;
-    return keys;
+    return this.cached;
   }
+}
+
+/** Additive: `-----BEGIN...\\nBASE64...` (Render) → standard PEM for createPrivateKey. */
+function normalizePem(value: string): string {
+  return value.trim().replace(/\\n/g, '\n');
 }
