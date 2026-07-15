@@ -178,6 +178,7 @@ model ChatMember {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([chatId, userId])
+  @@index([userId])
 }
 
 model Message {
