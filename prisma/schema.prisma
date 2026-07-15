@@ -332,6 +332,15 @@ enum AccountMergeStatus {
   FAILED
 }
 
+/// Website bot-login challenge state machine (ONIX Identity Platform Phase D).
+enum LoginChallengeStatus {
+  CREATED
+  OPENED
+  CONFIRMED
+  CONSUMED
+  EXPIRED
+}
+
 model IdentityLink {
   id              String       @id @default(cuid())
   userId          BigInt
@@ -563,6 +572,33 @@ model IdempotencyRecord {
 
   @@unique([key, route])
   @@index([expiresAt])
+}
+
+/// Ephemeral Website Telegram bot-login challenge (not a Session; not an ONIX User).
+model LoginChallenge {
+  id                      String               @id @default(cuid())
+  nonce                   String               @unique @db.VarChar(64)
+  browserFingerprintHash  String?              @db.VarChar(64)
+  loginSessionId          String               @db.VarChar(64)
+  status                  LoginChallengeStatus @default(CREATED)
+  expiresAt               DateTime
+  telegramId              BigInt?
+  telegramUsername        String?              @db.VarChar(64)
+  telegramFirstName       String?              @db.VarChar(120)
+  telegramLastName        String?              @db.VarChar(120)
+  telegramPhotoUrl        String?              @db.VarChar(500)
+  confirmedAt             DateTime?
+  consumedAt              DateTime?
+  exchangeCodeHash        String?              @unique @db.VarChar(64)
+  exchangeExpiresAt       DateTime?
+  createdIp               String?              @db.VarChar(64)
+  createdUserAgent        String?              @db.VarChar(512)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+
+  @@index([loginSessionId, status])
+  @@index([status, expiresAt])
+  @@index([telegramId])
 }
 
 enum ProductStatus {

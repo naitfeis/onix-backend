@@ -1,0 +1,116 @@
+import { createHash, randomBytes } from 'crypto';
+import { Injectable } from '@nestjs/common';
+import type { LoginChallenge, LoginChallengeStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { LOGIN_CHALLENGE_TTL_MS, LOGIN_EXCHANGE_TTL_MS } from './login-challenge.flags';
+
+export type CreateChallengeInput = {
+  loginSessionId: string;
+  browserFingerprintHash?: string;
+  createdIp?: string;
+  createdUserAgent?: string;
+};
+
+@Injectable()
+export class LoginChallengeRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(input: CreateChallengeInput): Promise<LoginChallenge> {
+    const now = new Date();
+    return this.prisma.loginChallenge.create({
+      data: {
+        nonce: randomBytes(32).toString('hex'),
+        loginSessionId: input.loginSessionId,
+        browserFingerprintHash: input.browserFingerprintHash,
+        createdIp: input.createdIp,
+        createdUserAgent: input.createdUserAgent,
+        status: 'CREATED',
+        expiresAt: new Date(now.getTime() + LOGIN_CHALLENGE_TTL_MS),
+      },
+    });
+  }
+
+  findById(id: string): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findUnique({ where: { id } });
+  }
+
+  findByNonce(nonce: string): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findUnique({ where: { nonce } });
+  }
+
+  findByExchangeCodeHash(hash: string): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findUnique({ where: { exchangeCodeHash: hash } });
+  }
+
+  async transition(
+    id: string,
+    from: LoginChallengeStatus[],
+    data: Prisma.LoginChallengeUpdateManyMutationInput,
+  ): Promise<LoginChallenge> {
+    const result = await this.prisma.loginChallenge.updateMany({
+      where: { id, status: { in: from } },
+      data,
+    });
+    if (result.count !== 1) {
+      throw new AuthPlatformError(
+        'AUTH_LOGIN_CHALLENGE_STATE',
+        'Login challenge cannot transition from its current state.',
+      );
+    }
+    const row = await this.findById(id);
+    if (!row) {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'Login challenge not found.');
+    }
+    return row;
+  }
+
+  async markOpened(id: string): Promise<LoginChallenge> {
+    return this.transition(id, ['CREATED', 'OPENED'], { status: 'OPENED' });
+  }
+
+  async markConfirmed(
+    id: string,
+    profile: {
+      telegramId: bigint;
+      telegramUsername?: string;
+      telegramFirstName?: string;
+      telegramLastName?: string;
+      telegramPhotoUrl?: string;
+    },
+  ): Promise<{ challenge: LoginChallenge; exchangeCode: string }> {
+    const exchangeCode = randomBytes(32).toString('hex');
+    const exchangeCodeHash = sha256Hex(exchangeCode);
+    const challenge = await this.transition(id, ['CREATED', 'OPENED'], {
+      status: 'CONFIRMED',
+      telegramId: profile.telegramId,
+      telegramUsername: profile.telegramUsername,
+      telegramFirstName: profile.telegramFirstName,
+      telegramLastName: profile.telegramLastName,
+      telegramPhotoUrl: profile.telegramPhotoUrl,
+      confirmedAt: new Date(),
+      exchangeCodeHash,
+      exchangeExpiresAt: new Date(Date.now() + LOGIN_EXCHANGE_TTL_MS),
+    });
+    return { challenge, exchangeCode };
+  }
+
+  async markConsumed(id: string): Promise<LoginChallenge> {
+    return this.transition(id, ['CONFIRMED'], {
+      status: 'CONSUMED',
+      consumedAt: new Date(),
+      exchangeCodeHash: null,
+      exchangeExpiresAt: null,
+    });
+  }
+
+  async markExpired(id: string): Promise<LoginChallenge> {
+    return this.transition(id, ['CREATED', 'OPENED', 'CONFIRMED'], {
+      status: 'EXPIRED',
+    });
+  }
+}
+
+export function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}

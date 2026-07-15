@@ -43,56 +43,11 @@ export class AuthOrchestrator {
   }> {
     try {
       const identity = this.telegram.verify(command.telegram);
-
-      const { user, session, refreshToken, trustedDevice } = await this.prisma.$transaction(async (tx) => {
-        const user = await this.identities.upsertTelegramUser(tx, identity);
-        const created = await this.sessions.createSessionInTransaction(tx, user, {
-          userId: user.id,
-          rememberMe: command.rememberMe,
-          device: command.device,
-          provider: 'TELEGRAM',
-          amr: ['telegram'],
-        });
-        return { user, ...created };
+      return await this.loginWithVerifiedTelegramIdentity(identity, {
+        rememberMe: command.rememberMe,
+        device: command.device,
+        amr: ['telegram'],
       });
-
-      const tokens = this.sessions.issueTokensForSession(
-        user, session.id, refreshToken, ['telegram'], trustedDevice,
-      );
-
-      this.logger.log(JSON.stringify({
-        msg: 'auth_v2_login_success',
-        userId: user.id.toString(),
-        sessionId: session.id,
-        provider: 'TELEGRAM',
-      }));
-
-      await this.events.publish('UserLoggedIn.v1', {
-        userId: user.id.toString(),
-        sessionId: session.id,
-        provider: 'TELEGRAM',
-      });
-      await this.events.publish('SessionCreated.v1', {
-        userId: user.id.toString(),
-        sessionId: session.id,
-        familyId: session.familyId,
-      });
-
-      return {
-        session,
-        user: {
-          id: user.id,
-          onixId: user.onixId,
-          sessionVersion: user.sessionVersion,
-          permissionVersion: user.permissionVersion,
-          isAdmin: user.isAdmin,
-          deletedAt: user.deletedAt,
-        },
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        trustedDevice,
-        refreshMaxAgeSeconds: refreshMaxAgeSeconds(session.rememberMe),
-      };
     } catch (error) {
       this.logger.warn(JSON.stringify({
         msg: 'auth_v2_login_failed',
@@ -103,6 +58,67 @@ export class AuthOrchestrator {
       });
       throw error;
     }
+  }
+
+  /**
+   * Issue Website Session for an already-verified Telegram identity (bot LoginChallenge, etc.).
+   * Does not change SessionService / TokenService — reuses createSessionInTransaction + issueTokens.
+   */
+  async loginWithVerifiedTelegramIdentity(
+    identity: import('./telegram-login.verifier').VerifiedTelegramIdentity,
+    options?: { rememberMe?: boolean; device?: DeviceContext; amr?: string[] },
+  ): Promise<SessionAuthResult & { refreshMaxAgeSeconds: number }> {
+    const amr = options?.amr ?? ['telegram'];
+    const { user, session, refreshToken, trustedDevice } = await this.prisma.$transaction(async (tx) => {
+      const user = await this.identities.upsertTelegramUser(tx, identity);
+      const created = await this.sessions.createSessionInTransaction(tx, user, {
+        userId: user.id,
+        rememberMe: options?.rememberMe,
+        device: options?.device,
+        provider: 'TELEGRAM',
+        amr,
+      });
+      return { user, ...created };
+    });
+
+    const tokens = this.sessions.issueTokensForSession(
+      user, session.id, refreshToken, amr, trustedDevice,
+    );
+
+    this.logger.log(JSON.stringify({
+      msg: 'auth_v2_login_success',
+      userId: user.id.toString(),
+      sessionId: session.id,
+      provider: 'TELEGRAM',
+      amr,
+    }));
+
+    await this.events.publish('UserLoggedIn.v1', {
+      userId: user.id.toString(),
+      sessionId: session.id,
+      provider: 'TELEGRAM',
+    });
+    await this.events.publish('SessionCreated.v1', {
+      userId: user.id.toString(),
+      sessionId: session.id,
+      familyId: session.familyId,
+    });
+
+    return {
+      session,
+      user: {
+        id: user.id,
+        onixId: user.onixId,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+        isAdmin: user.isAdmin,
+        deletedAt: user.deletedAt,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      trustedDevice,
+      refreshMaxAgeSeconds: refreshMaxAgeSeconds(session.rememberMe),
+    };
   }
 
   /**

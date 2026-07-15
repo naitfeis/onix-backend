@@ -55,3 +55,13 @@ export type {
 
 export { normalizeTelegramLoginPayload } from './telegramPayload';
 export { collectDeviceInfo } from './deviceInfo';
+
+export {
+  getWebsiteLoginProvider,
+  openTelegramBotLogin,
+  startBotLogin,
+  waitAndCompleteBotLogin,
+  completeBotLogin,
+  pollBotLoginStatus,
+} from './botLogin';
+export type { BotLoginStartResult, WebsiteLoginProvider } from './botLogin';

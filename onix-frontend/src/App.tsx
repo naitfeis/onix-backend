@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { loginWithTelegram as legacyLoginWithTelegram, money } from './api/client';
-import { getWebsiteAuthProvider, isWebsiteAuthV2 } from './auth';
+import {
+  getWebsiteAuthProvider,
+  getWebsiteLoginProvider,
+  isWebsiteAuthV2,
+  openTelegramBotLogin,
+  startBotLogin,
+  waitAndCompleteBotLogin,
+} from './auth';
 import { CATEGORIES, CATEGORY_LABELS, type Deal, type Product, type ProductDraft } from './api/contracts';
 import OnixBackground from './components/OnixBackground';
 import UserAvatar from './components/UserAvatar';
@@ -28,7 +35,7 @@ function registerOnixTelegramAuth() {
     console.log('Telegram callback fired', user);
     try {
       if (isWebsiteAuthV2()) {
-        console.log('Sending /api/v2/auth/login (Auth V2)');
+        console.log('Sending /api/v2/auth/login (Auth V2 widget rollback)');
         await getWebsiteAuthProvider().loginWithTelegram(user);
       } else {
         console.log('Sending /api/auth/telegram-login');
@@ -116,7 +123,76 @@ function AuthNotice({ miniApp, message }: { miniApp: boolean; message?: string }
   return <div className="auth-notice" role="alert"><div><strong>{miniApp ? 'Не удалось подтвердить Telegram' : 'Войдите через Telegram'}</strong>
     <span>{message || 'Авторизация нужна для сделок и сообщений.'}</span></div>
     {miniApp ? <Button variant="secondary" onClick={() => location.reload()}>Повторить</Button> :
-      <TelegramLogin />}
+      <WebsiteLoginEntry />}
+  </div>;
+}
+
+function WebsiteLoginEntry() {
+  const provider = getWebsiteLoginProvider();
+  if (provider === 'widget') return <TelegramLogin />;
+  return <BotTelegramLogin />;
+}
+
+function BotTelegramLogin() {
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState('');
+
+  const onLogin = async () => {
+    setError('');
+    setBusy(true);
+    setHint('Откройте Telegram и подтвердите вход…');
+    try {
+      const started = await startBotLogin();
+      openTelegramBotLogin(started.deepLink, started.webDeepLink);
+      await waitAndCompleteBotLogin(started.challengeId);
+      location.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Не удалось войти через Telegram.');
+      setHint('Если подтвердили в боте — нажмите «Вернуться в ONIX» в Telegram.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Support return link ?x=exchangeCode from bot "Вернуться в ONIX"
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const x = params.get('x');
+    if (!x) return;
+    let cancelled = false;
+    (async () => {
+      setBusy(true);
+      try {
+        const response = await fetch('/api/v2/auth/telegram-bot/continue', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ exchangeCode: x }),
+        });
+        const payload = await response.json() as { success?: boolean; data?: { accessToken: string; expiresIn: number } };
+        if (!response.ok || !payload.success || !payload.data) throw new Error('Exchange failed');
+        const { getSharedAuthManager } = await import('./auth');
+        getSharedAuthManager().setSession(payload.data.accessToken, payload.data.expiresIn);
+        if (!cancelled) {
+          history.replaceState({}, '', location.pathname);
+          location.reload();
+        }
+      } catch {
+        if (!cancelled) setError('Не удалось завершить вход по ссылке из бота.');
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return <div>
+    <Button onClick={() => void onLogin()} disabled={busy}>
+      {busy ? 'Ожидание Telegram…' : 'Войти через Telegram'}
+    </Button>
+    {hint && <small>{hint}</small>}
+    {error && <small>{error}</small>}
   </div>;
 }
 
