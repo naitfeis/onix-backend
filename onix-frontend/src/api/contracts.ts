@@ -287,11 +287,25 @@ export function formatLastSeen(iso?: string | null): string {
 
 export function formatBanRemaining(ban: BanInfo): string {
   if (ban.permanent) return 'Постоянная блокировка.';
-  const ms = ban.remainingMs ?? 0;
+  const ms = ban.remainingMs ?? (ban.bannedUntil ? Math.max(0, new Date(ban.bannedUntil).getTime() - Date.now()) : 0);
   if (ms <= 0) return 'Срок блокировки истёк.';
   const days = Math.floor(ms / 86400_000);
   const hours = Math.floor((ms % 86400_000) / 3600_000);
   if (days > 0) return `Осталось: ${days} д. ${hours} ч.`;
-  const mins = Math.floor((ms % 3600_000) / 60_000);
-  return `Осталось: ${hours} ч. ${mins} мин.`;
+  const mins = Math.max(1, Math.floor((ms % 3600_000) / 60_000));
+  if (hours > 0) return `Осталось: ${hours} ч. ${mins} мин.`;
+  return `Осталось: ${mins} мин.`;
+}
+
+/** Recompute remaining from bannedUntil (for live ban screen). */
+export function refreshBanInfo(ban: BanInfo): BanInfo {
+  if (ban.permanent || !ban.bannedUntil) return { ...ban, remainingMs: null, label: 'Постоянная блокировка.' };
+  const remainingMs = Math.max(0, new Date(ban.bannedUntil).getTime() - Date.now());
+  return {
+    ...ban,
+    remainingMs,
+    label: remainingMs <= 0
+      ? 'Срок блокировки истёк.'
+      : `До ${new Date(ban.bannedUntil).toLocaleString('ru-RU')}`,
+  };
 }

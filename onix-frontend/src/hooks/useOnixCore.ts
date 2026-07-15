@@ -276,7 +276,18 @@ export function useOnixCore() {
 
   const startChat = useCallback((onixId: string) => run(`chat-${onixId}`, () =>
     api.post<ChatThread>(API_PATHS.directChat, { onixId }),
-  () => void load('chats', API_PATHS.chats)), [load, run]);
+  ).then((thread) => {
+    if (thread) {
+      setStore((previous) => {
+        const exists = previous.chats.some((chat) => chat.id === thread.id);
+        return exists
+          ? previous
+          : { ...previous, chats: [thread, ...previous.chats] };
+      });
+      void load('chats', API_PATHS.chats);
+    }
+    return thread;
+  }), [load, run]);
 
   const openSupport = useCallback((dealId: string, reason?: string) => run(`support-${dealId}`, () =>
     api.post<{ ticketId: string; chatId: string }>(API_PATHS.orderSupport(dealId), {
