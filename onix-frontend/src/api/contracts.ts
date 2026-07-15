@@ -13,6 +13,8 @@ export interface Seller {
   followersCount: number;
   lastOnline?: string;
   followed?: boolean;
+  /** Yellow staff badge — ADMIN or SUPPORT. */
+  badge?: 'ADMIN' | 'SUPPORT';
 }
 
 export interface Product {
@@ -58,6 +60,7 @@ export interface ChatThread {
   peerOnixId?: string;
   peerLastOnline?: string;
   peerAvatarUrl?: string;
+  peerBadge?: 'ADMIN' | 'SUPPORT';
   orderCard?: OrderCard;
 }
 
@@ -65,7 +68,7 @@ export interface Message {
   id: string;
   threadId: string;
   kind?: 'USER' | 'SYSTEM';
-  sender: Pick<Seller, 'id' | 'username' | 'avatarUrl'>;
+  sender: Pick<Seller, 'id' | 'username' | 'avatarUrl' | 'badge'>;
   text: string;
   createdAt: string;
   mine: boolean;
@@ -100,21 +103,44 @@ export interface Profile extends Seller {
 export interface PublicProfile extends Seller {
   bio?: string | null;
   createdAt?: string;
+  products?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    priceCents: string;
+    category: string;
+    subcategory?: string;
+    status: string;
+    quantity: number;
+    createdAt: string;
+  }>;
+  reviews?: Review[];
 }
 
 export interface Review {
   id: string;
-  author: Pick<Seller, 'id' | 'username'>;
+  author: Pick<Seller, 'id' | 'username' | 'onixId' | 'avatarUrl' | 'badge'>;
   rating: number;
   text: string;
   createdAt: string;
+}
+
+export interface BanInfo {
+  reason: string;
+  reasonCode?: string | null;
+  comment: string;
+  bannedAt: string;
+  bannedUntil: string | null;
+  permanent: boolean;
+  remainingMs: number | null;
+  label: string;
 }
 
 export interface ApiEnvelope<T> {
   success: boolean;
   data: T;
   message?: string;
-  error?: { code: string; message: string | string[] };
+  error?: { code: string; message: string | string[]; details?: unknown };
 }
 
 export interface ProductDraft {
@@ -141,6 +167,14 @@ export type ProductListQuery = {
   offset?: number;
 };
 
+export type OrderListSort = 'newest' | 'oldest' | 'expensive' | 'cheap';
+export type OrderListStatus = 'active' | 'completed' | 'canceled' | 'dispute' | 'archive';
+
+export type OrderListQuery = {
+  sort?: OrderListSort;
+  status?: OrderListStatus;
+};
+
 export function productsListPath(query: ProductListQuery = {}): string {
   const params = new URLSearchParams();
   const search = query.search?.trim();
@@ -156,6 +190,14 @@ export function productsListPath(query: ProductListQuery = {}): string {
   return qs ? `/api/products?${qs}` : '/api/products';
 }
 
+export function ordersListPath(query: OrderListQuery = {}): string {
+  const params = new URLSearchParams();
+  if (query.sort) params.set('sort', query.sort);
+  if (query.status) params.set('status', query.status);
+  const qs = params.toString();
+  return qs ? `/api/orders?${qs}` : '/api/orders';
+}
+
 export const API_PATHS = {
   me: '/api/users/me',
   ledger: '/api/wallet/ledger',
@@ -168,9 +210,11 @@ export const API_PATHS = {
   favorite: (id: string) => `/api/favorites/${encodeURIComponent(id)}`,
   follow: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/follow`,
   orders: '/api/orders',
+  ordersList: ordersListPath,
   dealDeliver: (id: string) => `/api/orders/${encodeURIComponent(id)}/deliver`,
   dealComplete: (id: string) => `/api/orders/${encodeURIComponent(id)}/complete`,
   dealDispute: (id: string) => `/api/orders/${encodeURIComponent(id)}/dispute`,
+  orderRefundRequest: (id: string) => `/api/orders/${encodeURIComponent(id)}/refund-request`,
   orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
   supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
@@ -186,6 +230,21 @@ export const API_PATHS = {
   subcategories: '/api/products/catalog/subcategories',
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
 } as const;
+
+export type BanReasonCode =
+  | 'MISCONDUCT'
+  | 'THIRD_PARTY_ADS'
+  | 'OFF_PLATFORM_DEAL'
+  | 'FRAUD'
+  | 'OTHER';
+
+export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hint: string }> = [
+  { value: 'MISCONDUCT', label: 'Неадекватное поведение', hint: '7 дней' },
+  { value: 'THIRD_PARTY_ADS', label: 'Реклама сторонней площадки', hint: '30 дней' },
+  { value: 'OFF_PLATFORM_DEAL', label: 'Попытка сделки вне ONIX', hint: 'Навсегда' },
+  { value: 'FRAUD', label: 'Мошенничество', hint: 'Навсегда' },
+  { value: 'OTHER', label: 'Другое', hint: 'Срок вручную' },
+];
 
 export const CATEGORIES = ['STANDOFF_2', 'STEAM', 'ROBLOX', 'RP_PROJECTS', 'BRAWL_STARS', 'OTHER'] as const;
 export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
@@ -224,4 +283,15 @@ export function formatLastSeen(iso?: string | null): string {
   dayStart.setHours(0, 0, 0, 0);
   if (at >= dayStart.getTime() - 86400_000 && at < dayStart.getTime()) return 'Был вчера';
   return `Был ${new Date(iso).toLocaleDateString('ru-RU')}`;
+}
+
+export function formatBanRemaining(ban: BanInfo): string {
+  if (ban.permanent) return 'Постоянная блокировка.';
+  const ms = ban.remainingMs ?? 0;
+  if (ms <= 0) return 'Срок блокировки истёк.';
+  const days = Math.floor(ms / 86400_000);
+  const hours = Math.floor((ms % 86400_000) / 3600_000);
+  if (days > 0) return `Осталось: ${days} д. ${hours} ч.`;
+  const mins = Math.floor((ms % 3600_000) / 60_000);
+  return `Осталось: ${hours} ч. ${mins} мин.`;
 }

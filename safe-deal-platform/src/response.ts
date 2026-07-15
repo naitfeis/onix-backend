@@ -11,6 +11,8 @@ type PublicUser = {
   ratingCount: number;
   completedSales: number;
   lastSeenAt: Date;
+  isAdmin?: boolean;
+  isSupport?: boolean;
   _count?: { followers: number };
 };
 
@@ -56,6 +58,7 @@ export interface ProductDto {
 }
 
 export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: bigint }> }) {
+  const staff = Boolean(user.isAdmin || user.isSupport);
   return {
     id: user.id.toString(),
     onixId: user.onixId,
@@ -68,6 +71,7 @@ export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: b
     lastOnline: user.lastSeenAt.toISOString(),
     // Present when marketplace includes viewer-scoped Follow rows (take: 1).
     followed: Boolean(user.followers?.length),
+    ...(staff ? { badge: (user.isAdmin ? 'ADMIN' : 'SUPPORT') as 'ADMIN' | 'SUPPORT' } : {}),
   };
 }
 
@@ -154,7 +158,9 @@ export function dealDto(order: {
     role: buyer ? 'buyer' as const : 'seller' as const,
     counterparty: sellerDto(buyer ? order.seller : order.buyer),
     createdAt: order.createdAt.toISOString(),
-    canReview: order.status === 'COMPLETED' && !order.reviews.some((review) => review.authorId === viewer.id),
+    canReview: order.status === 'COMPLETED'
+      && buyer
+      && !order.reviews.some((review) => review.authorId === viewer.id),
   };
 }
 
@@ -165,17 +171,22 @@ export function messageDto(message: {
   kind?: string;
   text: string;
   createdAt: Date;
-  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl'> | null;
+  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'> | null;
 }, viewerId: bigint) {
   const system = message.kind === 'SYSTEM' || message.senderId == null;
+  const sender = message.sender;
+  const staffBadge = !system && sender
+    ? (sender.isAdmin ? 'ADMIN' as const : sender.isSupport ? 'SUPPORT' as const : undefined)
+    : undefined;
   return {
     id: message.id.toString(),
     threadId: message.chatId,
     kind: system ? 'SYSTEM' as const : 'USER' as const,
     sender: {
-      id: system ? '0' : message.sender!.id.toString(),
-      username: system ? 'ONIX' : (message.sender!.telegramNick ?? message.sender!.displayName ?? message.sender!.onixId),
-      ...(system ? {} : (message.sender!.avatarUrl ? { avatarUrl: message.sender!.avatarUrl } : {})),
+      id: system ? '0' : sender!.id.toString(),
+      username: system ? 'ONIX' : (sender!.telegramNick ?? sender!.displayName ?? sender!.onixId),
+      ...(system ? {} : (sender!.avatarUrl ? { avatarUrl: sender!.avatarUrl } : {})),
+      ...(staffBadge ? { badge: staffBadge } : {}),
     },
     text: message.text,
     createdAt: message.createdAt.toISOString(),
@@ -200,13 +211,17 @@ export function reviewDto(item: {
   rating: number;
   text: string | null;
   createdAt: Date;
-  author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'>;
+  author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'>;
 }) {
+  const staff = Boolean(item.author.isAdmin || item.author.isSupport);
   return {
     id: item.id.toString(),
     author: {
       id: item.author.id.toString(),
+      onixId: item.author.onixId,
       username: item.author.telegramNick ?? item.author.displayName ?? item.author.onixId,
+      ...(item.author.avatarUrl ? { avatarUrl: item.author.avatarUrl } : {}),
+      ...(staff ? { badge: (item.author.isAdmin ? 'ADMIN' : 'SUPPORT') as 'ADMIN' | 'SUPPORT' } : {}),
     },
     rating: item.rating,
     text: item.text ?? '',

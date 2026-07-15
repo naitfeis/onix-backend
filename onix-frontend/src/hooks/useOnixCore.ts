@@ -6,7 +6,7 @@ import {
   getSharedAuthManager,
   resolveApiBase,
 } from '../auth';
-import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
+import { API_PATHS, type AsyncState, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -306,16 +306,48 @@ export function useOnixCore() {
     }));
   }, []);
 
-  const adminAction = useCallback((action: 'ban' | 'unban', userId: string) => run(`admin-${action}`, () =>
-    api.patch(API_PATHS.adminBan(userId), { banned: action === 'ban' })), [run]);
+  const listDeals = useCallback(async (query: OrderListQuery = {}) => {
+    setStates(previous => ({ ...previous, deals: 'loading' }));
+    try {
+      const data = await api.get<Deal[]>(API_PATHS.ordersList(query));
+      setStore(previous => ({ ...previous, deals: data }));
+      setErrors(previous => ({ ...previous, deals: undefined }));
+      setStates(previous => ({ ...previous, deals: 'success' }));
+      return data;
+    } catch (error) {
+      setErrors(previous => ({ ...previous, deals: friendlyError(error) }));
+      setStates(previous => ({ ...previous, deals: 'error' }));
+      return null;
+    }
+  }, []);
+
+  const sellerRefund = useCallback((dealId: string, reason: string) => run(`seller-refund-${dealId}`, () =>
+    api.post(API_PATHS.orderRefundRequest(dealId), { reason, idempotencyKey: crypto.randomUUID() }),
+  () => void load('deals', API_PATHS.orders)), [load, run]);
+
+  const adminAction = useCallback((
+    action: 'ban' | 'unban',
+    userId: string,
+    ban?: { reason: BanReasonCode; comment: string; durationDays?: number },
+  ) => run(`admin-${action}`, () => {
+    if (action === 'ban' && ban) {
+      return api.patch(API_PATHS.adminBan(userId), {
+        banned: true,
+        reason: ban.reason,
+        comment: ban.comment,
+        ...(ban.durationDays ? { durationDays: ban.durationDays } : {}),
+      });
+    }
+    return api.patch(API_PATHS.adminBan(userId), { banned: false });
+  }), [run]);
 
   // Badge: chat unread only (in-app notifications stay for API/history; UI tab removed).
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
     profile, ...store, states, errors, messages, actionBusy, unread,
-    refreshAll, loadProfile, loadMessages, listProducts, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, supportRefund, startChat, sendMessage, withdraw, submitReview,
+    refreshAll, loadProfile, loadMessages, listProducts, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    toggleFollow, purchase, dealAction, openSupport, supportRefund, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction,
   };
 }

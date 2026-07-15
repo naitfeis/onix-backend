@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma, User } from '@prisma/client';
+import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from '../ban-policy';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from '../identity-link';
 import { resolveIsSupport } from '../common';
 import { RiskScoreService, type RiskDeviceInput } from '../risk-score.service';
@@ -15,9 +16,17 @@ export class IdentityService {
     identity: VerifiedTelegramIdentity,
     device?: RiskDeviceInput | null,
   ): Promise<User> {
-    const existing = await tx.user.findUnique({ where: { telegramId: identity.telegramId } });
+    let existing = await tx.user.findUnique({ where: { telegramId: identity.telegramId } });
     if (existing?.deletedAt) {
-      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked.');
+      if (!isBanActive(existing)) {
+        existing = await tx.user.update({ where: { id: existing.id }, data: { ...BAN_CLEAR_DATA } });
+      } else {
+        throw new AuthPlatformError(
+          'AUTH_ACCOUNT_LOCKED',
+          'Account is locked.',
+          { ban: banPublicInfo(existing) },
+        );
+      }
     }
 
     const loggedInAt = new Date();
@@ -39,6 +48,7 @@ export class IdentityService {
             ? { firstName: identity.firstName } : {}),
           ...(identity.lastName !== undefined && identity.lastName !== existing.lastName
             ? { lastName: identity.lastName } : {}),
+          ...(displayName && displayName !== existing.displayName ? { displayName } : {}),
           ...(identity.photoUrl !== undefined && identity.photoUrl !== existing.avatarUrl
             ? { avatarUrl: identity.photoUrl } : {}),
         },

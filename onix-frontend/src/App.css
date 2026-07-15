@@ -56,6 +56,8 @@
 .favorite { position: absolute; right: 10px; top: 42px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 50%; color: #555; background: #08080a; cursor: pointer; }.favorite.active { color: #fff; border-color: #555; }
 .badge { display: inline-flex; width: fit-content; border: 1px solid var(--line); border-radius: 999px; padding: 3px 7px; color: var(--muted); font-size: 8px; font-weight: 800; }
 .badge--success { color: var(--success); border-color: #173b30; }.badge--warning { color: var(--warning); border-color: #3b2a19; }.badge--danger { color: var(--danger); border-color: #492026; }
+.badge--staff { color: #e8c547; border-color: #5a4a18; }
+.onix-id-link { color: var(--accent, #7dd3c0); text-decoration: underline; }
 
 .control { width: 100%; min-height: 40px; color: var(--text); background: #030304; border: 1px solid #242428; border-radius: 11px; padding: 9px 11px; font: 11px/1.3 inherit; transition: border-color 180ms, box-shadow 180ms; }
 .control::placeholder { color: #414147; }.control:focus { border-color: #777; box-shadow: 0 0 0 3px rgba(255,255,255,.06); }.control--area { min-height: 96px; resize: vertical; }

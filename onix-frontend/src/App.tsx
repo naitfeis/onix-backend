@@ -8,10 +8,13 @@ import {
   openTelegramBotLogin,
   startBotLogin,
   waitAndCompleteBotLogin,
+  AuthV2ApiError,
 } from './auth';
+import { BotLoginError } from './auth/botLogin';
 import {
-  API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  formatLastSeen, type Deal, type Product, type ProductDraft, type PublicProfile,
+  API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
+  formatBanRemaining, formatLastSeen, type BanInfo, type BanReasonCode, type Deal, type OrderListQuery,
+  type OrderListSort, type OrderListStatus, type Product, type ProductDraft, type PublicProfile,
 } from './api/contracts';
 import OnixBackground from './components/OnixBackground';
 import UserAvatar from './components/UserAvatar';
@@ -31,6 +34,18 @@ declare global {
 }
 
 let reportTelegramLoginError: (message: string) => void = () => {};
+let reportTelegramBan: (ban: BanInfo) => void = () => {};
+
+function extractBanFromError(error: unknown): BanInfo | undefined {
+  const details = error instanceof AuthV2ApiError || error instanceof BotLoginError
+    ? error.details
+    : undefined;
+  if (!details || typeof details !== 'object') return undefined;
+  const ban = (details as { ban?: BanInfo }).ban;
+  const code = error instanceof AuthV2ApiError ? error.code : (error as BotLoginError).code;
+  if (code === 'AUTH_ACCOUNT_LOCKED' && ban) return ban;
+  return undefined;
+}
 
 function registerOnixTelegramAuth() {
   if (window.onixTelegramAuth) return;
@@ -42,7 +57,9 @@ function registerOnixTelegramAuth() {
         await legacyLoginWithTelegram(user);
       }
       location.reload();
-    } catch {
+    } catch (error) {
+      const ban = extractBanFromError(error);
+      if (ban) reportTelegramBan(ban);
       reportTelegramLoginError('Telegram вход не выполнен.');
     }
   };
@@ -67,6 +84,18 @@ const dealLabels: Record<Deal['status'], string> = {
   COMPLETED: 'Завершено', CANCELED: 'Отменено', DISPUTE: 'Открыт спор', REFUNDED: 'Возвращено',
 };
 
+const DEAL_FILTERS: Array<{ id: string; label: string; sort?: OrderListSort; status?: OrderListStatus }> = [
+  { id: 'newest', label: 'Новые', sort: 'newest' },
+  { id: 'oldest', label: 'Старые', sort: 'oldest' },
+  { id: 'expensive', label: 'Дорогие', sort: 'expensive' },
+  { id: 'cheap', label: 'Дешёвые', sort: 'cheap' },
+  { id: 'active', label: 'Активные', status: 'active' },
+  { id: 'completed', label: 'Завершённые', status: 'completed' },
+  { id: 'canceled', label: 'Отменённые', status: 'canceled' },
+  { id: 'dispute', label: 'Спор', status: 'dispute' },
+  { id: 'archive', label: 'Архив', status: 'archive' },
+];
+
 function isTelegramMiniApp() {
   try { return Boolean(WebApp.initData); } catch { return false; }
 }
@@ -76,6 +105,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('market');
   const [direction, setDirection] = useState(1);
   const [toast, setToast] = useState('');
+  const [banNotice, setBanNotice] = useState<BanInfo | undefined>();
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
     const to = TABS.findIndex(tab => tab.id === next);
@@ -88,6 +118,10 @@ export default function App() {
     const timeout = setTimeout(() => setToast(''), 2600);
     return () => clearTimeout(timeout);
   }, [toast]);
+  useEffect(() => {
+    reportTelegramBan = setBanNotice;
+    return () => { reportTelegramBan = () => {}; };
+  }, []);
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
 
@@ -114,7 +148,9 @@ export default function App() {
       <AuthNotice
         miniApp={isTelegramMiniApp()}
         message={core.errors.profile}
+        ban={banNotice}
         onAuthenticated={core.refreshAll}
+        onBan={setBanNotice}
       />
     )}
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
@@ -138,29 +174,65 @@ export default function App() {
 }
 
 type Core = ReturnType<typeof useOnixCore>;
+
+function staffBadgeFromRoles(roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>): 'ADMIN' | 'SUPPORT' | undefined {
+  if (roles.includes('ADMIN')) return 'ADMIN';
+  if (roles.includes('SUPPORT')) return 'SUPPORT';
+  return undefined;
+}
+
+function StaffBadge({ badge }: { badge?: 'ADMIN' | 'SUPPORT' }) {
+  if (!badge) return null;
+  return <span className="badge badge--staff">{badge}</span>;
+}
+
+function MessageText({ text, onOpenOnix }: { text: string; onOpenOnix: (onixId: string) => void }) {
+  const parts = text.split(/(ONIX-\d+)/gi);
+  return <>{parts.map((part, index) => {
+    if (/^ONIX-\d+$/i.test(part)) {
+      const onixId = part.toUpperCase();
+      return <button key={`${index}-${onixId}`} type="button" className="onix-id-link" onClick={() => onOpenOnix(onixId)}>{onixId}</button>;
+    }
+    return <span key={index}>{part}</span>;
+  })}</>;
+}
+
 function AuthNotice({
   miniApp,
   message,
+  ban,
   onAuthenticated,
+  onBan,
 }: {
   miniApp: boolean;
   message?: string;
+  ban?: BanInfo;
   onAuthenticated: () => void;
+  onBan?: (ban: BanInfo) => void;
 }) {
-  return <div className="auth-notice" role="alert"><div><strong>{miniApp ? 'Не удалось подтвердить Telegram' : 'Войдите через Telegram'}</strong>
-    <span>{message || 'Авторизация нужна для сделок и сообщений.'}</span></div>
+  const title = ban
+    ? 'Аккаунт заблокирован'
+    : miniApp ? 'Не удалось подтвердить Telegram' : 'Войдите через Telegram';
+  return <div className="auth-notice" role="alert"><div>
+    <strong>{title}</strong>
+    {ban ? <>
+      <span>Причина: {ban.reason}{ban.label ? ` · ${ban.label}` : ''}</span>
+      {ban.comment && <span>{ban.comment}</span>}
+      <span>{formatBanRemaining(ban)}</span>
+    </> : <span>{message || 'Авторизация нужна для сделок и сообщений.'}</span>}
+  </div>
     {miniApp ? <Button variant="secondary" onClick={() => location.reload()}>Повторить</Button> :
-      <WebsiteLoginEntry onAuthenticated={onAuthenticated} />}
+      <WebsiteLoginEntry onAuthenticated={onAuthenticated} onBan={onBan} />}
   </div>;
 }
 
-function WebsiteLoginEntry({ onAuthenticated }: { onAuthenticated: () => void }) {
+function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const provider = getWebsiteLoginProvider();
-  if (provider === 'widget') return <TelegramLogin />;
-  return <BotTelegramLogin onAuthenticated={onAuthenticated} />;
+  if (provider === 'widget') return <TelegramLogin onBan={onBan} />;
+  return <BotTelegramLogin onAuthenticated={onAuthenticated} onBan={onBan} />;
 }
 
-function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
+function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
@@ -187,6 +259,8 @@ function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) 
       onAuthenticatedRef.current();
     } catch (e) {
       if (controller.signal.aborted) return;
+      const ban = extractBanFromError(e);
+      if (ban) onBan?.(ban);
       setError(e instanceof Error ? e.message : 'Не удалось войти через Telegram.');
       setHint('Оставайтесь на этой вкладке — после подтверждения в Telegram вход завершится сам.');
     } finally {
@@ -203,15 +277,17 @@ function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) 
   </div>;
 }
 
-function TelegramLogin() {
+function TelegramLogin({ onBan }: { onBan?: (ban: BanInfo) => void }) {
   const bot = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
   const [error, setError] = useState('');
+  const [ban, setBan] = useState<BanInfo | undefined>();
   const hostRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!bot) return;
     const host = hostRef.current;
     if (!host) return;
     reportTelegramLoginError = setError;
+    reportTelegramBan = (next) => { setBan(next); onBan?.(next); };
     registerOnixTelegramAuth();
 
     const script = document.createElement('script');
@@ -227,13 +303,14 @@ function TelegramLogin() {
 
     return () => {
       reportTelegramLoginError = () => {};
+      reportTelegramBan = () => {};
       script.removeEventListener('error', handleError);
       script.remove();
       host.replaceChildren();
     };
-  }, [bot]);
+  }, [bot, onBan]);
   if (!bot) return <span>Настройте VITE_TELEGRAM_BOT_USERNAME</span>;
-  return <div><div ref={hostRef} />{error && <small>{error}</small>}</div>;
+  return <div><div ref={hostRef} />{ban && <small>{formatBanRemaining(ban)}</small>}{error && <small>{error}</small>}</div>;
 }
 
 function SectionHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
@@ -253,6 +330,7 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
   const [marketError, setMarketError] = useState<string | undefined>();
 
   const isDefaultView = query.trim() === '' && category === 'Все' && !subcategory && sort === 'new';
+  const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
   const marketSubs = category !== 'Все'
     ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
@@ -342,6 +420,9 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
   return <div className="stack">
     <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
       <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select></div>
+    {onixQuery && <Button variant="secondary" onClick={async () => {
+      try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery))); } catch { /* ignore */ }
+    }}>Открыть профиль</Button>}
     <div className="chips" role="list" aria-label="Категории">{['Все', ...CATEGORIES].map(item =>
       <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => {
         setCategory(item);
@@ -364,7 +445,7 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
           <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} /><span>@{product.seller.username} · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
           setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
@@ -374,7 +455,7 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username}</b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button variant="secondary" onClick={async () => {
               try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }
@@ -404,7 +485,10 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
         }}>Написать</Button><Button disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>
       </div>}
     </Modal>
-    <PublicProfileModal profile={sellerProfile} onClose={() => setSellerProfile(null)} />
+    <PublicProfileModal profile={sellerProfile} onClose={() => setSellerProfile(null)} core={core} onOpenOnix={async (onixId) => {
+      if (sellerProfile?.onixId === onixId) return;
+      try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+    }} />
     <Confirm open={Boolean(confirm)} title="Подтвердите покупку" text={confirm ? `${money(confirm.priceCents)} будут безопасно заморожены до получения товара.` : ''} busy={core.actionBusy?.startsWith('purchase')} onCancel={() => setConfirm(null)}
       onConfirm={async () => { if (confirm && await core.purchase(confirm.id)) { setConfirm(null); setSelected(null); setToast('Сделка создана. Деньги в сейфе.'); switchTo('deals'); } }} />
   </div>;
@@ -455,20 +539,34 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
 
 function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
+  const [dealFilter, setDealFilter] = useState('newest');
   const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'dispute' } | null>(null);
   const [reviewDeal, setReviewDeal] = useState<Deal | null>(null);
+  const [refundDeal, setRefundDeal] = useState<Deal | null>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter) ?? DEAL_FILTERS[0];
+  const listQuery: OrderListQuery = {
+    ...(activeFilter.sort ? { sort: activeFilter.sort } : {}),
+    ...(activeFilter.status ? { status: activeFilter.status } : {}),
+  };
+  useEffect(() => {
+    if (core.profile) void core.listDeals(listQuery);
+  }, [core.listDeals, core.profile, dealFilter]);
   const deals = core.deals.filter(deal => deal.role === role);
   const isSupport = Boolean(core.profile?.roles.includes('SUPPORT') || core.profile?.roles.includes('ADMIN'));
   return <div className="stack"><SectionHeader title="ESCROW ГАРАНТ" subtitle="КОНТРОЛЬ ЗАМОРОЖЕННЫХ СДЕЛОК" />
+    <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
+      <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => <Card key={deal.id} className="deal-card"><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
+      deals.map(deal => <Card key={deal.id} className="deal-card"><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
           {!['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>}
+          {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
           <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
             if (await core.openSupport(deal.id)) { setToast('Обращение создано. Поддержка в чате.'); switchTo('chat'); }
           }}>Обратиться в поддержку</Button>
@@ -481,6 +579,12 @@ function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Sc
     <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : 'Подтвердить передачу?'}
       text={confirm?.action === 'complete' ? 'Это действие необратимо. Подтверждайте только после проверки товара.' : confirm?.action === 'dispute' ? 'Сделка будет остановлена и передана администратору.' : 'Покупатель получит уведомление о передаче.'}
       onCancel={() => setConfirm(null)} onConfirm={async () => { if (confirm && await core.dealAction(confirm.deal, confirm.action)) { setToast('Статус сделки обновлён.'); setConfirm(null); } }} />
+    <Modal open={Boolean(refundDeal)} title="Запрос возврата" onClose={() => setRefundDeal(null)}><div className="form">
+      <Field label="Причина возврата"><Textarea required maxLength={500} value={refundReason} onChange={event => setRefundReason(event.target.value)} /></Field>
+      <div className="modal__actions"><Button variant="secondary" onClick={() => setRefundDeal(null)}>Отмена</Button><Button busy={core.actionBusy === `seller-refund-${refundDeal?.id}`} disabled={!refundReason.trim()} onClick={async () => {
+        if (refundDeal && refundReason.trim() && await core.sellerRefund(refundDeal.id, refundReason.trim())) { setRefundDeal(null); setToast('Запрос на возврат отправлен.'); }
+      }}>Отправить</Button></div>
+    </div></Modal>
     <ReviewForm deal={reviewDeal} core={core} onClose={() => setReviewDeal(null)} setToast={setToast} />
   </div>;
 }
@@ -505,13 +609,17 @@ function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => v
   const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
+  const openOnixProfile = async (onixId: string) => {
+    if (peerProfile?.onixId === onixId) return;
+    try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+  };
   useEffect(() => { if (threadId) void core.loadMessages(threadId); }, [core.loadMessages, threadId]);
   if (core.states.chats === 'loading') return <Card><Skeleton lines={6} /></Card>;
   return <div className="chat-layout">
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}><SectionHeader title="ЧАТЫ" subtitle="СООБЩЕНИЯ СДЕЛОК" />
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
         core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}>
-          <span className="thread-peer"><UserAvatar avatarUrl={chat.peerAvatarUrl} name={chat.title} /><span><b>{chat.title}</b><small>{chat.subtitle || 'Открыть диалог'}</small></span></span>
+          <span className="thread-peer"><UserAvatar avatarUrl={chat.peerAvatarUrl} name={chat.title} /><span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.subtitle || 'Открыть диалог'}</small></span></span>
           {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
         </button>)}</div>
     <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
@@ -519,8 +627,9 @@ function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => v
       <div>
       <button type="button" className="linkish" onClick={async () => {
         if (!thread.peerOnixId) return;
+        if (peerProfile?.onixId === thread.peerOnixId) return;
         try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
-      }}><b>{thread.title}</b></button>
+      }}><b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b></button>
       <small>{formatLastSeen(thread.peerLastOnline)}</small></div></div>
       {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
         <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
@@ -531,24 +640,72 @@ function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => v
         <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
           {!message.mine && <UserAvatar avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
           <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
-            {message.kind !== 'SYSTEM' && <small>@{message.sender.username}</small>}
+            {message.kind !== 'SYSTEM' && <small>@{message.sender.username} <StaffBadge badge={message.sender.badge} /></small>}
             {message.kind === 'SYSTEM' && <small>ONIX</small>}
-            <p>{message.text}</p>
+            <p><MessageText text={message.text} onOpenOnix={openOnixProfile} /></p>
             <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
           </div>
         </div>)}</div>
       <form className="composer" onSubmit={async event => { event.preventDefault(); if (await core.sendMessage(thread.id, text)) setText(''); }}><Input value={text} onChange={event => setText(event.target.value)} maxLength={1000} placeholder="Сообщение..." aria-label="Сообщение" /><Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>➤</Button></form>
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
-    <PublicProfileModal profile={peerProfile} onClose={() => setPeerProfile(null)} />
+    <PublicProfileModal profile={peerProfile} onClose={() => setPeerProfile(null)} core={core} onOpenOnix={openOnixProfile} />
   </div>;
 }
 
-function PublicProfileModal({ profile, onClose }: { profile: PublicProfile | null; onClose: () => void }) {
-  return <Modal open={Boolean(profile)} title="Профиль" onClose={onClose}>
-    {profile && <div className="stack"><div className="seller-row"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} /><div><b>@{profile.username}</b><p className="muted">{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p></div></div>
+function PublicProfileModal({ profile, onClose, core, onOpenOnix }: {
+  profile: PublicProfile | null;
+  onClose: () => void;
+  core?: Core;
+  onOpenOnix?: (onixId: string) => void;
+}) {
+  const [section, setSection] = useState<'products' | 'reviews'>('products');
+  const [followed, setFollowed] = useState(false);
+  useEffect(() => {
+    if (profile) setFollowed(Boolean(profile.followed));
+  }, [profile?.onixId, profile?.followed]);
+  if (!profile) return null;
+  const products = profile.products ?? [];
+  const reviews = profile.reviews ?? [];
+  return <Modal open title="Профиль" onClose={onClose}>
+    <div className="stack">
+      <Card className="profile-card">
+        <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" />
+        <div className="profile-main">
+          <h1>@{profile.username} <StaffBadge badge={profile.badge} /></h1>
+          <p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p>
+          <div className="stats">
+            <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
+            <span><b>{profile.salesCount}</b> сделок</span>
+            <span><b>{profile.followersCount}</b> подписчиков</span>
+          </div>
+        </div>
+        {core && <Button
+          variant="secondary"
+          busy={core.actionBusy === `follow-${profile.onixId}`}
+          onClick={async () => {
+            const result = await core.toggleFollow(profile.onixId, followed);
+            if (result) setFollowed(result.followed);
+          }}
+        >{followed ? 'Отписаться' : '+ Подписаться'}</Button>}
+      </Card>
       {profile.bio && <p className="muted">{profile.bio}</p>}
-      <div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b></span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div>
-    </div>}
+      {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}
+      <div className="chips profile-tabs">
+        <button className={section === 'products' ? 'active' : ''} onClick={() => setSection('products')}>ТОВАРЫ</button>
+        <button className={section === 'reviews' ? 'active' : ''} onClick={() => setSection('reviews')}>ОТЗЫВЫ</button>
+      </div>
+      {section === 'products' && (products.length === 0
+        ? <StateView title="Товаров нет" text="Продавец ещё не разместил лоты." />
+        : <div className="product-grid">{products.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><span className="muted">{item.category}</span><strong>{money(item.priceCents)}</strong></div></Card>)}</div>)}
+      {section === 'reviews' && (reviews.length === 0
+        ? <StateView title="Отзывов нет" text="Пока никто не оставил отзыв." />
+        : reviews.map(review => <Card key={review.id}><div className="seller-row">
+          {review.author.onixId && onOpenOnix
+            ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>@{review.author.username}</b> <StaffBadge badge={review.author.badge} /></button>
+            : <b>@{review.author.username} <StaffBadge badge={review.author.badge} /></b>}
+          <span>{'★'.repeat(review.rating)}</span>
+        </div><p className="muted">{review.text}</p></Card>))}
+    </div>
   </Modal>;
 }
 
@@ -557,6 +714,7 @@ function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
+  const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const profile = core.profile;
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
@@ -564,7 +722,11 @@ function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: 
   const ownProducts = core.products.filter(product => product.seller.id === profile.id);
   const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'admin'> =
     profile.roles.includes('ADMIN') ? ['overview', 'listings', 'favorites', 'reviews', 'admin'] : ['overview', 'listings', 'favorites', 'reviews'];
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username}</h1><p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
+  const openAuthorProfile = async (onixId: string) => {
+    if (authorProfile?.onixId === onixId) return;
+    try { setAuthorProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+  };
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span></div></div>
       <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><Button variant="secondary" onClick={() => setWithdrawOpen(true)}>Вывести</Button></div></Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
@@ -574,8 +736,14 @@ function Profile({ core, switchTo, setToast }: { core: Core; switchTo: (screen: 
     {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
       <div className="product-grid">{ownProducts.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><strong>{money(item.priceCents)}</strong><Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button></div></Card>)}</div>)}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
-      core.reviews.map(review => <Card key={review.id}><div className="seller-row"><b>@{review.author.username}</b><span>{'★'.repeat(review.rating)}</span></div><p className="muted">{review.text}</p></Card>))}
+      core.reviews.map(review => <Card key={review.id}><div className="seller-row">
+        {review.author.onixId
+          ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>@{review.author.username}</b> <StaffBadge badge={review.author.badge} /></button>
+          : <b>@{review.author.username} <StaffBadge badge={review.author.badge} /></b>}
+        <span>{'★'.repeat(review.rating)}</span>
+      </div><p className="muted">{review.text}</p></Card>))}
     {section === 'admin' && profile.roles.includes('ADMIN') && <Admin core={core} setToast={setToast} />}
+    <PublicProfileModal profile={authorProfile} onClose={() => setAuthorProfile(null)} core={core} onOpenOnix={openAuthorProfile} />
     <EditProduct product={editing} core={core} onClose={() => setEditing(null)} setToast={setToast} />
     <Modal open={withdrawOpen} title="Вывод средств" onClose={() => setWithdrawOpen(false)}><div className="form"><p className="modal__text">Сумма и комиссия будут подтверждены сервером до списания.</p><Field label="Сумма, ₽"><Input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></Field><div className="modal__actions"><Button variant="secondary" onClick={() => setWithdrawOpen(false)}>Отмена</Button><Button busy={core.actionBusy === 'withdraw'} disabled={Number(amount) < 100} onClick={async () => { if (await core.withdraw(Number(amount))) { setWithdrawOpen(false); setToast('Заявка на вывод создана.'); } }}>Продолжить</Button></div></div></Modal>
   </div>;
@@ -598,7 +766,36 @@ function EditProduct({ product, core, onClose, setToast }: { product: Product | 
 
 function Admin({ core, setToast }: { core: Core; setToast: (text: string) => void }) {
   const [userId, setUserId] = useState('');
-  const [action, setAction] = useState<'ban' | 'unban' | null>(null);
-  return <Card className="admin-card"><h2>// ADMIN · МОДЕРАЦИЯ</h2><p className="muted">Доступ показан только по роли, полученной от сервера.</p><Field label="ONIX ID пользователя"><Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-000007" /></Field><div className="card-actions"><Button variant="danger" disabled={!userId} onClick={() => setAction('ban')}>Заблокировать</Button><Button variant="secondary" disabled={!userId} onClick={() => setAction('unban')}>Разблокировать</Button></div>
-    <Confirm open={Boolean(action)} dangerous={action === 'ban'} title={action === 'ban' ? 'Заблокировать пользователя?' : 'Снять блокировку?'} text="Операция будет записана в журнал администратора." busy={core.actionBusy?.startsWith('admin-')} onCancel={() => setAction(null)} onConfirm={async () => { if (action && await core.adminAction(action, userId)) { setAction(null); setToast('Действие администратора выполнено.'); } }} /></Card>;
+  const [reason, setReason] = useState<BanReasonCode | ''>('');
+  const [comment, setComment] = useState('');
+  const [durationDays, setDurationDays] = useState('');
+  const [confirmBan, setConfirmBan] = useState(false);
+  const [confirmUnban, setConfirmUnban] = useState(false);
+  const reasonOption = BAN_REASON_OPTIONS.find(item => item.value === reason);
+  const banReady = Boolean(userId.trim() && reason && comment.trim() && (reason !== 'OTHER' || Number(durationDays) > 0));
+  return <Card className="admin-card"><h2>// ADMIN · МОДЕРАЦИЯ</h2><p className="muted">Доступ показан только по роли, полученной от сервера.</p>
+    <Field label="ONIX ID пользователя"><Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-000007" /></Field>
+    <Field label="Причина блокировки" hint={reasonOption?.hint}>
+      <Select value={reason} onChange={event => setReason(event.target.value as BanReasonCode | '')}>
+        <option value="">Выберите причину</option>
+        {BAN_REASON_OPTIONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
+      </Select>
+    </Field>
+    {reason === 'OTHER' && <Field label="Срок, дней"><Input type="number" min={1} value={durationDays} onChange={event => setDurationDays(event.target.value)} /></Field>}
+    <Field label="Комментарий"><Textarea required maxLength={500} value={comment} onChange={event => setComment(event.target.value)} /></Field>
+    <div className="card-actions">
+      <Button variant="danger" disabled={!banReady} onClick={() => setConfirmBan(true)}>Заблокировать</Button>
+      <Button variant="secondary" disabled={!userId.trim()} onClick={() => setConfirmUnban(true)}>Разблокировать</Button>
+    </div>
+    <Confirm open={confirmBan} dangerous title="Заблокировать пользователя?" text="Операция будет записана в журнал администратора." busy={core.actionBusy === 'admin-ban'} onCancel={() => setConfirmBan(false)} onConfirm={async () => {
+      if (reason && comment.trim() && await core.adminAction('ban', userId.trim(), {
+        reason,
+        comment: comment.trim(),
+        ...(reason === 'OTHER' && durationDays ? { durationDays: Number(durationDays) } : {}),
+      })) { setConfirmBan(false); setToast('Действие администратора выполнено.'); }
+    }} />
+    <Confirm open={confirmUnban} title="Снять блокировку?" text="Пользователь снова сможет войти в ONIX." busy={core.actionBusy === 'admin-unban'} onCancel={() => setConfirmUnban(false)} onConfirm={async () => {
+      if (await core.adminAction('unban', userId.trim())) { setConfirmUnban(false); setToast('Действие администратора выполнено.'); }
+    }} />
+  </Card>;
 }

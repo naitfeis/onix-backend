@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { API_PATHS, CATEGORIES, productsListPath } from './contracts';
+import { API_PATHS, CATEGORIES, productsListPath, ordersListPath } from './contracts';
 
 describe('ONIX API paths', () => {
   it('matches backend resource routes', () => {
@@ -11,6 +11,13 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.reviewCreate('42')).toBe('/api/orders/42/reviews');
     expect(API_PATHS.walletWithdraw).toBe('/api/wallet/withdrawals');
     expect(API_PATHS.adminBan('ONIX-000007')).toBe('/api/admin/users/ONIX-000007/ban');
+    expect(API_PATHS.orderRefundRequest('42')).toBe('/api/orders/42/refund-request');
+  });
+
+  it('builds orders list query', () => {
+    expect(ordersListPath({})).toBe('/api/orders');
+    expect(ordersListPath({ sort: 'newest', status: 'active' })).toBe('/api/orders?sort=newest&status=active');
+    expect(API_PATHS.ordersList({ sort: 'cheap', status: 'dispute' })).toBe('/api/orders?sort=cheap&status=dispute');
   });
 
   it('builds marketplace list query without empty search', () => {

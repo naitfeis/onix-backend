@@ -2,8 +2,12 @@ import {
   BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext,
   ForbiddenException, Get, Injectable, Module, Param, Patch, Post, UseGuards,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { IsBoolean, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import { BanReason, Prisma } from '@prisma/client';
+import {
+  IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } from './ban-policy';
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
@@ -15,7 +19,13 @@ class BalanceDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }
-class BanDto { @IsBoolean() banned!: boolean; }
+class BanDto {
+  @IsBoolean() banned!: boolean;
+  @IsOptional() @IsEnum(BanReason) reason?: BanReason;
+  @IsOptional() @IsString() @MaxLength(1000) comment?: string;
+  /** Required when reason=OTHER (1–3650 days). Ignored for fixed-duration reasons. */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) durationDays?: number;
+}
 class RefundDto { @IsOptional() @IsString() @MaxLength(1000) reason?: string; }
 class WithdrawalDto {
   @IsString() @Matches(/^[1-9]\d*$/) amountCents!: string;
@@ -78,17 +88,58 @@ class OperationsService {
       return entry;
     });
   }
-  async ban(actor: AuthUser, onixId: string, banned: boolean) {
-    const user = await this.prisma.user.update({ where: { onixId }, data: { deletedAt: banned ? new Date() : null } });
-    if (banned) {
+
+  async ban(actor: AuthUser, onixId: string, dto: BanDto) {
+    if (dto.banned) {
+      if (!dto.reason) throw new BadRequestException('Укажите причину блокировки.');
+      const comment = dto.comment?.trim();
+      if (!comment) throw new BadRequestException('Комментарий администратора обязателен.');
+      let days: number | null;
+      try {
+        days = banDurationDays(dto.reason, dto.durationDays);
+      } catch (error) {
+        throw new BadRequestException((error as Error).message);
+      }
+      const now = new Date();
+      const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86400_000);
+      const user = await this.prisma.user.update({
+        where: { onixId },
+        data: {
+          deletedAt: now,
+          banReason: dto.reason,
+          banComment: comment.slice(0, 1000),
+          bannedAt: now,
+          bannedUntil,
+        },
+      });
       await this.risk.recordBanMarkers(this.prisma, user.id);
-    } else {
-      await this.risk.revokeBanMarkers(this.prisma, user.id);
+      await this.prisma.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'USER_BAN',
+          entity: 'User',
+          entityId: user.id.toString(),
+          metadata: {
+            reason: dto.reason,
+            reasonLabel: BAN_REASON_LABELS[dto.reason],
+            comment,
+            bannedUntil: bannedUntil?.toISOString() ?? null,
+            permanent: bannedUntil == null,
+          },
+        },
+      });
+      return { onixId, banned: true, ban: banPublicInfo(user) };
     }
-    await this.prisma.auditLog.create({
-      data: { actorId: actor.id, action: banned ? 'USER_BAN' : 'USER_UNBAN', entity: 'User', entityId: user.id.toString() },
+
+    const user = await this.prisma.user.update({
+      where: { onixId },
+      data: { ...BAN_CLEAR_DATA },
     });
-    return { onixId, banned };
+    await this.risk.revokeBanMarkers(this.prisma, user.id);
+    await this.prisma.auditLog.create({
+      data: { actorId: actor.id, action: 'USER_UNBAN', entity: 'User', entityId: user.id.toString() },
+    });
+    return { onixId, banned: false, ban: null };
   }
 
   withdraw(user: AuthUser, dto: WithdrawalDto) {
@@ -150,7 +201,7 @@ class AdminController {
   }
   @Patch('users/:onixId/ban')
   ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {
-    return this.service.ban(actor, id, dto.banned);
+    return this.service.ban(actor, id, dto);
   }
 }
 

@@ -6,7 +6,8 @@ import { AuthUser, CurrentUser } from './common';
 import { PrismaService } from './prisma.service';
 
 /**
- * Favorites — own userId only; ACTIVE products only; composite PK prevents duplicates.
+ * Favorites — own userId only; composite PK prevents duplicates.
+ * Policy: archived products are removed from favorites on archive; list returns ACTIVE only.
  */
 @Injectable()
 export class FavoritesService {

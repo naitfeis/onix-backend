@@ -10,6 +10,7 @@ import { Type } from 'class-transformer';
 import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
 import { encryptDeliverySecret } from './delivery-crypto';
+import { pushNewProductToFollowers } from './domain-notify';
 import { PrismaService } from './prisma.service';
 import { productDto } from './response';
 
@@ -170,16 +171,20 @@ export class MarketplaceService {
     });
     const followers = await this.prisma.follow.findMany({
       where: { sellerId: user.id },
-      select: { followerId: true },
+      select: { followerId: true, follower: { select: { telegramId: true } } },
       take: 500,
     });
     if (followers.length) {
       await this.prisma.notification.createMany({
         data: followers.map(({ followerId }) => ({
-          userId: followerId, type: 'NEW_PRODUCT', title: 'Новый товар',
-          body: product.title, data: { productId: product.id },
+          userId: followerId, type: 'NEW_PRODUCT', title: 'Новый товар у продавца',
+          body: `${product.title} · ${product.category}`, data: { productId: product.id },
         })),
       });
+      void pushNewProductToFollowers(
+        followers.map((f) => ({ telegramId: f.follower.telegramId })),
+        product,
+      );
     }
     return this.get(user, product.id);
   }
@@ -226,9 +231,15 @@ export class MarketplaceService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product || product.sellerId !== user.id) throw new NotFoundException('Товар не найден.');
     if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке.');
-    await this.prisma.product.update({
-      where: { id },
-      data: { status, ...(status === 'ACTIVE' ? { publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400_000) } : {}) },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: { status, ...(status === 'ACTIVE' ? { publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400_000) } : {}) },
+      });
+      // Favorites policy: archived listings are removed (not shown as «Недоступен»).
+      if (status === 'ARCHIVED') {
+        await tx.favorite.deleteMany({ where: { productId: id } });
+      }
     });
     return this.get(user, id);
   }

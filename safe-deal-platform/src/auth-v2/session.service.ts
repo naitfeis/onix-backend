@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import type { Prisma, Session, SessionRevokeReason, User } from '@prisma/client';
+import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from '../ban-policy';
 import { PrismaService } from '../prisma.service';
 import { AuthPlatformError } from './auth-errors';
 import {
@@ -57,10 +58,11 @@ export class SessionService {
   ) {}
 
   async createSession(input: CreateSessionInput): Promise<SessionAuthResult> {
-    const user = await this.prisma.user.findUnique({ where: { id: input.userId } });
-    if (!user || user.deletedAt) {
+    const found = await this.prisma.user.findUnique({ where: { id: input.userId } });
+    if (!found) {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
+    const user = await this.resolveUserAccountLock(found, this.prisma);
 
     const prepared = await this.prepareSessionMaterial(user, input);
     const session = await this.prisma.$transaction(async (tx) => (
@@ -79,9 +81,7 @@ export class SessionService {
     user: User,
     input: CreateSessionInput,
   ): Promise<{ session: Session; refreshToken: string; trustedDevice: boolean }> {
-    if (user.deletedAt) {
-      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
-    }
+    user = await this.resolveUserAccountLock(user, tx);
     const prepared = await this.prepareSessionMaterial(user, input, tx);
     const session = await this.persistPreparedSession(tx, user, input, prepared);
     return {
@@ -385,14 +385,15 @@ export class SessionService {
     session: Session;
   }> {
     const userId = BigInt(claims.sub);
-    const [user, session] = await Promise.all([
+    const [found, session] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: userId } }),
       this.prisma.session.findUnique({ where: { id: claims.sid } }),
     ]);
 
-    if (!user || user.deletedAt) {
+    if (!found) {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
+    const user = await this.resolveUserAccountLock(found, this.prisma);
     if (claims.sv !== user.sessionVersion) {
       throw new AuthPlatformError('AUTH_INVALID_TOKEN', 'Access token sessionVersion is stale.');
     }
@@ -426,10 +427,11 @@ export class SessionService {
   ): Promise<SessionAuthResult> {
     this.assertSessionUsable(session, now);
 
-    const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
-    if (!user || user.deletedAt) {
+    const found = await this.prisma.user.findUnique({ where: { id: session.userId } });
+    if (!found) {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
+    const user = await this.resolveUserAccountLock(found, this.prisma);
 
     const idleMs = session.rememberMe ? SESSION_REMEMBER_IDLE_TTL_MS : SESSION_IDLE_TTL_MS;
     const nextRefresh = this.tokens.issueRefreshToken();
@@ -566,6 +568,19 @@ export class SessionService {
         },
       });
     });
+  }
+
+  private async resolveUserAccountLock(
+    user: User,
+    db: Prisma.TransactionClient | PrismaService,
+  ): Promise<User> {
+    if (!user.deletedAt) return user;
+    if (isBanActive(user)) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.', {
+        ban: banPublicInfo(user),
+      });
+    }
+    return db.user.update({ where: { id: user.id }, data: BAN_CLEAR_DATA });
   }
 
   private assertSessionUsable(session: Session, now: Date): void {

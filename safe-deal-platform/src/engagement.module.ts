@@ -47,6 +47,7 @@ export class ChatService {
             user: {
               select: {
                 onixId: true, displayName: true, telegramNick: true, lastSeenAt: true, avatarUrl: true,
+                isAdmin: true, isSupport: true,
               },
             },
           },
@@ -78,6 +79,7 @@ export class ChatService {
         peerOnixId: other?.user.onixId,
         peerLastOnline: other?.user.lastSeenAt?.toISOString(),
         ...(other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
+        ...(other?.user.isAdmin ? { peerBadge: 'ADMIN' as const } : other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
         ...(chat.orderId && chat.order ? {
           dealId: chat.orderId.toString(),
           orderCard: {
@@ -136,7 +138,7 @@ export class ChatService {
       },
       orderBy: { createdAt: 'desc' },
       take,
-      include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true } } },
+      include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
     });
     // Mark entire thread read in one updateMany — not per-message.
     await this.prisma.chatMember.updateMany({
@@ -161,7 +163,7 @@ export class ChatService {
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: { chatId, senderId: user.id, kind: 'USER', text: body },
-        include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true } } },
+        include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
       });
       await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
       await createDomainNotification(tx, {
@@ -229,7 +231,7 @@ export class ReviewService {
   async list(onixId: string) {
     const reviews = await this.prisma.review.findMany({
       where: { subject: { onixId } },
-      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true } } },
+      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -243,10 +245,10 @@ export class ReviewService {
         if (!order || order.status !== 'COMPLETED') {
           throw new BadRequestException('Отзыв доступен только после завершённой сделки.');
         }
-        if (order.buyerId !== user.id && order.sellerId !== user.id) {
-          throw new NotFoundException('Сделка не найдена.');
+        if (order.buyerId !== user.id) {
+          throw new BadRequestException('Отзыв может оставить только покупатель продавцу.');
         }
-        const subjectId = order.buyerId === user.id ? order.sellerId : order.buyerId;
+        const subjectId = order.sellerId;
         if (subjectId === user.id) {
           throw new BadRequestException('Нельзя оставить отзыв самому себе.');
         }
@@ -287,7 +289,7 @@ export class ReviewService {
         });
         const row = await tx.review.findUniqueOrThrow({
           where: { id: review.id },
-          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true } } },
+          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
         });
         return { dto: reviewDto(row), subjectId };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

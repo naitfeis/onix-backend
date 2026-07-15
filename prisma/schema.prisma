@@ -30,6 +30,10 @@ model User {
   isAdmin           Boolean   @default(false)
   isSupport         Boolean   @default(false)
   deletedAt         DateTime?
+  banReason         BanReason?
+  banComment        String?   @db.VarChar(1000)
+  bannedAt          DateTime?
+  bannedUntil       DateTime?
   mergedIntoUserId  BigInt?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -703,6 +707,14 @@ enum MessageKind {
 enum SupportTicketStatus {
   OPEN
   CLOSED
+}
+
+enum BanReason {
+  MISCONDUCT
+  THIRD_PARTY_ADS
+  OFF_PLATFORM_DEAL
+  FRAUD
+  OTHER
 }
 
 enum OrderStatus {

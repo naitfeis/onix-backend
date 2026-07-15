@@ -1,10 +1,10 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Get, Injectable,
-  Module, NotFoundException, Param, Post,
+  Module, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
@@ -18,6 +18,16 @@ class PurchaseDto {
 class ReasonDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
   @IsString() @Length(16, 100) idempotencyKey!: string;
+}
+class SellerRefundDto {
+  @IsString() @MaxLength(1000) reason!: string;
+  @IsString() @Length(16, 100) idempotencyKey!: string;
+}
+class OrderQuery {
+  /** newest | oldest | expensive | cheap */
+  @IsOptional() @IsIn(['newest', 'oldest', 'expensive', 'cheap']) sort?: string;
+  /** active | completed | canceled | dispute | archive */
+  @IsOptional() @IsIn(['active', 'completed', 'canceled', 'dispute', 'archive']) status?: string;
 }
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
@@ -35,16 +45,28 @@ const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
 export class EscrowService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(user: AuthUser) {
+  async list(user: AuthUser, query: OrderQuery = {}) {
+    const statusWhere: Prisma.OrderWhereInput =
+      query.status === 'active' ? { status: { in: ['PAYMENT_HOLD', 'DELIVERING'] } } :
+      query.status === 'completed' ? { status: 'COMPLETED' } :
+      query.status === 'canceled' ? { status: 'CANCELED' } :
+      query.status === 'dispute' ? { status: 'DISPUTE' } :
+      query.status === 'archive' ? { status: { in: ['CANCELED', 'REFUNDED'] } } :
+      {};
+    const orderBy: Prisma.OrderOrderByWithRelationInput =
+      query.sort === 'oldest' ? { createdAt: 'asc' } :
+      query.sort === 'expensive' ? { totalAmountCents: 'desc' } :
+      query.sort === 'cheap' ? { totalAmountCents: 'asc' } :
+      { createdAt: 'desc' };
     const orders = await this.prisma.order.findMany({
-      where: { OR: [{ buyerId: user.id }, { sellerId: user.id }] },
+      where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
       include: {
         product: true,
         buyer: { include: { _count: { select: { followers: true } } } },
         seller: { include: { _count: { select: { followers: true } } } },
         reviews: { select: { authorId: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       take: 100,
     });
     return orders.map((order) => dealDto(order, user));
@@ -282,6 +304,25 @@ export class EscrowService {
     return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'], 'REFUNDED', key, reason);
   }
 
+  /**
+   * Seller-initiated refund:
+   * - funds still held (PAYMENT_HOLD | DELIVERING | DISPUTE) → automatic Escrow refund
+   * - COMPLETED (payout done) → clawback via seller with mandatory reason + audit
+   */
+  refundBySeller(seller: AuthUser, id: bigint, key: string, reason: string) {
+    const trimmed = reason.trim();
+    if (!trimmed) throw new BadRequestException('Укажите причину возврата.');
+    return this.refund(
+      seller,
+      id,
+      ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'],
+      'REFUNDED',
+      key,
+      trimmed,
+      { sellerInitiated: true },
+    );
+  }
+
   private async refund(
     actor: AuthUser,
     id: bigint,
@@ -289,6 +330,7 @@ export class EscrowService {
     target: 'CANCELED' | 'REFUNDED',
     key: string,
     reason?: string,
+    opts?: { sellerInitiated?: boolean },
   ) {
     await this.prisma.$transaction(async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
@@ -302,9 +344,17 @@ export class EscrowService {
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const participant = order.buyerId === actor.id || order.sellerId === actor.id;
       const support = canActAsSupport(actor);
+      const sellerInitiated = Boolean(opts?.sellerInitiated) && order.sellerId === actor.id;
       if (!participant && !support) throw new BadRequestException('Нет доступа к сделке.');
-      if (order.status === 'COMPLETED' && !support) {
-        throw new BadRequestException('После завершения возврат доступен только поддержке.');
+      if (order.status === 'COMPLETED') {
+        if (!support && !sellerInitiated) {
+          throw new BadRequestException('После завершения возврат доступен продавцу или поддержке.');
+        }
+        if (!reason?.trim()) {
+          throw new BadRequestException('Укажите причину возврата после завершённой сделки.');
+        }
+      } else if (sellerInitiated && order.sellerId !== actor.id) {
+        throw new BadRequestException('Возврат может инициировать только продавец.');
       }
       if (order.status === target) return;
       const changed = await tx.order.updateMany({
@@ -327,7 +377,9 @@ export class EscrowService {
           data: {
             userId: order.sellerId, orderId: id, type: 'ADMIN_ADJUSTMENT', amountCents: -order.payoutCents,
             balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:clawback`,
-            description: 'Возврат после COMPLETED (поддержка)',
+            description: sellerInitiated
+              ? 'Возврат после COMPLETED (продавец)'
+              : 'Возврат после COMPLETED (поддержка)',
           },
         });
       }
@@ -351,7 +403,12 @@ export class EscrowService {
       await tx.orderTransition.create({
         data: { orderId: id, from: order.status, to: target, actorId: actor.id, idempotencyKey: key, reason },
       });
-      await this.audit(tx, actor.id, `ORDER_${target}`, id, reason ? { reason } : undefined);
+      await this.audit(tx, actor.id, `ORDER_${target}`, id, {
+        ...(reason ? { reason } : {}),
+        ...(sellerInitiated ? { sellerInitiated: true } : {}),
+        ...(support ? { support: true } : {}),
+        fromStatus: order.status,
+      });
     }, SERIALIZABLE);
 
     if (canActAsSupport(actor)) {
@@ -420,7 +477,9 @@ export class EscrowService {
 @Controller('orders')
 export class EscrowController {
   constructor(private readonly service: EscrowService) {}
-  @Get() list(@CurrentUser() user: AuthUser) { return this.service.list(user); }
+  @Get() list(@CurrentUser() user: AuthUser, @Query() query: OrderQuery) {
+    return this.service.list(user, query);
+  }
   @Post('product/:productId') purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {
     return this.service.purchase(user, id, dto.idempotencyKey, dto.quantity);
   }
@@ -435,6 +494,13 @@ export class EscrowController {
   }
   @Post(':id/dispute') dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
     return this.service.dispute(user, parseId(id), dto.idempotencyKey, dto.reason);
+  }
+  @Post(':id/refund-request') refundRequest(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SellerRefundDto,
+  ) {
+    return this.service.refundBySeller(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
 }
 

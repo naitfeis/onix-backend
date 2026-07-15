@@ -21,15 +21,17 @@ export type BotLoginStartResult = {
 
 export class BotLoginError extends Error {
   readonly code?: string;
+  readonly details?: unknown;
 
-  constructor(message: string, code?: string) {
+  constructor(message: string, code?: string, details?: unknown) {
     super(message);
     this.name = 'BotLoginError';
     this.code = code;
+    this.details = details;
   }
 }
 
-type Envelope<T> = { success: boolean; data: T; error?: { code?: string; message?: string }; message?: string };
+type Envelope<T> = { success: boolean; data: T; error?: { code?: string; message?: string; details?: unknown }; message?: string };
 
 async function readData<T>(response: Response): Promise<T> {
   const payload = await response.json() as Envelope<T>;
@@ -38,6 +40,7 @@ async function readData<T>(response: Response): Promise<T> {
     throw new BotLoginError(
       Array.isArray(msg) ? msg.join(' ') : msg,
       payload.error?.code,
+      payload.error?.details,
     );
   }
   return payload.data;

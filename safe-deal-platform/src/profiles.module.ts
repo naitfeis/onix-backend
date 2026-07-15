@@ -4,7 +4,7 @@ import {
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuthUser, CurrentUser } from './common';
 import { PrismaService } from './prisma.service';
-import { ledgerDto, profileDto, sellerDto } from './response';
+import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
 class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(120) displayName?: string;
@@ -36,29 +36,53 @@ export class ProfilesService {
     return profileDto(profile, ledger);
   }
 
-  async getPublic(onixId: string) {
+  /** Public profile — no balance / ledger / private deal history. */
+  async getPublic(viewer: AuthUser, onixId: string) {
     const profile = await this.prisma.user.findUnique({
       where: { onixId },
       select: {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
-        createdAt: true, _count: { select: { followers: true } },
+        createdAt: true, isAdmin: true, isSupport: true, deletedAt: true,
+        _count: { select: { followers: true } },
+        followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
         products: {
           where: { status: 'ACTIVE' },
           orderBy: { createdAt: 'desc' },
           take: 30,
+          select: {
+            id: true, title: true, description: true, priceCents: true, category: true,
+            subcategory: true, status: true, createdAt: true, quantity: true,
+          },
+        },
+        reviewsReceived: {
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
         },
       },
     });
-    if (!profile) throw new NotFoundException('Профиль не найден.');
+    if (!profile || profile.deletedAt) throw new NotFoundException('Профиль не найден.');
     return {
       ...sellerDto({
         ...profile,
         _count: profile._count,
+        followers: profile.followers,
       }),
       bio: profile.bio,
       createdAt: profile.createdAt.toISOString(),
-      products: profile.products,
+      products: profile.products.map((p) => ({
+        id: p.id,
+        title: p.title,
+        ...(p.description ? { description: p.description } : {}),
+        priceCents: p.priceCents.toString(),
+        category: p.category,
+        ...(p.subcategory ? { subcategory: p.subcategory } : {}),
+        status: p.status,
+        quantity: p.quantity,
+        createdAt: p.createdAt.toISOString(),
+      })),
+      reviews: profile.reviewsReceived.map(reviewDto),
     };
   }
 
@@ -85,8 +109,8 @@ export class ProfilesController {
   @Patch('users/me') update(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.profiles.update(user, dto);
   }
-  @Get('users/:onixId') profile(@Param('onixId') onixId: string) {
-    return this.profiles.getPublic(onixId);
+  @Get('users/:onixId') profile(@CurrentUser() user: AuthUser, @Param('onixId') onixId: string) {
+    return this.profiles.getPublic(user, onixId);
   }
   @Get('wallet/ledger') ledger(@CurrentUser() user: AuthUser) { return this.profiles.ledger(user); }
 }
