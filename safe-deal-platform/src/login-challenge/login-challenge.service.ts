@@ -3,9 +3,12 @@ import { randomBytes } from 'crypto';
 import type { LoginChallenge } from '@prisma/client';
 import { AuthOrchestrator } from '../auth-v2/auth-orchestrator.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
-import type { DeviceContext } from '../auth-v2/session.service';
+import type { DeviceContext, SessionAuthResult } from '../auth-v2/session.service';
 import type { VerifiedTelegramIdentity } from '../auth-v2/telegram-login.verifier';
 import { LoginChallengeRepository } from './login-challenge.repository';
+
+/** Same payload Website `/complete` returns (Session + refreshMaxAge). */
+export type BotLoginCompleteResult = SessionAuthResult & { refreshMaxAgeSeconds: number };
 
 export type StartChallengeResult = {
   challengeId: string;
@@ -210,7 +213,7 @@ export class LoginChallengeService {
     loginSessionId: string;
     rememberMe?: boolean;
     device?: DeviceContext;
-  }) {
+  }): Promise<BotLoginCompleteResult> {
     const challenge = await this.requireFresh(input.challengeId);
     this.assertLoginSession(challenge, input.loginSessionId);
 
@@ -245,13 +248,14 @@ export class LoginChallengeService {
 
   /**
    * @deprecated Exchange / return-URL login removed. Use poll → POST /complete on the same SPA URL.
+   * Return type matches `/complete` for call-site compatibility; runtime always throws.
    */
   async completeWithExchangeCode(_input: {
     exchangeCode: string;
     loginSessionId?: string;
     rememberMe?: boolean;
     device?: DeviceContext;
-  }): Promise<never> {
+  }): Promise<BotLoginCompleteResult> {
     void _input;
     throw new AuthPlatformError(
       'AUTH_LOGIN_CHALLENGE_INVALID',
