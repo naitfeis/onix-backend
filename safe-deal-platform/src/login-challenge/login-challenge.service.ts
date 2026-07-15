@@ -90,8 +90,18 @@ export class LoginChallengeService {
     createdUserAgent: string | null;
     expiresAt: Date;
   }> {
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] openForBotPrompt lookup',
+      challengeId,
+    }));
     await this.markOpened(challengeId);
     const challenge = await this.requireFresh(challengeId);
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] openForBotPrompt result',
+      challengeId: challenge.id,
+      status: challenge.status,
+      dbIdMatchesDeepLink: challenge.id === challengeId,
+    }));
     return {
       challengeId: challenge.id,
       status: challenge.status,
@@ -145,6 +155,14 @@ export class LoginChallengeService {
     identity: VerifiedTelegramIdentity,
   ): Promise<{ exchangeCode: string; returnUrl: string }> {
     const challenge = await this.requireFresh(challengeId);
+    const statusBefore = challenge.status;
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] confirmFromBot status before',
+      challengeId,
+      statusBefore,
+      telegramId: identity.telegramId.toString(),
+    }));
+
     if (challenge.status === 'CONFIRMED') {
       if (challenge.telegramId && challenge.telegramId !== identity.telegramId) {
         throw new AuthPlatformError(
@@ -160,6 +178,12 @@ export class LoginChallengeService {
         exchangeExpiresAt: new Date(Date.now() + LOGIN_EXCHANGE_TTL_MS),
       });
       const returnUrl = `${websiteOrigin()}/login/continue?x=${exchangeCode}`;
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] confirmFromBot status after',
+        challengeId,
+        statusAfter: 'CONFIRMED',
+        reused: true,
+      }));
       return { exchangeCode, returnUrl };
     }
     if (challenge.status === 'CONSUMED' || challenge.status === 'EXPIRED') {
@@ -181,6 +205,8 @@ export class LoginChallengeService {
       msg: 'login_challenge_confirmed',
       challengeId,
       telegramId: identity.telegramId.toString(),
+      statusBefore,
+      statusAfter: 'CONFIRMED',
     }));
 
     return { exchangeCode, returnUrl };

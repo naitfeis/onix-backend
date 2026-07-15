@@ -5,6 +5,7 @@ import {
   answerTelegramCallback,
   editTelegramMessage,
   sendTelegramMessage,
+  type TelegramApiResult,
 } from './bot-telegram-api';
 import { formatLoginConfirmPrompt } from './login-challenge-prompt';
 import { LoginChallengeService } from './login-challenge.service';
@@ -17,6 +18,7 @@ type TelegramUser = {
 };
 
 type TelegramUpdate = {
+  update_id?: number;
   message?: {
     text?: string;
     from?: TelegramUser;
@@ -38,6 +40,8 @@ type TelegramUpdate = {
  * Telegram Bot webhook — LoginChallenge UX only.
  * Confirm calls existing LoginChallengeService.confirmFromBot.
  * Session is issued later by Website complete (unchanged).
+ *
+ * Diagnostics: every hop logs with prefix [Bot] so ops can locate the first broken link.
  */
 @Public()
 @Controller('telegram')
@@ -51,21 +55,65 @@ export class BotWebhookHandler {
     @Headers('x-telegram-bot-api-secret-token') secret: string | undefined,
     @Body() update: TelegramUpdate,
   ) {
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] webhook hit',
+      updateId: update?.update_id ?? null,
+      hasMessage: Boolean(update?.message),
+      hasCallback: Boolean(update?.callback_query),
+      messageText: update?.message?.text ?? null,
+      callbackData: update?.callback_query?.data ?? null,
+      secretHeaderPresent: Boolean(secret),
+    }));
+
     assertWebhookSecret(secret);
+    this.logger.log('[Bot] webhook secret check passed');
 
     const start = update.message?.text?.trim();
-    if (start?.startsWith('/start ')) {
+    if (start?.startsWith('/start')) {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] received /start',
+        rawText: start,
+        telegramId: update.message?.from?.id ?? null,
+        chatId: update.message?.chat?.id ?? null,
+      }));
+
+      if (!start.startsWith('/start ')) {
+        this.logger.warn(JSON.stringify({
+          msg: '[Bot] /start format not matched — expected "/start login_<challengeId>"',
+          rawText: start,
+          note: 'Chain breaks HERE if Telegram sent /start@BotName or payload-less /start',
+        }));
+        return { ok: true, ignored: true, reason: 'start_format' };
+      }
+
       return this.onStartLogin(update);
     }
 
     const data = update.callback_query?.data;
     if (data?.startsWith('confirm_login:')) {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] callback received',
+        kind: 'confirm',
+        challengeId: data.slice('confirm_login:'.length),
+        telegramId: update.callback_query?.from?.id ?? null,
+        messageId: update.callback_query?.message?.message_id ?? null,
+      }));
       return this.onConfirm(update, data.slice('confirm_login:'.length));
     }
     if (data?.startsWith('cancel_login:')) {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] callback received',
+        kind: 'cancel',
+        challengeId: data.slice('cancel_login:'.length),
+        telegramId: update.callback_query?.from?.id ?? null,
+      }));
       return this.onCancel(update, data.slice('cancel_login:'.length));
     }
 
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] update ignored (no /start login_ / confirm / cancel)',
+      updateId: update?.update_id ?? null,
+    }));
     return { ok: true };
   }
 
@@ -75,12 +123,42 @@ export class BotWebhookHandler {
     const challengeId = parseLoginChallengeId(param);
     const chatId = update.message?.chat?.id;
     const from = update.message?.from;
+
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] parse start payload',
+      startParam: param,
+      challengeId,
+      telegramId: from?.id ?? null,
+      chatId: chatId ?? null,
+    }));
+
     if (!challengeId || chatId == null || !from) {
-      return { ok: true };
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] chain break — missing challengeId/chatId/from after /start',
+        challengeId,
+        chatId: chatId ?? null,
+        hasFrom: Boolean(from),
+      }));
+      return { ok: true, prompted: false, reason: 'parse_failed' };
     }
 
     try {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] LoginChallenge lookup → openForBotPrompt()',
+        challengeId,
+      }));
       const prompt = await this.challenges.openForBotPrompt(challengeId);
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] challenge found',
+        challengeId: prompt.challengeId,
+        challengeFound: true,
+        status: prompt.status,
+        createdIp: prompt.createdIp,
+        hasUserAgent: Boolean(prompt.createdUserAgent),
+        userLinked: 'n/a (IdentityLink resolved later on Website complete)',
+        expiresAt: prompt.expiresAt.toISOString(),
+      }));
+
       const text = formatLoginConfirmPrompt(
         {
           createdAt: prompt.createdAt,
@@ -89,7 +167,15 @@ export class BotWebhookHandler {
         },
         from.first_name,
       );
-      await sendTelegramMessage({
+
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] sending prompt…',
+        challengeId,
+        chatId,
+        botTokenConfigured: Boolean(process.env.BOT_TOKEN),
+      }));
+
+      const sent = await sendTelegramMessage({
         chatId,
         text,
         parseMode: 'HTML',
@@ -100,18 +186,39 @@ export class BotWebhookHandler {
           ]],
         },
       });
-      return { ok: true, prompted: true };
+      this.logBotApi('[Bot] sendMessage result', sent);
+
+      if (!sent.ok) {
+        this.logger.error(JSON.stringify({
+          msg: '[Bot] chain break — Telegram Bot API sendMessage FAILED',
+          challengeId,
+          statusAfterDb: prompt.status,
+          note: 'DB may be OPENED but Website stays non-CONFIRMED until user confirms; without keyboard confirm never happens',
+          ...sent,
+        }));
+        return { ok: true, prompted: false, reason: 'bot_api_send_failed', botApi: sent };
+      }
+
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] prompt delivered',
+        challengeId,
+        messageId: sent.messageId ?? null,
+      }));
+      return { ok: true, prompted: true, messageId: sent.messageId ?? null };
     } catch (error) {
       const message = error instanceof AuthPlatformError
         ? userFacingChallengeError(error)
         : 'Не удалось найти попытку входа. Откройте вход на сайте ONIX ещё раз.';
-      await sendTelegramMessage({ chatId, text: message });
       this.logger.warn(JSON.stringify({
-        msg: 'login_challenge_start_prompt_failed',
+        msg: '[Bot] chain break — LoginChallenge lookup/open failed',
         challengeId,
+        challengeFound: false,
+        errorCode: error instanceof AuthPlatformError ? error.code : 'UNKNOWN',
         error: error instanceof Error ? error.message : String(error),
       }));
-      return { ok: true, prompted: false };
+      const sent = await sendTelegramMessage({ chatId, text: message });
+      this.logBotApi('[Bot] error notify sendMessage', sent);
+      return { ok: true, prompted: false, reason: 'challenge_lookup_failed' };
     }
   }
 
@@ -121,20 +228,40 @@ export class BotWebhookHandler {
     const chatId = cb?.message?.chat?.id;
     const messageId = cb?.message?.message_id;
     if (!from || chatId == null) {
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] chain break — confirm callback missing from/chat',
+        challengeId,
+      }));
       return { ok: true };
     }
 
     if (cb?.id) {
-      await answerTelegramCallback(cb.id);
+      const answered = await answerTelegramCallback(cb.id);
+      this.logBotApi('[Bot] answerCallbackQuery', answered);
     }
 
     try {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] confirmFromBot() start',
+        challengeId,
+        telegramId: from.id,
+        statusBefore: '(see next log from service / result)',
+      }));
+
       const result = await this.challenges.confirmFromBot(challengeId, {
         telegramId: BigInt(from.id),
         username: from.username,
         firstName: from.first_name,
         lastName: from.last_name,
       });
+
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] confirmFromBot() done',
+        challengeId,
+        statusAfter: 'CONFIRMED',
+        returnUrlHost: safeHost(result.returnUrl),
+        note: 'Website poll should observe CONFIRMED next',
+      }));
 
       const confirmedText = [
         '✅ <b>Вход успешно подтверждён</b>',
@@ -144,7 +271,7 @@ export class BotWebhookHandler {
       ].join('\n');
 
       if (messageId != null) {
-        await editTelegramMessage({
+        const edited = await editTelegramMessage({
           chatId,
           messageId,
           text: confirmedText,
@@ -153,8 +280,9 @@ export class BotWebhookHandler {
             inline_keyboard: [[{ text: 'Вернуться в ONIX', url: result.returnUrl }]],
           },
         });
+        this.logBotApi('[Bot] editMessageText after confirm', edited);
       } else {
-        await sendTelegramMessage({
+        const sent = await sendTelegramMessage({
           chatId,
           text: confirmedText,
           parseMode: 'HTML',
@@ -162,10 +290,17 @@ export class BotWebhookHandler {
             inline_keyboard: [[{ text: 'Вернуться в ONIX', url: result.returnUrl }]],
           },
         });
+        this.logBotApi('[Bot] sendMessage after confirm (no message_id)', sent);
       }
 
       return { ok: true, confirmed: true };
     } catch (error) {
+      this.logger.error(JSON.stringify({
+        msg: '[Bot] chain break — confirmFromBot failed',
+        challengeId,
+        errorCode: error instanceof AuthPlatformError ? error.code : 'UNKNOWN',
+        error: error instanceof Error ? error.message : String(error),
+      }));
       const text = error instanceof AuthPlatformError
         ? userFacingChallengeError(error)
         : 'Не удалось подтвердить вход. Попробуйте снова с сайта.';
@@ -191,9 +326,18 @@ export class BotWebhookHandler {
     }
 
     try {
-      await this.challenges.cancelFromBot(challengeId);
-    } catch {
-      /* already expired/confirmed — still update UI */
+      const cancelled = await this.challenges.cancelFromBot(challengeId);
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] cancelFromBot() done',
+        challengeId,
+        statusAfter: cancelled.status,
+      }));
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] cancelFromBot failed (UI still updated)',
+        challengeId,
+        error: error instanceof Error ? error.message : String(error),
+      }));
     }
 
     const text = '❌ Вход отменён. Вы можете начать вход заново на сайте ONIX.';
@@ -204,6 +348,15 @@ export class BotWebhookHandler {
     }
 
     return { ok: true, cancelled: true };
+  }
+
+  private logBotApi(label: string, result: TelegramApiResult): void {
+    const payload = { msg: label, ...result };
+    if (result.ok) {
+      this.logger.log(JSON.stringify(payload));
+    } else {
+      this.logger.error(JSON.stringify(payload));
+    }
   }
 }
 
@@ -233,5 +386,13 @@ function userFacingChallengeError(error: AuthPlatformError): string {
       return 'Статус попытки входа изменился. Обновите страницу сайта.';
     default:
       return error.message || 'Не удалось обработать вход.';
+  }
+}
+
+function safeHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return '(invalid-url)';
   }
 }
