@@ -168,7 +168,7 @@ export type ProductListQuery = {
 };
 
 export type OrderListSort = 'newest' | 'oldest' | 'expensive' | 'cheap';
-export type OrderListStatus = 'active' | 'completed' | 'canceled' | 'dispute' | 'archive';
+export type OrderListStatus = 'open' | 'active' | 'completed' | 'canceled' | 'dispute' | 'archive';
 
 export type OrderListQuery = {
   sort?: OrderListSort;

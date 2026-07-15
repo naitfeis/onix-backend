@@ -24,10 +24,10 @@ class SellerRefundDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
 }
 class OrderQuery {
-  /** newest | oldest | expensive | cheap */
+  /** newest | oldest | expensive | cheap — marketplace-style sorts kept for API compat */
   @IsOptional() @IsIn(['newest', 'oldest', 'expensive', 'cheap']) sort?: string;
-  /** active | completed | canceled | dispute | archive */
-  @IsOptional() @IsIn(['active', 'completed', 'canceled', 'dispute', 'archive']) status?: string;
+  /** all (omit) | open | completed | active | canceled | dispute | archive */
+  @IsOptional() @IsIn(['open', 'active', 'completed', 'canceled', 'dispute', 'archive']) status?: string;
 }
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
@@ -47,7 +47,8 @@ export class EscrowService {
 
   async list(user: AuthUser, query: OrderQuery = {}) {
     const statusWhere: Prisma.OrderWhereInput =
-      query.status === 'active' ? { status: { in: ['PAYMENT_HOLD', 'DELIVERING'] } } :
+      query.status === 'open' || query.status === 'active'
+        ? { status: { in: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] } } :
       query.status === 'completed' ? { status: 'COMPLETED' } :
       query.status === 'canceled' ? { status: 'CANCELED' } :
       query.status === 'dispute' ? { status: 'DISPUTE' } :
@@ -72,6 +73,10 @@ export class EscrowService {
     return orders.map((order) => dealDto(order, user));
   }
 
+  /**
+   * Canonical purchase entry — Marketplace / Favorites / Public Profile product card
+   * all call POST /orders/product/:productId → this method only.
+   */
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
     const order = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
@@ -134,13 +139,19 @@ export class EscrowService {
       });
 
       // Auto-delivery after payment hold — one-time, never via public product API.
+      // Single purchase path: EscrowService.purchase (POST /orders/product/:productId).
       if (
         product.autoDeliver
         && product.deliveryCiphertext
         && product.deliveryIv
         && !product.deliveryConsumedAt
       ) {
-        const payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
+        let payload: string;
+        try {
+          payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
+        } catch {
+          throw new BadRequestException('Автовыдача недоступна: ошибка расшифровки (PRODUCT_DELIVERY_KEY).');
+        }
         await tx.message.create({
           data: {
             chatId,

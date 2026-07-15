@@ -62,13 +62,21 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
   if (!text) {
     throw new BadRequestException('Для автовыдачи укажите текст товара (deliveryText).');
   }
-  const enc = encryptDeliverySecret(text);
-  return {
-    autoDeliver: true,
-    deliveryCiphertext: enc.ciphertext,
-    deliveryIv: enc.iv,
-    deliveryConsumedAt: null as Date | null,
-  };
+  try {
+    const enc = encryptDeliverySecret(text);
+    return {
+      autoDeliver: true,
+      deliveryCiphertext: enc.ciphertext,
+      deliveryIv: enc.iv,
+      deliveryConsumedAt: null as Date | null,
+    };
+  } catch (error) {
+    throw new BadRequestException(
+      (error as Error).message.includes('PRODUCT_DELIVERY_KEY')
+        ? 'Автовыдача временно недоступна (ключ шифрования не настроен).'
+        : 'Не удалось зашифровать текст автовыдачи.',
+    );
+  }
 }
 
 @Injectable()

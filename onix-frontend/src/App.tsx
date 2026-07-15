@@ -14,7 +14,7 @@ import { BotLoginError } from './auth/botLogin';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
   formatBanRemaining, formatLastSeen, refreshBanInfo, type BanInfo, type BanReasonCode, type Deal, type OrderListQuery,
-  type OrderListSort, type OrderListStatus, type Product, type ProductDraft, type PublicProfile,
+  type OrderListStatus, type Product, type ProductDraft, type PublicProfile,
 } from './api/contracts';
 import OnixBackground from './components/OnixBackground';
 import UserAvatar from './components/UserAvatar';
@@ -84,16 +84,10 @@ const dealLabels: Record<Deal['status'], string> = {
   COMPLETED: 'Завершено', CANCELED: 'Отменено', DISPUTE: 'Открыт спор', REFUNDED: 'Возвращено',
 };
 
-const DEAL_FILTERS: Array<{ id: string; label: string; sort?: OrderListSort; status?: OrderListStatus }> = [
-  { id: 'newest', label: 'Новые', sort: 'newest' },
-  { id: 'oldest', label: 'Старые', sort: 'oldest' },
-  { id: 'expensive', label: 'Дорогие', sort: 'expensive' },
-  { id: 'cheap', label: 'Дешёвые', sort: 'cheap' },
-  { id: 'active', label: 'Активные', status: 'active' },
+const DEAL_FILTERS: Array<{ id: string; label: string; status?: OrderListStatus }> = [
+  { id: 'all', label: 'Все' },
+  { id: 'open', label: 'Незавершённые', status: 'open' },
   { id: 'completed', label: 'Завершённые', status: 'completed' },
-  { id: 'canceled', label: 'Отменённые', status: 'canceled' },
-  { id: 'dispute', label: 'Спор', status: 'dispute' },
-  { id: 'archive', label: 'Архив', status: 'archive' },
 ];
 
 function isTelegramMiniApp() {
@@ -644,14 +638,13 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
 
 function Deals({ core, switchTo, setToast }: { core: Core; switchTo: (screen: Screen) => void; setToast: (text: string) => void }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
-  const [dealFilter, setDealFilter] = useState('newest');
+  const [dealFilter, setDealFilter] = useState('all');
   const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'dispute' } | null>(null);
   const [reviewDeal, setReviewDeal] = useState<Deal | null>(null);
   const [refundDeal, setRefundDeal] = useState<Deal | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter) ?? DEAL_FILTERS[0];
   const listQuery: OrderListQuery = {
-    ...(activeFilter.sort ? { sort: activeFilter.sort } : {}),
     ...(activeFilter.status ? { status: activeFilter.status } : {}),
   };
   useEffect(() => {
@@ -808,15 +801,6 @@ function PublicProfileModal({
   const reviews = profile.reviews ?? [];
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
-  const activeProducts = products.filter((item) => item.status === 'ACTIVE');
-
-  const onBuy = () => {
-    if (activeProducts.length === 1) {
-      onOpenProduct?.(activeProducts[0].id);
-      return;
-    }
-    setSection('products');
-  };
 
   return <Modal open title="Профиль" onClose={onClose}>
     <div className="stack public-profile">
@@ -855,9 +839,6 @@ function PublicProfileModal({
               setFollowersCount(result.followersCount);
             }}
           >{followed ? 'Отписаться' : 'Подписаться'}</Button>}
-          {isSeller && activeProducts.length > 0 && onOpenProduct && (
-            <Button onClick={onBuy}>{activeProducts.length === 1 ? 'Купить товар' : 'Выбрать товар'}</Button>
-          )}
         </div>}
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
@@ -930,7 +911,25 @@ function Profile({
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
     {section === 'favorites' && (favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
-      <div className="product-grid">{favoriteProducts.map(item => <Card key={item.id}><h2>{item.title}</h2><div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} /><span>@{item.seller.username}</span></span><strong>{money(item.priceCents)}</strong></div></Card>)}</div>)}
+      <div className="product-grid">{favoriteProducts.map(item => (
+        <Card key={item.id} interactive className="product-card">
+          <button
+            type="button"
+            className="product-main"
+            onClick={() => openProductCard(item.id)}
+            aria-label={`Открыть ${item.title}`}
+          >
+            <h2>{item.title}</h2>
+            <div className="seller-row">
+              <span className="user-summary">
+                <UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} />
+                <span>@{item.seller.username}</span>
+              </span>
+              <strong>{money(item.priceCents)}</strong>
+            </div>
+          </button>
+        </Card>
+      ))}</div>)}
     {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
       <div className="product-grid">{ownProducts.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><strong>{money(item.priceCents)}</strong><Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button></div></Card>)}</div>)}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
@@ -963,12 +962,35 @@ function Profile({
 function EditProduct({ product, core, onClose, setToast }: { product: Product | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   useEffect(() => {
-    if (product) setDraft({ title: product.title, description: product.description || '', priceRubles: String(Number(product.priceCents) / 100), quantity: product.quantity, category: product.category, subcategory: product.subcategory || '' });
+    if (product) {
+      setDraft({
+        title: product.title,
+        description: product.description || '',
+        priceRubles: String(Number(product.priceCents) / 100),
+        quantity: product.quantity,
+        category: product.category,
+        subcategory: product.subcategory || '',
+        autoDeliver: Boolean(product.autoDeliver),
+        deliveryText: '',
+      });
+    }
   }, [product]);
-  return <Modal open={Boolean(product)} title="Редактировать товар" onClose={onClose}><form className="form" onSubmit={async event => { event.preventDefault(); if (product && validateDraft(draft).length === 0 && await core.updateProduct(product.id, draft)) { setToast('Изменения сохранены.'); onClose(); } }}>
+  return <Modal open={Boolean(product)} title="Редактировать товар" onClose={onClose}><form className="form" onSubmit={async event => {
+    event.preventDefault();
+    if (!product) return;
+    const keepSecret = Boolean(product.autoDeliver && draft.autoDeliver && !draft.deliveryText?.trim());
+    if (validateDraft(draft, { keepDeliverySecret: keepSecret }).length === 0 && await core.updateProduct(product.id, draft)) {
+      setToast('Изменения сохранены.');
+      onClose();
+    }
+  }}>
     <Field label="Название"><Input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field>
     <Field label="Описание"><Textarea value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
     <div className="form-grid"><Field label="Цена, ₽"><Input value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field><Field label="Количество"><Input type="number" min={1} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
+    <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
+    {draft.autoDeliver && <Field label="Текст товара" hint={product?.autoDeliver ? 'Оставьте пустым, чтобы сохранить текущий секрет. Новый текст заменит старый.' : 'login / password / код — выдаётся один раз после оплаты'}>
+      <Textarea maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} />
+    </Field>}
     <div className="modal__actions"><Button type="button" variant="danger" busy={core.actionBusy === `archive-${product?.id}`} onClick={async () => {
       if (product && await core.archiveProduct(product.id)) { setToast('Лот снят с публикации.'); onClose(); }
     }}>Снять</Button><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.actionBusy === 'product-form'}>Сохранить</Button></div>

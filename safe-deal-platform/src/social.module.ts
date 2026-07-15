@@ -4,10 +4,12 @@ import {
 } from '@nestjs/common';
 import { AuthUser, CurrentUser } from './common';
 import { PrismaService } from './prisma.service';
+import { productDto } from './response';
 
 /**
- * Favorites — own userId only; composite PK prevents duplicates.
- * Policy: archived products are removed from favorites on archive; list returns ACTIVE only.
+ * Favorites — own userId only; ACTIVE products only; composite PK prevents duplicates.
+ * Policy: archived products are removed from favorites on archive (`marketplace.status`);
+ * list returns ACTIVE only (same Product DTO as Marketplace).
  */
 @Injectable()
 export class FavoritesService {
@@ -33,25 +35,27 @@ export class FavoritesService {
     return this.prisma.favorite.deleteMany({ where: { userId: user.id, productId } });
   }
 
-  favorites(user: AuthUser) {
-    return this.prisma.favorite.findMany({
+  /** Same Product DTO as Marketplace — purchase opens via GET /products/:id → EscrowService.purchase. */
+  async favorites(user: AuthUser) {
+    const rows = await this.prisma.favorite.findMany({
       where: { userId: user.id, product: { status: 'ACTIVE' } },
-      select: {
-        createdAt: true,
+      include: {
         product: {
-          select: {
-            id: true,
-            title: true,
-            priceCents: true,
-            status: true,
-            category: true,
-            seller: { select: { onixId: true, telegramNick: true, displayName: true } },
+          include: {
+            seller: {
+              include: {
+                _count: { select: { followers: true } },
+                followers: { where: { followerId: user.id }, select: { followerId: true }, take: 1 },
+              },
+            },
+            favorites: { where: { userId: user.id }, select: { userId: true } },
           },
         },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    return rows.map((row) => productDto(row.product, user.id));
   }
 }
 

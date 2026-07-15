@@ -174,6 +174,8 @@ model LedgerEntry {
 model Chat {
   id        String          @id @default(cuid())
   orderId   BigInt?         @unique
+  /** Direct-chat pair key `d:{minUserId}:{maxUserId}` — unique; null for escrow/order chats. */
+  pairKey   String?         @unique @db.VarChar(64)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   order     Order?          @relation(fields: [orderId], references: [id])

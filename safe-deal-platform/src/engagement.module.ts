@@ -22,6 +22,13 @@ class ReviewDto {
   @IsOptional() @IsString() @Length(1, 1000) text?: string;
 }
 
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+/** Deterministic Direct Chat pair key — unique in DB (`Chat.pairKey`). */
+export function directChatPairKey(a: bigint, b: bigint): string {
+  return a < b ? `d:${a}:${b}` : `d:${b}:${a}`;
+}
+
 /**
  * Chat + notification domain (HTTP polling today; methods are WS-ready — no transport in service).
  * Access: ChatMember only. senderId always = CurrentUser (never from body).
@@ -101,21 +108,32 @@ export class ChatService {
     if (target.id === user.id) throw new BadRequestException('Нельзя открыть чат с собой.');
     await this.assertNotBlocked(user.id, target.id);
 
-    const chat = await this.prisma.$transaction(async (tx) => {
-      const existing = await tx.chat.findFirst({
-        where: {
-          orderId: null,
-          AND: [
-            { members: { some: { userId: user.id } } },
-            { members: { some: { userId: target.id } } },
-          ],
-        },
-      });
-      if (existing) return existing;
-      return tx.chat.create({
-        data: { members: { create: [{ userId: user.id }, { userId: target.id }] } },
-      });
-    });
+    const pairKey = directChatPairKey(user.id, target.id);
+    let chat: { id: string };
+    try {
+      chat = await this.prisma.$transaction(async (tx) => {
+        const existing = await tx.chat.findUnique({ where: { pairKey } });
+        if (existing) return existing;
+        return tx.chat.create({
+          data: {
+            pairKey,
+            members: { create: [{ userId: user.id }, { userId: target.id }] },
+          },
+        });
+      }, SERIALIZABLE);
+    } catch (error) {
+      // Concurrent create: unique pairKey wins — reuse existing chat (no duplicates).
+      if (
+        typeof error === 'object'
+        && error !== null
+        && 'code' in error
+        && (error as { code: string }).code === 'P2002'
+      ) {
+        chat = await this.prisma.chat.findUniqueOrThrow({ where: { pairKey } });
+      } else {
+        throw error;
+      }
+    }
 
     return {
       id: chat.id,
