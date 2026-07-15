@@ -36,7 +36,7 @@ export class ProfilesService {
     const profile = await this.prisma.user.findUnique({
       where: { onixId },
       select: {
-        onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
+        id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
         createdAt: true, _count: { select: { followers: true } },
         products: { where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' } },
@@ -45,7 +45,6 @@ export class ProfilesService {
     if (!profile) throw new NotFoundException('Профиль не найден.');
     return {
       ...sellerDto({
-        id: 0n,
         ...profile,
         _count: profile._count,
       }),

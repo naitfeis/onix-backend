@@ -6,7 +6,7 @@ import {
   getSharedAuthManager,
   resolveApiBase,
 } from '../auth';
-import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type Profile, type Review, type WalletOperation } from '../api/contracts';
+import { API_PATHS, type AsyncState, type ChatThread, type Deal, type Message, type Notification, type Product, type ProductDraft, type Profile, type Review } from '../api/contracts';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -88,12 +88,7 @@ export function useOnixCore() {
   const loadProfile = useCallback(async () => {
     setStates(previous => ({ ...previous, profile: 'loading' }));
     try {
-      console.log("Profile request started");
-      const [data, walletHistory] = await Promise.all([
-        api.get<Profile>(API_PATHS.me),
-        api.get<WalletOperation[]>(API_PATHS.ledger),
-      ]);
-      const complete = { ...data, walletHistory };
+      const complete = await api.get<Profile>(API_PATHS.me);
       setProfile(complete);
       setErrors(previous => ({ ...previous, profile: undefined }));
       setStates(previous => ({ ...previous, profile: 'success' }));
