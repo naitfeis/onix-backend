@@ -12,6 +12,7 @@ export class DeviceInfoDto {
   @IsOptional() @IsString() @MaxLength(32) language?: string;
   @IsOptional() @IsString() @MaxLength(512) userAgent?: string;
   @IsOptional() @IsString() @MaxLength(64) fingerprintHash?: string;
+  @IsOptional() @IsString() @MaxLength(64) browserId?: string;
   @IsOptional() @IsString() @MaxLength(32) screenResolution?: string;
   @IsOptional() @IsString() @MaxLength(64) webglHash?: string;
   @IsOptional() @IsString() @MaxLength(64) canvasHash?: string;

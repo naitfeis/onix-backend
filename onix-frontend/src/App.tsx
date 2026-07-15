@@ -246,39 +246,18 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
   const [sellerProfile, setSellerProfile] = useState<PublicProfile | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('Все');
+  const [subcategory, setSubcategory] = useState('');
   const [sort, setSort] = useState('new');
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
 
-  const isDefaultView = query.trim() === '' && category === 'Все' && sort === 'new';
-
-  const reloadCatalog = () => {
-    if (isDefaultView) {
-      void core.refreshAll();
-      return;
-    }
-    setMarketState('loading');
-    const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
-    void core.listProducts({
-      search: query.trim() || undefined,
-      category: category === 'Все' ? undefined : category,
-      sort: serverSort,
-      limit: 30,
-      offset: 0,
-    }).then((data) => {
-      setItems(data);
-      setMarketError(undefined);
-      setMarketState('success');
-    }).catch((error: unknown) => {
-      setItems([]);
-      setMarketError(friendlyError(error));
-      setMarketState('error');
-    });
-  };
+  const isDefaultView = query.trim() === '' && category === 'Все' && !subcategory && sort === 'new';
+  const marketSubs = category !== 'Все'
+    ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
+    : [];
 
   useEffect(() => {
-    // Domain catalog only after auth bootstrap / session restore (no racing 401s).
     if (core.states.profile === 'loading') {
       setMarketState('loading');
       return;
@@ -292,7 +271,6 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
 
     if (!isDefaultView) return;
 
-    // Default vitrine: reuse bootstrap products — avoid duplicate GET /api/products.
     if (core.states.products === 'loading' || core.states.products === 'idle') {
       setMarketState('loading');
       return;
@@ -328,6 +306,7 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
       void core.listProducts({
         search: query.trim() || undefined,
         category: category === 'Все' ? undefined : category,
+        subcategory: subcategory || undefined,
         sort: serverSort,
         limit: 30,
         offset: 0,
@@ -344,9 +323,8 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
       });
     }, debounceMs);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [category, core.listProducts, core.profile, core.states.profile, isDefaultView, query, sort]);
+  }, [category, core.listProducts, core.profile, core.states.profile, isDefaultView, query, sort, subcategory]);
 
-  // Keep open product modal seller follow state in sync with catalog (no manual tick).
   useEffect(() => {
     if (!selected) return;
     const fresh = items.find((item) => item.id === selected.id)
@@ -363,12 +341,24 @@ function Market({ core, switchTo, setToast }: { core: Core; switchTo: (screen: S
 
   return <div className="stack">
     <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
-      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select>
-      <Button variant="ghost" onClick={reloadCatalog} aria-label="Обновить">↻</Button></div>
+      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select></div>
     <div className="chips" role="list" aria-label="Категории">{['Все', ...CATEGORIES].map(item =>
-      <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => setCategory(item)}>{item === 'Все' ? item.toUpperCase() : CATEGORY_LABELS[item as keyof typeof CATEGORY_LABELS].toUpperCase()}</button>)}</div>
+      <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => {
+        setCategory(item);
+        setSubcategory('');
+      }}>{item === 'Все' ? item.toUpperCase() : CATEGORY_LABELS[item as keyof typeof CATEGORY_LABELS].toUpperCase()}</button>)}</div>
+    {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
+      {marketSubs.map(item => (
+        <button
+          role="listitem"
+          className={subcategory === item ? 'active' : ''}
+          key={item}
+          onClick={() => setSubcategory(subcategory === item ? '' : item)}
+        >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
+      ))}
+    </div>}
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
-      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={reloadCatalog}>Попробовать снова</Button>} /> :
+      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid">{items.map(product => <Card key={product.id} interactive className="product-card">
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
@@ -520,8 +510,13 @@ function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => v
   return <div className="chat-layout">
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}><SectionHeader title="ЧАТЫ" subtitle="СООБЩЕНИЯ СДЕЛОК" />
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
-        core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}><span><b>{chat.title}</b><small>{chat.subtitle || 'Открыть диалог'}</small></span>{chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}</button>)}</div>
-    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button><div>
+        core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}>
+          <span className="thread-peer"><UserAvatar avatarUrl={chat.peerAvatarUrl} name={chat.title} /><span><b>{chat.title}</b><small>{chat.subtitle || 'Открыть диалог'}</small></span></span>
+          {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
+        </button>)}</div>
+    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
+      {thread.peerAvatarUrl !== undefined || thread.title ? <UserAvatar avatarUrl={thread.peerAvatarUrl} name={thread.title} /> : null}
+      <div>
       <button type="button" className="linkish" onClick={async () => {
         if (!thread.peerOnixId) return;
         try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
@@ -533,11 +528,14 @@ function Chats({ core, switchTo }: { core: Core; switchTo: (screen: Screen) => v
         <Button variant="secondary" onClick={() => switchTo('deals')}>Открыть заказ</Button>
       </div>}
       <div className="messages">{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
-        <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
-          {message.kind !== 'SYSTEM' && <small>@{message.sender.username}</small>}
-          {message.kind === 'SYSTEM' && <small>ONIX</small>}
-          <p>{message.text}</p>
-          <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
+        <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
+          {!message.mine && <UserAvatar avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
+          <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
+            {message.kind !== 'SYSTEM' && <small>@{message.sender.username}</small>}
+            {message.kind === 'SYSTEM' && <small>ONIX</small>}
+            <p>{message.text}</p>
+            <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
+          </div>
         </div>)}</div>
       <form className="composer" onSubmit={async event => { event.preventDefault(); if (await core.sendMessage(thread.id, text)) setText(''); }}><Input value={text} onChange={event => setText(event.target.value)} maxLength={1000} placeholder="Сообщение..." aria-label="Сообщение" /><Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>➤</Button></form>
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>

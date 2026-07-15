@@ -2,14 +2,18 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma, User } from '@prisma/client';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from '../identity-link';
 import { resolveIsSupport } from '../common';
+import { RiskScoreService, type RiskDeviceInput } from '../risk-score.service';
 import { AuthPlatformError } from './auth-errors';
 import type { VerifiedTelegramIdentity } from './telegram-login.verifier';
 
 @Injectable()
 export class IdentityService {
+  constructor(private readonly risk: RiskScoreService) {}
+
   async upsertTelegramUser(
     tx: Prisma.TransactionClient,
     identity: VerifiedTelegramIdentity,
+    device?: RiskDeviceInput | null,
   ): Promise<User> {
     const existing = await tx.user.findUnique({ where: { telegramId: identity.telegramId } });
     if (existing?.deletedAt) {
@@ -40,6 +44,10 @@ export class IdentityService {
         },
       });
     } else {
+      await this.risk.assertNewRegistrationAllowed(tx, {
+        telegramId: identity.telegramId,
+        device,
+      });
       const isAdmin = process.env.ADMIN_TELEGRAM_ID === identity.telegramId.toString();
       const created = await tx.user.create({
         data: {

@@ -46,7 +46,7 @@ export class ChatService {
           include: {
             user: {
               select: {
-                onixId: true, displayName: true, telegramNick: true, lastSeenAt: true,
+                onixId: true, displayName: true, telegramNick: true, lastSeenAt: true, avatarUrl: true,
               },
             },
           },
@@ -77,6 +77,7 @@ export class ChatService {
         unreadCount,
         peerOnixId: other?.user.onixId,
         peerLastOnline: other?.user.lastSeenAt?.toISOString(),
+        ...(other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
         ...(chat.orderId && chat.order ? {
           dealId: chat.orderId.toString(),
           orderCard: {
@@ -120,6 +121,7 @@ export class ChatService {
       unreadCount: 0,
       peerOnixId: target.onixId,
       peerLastOnline: target.lastSeenAt.toISOString(),
+      ...(target.avatarUrl ? { peerAvatarUrl: target.avatarUrl } : {}),
     };
   }
 
@@ -134,7 +136,7 @@ export class ChatService {
       },
       orderBy: { createdAt: 'desc' },
       take,
-      include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true } } },
+      include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true } } },
     });
     // Mark entire thread read in one updateMany — not per-message.
     await this.prisma.chatMember.updateMany({
@@ -159,7 +161,7 @@ export class ChatService {
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: { chatId, senderId: user.id, kind: 'USER', text: body },
-        include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true } } },
+        include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true } } },
       });
       await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
       await createDomainNotification(tx, {

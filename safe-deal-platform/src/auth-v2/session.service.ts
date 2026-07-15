@@ -22,6 +22,7 @@ export interface DeviceContext {
   language?: string | null;
   userAgent?: string | null;
   fingerprintHash?: string | null;
+  browserId?: string | null;
   screenResolution?: string | null;
   webglHash?: string | null;
   canvasHash?: string | null;

@@ -331,6 +331,14 @@ enum SecurityEventType {
   IMPOSSIBLE_TRAVEL
   SESSION_ANOMALY
   ACCOUNT_TAKEOVER_SUSPECTED
+  REGISTRATION_BLOCKED
+}
+
+enum AbuseMarkerKind {
+  FINGERPRINT
+  BROWSER_ID
+  IP
+  USER_AGENT
 }
 
 enum SecurityEventStatus {
@@ -480,6 +488,20 @@ model SecurityEvent {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([type, createdAt])
+}
+
+/// Multi-factor abuse signals from banned accounts (Risk Score). Never block on IP alone.
+model AbuseMarker {
+  id           String          @id @default(cuid())
+  kind         AbuseMarkerKind
+  valueHash    String          @db.VarChar(64)
+  sourceUserId BigInt
+  createdAt    DateTime        @default(now())
+  revokedAt    DateTime?
+
+  @@unique([kind, valueHash])
+  @@index([kind, valueHash, revokedAt])
+  @@index([sourceUserId, revokedAt])
 }
 
 model Role {

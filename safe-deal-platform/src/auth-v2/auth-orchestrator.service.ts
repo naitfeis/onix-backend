@@ -70,7 +70,7 @@ export class AuthOrchestrator {
   ): Promise<SessionAuthResult & { refreshMaxAgeSeconds: number }> {
     const amr = options?.amr ?? ['telegram'];
     const { user, session, refreshToken, trustedDevice } = await this.prisma.$transaction(async (tx) => {
-      const user = await this.identities.upsertTelegramUser(tx, identity);
+      const user = await this.identities.upsertTelegramUser(tx, identity, options?.device);
       const created = await this.sessions.createSessionInTransaction(tx, user, {
         userId: user.id,
         rememberMe: options?.rememberMe,

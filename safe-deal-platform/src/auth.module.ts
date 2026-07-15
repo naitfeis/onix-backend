@@ -14,6 +14,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { AuthRolloutService } from './auth-v2/auth-rollout.service';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
+import { RiskScoreService } from './risk-score.service';
 import { formatErrorForLog } from './safe-error-log';
 
 interface TelegramIdentity {
@@ -46,6 +47,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly orchestrator?: AuthOrchestrator,
+    @Optional() private readonly risk?: RiskScoreService,
   ) {}
 
   async miniApp(initData: string) {
@@ -128,6 +130,9 @@ export class AuthService {
       });
     } else {
       try {
+        if (this.risk) {
+          await this.risk.assertNewRegistrationAllowed(this.prisma, { telegramId: identity.id });
+        }
         user = await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
             data: {

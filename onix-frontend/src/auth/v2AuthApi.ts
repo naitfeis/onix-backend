@@ -59,6 +59,9 @@ export type AuthV2LoginRequest = {
     timezone?: string;
     language?: string;
     userAgent?: string;
+    fingerprintHash?: string;
+    screenResolution?: string;
+    browserId?: string;
   };
 };
 

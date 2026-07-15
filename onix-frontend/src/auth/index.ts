@@ -54,7 +54,7 @@ export type {
 } from './v2AuthApi';
 
 export { normalizeTelegramLoginPayload } from './telegramPayload';
-export { collectDeviceInfo } from './deviceInfo';
+export { collectDeviceInfo, collectDeviceInfoAsync } from './deviceInfo';
 
 export {
   getWebsiteLoginProvider,

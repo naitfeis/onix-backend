@@ -57,6 +57,7 @@ export interface ChatThread {
   dealId?: string;
   peerOnixId?: string;
   peerLastOnline?: string;
+  peerAvatarUrl?: string;
   orderCard?: OrderCard;
 }
 
@@ -64,7 +65,7 @@ export interface Message {
   id: string;
   threadId: string;
   kind?: 'USER' | 'SYSTEM';
-  sender: Pick<Seller, 'id' | 'username'>;
+  sender: Pick<Seller, 'id' | 'username' | 'avatarUrl'>;
   text: string;
   createdAt: string;
   mine: boolean;
@@ -132,6 +133,7 @@ export type ProductListSort = 'newest' | 'price_asc' | 'price_desc' | 'rating';
 export type ProductListQuery = {
   search?: string;
   category?: string;
+  subcategory?: string;
   minPriceCents?: string;
   maxPriceCents?: string;
   sort?: ProductListSort;
@@ -144,6 +146,7 @@ export function productsListPath(query: ProductListQuery = {}): string {
   const search = query.search?.trim();
   if (search) params.set('search', search.slice(0, 100));
   if (query.category) params.set('category', query.category);
+  if (query.subcategory) params.set('subcategory', query.subcategory);
   if (query.minPriceCents) params.set('minPriceCents', query.minPriceCents);
   if (query.maxPriceCents) params.set('maxPriceCents', query.maxPriceCents);
   if (query.sort) params.set('sort', query.sort);

@@ -165,7 +165,7 @@ export function messageDto(message: {
   kind?: string;
   text: string;
   createdAt: Date;
-  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName'> | null;
+  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl'> | null;
 }, viewerId: bigint) {
   const system = message.kind === 'SYSTEM' || message.senderId == null;
   return {
@@ -175,6 +175,7 @@ export function messageDto(message: {
     sender: {
       id: system ? '0' : message.sender!.id.toString(),
       username: system ? 'ONIX' : (message.sender!.telegramNick ?? message.sender!.displayName ?? message.sender!.onixId),
+      ...(system ? {} : (message.sender!.avatarUrl ? { avatarUrl: message.sender!.avatarUrl } : {})),
     },
     text: message.text,
     createdAt: message.createdAt.toISOString(),

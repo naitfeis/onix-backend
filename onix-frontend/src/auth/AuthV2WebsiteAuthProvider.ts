@@ -1,5 +1,5 @@
 import { AuthManager } from './AuthManager';
-import { collectDeviceInfo } from './deviceInfo';
+import { collectDeviceInfoAsync } from './deviceInfo';
 import { getSharedAuthManager } from './sharedAuthManager';
 import { normalizeTelegramLoginPayload } from './telegramPayload';
 import type {
@@ -79,7 +79,7 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
       {
         telegram,
         rememberMe: options?.rememberMe,
-        device: collectDeviceInfo(),
+        device: await collectDeviceInfoAsync(),
       },
       this.fetchImpl,
       this.apiBase,

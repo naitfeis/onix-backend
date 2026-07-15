@@ -8,6 +8,7 @@ import { AuthRolloutService } from './auth-rollout.service';
 import { IdentityService } from './identity.service';
 import { RbacService } from './rbac.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
+import { RiskScoreService } from '../risk-score.service';
 import { SessionService } from './session.service';
 import { SigningKeyService } from './signing-key.service';
 import { TelegramLoginVerifier } from './telegram-login.verifier';
@@ -30,6 +31,7 @@ import { TokenService } from './token.service';
     SessionService,
     DualAccessService,
     AuthRolloutService,
+    RiskScoreService,
     IdentityService,
     TelegramLoginVerifier,
     AuthOrchestrator,
@@ -49,6 +51,7 @@ import { TokenService } from './token.service';
     RolesGuard,
     PermissionGuard,
     RbacService,
+    RiskScoreService,
     SECRETS_PROVIDER,
     AUTH_EVENT_PUBLISHER,
   ],

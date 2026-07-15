@@ -5,8 +5,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { IsBoolean, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
+import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { PrismaService } from './prisma.service';
+import { RiskScoreService } from './risk-score.service';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -44,7 +46,10 @@ class SupportGuard implements CanActivate {
 
 @Injectable()
 class OperationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly risk: RiskScoreService,
+  ) {}
 
   adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
     return this.prisma.$transaction(async (tx) => {
@@ -75,6 +80,11 @@ class OperationsService {
   }
   async ban(actor: AuthUser, onixId: string, banned: boolean) {
     const user = await this.prisma.user.update({ where: { onixId }, data: { deletedAt: banned ? new Date() : null } });
+    if (banned) {
+      await this.risk.recordBanMarkers(this.prisma, user.id);
+    } else {
+      await this.risk.revokeBanMarkers(this.prisma, user.id);
+    }
     await this.prisma.auditLog.create({
       data: { actorId: actor.id, action: banned ? 'USER_BAN' : 'USER_UNBAN', entity: 'User', entityId: user.id.toString() },
     });
@@ -180,6 +190,6 @@ class HealthController {
 @Module({
   controllers: [AdminController, AdminRefundController, SupportOpsController, HealthController, WalletController],
   providers: [AdminGuard, SupportGuard, OperationsService],
-  imports: [EscrowModule],
+  imports: [EscrowModule, AuthV2Module],
 })
 export class OperationsModule {}
