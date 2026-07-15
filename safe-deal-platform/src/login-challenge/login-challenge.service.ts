@@ -78,6 +78,52 @@ export class LoginChallengeService {
     return this.status(challengeId);
   }
 
+  /**
+   * Bot /start login_xxx: mark OPENED and return fields for the confirm prompt.
+   * Does not change IdentityLink / Session / Token — presentation only.
+   */
+  async openForBotPrompt(challengeId: string): Promise<{
+    challengeId: string;
+    status: string;
+    createdAt: Date;
+    createdIp: string | null;
+    createdUserAgent: string | null;
+    expiresAt: Date;
+  }> {
+    await this.markOpened(challengeId);
+    const challenge = await this.requireFresh(challengeId);
+    return {
+      challengeId: challenge.id,
+      status: challenge.status,
+      createdAt: challenge.createdAt,
+      createdIp: challenge.createdIp,
+      createdUserAgent: challenge.createdUserAgent,
+      expiresAt: challenge.expiresAt,
+    };
+  }
+
+  /**
+   * Bot cancel button: expire a pending challenge so Website polling stops cleanly.
+   */
+  async cancelFromBot(challengeId: string): Promise<{ challengeId: string; status: string }> {
+    const challenge = await this.requireFresh(challengeId);
+    if (challenge.status === 'CONFIRMED' || challenge.status === 'CONSUMED') {
+      throw new AuthPlatformError(
+        'AUTH_LOGIN_CHALLENGE_STATE',
+        'Challenge already confirmed; cannot cancel.',
+      );
+    }
+    if (challenge.status === 'EXPIRED') {
+      return { challengeId: challenge.id, status: 'EXPIRED' };
+    }
+    const expired = await this.challenges.markExpired(challengeId);
+    this.logger.log(JSON.stringify({
+      msg: 'login_challenge_cancelled_by_bot',
+      challengeId,
+    }));
+    return { challengeId: expired.id, status: expired.status };
+  }
+
   async status(challengeId: string): Promise<ChallengeStatusResult> {
     const challenge = await this.requireFresh(challengeId);
     const result: ChallengeStatusResult = {

@@ -199,6 +199,26 @@ No new Website User model. Same `API_PATHS` / DTOs as Mini App.
 | `onix-frontend/src/hooks/useOnixCore.ts` | AuthManager restore + `/me` + full Mini-equivalent bootstrap |
 | `onix-frontend/src/App.tsx` | No reload; abortable bot login; navbar identity sync |
 | `docs/architecture/ONIX-PRODUCTION-INTEGRATION-CUTOVER.md` | This report |
+| `safe-deal-platform/src/login-challenge/bot-webhook.handler.ts` | Interactive confirm/cancel UX + edit on success |
+| `safe-deal-platform/src/login-challenge/login-challenge-prompt.ts` | Browser/OS/IP/time prompt formatting |
+| `safe-deal-platform/src/login-challenge/bot-telegram-api.ts` | send/edit/answerCallback helpers |
+| `safe-deal-platform/src/login-challenge/login-challenge.service.ts` | Additive `openForBotPrompt` + `cancelFromBot` only |
+| `safe-deal-platform/test/bot-login-webhook-ux.test.ts` | Bot UX unit tests |
+
+---
+
+## Bot Login interactive UX
+
+After `/start login_<challengeId>`:
+
+1. Find LoginChallenge → mark OPENED (`openForBotPrompt`)
+2. Send message: источник Website, браузер, ОС, IP, время
+3. Buttons: **Подтвердить вход** / **Отменить**
+4. Confirm → existing `confirmFromBot` → edit message **«Вход успешно подтверждён»** (+ return link fallback)
+5. Cancel → `cancelFromBot` (EXPIRED) → Website poll stops on EXPIRED
+6. Website handshake unchanged: complete → AuthManager → `/me` → bootstrap
+
+Auth V2 / SessionService / TokenService / LoginChallenge schema — not rewritten.
 
 ---
 
@@ -206,7 +226,7 @@ No new Website User model. Same `API_PATHS` / DTOs as Mini App.
 
 ```
 onix-frontend: vitest run → 45/45 passed
-onix-frontend: tsc -b → pass
+backend: tsx --test → 93/93 passed (incl. bot UX)
 ```
 
 Manual e2e (ops): confirm on staging with `AUTH_ACCEPT_V2_ACCESS=true`, bot webhook, and same-origin cookie path before production cutover.
@@ -219,5 +239,6 @@ Manual e2e (ops): confirm on staging with `AUTH_ACCEPT_V2_ACCESS=true`, bot webh
 | --- | --- |
 | Frontend integration code | **95%** |
 | Backend Auth V2 / LoginChallenge (prior freeze) | **Ready (additive)** |
+| Bot interactive confirm UX | **Ready** |
 | Production ops gate (`AUTH_ACCEPT_V2_ACCESS` + webhook + migration) | **Required before go-live** |
 | **Overall production cutover** | **Ready after ops checklist** |
