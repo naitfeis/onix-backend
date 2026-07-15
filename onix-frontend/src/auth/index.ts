@@ -39,4 +39,4 @@ export {
   writeMemoryAccessToken,
 } from './memoryAccessToken';
 
-export { getSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
+export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';

@@ -282,4 +282,117 @@ describe('AuthManager Phase B', () => {
     expect(result.accessToken).toBe('hdr');
     expect(transport).toHaveBeenCalledTimes(1);
   });
+
+  it('refresh queue: 8s refresh + 30 waiters → 1 HTTP refresh, all continue', async () => {
+    let refreshCalls = 0;
+    let release!: (value: { accessToken: string; expiresIn: number }) => void;
+    const gate = new Promise<{ accessToken: string; expiresIn: number }>((resolve) => {
+      release = resolve;
+    });
+
+    const manager = new AuthManager({
+      refresh: async () => {
+        refreshCalls += 1;
+        return gate;
+      },
+      broadcast: new AuthBroadcast('test-queue-30', () => null),
+    });
+
+    const waiters = Promise.all(
+      Array.from({ length: 30 }, () => manager.refreshAccessToken()),
+    );
+
+    expect(refreshCalls).toBe(1);
+    release({ accessToken: 'shared-after-8s', expiresIn: 900 });
+    const tokens = await waiters;
+
+    expect(refreshCalls).toBe(1);
+    expect(tokens).toHaveLength(30);
+    expect(tokens.every((token) => token === 'shared-after-8s')).toBe(true);
+    manager.dispose();
+  });
+
+  it('Refresh Cancellation: logout during refresh discards late token', async () => {
+    let release!: (value: { accessToken: string; expiresIn: number }) => void;
+    const gate = new Promise<{ accessToken: string; expiresIn: number }>((resolve) => {
+      release = resolve;
+    });
+
+    const manager = new AuthManager({
+      refresh: async () => gate,
+      broadcast: new AuthBroadcast('test-cancel', () => null),
+    });
+
+    const pending = manager.refreshAccessToken();
+    manager.clearSession('logout');
+    expect(manager.getAccessToken()).toBeNull();
+
+    release({ accessToken: 'should-not-stick', expiresIn: 900 });
+    await expect(pending).rejects.toMatchObject({ code: 'AUTH_SESSION_CLEARED' });
+    expect(manager.getAccessToken()).toBeNull();
+    manager.dispose();
+  });
+
+  it('Double Logout: Tab A then Tab B logout throws nothing', () => {
+    const bus = new MemoryAuthBroadcastBus();
+    const tabA = new AuthManager({
+      refresh: async () => ({ accessToken: 'a', expiresIn: 900 }),
+      broadcast: new AuthBroadcast('onix-double-logout', (name) => bus.create(name)),
+    });
+    const tabB = new AuthManager({
+      refresh: async () => ({ accessToken: 'b', expiresIn: 900 }),
+      broadcast: new AuthBroadcast('onix-double-logout', (name) => bus.create(name)),
+    });
+
+    tabA.setSession('tok', 900, { broadcast: false });
+    tabB.setSession('tok', 900, { broadcast: false });
+
+    expect(() => tabA.clearSession('logout')).not.toThrow();
+    expect(() => tabB.clearSession('logout')).not.toThrow();
+    expect(tabA.getAccessToken()).toBeNull();
+    expect(tabB.getAccessToken()).toBeNull();
+
+    tabA.dispose();
+    tabB.dispose();
+  });
+
+  it('dispose cancels timer and closes broadcast (no listener leak after teardown)', () => {
+    const bus = new MemoryAuthBroadcastBus();
+    const channelName = 'onix-dispose';
+    const manager = new AuthManager({
+      refresh: async () => ({ accessToken: 'x', expiresIn: 900 }),
+      broadcast: new AuthBroadcast(channelName, (name) => bus.create(name)),
+      proactiveSkewMs: 60_000,
+      minProactiveIntervalMs: 10,
+      now: () => 0,
+    });
+
+    manager.setSession('live', 120);
+    manager.dispose();
+
+    expect(manager.getAccessToken()).toBeNull();
+    expect(() => manager.setSession('nope', 900)).toThrow(/disposed/);
+  });
+});
+
+describe('AuthManager singleton', () => {
+  beforeEach(() => {
+    resetMemoryAccessTokenStore();
+  });
+
+  it('AuthV2 providers share exactly one AuthManager', async () => {
+    const { resetSharedAuthManager, peekSharedAuthManager, getSharedAuthManager } = await import('./sharedAuthManager');
+    const { AuthV2WebsiteAuthProvider } = await import('./AuthV2WebsiteAuthProvider');
+    resetSharedAuthManager();
+
+    expect(peekSharedAuthManager()).toBeNull();
+    const a = new AuthV2WebsiteAuthProvider();
+    const b = new AuthV2WebsiteAuthProvider();
+    expect(a.getAuthManager()).toBe(b.getAuthManager());
+    expect(a.getAuthManager()).toBe(getSharedAuthManager());
+    expect(peekSharedAuthManager()).toBe(a.getAuthManager());
+
+    resetSharedAuthManager();
+    expect(peekSharedAuthManager()).toBeNull();
+  });
 });

@@ -20,11 +20,25 @@ export type AuthManagerOptions = {
 
 /**
  * Website Auth V2 client core (Phase B).
- * - Access JWT: memory only
- * - Refresh: HttpOnly cookie via /api/v2/auth/refresh + single-flight queue
- * - Cross-tab: BroadcastChannel
  *
- * Not wired into Legacy App login in Phase B — AuthV2 provider holds it inactive by default.
+ * Lifecycle (no hidden loops):
+ *   Unauthenticated ──restore/login──► Authenticated
+ *        ▲                                 │
+ *        │                    ┌────────────┼────────────┐
+ *        │                    │            │            │
+ *        │             proactive      API 401      explicit logout
+ *        │                    │            │            │
+ *        │                    ▼            ▼            │
+ *        │               Refreshing ◄──────┘            │
+ *        │               /         \                    │
+ *        │          success       failure               │
+ *        │               │           │                  │
+ *        │               ▼           └──────► LoggedOut ◄┘
+ *        │          Authenticated
+ *        └────────────(clear)─────────────────────┘
+ *
+ * Concurrent callers share one `refreshInFlight` promise (refresh queue).
+ * Logout / dispose bumps `sessionGeneration` so a late refresh cannot restore tokens.
  */
 export class AuthManager {
   private expiresAtMs: number | null = null;
@@ -32,6 +46,8 @@ export class AuthManager {
   private proactiveTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribeBroadcast: (() => void) | null = null;
   private disposed = false;
+  /** Bumped on clearSession/dispose so in-flight refresh results are discarded. */
+  private sessionGeneration = 0;
   private readonly broadcast: AuthBroadcast;
   private readonly now: () => number;
   private readonly proactiveSkewMs: number;
@@ -54,6 +70,11 @@ export class AuthManager {
 
   getExpiresAtMs(): number | null {
     return this.expiresAtMs;
+  }
+
+  /** Test/ops helper — current logout/dispose generation. */
+  getSessionGeneration(): number {
+    return this.sessionGeneration;
   }
 
   isAccessExpired(skewMs = 0): boolean {
@@ -80,6 +101,7 @@ export class AuthManager {
   }
 
   clearSession(reason: 'logout' | 'force-reauth' | 'refresh-failed' = 'logout'): void {
+    this.sessionGeneration += 1;
     clearMemoryAccessToken();
     this.expiresAtMs = null;
     this.clearProactiveTimer();
@@ -93,20 +115,30 @@ export class AuthManager {
 
   /**
    * Single-flight refresh. Concurrent callers share one in-flight promise (refresh queue).
+   * Example: refresh takes 8s and 30 callers arrive → still exactly 1 HTTP refresh;
+   * all 30 await the same promise, then continue with the new access token.
    */
   refreshAccessToken(): Promise<string> {
     this.assertOpen();
     if (this.refreshInFlight) return this.refreshInFlight;
 
+    const generation = this.sessionGeneration;
     this.refreshInFlight = (async () => {
       try {
         const result = await this.refreshFn();
+        if (this.disposed || generation !== this.sessionGeneration) {
+          throw new RefreshError(
+            'Session was cleared during refresh.',
+            401,
+            'AUTH_SESSION_CLEARED',
+          );
+        }
         this.setSession(result.accessToken, result.expiresIn);
         return result.accessToken;
       } catch (error) {
-        this.clearSession(isMissingRefresh(error) || isUnauthorizedRefresh(error)
-          ? 'refresh-failed'
-          : 'refresh-failed');
+        if (generation === this.sessionGeneration && !this.disposed) {
+          this.clearSession('refresh-failed');
+        }
         throw error;
       } finally {
         this.refreshInFlight = null;
@@ -162,8 +194,16 @@ export class AuthManager {
     }
   }
 
+  /**
+   * Tab teardown: cancel proactive timer, unsubscribe, close BroadcastChannel.
+   * Shared singleton registers `pagehide` → dispose (see sharedAuthManager).
+   */
   dispose(): void {
+    if (this.disposed) return;
+    this.sessionGeneration += 1;
     this.disposed = true;
+    clearMemoryAccessToken();
+    this.expiresAtMs = null;
     this.clearProactiveTimer();
     this.unsubscribeBroadcast?.();
     this.unsubscribeBroadcast = null;
@@ -174,6 +214,8 @@ export class AuthManager {
   private onBroadcast(event: AuthBroadcastEvent): void {
     if (this.disposed) return;
     if (event.type === 'logout' || event.type === 'force-reauth') {
+      // Peer logout: invalidate local session without re-broadcasting.
+      this.sessionGeneration += 1;
       clearMemoryAccessToken();
       this.expiresAtMs = null;
       this.clearProactiveTimer();
@@ -191,6 +233,10 @@ export class AuthManager {
     }
   }
 
+  /**
+   * delay = max(minProactiveIntervalMs, expiresAtMs - now - proactiveSkewMs)
+   * Each setSession/token-updated first clearTimeout(previous), then schedules one new timer.
+   */
   private scheduleProactiveRefresh(): void {
     this.clearProactiveTimer();
     if (this.expiresAtMs == null) return;
@@ -205,7 +251,7 @@ export class AuthManager {
       if (this.disposed) return;
       if (!this.getAccessToken()) return;
       void this.refreshAccessToken().catch(() => {
-        /* clearSession already invoked inside refreshAccessToken */
+        /* clearSession already invoked inside refreshAccessToken when generation matches */
       });
     }, delay);
   }
@@ -229,13 +275,4 @@ function isUnauthorizedStatus(error: unknown): boolean {
     && 'status' in error
     && Number((error as { status: unknown }).status) === 401,
   );
-}
-
-function isUnauthorizedRefresh(error: unknown): boolean {
-  return error instanceof RefreshError && error.status === 401;
-}
-
-function isMissingRefresh(error: unknown): boolean {
-  return error instanceof RefreshError
-    && (error.code === 'AUTH_REFRESH_MISSING' || error.status === 401);
 }

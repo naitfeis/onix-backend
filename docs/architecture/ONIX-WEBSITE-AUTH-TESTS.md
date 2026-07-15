@@ -49,6 +49,10 @@
 | B-T08 | 401 → refresh → retry → success | ✅ Phase B |
 | B-T09 | 401 → refresh 401 → logout, no loops | ✅ Phase B |
 | B-T10 | Silent refresh after reload restores session | ✅ Phase B |
+| B-T11 | Refresh Cancellation (logout during refresh discards token) | ✅ Phase B |
+| B-T12 | Double Logout (A then B, no exceptions) | ✅ Phase B |
+| B-T13 | Refresh queue 30 waiters / 1 HTTP refresh | ✅ Phase B |
+| B-T14 | Singleton: one AuthManager for all AuthV2 providers | ✅ Phase B |
 
 ### Phase C (V2 login)
 
