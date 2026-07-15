@@ -195,6 +195,10 @@ export default function App() {
           onFocusProductHandled={() => setFocusProductId(null)}
           openDirectChat={openDirectChat}
           openProductCard={openProductCard}
+          openDealChat={(chatId) => {
+            setFocusChatId(chatId);
+            switchTo('chat');
+          }}
         />}
         {screen === 'deals' && <Deals core={core} switchTo={switchTo} setToast={setToast} focusDealId={focusDealId} onFocusDealHandled={() => setFocusDealId(null)} />}
         {screen === 'create' && <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />}
@@ -384,7 +388,7 @@ function SectionHeader({ title, subtitle, action }: { title: string; subtitle: s
 }
 
 function Market({
-  core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard,
+  core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -393,6 +397,7 @@ function Market({
   onFocusProductHandled: () => void;
   openDirectChat: (onixId: string) => Promise<boolean>;
   openProductCard: (productId: string) => void;
+  openDealChat: (chatId: string) => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [confirm, setConfirm] = useState<Product | null>(null);
@@ -601,7 +606,16 @@ function Market({
       setToast={setToast}
     />
     <Confirm open={Boolean(confirm)} title="Подтвердите покупку" text={confirm ? `${money(confirm.priceCents)} будут безопасно заморожены до получения товара.` : ''} busy={core.actionBusy?.startsWith('purchase')} onCancel={() => setConfirm(null)}
-      onConfirm={async () => { if (confirm && await core.purchase(confirm.id)) { setConfirm(null); setSelected(null); setToast('Сделка создана. Деньги в сейфе.'); switchTo('deals'); } }} />
+      onConfirm={async () => {
+        if (!confirm) return;
+        const deal = await core.purchase(confirm.id);
+        if (!deal) return;
+        setConfirm(null);
+        setSelected(null);
+        setToast('Сделка создана. Деньги в сейфе.');
+        if (deal.chatId) openDealChat(deal.chatId);
+        else switchTo('deals');
+      }} />
   </div>;
 }
 

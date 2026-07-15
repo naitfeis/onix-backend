@@ -148,6 +148,7 @@ export function dealDto(order: {
   buyer: PublicUser;
   seller: PublicUser;
   reviews: Array<{ authorId: bigint }>;
+  chat?: { id: string } | null;
 }, viewer: AuthUser) {
   const buyer = order.buyerId === viewer.id;
   return {
@@ -161,6 +162,7 @@ export function dealDto(order: {
     canReview: order.status === 'COMPLETED'
       && buyer
       && !order.reviews.some((review) => review.authorId === viewer.id),
+    ...(order.chat?.id ? { chatId: order.chat.id } : {}),
   };
 }
 

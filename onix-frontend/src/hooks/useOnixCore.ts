@@ -255,8 +255,10 @@ export function useOnixCore() {
   }, [load, run]);
 
   const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
-    api.post(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
-      void load('products', API_PATHS.productsList({ limit: 100 })); void load('deals', API_PATHS.orders);
+    api.post<Deal>(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
+      void load('products', API_PATHS.productsList({ limit: 100 }));
+      void load('deals', API_PATHS.orders);
+      void load('chats', API_PATHS.chats);
     }), [load, run]);
 
   const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'dispute') => {

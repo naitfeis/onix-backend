@@ -66,6 +66,7 @@ export class EscrowService {
         buyer: { include: { _count: { select: { followers: true } } } },
         seller: { include: { _count: { select: { followers: true } } } },
         reviews: { select: { authorId: true } },
+        chat: { select: { id: true } },
       },
       orderBy,
       take: 100,
@@ -123,6 +124,7 @@ export class EscrowService {
         include: { chat: true },
       });
       const chatId = created.chat!.id;
+      // Exactly one order SYSTEM message — same transaction as order+chat (ordinary + auto-delivery).
       await tx.message.create({
         data: {
           chatId,
@@ -135,15 +137,11 @@ export class EscrowService {
             'пока полностью его не проверите.',
             '',
             'При любых проблемах',
-            'нажмите',
-            '«Обратиться в поддержку».',
-            '',
-            `Заказ #${created.id}`,
-            'Товар:',
-            product.title,
+            'нажмите «Обратиться в поддержку».',
           ].join('\n'),
         },
       });
+      await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 
       // Auto-delivery after payment hold — one-time, never via public product API.
       // Single purchase path: EscrowService.purchase (POST /orders/product/:productId).
@@ -157,7 +155,9 @@ export class EscrowService {
         try {
           payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
         } catch {
-          throw new BadRequestException('Автовыдача недоступна: ошибка расшифровки (PRODUCT_DELIVERY_KEY).');
+          throw new BadRequestException(
+            'Автовыдача недоступна: ошибка расшифровки. Проверьте PRODUCT_DELIVERY_KEY на сервере.',
+          );
         }
         if (payload.length > 4200) {
           throw new BadRequestException('Текст автовыдачи слишком длинный для выдачи в чат.');
@@ -494,6 +494,7 @@ export class EscrowService {
         buyer: { include: { _count: { select: { followers: true } } } },
         seller: { include: { _count: { select: { followers: true } } } },
         reviews: { select: { authorId: true } },
+        chat: { select: { id: true } },
       },
     });
     return dealDto(order, user);

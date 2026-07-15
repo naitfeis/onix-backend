@@ -87,7 +87,7 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
     throw fieldBadRequest(
       'autoDeliver',
       (error as Error).message.includes('PRODUCT_DELIVERY_KEY')
-        ? 'encryption key not configured (PRODUCT_DELIVERY_KEY)'
+        ? 'PRODUCT_DELIVERY_KEY не задан или неверный (нужен 32-byte base64). Добавьте ключ в Render Environment или локальный .env и перезапустите API.'
         : 'failed to encrypt deliveryText',
     );
   }

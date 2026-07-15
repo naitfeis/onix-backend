@@ -3,7 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 const ALGO = 'aes-256-gcm';
 
 function keyBytes(): Buffer {
-  const raw = process.env.PRODUCT_DELIVERY_KEY;
+  const raw = process.env.PRODUCT_DELIVERY_KEY?.trim();
   if (!raw) {
     throw new Error('PRODUCT_DELIVERY_KEY is not configured (32-byte base64).');
   }

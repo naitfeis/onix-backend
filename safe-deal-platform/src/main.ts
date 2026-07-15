@@ -1,13 +1,18 @@
 import 'reflect-metadata';
-import 'dotenv/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
+import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
 import { validationExceptionFactory } from './validation-errors';
 
+loadEnvFiles();
+
 async function bootstrap(): Promise<void> {
+  const bootLog = new Logger('Bootstrap');
+  logProductDeliveryKeyStatus(bootLog);
+
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
   app.use(requestIdMiddleware);
@@ -32,7 +37,7 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  new Logger('Bootstrap').log(`ONIX API listening on ${port}`);
+  bootLog.log(`ONIX API listening on ${port}`);
 }
 
 void bootstrap();
