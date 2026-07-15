@@ -8,10 +8,12 @@ vi.mock('@twa-dev/sdk', () => ({
 
 beforeEach(() => {
   storage.clear();
+  vi.resetModules();
   vi.stubEnv('VITE_API_URL', 'https://onix-api-47tj.onrender.com');
   vi.stubGlobal('sessionStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => { storage.delete(key); },
   });
 });
 
@@ -83,9 +85,26 @@ describe('Bearer auth bootstrap', () => {
     await api.get('/api/users/me');
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(new Headers(request.headers).get('Authorization')).toBe('Bearer jwt-token');
+    expect(request.credentials).toBe('same-origin');
     await expect(api.get('/api/failure')).rejects.toEqual(expect.objectContaining({
       message: 'Контракт нарушен',
       status: 400,
+    }));
+  });
+
+  it('uses same-origin relative /api when VITE_API_URL is empty', async () => {
+    vi.stubEnv('VITE_API_URL', '');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { id: '1' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { api } = await import('./client');
+
+    await api.get('/api/users/me');
+    expect(fetchMock).toHaveBeenCalledWith('/api/users/me', expect.objectContaining({
+      credentials: 'include',
     }));
   });
 });

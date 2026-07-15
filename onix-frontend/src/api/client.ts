@@ -1,13 +1,13 @@
 import WebApp from '@twa-dev/sdk';
+import { buildApiUrl, resolveApiBase, shouldIncludeCredentials } from '../auth/apiConfig';
 import type { ApiEnvelope } from './contracts';
 
 const TOKEN_KEY = 'onix.accessToken';
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim().replace(/\/+$/, '');
 
 function apiUrl(path: string): string {
-  console.log("API BASE =", API_BASE);
-  if (!API_BASE) throw new Error('VITE_API_URL is not configured');
-  return `${API_BASE}${path}`;
+  const base = resolveApiBase();
+  console.log('API BASE =', base || '(same-origin)');
+  return buildApiUrl(path, base);
 }
 
 export class ApiError extends Error {
@@ -28,6 +28,10 @@ export function setAccessToken(token: string): void {
   try { sessionStorage.setItem(TOKEN_KEY, token); } catch { /* Storage can be unavailable. */ }
 }
 
+export function clearAccessToken(): void {
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch { /* Storage can be unavailable. */ }
+}
+
 function initData(): string {
   try {
     return WebApp.initData || '';
@@ -44,10 +48,15 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
   if (options.body) headers.set('Content-Type', 'application/json');
 
   const url = apiUrl(path);
-  console.log("POST URL =", url);
-  console.log("fetch() full URL =", url);
-  console.log("FINAL REQUEST URL", url);
-  const response = await fetch(url, { ...options, headers });
+  console.log('POST URL =', url);
+  console.log('fetch() full URL =', url);
+  console.log('FINAL REQUEST URL', url);
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    // Same-origin only: enables future __Host- refresh cookie without cross-origin CORS credentials.
+    credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
+  });
   let payload: ApiEnvelope<T> | undefined;
   try {
     payload = await response.json() as ApiEnvelope<T>;

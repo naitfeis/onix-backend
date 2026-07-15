@@ -1,12 +1,20 @@
-# ONIX frontend API contract
+# ONIX frontend API / auth notes
 
-`contracts.ts` is the single place for paths and transport types. All authenticated requests:
+`contracts.ts` is the single place for paths and transport types.
 
-- bootstrap a Mini App once through `POST /api/auth/telegram-mini` with `initData`;
-- bootstrap a browser through Telegram Login Widget and `POST /api/auth/telegram-login`;
-- keep the returned access token in `sessionStorage` and send `Authorization: Bearer …`;
-- never send a Telegram ID as proof of identity;
-- expect `{ success, data }` or `{ success: false, error: { message } }`.
+## Current production (legacy Website + Mini App)
 
-The backend verifies Telegram signatures, issues Bearer JWTs and derives identity and admin
-permissions exclusively from the verified token.
+- Mini App: `POST /api/auth/telegram-mini` with `initData`; JWT in `sessionStorage`.
+- Website: Telegram Login Widget → `POST /api/auth/telegram-login`; JWT in `sessionStorage`.
+- Authenticated requests send `Authorization: Bearer …` and expect `{ success, data }` envelopes.
+- Never send a Telegram ID as proof of identity.
+
+## Website Auth V2 cutover (frontend only; backend frozen)
+
+- Abstraction: `WebsiteAuthProvider` (`legacy` | `auth_v2`) under `src/auth/`.
+- Temporary switch: `VITE_WEBSITE_AUTH_MODE=legacy|auth_v2` (default `legacy`). Remove after soak.
+- Same-origin API: leave `VITE_API_URL` empty so requests hit `/api/...` (Vercel rewrite / Vite proxy). Required for `__Host-onix_rt`.
+- Absolute `VITE_API_URL` remains supported for today’s cross-origin setup; Auth V2 cookies will not work on that topology.
+- Do not change `vercel.json` while the existing `/api` rewrite works.
+
+See `docs/architecture/ONIX-WEBSITE-AUTH-TESTS.md`.
