@@ -257,17 +257,16 @@ export class BotWebhookHandler {
 
       this.logger.log(JSON.stringify({
         msg: '[Bot] confirmFromBot() done',
-        challengeId,
-        statusAfter: 'CONFIRMED',
-        returnUrlHost: safeHost(result.returnUrl),
-        note: 'Website poll should observe CONFIRMED next',
+        challengeId: result.challengeId,
+        statusAfter: result.status,
+        note: 'Website poll should observe CONFIRMED → complete on same SPA URL (no returnUrl)',
       }));
 
       const confirmedText = [
         '✅ <b>Вход успешно подтверждён</b>',
         '',
-        'Вернитесь на сайт ONIX — авторизация завершится автоматически.',
-        'Если страница не обновилась, нажмите кнопку ниже.',
+        'Вернитесь на вкладку сайта ONIX.',
+        'Вход завершится автоматически — ничего нажимать не нужно.',
       ].join('\n');
 
       if (messageId != null) {
@@ -276,9 +275,7 @@ export class BotWebhookHandler {
           messageId,
           text: confirmedText,
           parseMode: 'HTML',
-          replyMarkup: {
-            inline_keyboard: [[{ text: 'Вернуться в ONIX', url: result.returnUrl }]],
-          },
+          replyMarkup: { inline_keyboard: [] },
         });
         this.logBotApi('[Bot] editMessageText after confirm', edited);
       } else {
@@ -286,9 +283,6 @@ export class BotWebhookHandler {
           chatId,
           text: confirmedText,
           parseMode: 'HTML',
-          replyMarkup: {
-            inline_keyboard: [[{ text: 'Вернуться в ONIX', url: result.returnUrl }]],
-          },
         });
         this.logBotApi('[Bot] sendMessage after confirm (no message_id)', sent);
       }
@@ -386,13 +380,5 @@ function userFacingChallengeError(error: AuthPlatformError): string {
       return 'Статус попытки входа изменился. Обновите страницу сайта.';
     default:
       return error.message || 'Не удалось обработать вход.';
-  }
-}
-
-function safeHost(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return '(invalid-url)';
   }
 }

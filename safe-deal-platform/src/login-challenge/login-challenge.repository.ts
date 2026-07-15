@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { LoginChallenge, LoginChallengeStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
-import { LOGIN_CHALLENGE_TTL_MS, LOGIN_EXCHANGE_TTL_MS } from './login-challenge.flags';
+import { LOGIN_CHALLENGE_TTL_MS } from './login-challenge.flags';
 
 export type CreateChallengeInput = {
   loginSessionId: string;
@@ -78,10 +78,9 @@ export class LoginChallengeRepository {
       telegramLastName?: string;
       telegramPhotoUrl?: string;
     },
-  ): Promise<{ challenge: LoginChallenge; exchangeCode: string }> {
-    const exchangeCode = randomBytes(32).toString('hex');
-    const exchangeCodeHash = sha256Hex(exchangeCode);
-    const challenge = await this.transition(id, ['CREATED', 'OPENED'], {
+  ): Promise<LoginChallenge> {
+    // No exchangeCode / returnUrl — Website completes via poll + same-origin POST /complete.
+    return this.transition(id, ['CREATED', 'OPENED'], {
       status: 'CONFIRMED',
       telegramId: profile.telegramId,
       telegramUsername: profile.telegramUsername,
@@ -89,10 +88,9 @@ export class LoginChallengeRepository {
       telegramLastName: profile.telegramLastName,
       telegramPhotoUrl: profile.telegramPhotoUrl,
       confirmedAt: new Date(),
-      exchangeCodeHash,
-      exchangeExpiresAt: new Date(Date.now() + LOGIN_EXCHANGE_TTL_MS),
+      exchangeCodeHash: null,
+      exchangeExpiresAt: null,
     });
-    return { challenge, exchangeCode };
   }
 
   async markConsumed(id: string): Promise<LoginChallenge> {

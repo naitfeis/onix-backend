@@ -5,8 +5,7 @@ import { AuthOrchestrator } from '../auth-v2/auth-orchestrator.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import type { DeviceContext } from '../auth-v2/session.service';
 import type { VerifiedTelegramIdentity } from '../auth-v2/telegram-login.verifier';
-import { LOGIN_EXCHANGE_TTL_MS } from './login-challenge.flags';
-import { LoginChallengeRepository, sha256Hex } from './login-challenge.repository';
+import { LoginChallengeRepository } from './login-challenge.repository';
 
 export type StartChallengeResult = {
   challengeId: string;
@@ -22,9 +21,15 @@ export type ChallengeStatusResult = {
   challengeId: string;
   status: string;
   expiresAt: string;
-  returnUrl?: string;
 };
 
+/**
+ * LoginChallenge lifecycle (SPA same-URL):
+ *   CREATED → OPENED → CONFIRMED (= ready for Website complete) → CONSUMED
+ *
+ * CONFIRMED means Telegram proved telegramId. Session + refresh cookie are issued ONLY on
+ * Website POST /complete (browser Set-Cookie). Webhook cannot set Website cookies.
+ */
 @Injectable()
 export class LoginChallengeService {
   private readonly logger = new Logger(LoginChallengeService.name);
@@ -80,7 +85,6 @@ export class LoginChallengeService {
 
   /**
    * Bot /start login_xxx: mark OPENED and return fields for the confirm prompt.
-   * Does not change IdentityLink / Session / Token — presentation only.
    */
   async openForBotPrompt(challengeId: string): Promise<{
     challengeId: string;
@@ -112,9 +116,6 @@ export class LoginChallengeService {
     };
   }
 
-  /**
-   * Bot cancel button: expire a pending challenge so Website polling stops cleanly.
-   */
   async cancelFromBot(challengeId: string): Promise<{ challengeId: string; status: string }> {
     const challenge = await this.requireFresh(challengeId);
     if (challenge.status === 'CONFIRMED' || challenge.status === 'CONSUMED') {
@@ -136,24 +137,22 @@ export class LoginChallengeService {
 
   async status(challengeId: string): Promise<ChallengeStatusResult> {
     const challenge = await this.requireFresh(challengeId);
-    const result: ChallengeStatusResult = {
+    return {
       challengeId: challenge.id,
       status: challenge.status,
       expiresAt: challenge.expiresAt.toISOString(),
     };
-    if (challenge.status === 'CONFIRMED') {
-      result.returnUrl = undefined; // populated only via bot message with exchange code
-    }
-    return result;
   }
 
   /**
-   * Bot confirm: Telegram identity proof arrives only via Bot API (trusted).
+   * Bot confirm: prove telegramId ownership only.
+   * Does NOT create Session / Set-Cookie / returnUrl / exchangeCode.
+   * User + IdentityLink + Session are created on Website complete via AuthOrchestrator.
    */
   async confirmFromBot(
     challengeId: string,
     identity: VerifiedTelegramIdentity,
-  ): Promise<{ exchangeCode: string; returnUrl: string }> {
+  ): Promise<{ challengeId: string; status: 'CONFIRMED' }> {
     const challenge = await this.requireFresh(challengeId);
     const statusBefore = challenge.status;
     this.logger.log(JSON.stringify({
@@ -170,27 +169,19 @@ export class LoginChallengeService {
           'Challenge already confirmed by another Telegram account.',
         );
       }
-      // Bot retry (same telegram): rotate exchange code, keep CONFIRMED.
-      const exchangeCode = randomBytes(32).toString('hex');
-      const exchangeCodeHash = sha256Hex(exchangeCode);
-      await this.challenges.transition(challenge.id, ['CONFIRMED'], {
-        exchangeCodeHash,
-        exchangeExpiresAt: new Date(Date.now() + LOGIN_EXCHANGE_TTL_MS),
-      });
-      const returnUrl = `${websiteOrigin()}/login/continue?x=${exchangeCode}`;
       this.logger.log(JSON.stringify({
         msg: '[Bot] confirmFromBot status after',
         challengeId,
         statusAfter: 'CONFIRMED',
         reused: true,
       }));
-      return { exchangeCode, returnUrl };
+      return { challengeId: challenge.id, status: 'CONFIRMED' };
     }
     if (challenge.status === 'CONSUMED' || challenge.status === 'EXPIRED') {
       throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_CONSUMED', 'Challenge is no longer usable.');
     }
 
-    const { exchangeCode } = await this.challenges.markConfirmed(challengeId, {
+    await this.challenges.markConfirmed(challengeId, {
       telegramId: identity.telegramId,
       telegramUsername: identity.username,
       telegramFirstName: identity.firstName,
@@ -198,20 +189,22 @@ export class LoginChallengeService {
       telegramPhotoUrl: identity.photoUrl,
     });
 
-    const origin = websiteOrigin();
-    const returnUrl = `${origin}/login/continue?x=${exchangeCode}`;
-
     this.logger.log(JSON.stringify({
       msg: 'login_challenge_confirmed',
       challengeId,
       telegramId: identity.telegramId.toString(),
       statusBefore,
       statusAfter: 'CONFIRMED',
+      note: 'ready for Website poll → complete (no returnUrl)',
     }));
 
-    return { exchangeCode, returnUrl };
+    return { challengeId, status: 'CONFIRMED' };
   }
 
+  /**
+   * Website same-origin complete: Identity upsert + Session + tokens.
+   * Refresh cookie is set by the controller on this browser response.
+   */
   async complete(input: {
     challengeId: string;
     loginSessionId: string;
@@ -250,26 +243,20 @@ export class LoginChallengeService {
     return session;
   }
 
-  async completeWithExchangeCode(input: {
+  /**
+   * @deprecated Exchange / return-URL login removed. Use poll → POST /complete on the same SPA URL.
+   */
+  async completeWithExchangeCode(_input: {
     exchangeCode: string;
     loginSessionId?: string;
     rememberMe?: boolean;
     device?: DeviceContext;
-  }) {
-    const hash = sha256Hex(input.exchangeCode);
-    const challenge = await this.challenges.findByExchangeCodeHash(hash);
-    if (!challenge) {
-      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'Exchange code is invalid.');
-    }
-    if (input.loginSessionId) {
-      this.assertLoginSession(challenge, input.loginSessionId);
-    }
-    return this.complete({
-      challengeId: challenge.id,
-      loginSessionId: challenge.loginSessionId,
-      rememberMe: input.rememberMe,
-      device: input.device,
-    });
+  }): Promise<never> {
+    void _input;
+    throw new AuthPlatformError(
+      'AUTH_LOGIN_CHALLENGE_INVALID',
+      'Exchange-code login is disabled. Stay on the Website tab; polling completes after Telegram confirm.',
+    );
   }
 
   private assertLoginSession(challenge: LoginChallenge, loginSessionId: string): void {
@@ -313,8 +300,4 @@ function identityFromChallenge(challenge: LoginChallenge): VerifiedTelegramIdent
 function botUsername(): string {
   const raw = process.env.TELEGRAM_BOT_USERNAME || process.env.VITE_TELEGRAM_BOT_USERNAME || 'Onixshop_bot';
   return raw.replace(/^@/, '');
-}
-
-function websiteOrigin(): string {
-  return (process.env.WEBSITE_ORIGIN || process.env.PUBLIC_WEBSITE_ORIGIN || 'https://onix.gg').replace(/\/+$/, '');
 }

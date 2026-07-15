@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import WebApp from '@twa-dev/sdk';
 import { loginWithTelegram as legacyLoginWithTelegram, money } from './api/client';
 import {
-  continueBotLogin,
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
   isWebsiteAuthV2,
@@ -185,35 +184,11 @@ function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) 
     } catch (e) {
       if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось войти через Telegram.');
-      setHint('Если подтвердили в боте — нажмите «Вернуться в ONIX» в Telegram.');
+      setHint('Оставайтесь на этой вкладке — после подтверждения в Telegram вход завершится сам.');
     } finally {
       if (!controller.signal.aborted) setBusy(false);
     }
   };
-
-  // Return link ?x=exchangeCode from bot "Вернуться в ONIX" — no reload.
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const x = params.get('x');
-    if (!x) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    (async () => {
-      setBusy(true);
-      try {
-        await continueBotLogin(x, controller.signal);
-        if (!controller.signal.aborted) {
-          history.replaceState({}, '', location.pathname);
-          onAuthenticatedRef.current();
-        }
-      } catch {
-        if (!controller.signal.aborted) setError('Не удалось завершить вход по ссылке из бота.');
-      } finally {
-        if (!controller.signal.aborted) setBusy(false);
-      }
-    })();
-    return () => { controller.abort(); };
-  }, []);
 
   return <div>
     <Button onClick={() => void onLogin()} disabled={busy}>

@@ -69,7 +69,7 @@ test('BotWebhookHandler /start login_xxx sends confirm+cancel buttons with detai
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       expiresAt: new Date('2026-07-15T12:02:00.000Z'),
     }),
-    confirmFromBot: async () => ({ exchangeCode: 'x', returnUrl: 'https://onix.gg/?x=x' }),
+    confirmFromBot: async () => ({ challengeId: 'ch_abc', status: 'CONFIRMED' as const }),
     cancelFromBot: async () => ({ challengeId: 'ch_abc', status: 'EXPIRED' }),
   };
 
@@ -102,7 +102,7 @@ test('BotWebhookHandler /start login_xxx sends confirm+cancel buttons with detai
   }
 });
 
-test('BotWebhookHandler confirm edits message to success and keeps return link', async () => {
+test('BotWebhookHandler confirm edits message to success without return URL', async () => {
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -118,7 +118,7 @@ test('BotWebhookHandler confirm edits message to success and keeps return link',
     confirmFromBot: async (id: string, identity: { telegramId: bigint }) => {
       assert.equal(id, 'ch_ok');
       assert.equal(identity.telegramId, 99n);
-      return { exchangeCode: 'ex1', returnUrl: 'https://onix.gg/login/continue?x=ex1' };
+      return { challengeId: id, status: 'CONFIRMED' as const };
     },
     cancelFromBot: async () => ({ challengeId: 'ch_ok', status: 'EXPIRED' }),
   };
@@ -138,8 +138,8 @@ test('BotWebhookHandler confirm edits message to success and keeps return link',
     assert.ok(edit);
     assert.match(String(edit!.body.text), /Вход успешно подтверждён/);
     assert.equal(edit!.body.message_id, 555);
-    const markup = edit!.body.reply_markup as { inline_keyboard: Array<Array<{ url?: string }>> };
-    assert.equal(markup.inline_keyboard[0][0].url, 'https://onix.gg/login/continue?x=ex1');
+    const markup = edit!.body.reply_markup as { inline_keyboard: unknown[] };
+    assert.deepEqual(markup.inline_keyboard, []);
     assert.ok(calls.some((c) => c.method === 'answerCallbackQuery'));
   } finally {
     globalThis.fetch = originalFetch;
@@ -161,7 +161,7 @@ test('BotWebhookHandler cancel expires challenge and edits message', async () =>
   let cancelled = false;
   const challenges = {
     openForBotPrompt: async () => { throw new Error('unused'); },
-    confirmFromBot: async () => ({ exchangeCode: 'x', returnUrl: 'https://onix.gg' }),
+    confirmFromBot: async () => ({ challengeId: 'ch_cancel', status: 'CONFIRMED' as const }),
     cancelFromBot: async (id: string) => {
       assert.equal(id, 'ch_cancel');
       cancelled = true;
@@ -205,7 +205,7 @@ test('BotWebhookHandler /start with missing challenge sends error message', asyn
     openForBotPrompt: async () => {
       throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'not found');
     },
-    confirmFromBot: async () => ({ exchangeCode: 'x', returnUrl: 'https://onix.gg' }),
+    confirmFromBot: async () => ({ challengeId: 'ch_cancel', status: 'CONFIRMED' as const }),
     cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
   };
 

@@ -86,21 +86,18 @@ export async function completeBotLogin(challengeId: string, signal?: AbortSignal
   getSharedAuthManager().setSession(data.accessToken, data.expiresIn);
 }
 
-export async function continueBotLogin(exchangeCode: string, signal?: AbortSignal): Promise<void> {
-  const response = await fetch(buildApiUrl('/api/v2/auth/telegram-bot/continue', resolveApiBase()), {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ exchangeCode }),
-    signal,
-  });
-  const data = await readData<{ accessToken: string; expiresIn: number }>(response);
-  getSharedAuthManager().setSession(data.accessToken, data.expiresIn);
+export async function continueBotLogin(_exchangeCode: string, _signal?: AbortSignal): Promise<void> {
+  void _exchangeCode;
+  void _signal;
+  throw new BotLoginError(
+    'Exchange-code login is disabled. Stay on this tab; polling completes after Telegram confirm.',
+    'AUTH_LOGIN_CHALLENGE_INVALID',
+  );
 }
 
 /**
- * Poll until CONFIRMED then complete exactly once.
- * Stops on EXPIRED/CONSUMED/timeout/abort — no infinite loop.
+ * Poll until CONFIRMED (ready) then complete exactly once on the same SPA URL.
+ * No /login/continue, no ?x=, no location changes.
  */
 export async function waitAndCompleteBotLogin(
   challengeId: string,
@@ -118,7 +115,7 @@ export async function waitAndCompleteBotLogin(
     }
     if (Date.now() - started >= timeoutMs) {
       throw new BotLoginError(
-        'Login challenge timed out. Confirm in Telegram or tap «Вернуться в ONIX».',
+        'Login challenge timed out. Confirm in Telegram while keeping this tab open.',
         'AUTH_LOGIN_CHALLENGE_EXPIRED',
       );
     }
@@ -129,7 +126,6 @@ export async function waitAndCompleteBotLogin(
     } catch (error) {
       if (signal?.aborted) throw new BotLoginError('Login cancelled.', 'ABORTED');
       if (error instanceof BotLoginError && error.code === 'AUTH_LOGIN_CHALLENGE_EXPIRED') throw error;
-      // Network blip: retry until timeout
       await delay(intervalMs, signal);
       continue;
     }
