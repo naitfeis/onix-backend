@@ -5,6 +5,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
@@ -24,15 +25,11 @@ class ReviewDto {
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
-/** Deterministic Direct Chat pair key — unique in DB (`Chat.pairKey`). */
-export function directChatPairKey(a: bigint, b: bigint): string {
-  return a < b ? `d:${a}:${b}` : `d:${b}:${a}`;
-}
-
 /**
  * Chat + notification domain (HTTP polling today; methods are WS-ready — no transport in service).
  * Access: ChatMember only. senderId always = CurrentUser (never from body).
  * Read: opening a chat marks the thread read via ChatMember.updateMany (not per-message).
+ * Personal chats: exactly one per user pair via Chat.pairKey (Direct + all Escrow deals).
  */
 @Injectable()
 export class ChatService {
@@ -67,7 +64,11 @@ export class ChatService {
           take: 1,
           select: { text: true, kind: true },
         },
-        order: { select: { id: true, status: true, totalAmountCents: true, product: { select: { title: true } } } },
+        orders: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, status: true, totalAmountCents: true, product: { select: { title: true } } },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: 50,
@@ -76,7 +77,13 @@ export class ChatService {
 
     const threads = await Promise.all(chats.map(async (chat) => {
       const me = chat.members.find((member) => member.userId === user.id);
-      const other = chat.members.find((member) => member.userId !== user.id);
+      // Prefer counterparty over support/admin who joined via ChatMember.
+      const other = chat.members.find((member) => (
+        member.userId !== user.id
+        && !member.user.isAdmin
+        && !member.user.isSupport
+      )) ?? chat.members.find((member) => member.userId !== user.id);
+      const latestOrder = chat.orders[0];
       const unreadCount = await this.prisma.message.count({
         where: {
           chatId: chat.id,
@@ -94,13 +101,13 @@ export class ChatService {
         peerLastOnline: other?.user.lastSeenAt?.toISOString(),
         ...(other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
         ...(other?.user.isAdmin ? { peerBadge: 'ADMIN' as const } : other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
-        ...(chat.orderId && chat.order ? {
-          dealId: chat.orderId.toString(),
+        ...(latestOrder ? {
+          dealId: latestOrder.id.toString(),
           orderCard: {
-            id: chat.orderId.toString(),
-            productTitle: chat.order.product.title,
-            totalAmountCents: chat.order.totalAmountCents.toString(),
-            status: chat.order.status,
+            id: latestOrder.id.toString(),
+            productTitle: latestOrder.product.title,
+            totalAmountCents: latestOrder.totalAmountCents.toString(),
+            status: latestOrder.status,
             escrow: true,
           },
         } : {}),
@@ -115,19 +122,13 @@ export class ChatService {
     if (target.id === user.id) throw new BadRequestException('Нельзя открыть чат с собой.');
     await this.assertNotBlocked(user.id, target.id);
 
-    const pairKey = directChatPairKey(user.id, target.id);
+    const pairKey = pairChatKey(user.id, target.id);
     let chat: { id: string };
     try {
-      chat = await this.prisma.$transaction(async (tx) => {
-        const existing = await tx.chat.findUnique({ where: { pairKey } });
-        if (existing) return existing;
-        return tx.chat.create({
-          data: {
-            pairKey,
-            members: { create: [{ userId: user.id }, { userId: target.id }] },
-          },
-        });
-      }, SERIALIZABLE);
+      chat = await this.prisma.$transaction(
+        (tx) => ensurePairChat(tx, user.id, target.id),
+        SERIALIZABLE,
+      );
     } catch (error) {
       // Concurrent create: unique pairKey wins — reuse existing chat (no duplicates).
       if (

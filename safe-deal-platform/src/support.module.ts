@@ -3,6 +3,7 @@ import {
   Param, Post,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
 import { PrismaService } from './prisma.service';
@@ -29,7 +30,7 @@ export class SupportService {
       where: { id: orderId },
       include: { chat: true, product: { select: { title: true } } },
     });
-    if (!order || !order.chat) throw new NotFoundException('Сделка не найдена.');
+    if (!order) throw new NotFoundException('Сделка не найдена.');
     if (order.buyerId !== user.id && order.sellerId !== user.id && !canActAsSupport(user)) {
       throw new NotFoundException('Сделка не найдена.');
     }
@@ -48,25 +49,32 @@ export class SupportService {
       take: 50,
     });
 
+    // Join existing buyer↔seller pair chat via ChatMember — never create a separate support chat.
     const ticket = await this.prisma.$transaction(async (tx) => {
+      const chat = order.chatId
+        ? { id: order.chatId }
+        : await ensurePairChat(tx, order.buyerId, order.sellerId);
+      if (!order.chatId) {
+        await tx.order.update({ where: { id: orderId }, data: { chatId: chat.id } });
+      }
       for (const agent of staff) {
         await tx.chatMember.upsert({
-          where: { chatId_userId: { chatId: order.chat!.id, userId: agent.id } },
-          create: { chatId: order.chat!.id, userId: agent.id },
+          where: { chatId_userId: { chatId: chat.id, userId: agent.id } },
+          create: { chatId: chat.id, userId: agent.id },
           update: {},
         });
       }
       const created = await tx.supportTicket.create({
         data: {
           orderId,
-          chatId: order.chat!.id,
+          chatId: chat.id,
           openedById: user.id,
           status: 'OPEN',
         },
       });
       await tx.message.create({
         data: {
-          chatId: order.chat!.id,
+          chatId: chat.id,
           kind: 'SYSTEM',
           senderId: null,
           text: reason?.trim()
@@ -74,7 +82,7 @@ export class SupportService {
             : 'Обращение в поддержку открыто. Администратор подключён к чату.',
         },
       });
-      await tx.chat.update({ where: { id: order.chat!.id }, data: { updatedAt: new Date() } });
+      await tx.chat.update({ where: { id: chat.id }, data: { updatedAt: new Date() } });
       return created;
     });
 

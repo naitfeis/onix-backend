@@ -200,7 +200,17 @@ export default function App() {
             switchTo('chat');
           }}
         />}
-        {screen === 'deals' && <Deals core={core} switchTo={switchTo} setToast={setToast} focusDealId={focusDealId} onFocusDealHandled={() => setFocusDealId(null)} />}
+        {screen === 'deals' && <Deals
+          core={core}
+          switchTo={switchTo}
+          setToast={setToast}
+          focusDealId={focusDealId}
+          onFocusDealHandled={() => setFocusDealId(null)}
+          openDealChat={(chatId) => {
+            setFocusChatId(chatId);
+            switchTo('chat');
+          }}
+        />}
         {screen === 'create' && <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />}
         {screen === 'chat' && <Chats
           core={core}
@@ -664,13 +674,14 @@ function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => voi
 }
 
 function Deals({
-  core, switchTo, setToast, focusDealId, onFocusDealHandled,
+  core, switchTo, setToast, focusDealId, onFocusDealHandled, openDealChat,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
   setToast: (text: string) => void;
   focusDealId: string | null;
   onFocusDealHandled: () => void;
+  openDealChat: (chatId: string) => void;
 }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [dealFilter, setDealFilter] = useState('all');
@@ -710,7 +721,12 @@ function Deals({
           {!['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>}
           {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
           <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
-            if (await core.openSupport(deal.id)) { setToast('Обращение создано. Поддержка в чате.'); switchTo('chat'); }
+            const ticket = await core.openSupport(deal.id);
+            if (!ticket) return;
+            setToast('Обращение создано. Поддержка в чате.');
+            if (ticket.chatId) openDealChat(ticket.chatId);
+            else if (deal.chatId) openDealChat(deal.chatId);
+            else switchTo('chat');
           }}>Обратиться в поддержку</Button>
           {isSupport && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="danger" busy={core.actionBusy === `refund-${deal.id}`} onClick={async () => {
             if (await core.supportRefund(deal.id, 'Возврат поддержкой')) setToast('Возврат через Escrow выполнен.');
@@ -805,9 +821,13 @@ function Chats({
             {message.kind !== 'SYSTEM' && <small>@{message.sender.username} <StaffBadge badge={message.sender.badge} /></small>}
             {message.kind === 'SYSTEM' && <small>🛡 ONIX</small>}
             <p><MessageText text={message.text} onOpenOnix={openOnixProfile} /></p>
-            {message.kind === 'SYSTEM' && thread.orderCard && message.text.includes('Заказ создан') && (
-              <Button variant="secondary" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
-            )}
+            {message.kind === 'SYSTEM' && message.text.includes('Заказ создан') && (() => {
+              const orderId = message.text.match(/Заказ #(\d+)/)?.[1]
+                || thread.dealId
+                || thread.orderCard?.id;
+              if (!orderId) return null;
+              return <Button variant="secondary" onClick={() => openDeal(orderId)}>Открыть заказ</Button>;
+            })()}
             <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
           </div>
         </div>)}</div>

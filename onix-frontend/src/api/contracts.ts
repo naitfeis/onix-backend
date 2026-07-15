@@ -41,7 +41,7 @@ export interface Deal {
   counterparty: Seller;
   createdAt: string;
   canReview?: boolean;
-  /** Escrow deal chat — open to see SYSTEM «Заказ создан». */
+  /** Shared buyer↔seller pair chat (same id for all deals + direct). */
   chatId?: string;
 }
 

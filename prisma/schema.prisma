@@ -136,12 +136,15 @@ model Order {
   product       Product           @relation(fields: [productId], references: [id])
   transitions   OrderTransition[]
   ledgerEntries LedgerEntry[]
-  chat          Chat?
+  /** Personal pair chat shared across all deals between buyer and seller. */
+  chatId        String?
+  chat          Chat?             @relation(fields: [chatId], references: [id])
   reviews       Review[]
   supportTickets SupportTicket[]
 
   @@index([buyerId, status])
   @@index([sellerId, status])
+  @@index([chatId])
 }
 
 model OrderTransition {
@@ -176,12 +179,11 @@ model LedgerEntry {
 
 model Chat {
   id        String          @id @default(cuid())
-  orderId   BigInt?         @unique
-  /** Direct-chat pair key `d:{minUserId}:{maxUserId}` — unique; null for escrow/order chats. */
+  /** Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. */
   pairKey   String?         @unique @db.VarChar(64)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
-  order     Order?          @relation(fields: [orderId], references: [id])
+  orders    Order[]
   members   ChatMember[]
   messages  Message[]
   tickets   SupportTicket[]

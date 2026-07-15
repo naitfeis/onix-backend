@@ -5,6 +5,7 @@ import {
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
+import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
@@ -106,11 +107,15 @@ export class EscrowService {
       });
       if (!debited.count) throw new BadRequestException('Недостаточно средств.');
       const balance = await tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { balanceCents: true } });
+      // One personal chat per buyer↔seller pair — never create a new chat per deal.
+      const chat = await ensurePairChat(tx, user.id, product.sellerId);
+      const chatId = chat.id;
       const created = await tx.order.create({
         data: {
           productId, buyerId: user.id, sellerId: product.sellerId,
           totalAmountCents, payoutCents: totalAmountCents, quantity,
           status: 'PAYMENT_HOLD', idempotencyKey: key,
+          chatId,
           transitions: { create: {
             from: 'PENDING', to: 'PAYMENT_HOLD', actorId: user.id,
             idempotencyKey: `order:${key}:create`,
@@ -119,19 +124,18 @@ export class EscrowService {
             userId: user.id, type: 'PURCHASE_HOLD', amountCents: -totalAmountCents,
             balanceAfterCents: balance.balanceCents, idempotencyKey: `order:${key}:hold`,
           } },
-          chat: { create: { members: { create: [{ userId: user.id }, { userId: product.sellerId }] } } },
         },
         include: { chat: true },
       });
-      const chatId = created.chat!.id;
-      // Exactly one order SYSTEM message — same transaction as order+chat (ordinary + auto-delivery).
+      // SYSTEM message in the existing pair chat — FE shows «Открыть заказ» for this order id.
       await tx.message.create({
         data: {
           chatId,
           kind: 'SYSTEM',
           senderId: null,
           text: [
-            'Заказ создан.',
+            `Заказ #${created.id} создан.`,
+            `Товар: «${product.title}»`,
             '',
             'Не подтверждайте получение товара,',
             'пока полностью его не проверите.',
