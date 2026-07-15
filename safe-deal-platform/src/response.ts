@@ -19,6 +19,7 @@ export interface ProfileDto {
   onixId: string;
   username: string;
   avatarUrl?: string;
+  bio?: string;
   rating: number;
   reviewCount: number;
   salesCount: number;
@@ -34,6 +35,7 @@ export interface LedgerDto {
   id: string;
   type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL';
   amountCents: string;
+  /** API contract: LedgerEntry has no DB status; posted entries are always COMPLETED. */
   status: 'COMPLETED';
   createdAt: string;
 }
@@ -67,11 +69,12 @@ export function sellerDto(user: PublicUser) {
 }
 
 export function profileDto(
-  user: PublicUser & { balanceCents: bigint; isAdmin: boolean },
+  user: PublicUser & { balanceCents: bigint; isAdmin: boolean; bio?: string | null },
   ledger: Array<{ id: bigint; type: string; amountCents: bigint; createdAt: Date }>,
 ): ProfileDto {
   return {
     ...sellerDto(user),
+    ...(user.bio ? { bio: user.bio } : {}),
     balanceCents: user.balanceCents.toString(),
     isAdmin: user.isAdmin,
     roles: user.isAdmin ? ['USER', 'ADMIN'] : ['USER'],

@@ -23,6 +23,7 @@ export class SocialService {
       where: { userId: user.id, product: { status: 'ACTIVE' } },
       include: { product: { include: { seller: { select: { onixId: true, telegramNick: true } } } } },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
   async follow(user: AuthUser, onixId: string) {

@@ -62,7 +62,8 @@ export interface WalletOperation {
   id: string;
   type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL';
   amountCents: string;
-  status: 'PENDING' | 'COMPLETED' | 'FAILED';
+  /** API contract: matches ledgerDto — no DB status column. */
+  status: 'COMPLETED';
   createdAt: string;
 }
 
@@ -75,6 +76,7 @@ export interface Notification {
 }
 
 export interface Profile extends Seller {
+  bio?: string;
   balanceCents: string;
   isAdmin: boolean;
   roles: Array<'USER' | 'ADMIN'>;

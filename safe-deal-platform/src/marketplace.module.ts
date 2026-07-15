@@ -43,6 +43,13 @@ export class MarketplaceService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(user: AuthUser, query: ProductQuery) {
+    if (
+      query.minPriceCents !== undefined
+      && query.maxPriceCents !== undefined
+      && BigInt(query.minPriceCents) > BigInt(query.maxPriceCents)
+    ) {
+      throw new BadRequestException('minPriceCents не может быть больше maxPriceCents.');
+    }
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       ...(query.category ? { category: query.category } : {}),
@@ -76,13 +83,18 @@ export class MarketplaceService {
   }
 
   async get(user: AuthUser, id: string) {
-    const product = await this.prisma.product.findUniqueOrThrow({
+    const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
         seller: { include: { _count: { select: { followers: true } } } },
         favorites: { where: { userId: user.id }, select: { userId: true } },
       },
     });
+    if (!product) throw new NotFoundException('Товар не найден.');
+    // Public catalog surface: non-ACTIVE listings are owner-only (ARCHIVED/RESERVED/SOLD_OUT).
+    if (product.status !== ProductStatus.ACTIVE && product.sellerId !== user.id) {
+      throw new NotFoundException('Товар не найден.');
+    }
     return productDto(product, user.id);
   }
 

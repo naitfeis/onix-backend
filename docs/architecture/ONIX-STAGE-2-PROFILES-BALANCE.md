@@ -19,10 +19,11 @@
 
 ## Backend
 
-- `ProfilesService.getMe` — только `CurrentUser.id`; баланс + ledger (take 100) в транзакции.
+- `ProfilesService.getMe` — только `CurrentUser.id`; включает `bio`; баланс + ledger (take 100) в транзакции.
 - `ProfilesService.update` — whitelist: `displayName`, `bio` (`forbidNonWhitelisted`).
-- `ProfilesService.getPublic` — без `balanceCents`; seller id из БД.
+- `ProfilesService.getPublic` — без `balanceCents`; ACTIVE products `take: 30` + `orderBy createdAt desc`.
 - `ProfilesService.ledger` — `where: { userId: user.id }`.
+- `ledgerDto.status` — контракт API (`COMPLETED`); колонки status в Prisma нет (см. follow-up audit).
 - Вывод: `POST /wallet/withdrawals` — только свой `user.id` + идемпотентность.
 - Корректировка баланса: `POST /admin/users/:onixId/balance` + `AdminGuard`.
 

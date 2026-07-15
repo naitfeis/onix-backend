@@ -34,9 +34,11 @@
 
 - `search` — case-insensitive по title / telegramNick; exact ONIX ID; пустая строка не передаётся
 - `category` — `ProductCategory`
-- `minPriceCents` / `maxPriceCents`
+- `minPriceCents` / `maxPriceCents` — Prisma range; при `min > max` → 400 (UI контролов пока нет)
 - `sort` — `newest` \| `price_asc` \| `price_desc` \| `rating`
-- `limit` (1–100, default 30), `offset` (пагинация)
+- `limit` (1–100, default 30), `offset` (0–10000)
+
+`GET /api/products/:id`: `ACTIVE` — всем; non-ACTIVE — только владельцу.
 
 Комбинации фильтров применяются в одном Prisma `where`. SQL-инъекции исключены (параметризованный Prisma). Mass assignment закрыт DTO + `forbidNonWhitelisted`.
 

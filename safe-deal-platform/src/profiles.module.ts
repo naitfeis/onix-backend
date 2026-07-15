@@ -20,7 +20,7 @@ export class ProfilesService {
       this.prisma.user.findUniqueOrThrow({
       where: { id: user.id },
       select: {
-        id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true,
+        id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         balanceCents: true, ratingAverage: true, ratingCount: true, completedSales: true,
         lastSeenAt: true, isAdmin: true, _count: { select: { followers: true } },
       },
@@ -39,7 +39,11 @@ export class ProfilesService {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
         createdAt: true, _count: { select: { followers: true } },
-        products: { where: { status: 'ACTIVE' }, orderBy: { createdAt: 'desc' } },
+        products: {
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' },
+          take: 30,
+        },
       },
     });
     if (!profile) throw new NotFoundException('Профиль не найден.');

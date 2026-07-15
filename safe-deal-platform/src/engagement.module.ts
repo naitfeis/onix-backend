@@ -116,6 +116,7 @@ export class EngagementService {
       where: { subject: { onixId } },
       include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true } } },
       orderBy: { createdAt: 'desc' },
+      take: 100,
     });
     return reviews.map(reviewDto);
   }

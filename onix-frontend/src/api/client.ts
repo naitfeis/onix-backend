@@ -6,9 +6,7 @@ import type { ApiEnvelope } from './contracts';
 const TOKEN_KEY = 'onix.accessToken';
 
 function apiUrl(path: string): string {
-  const base = resolveApiBase();
-  console.log('API BASE =', base || '(same-origin)');
-  return buildApiUrl(path, base);
+  return buildApiUrl(path, resolveApiBase());
 }
 
 export class ApiError extends Error {
@@ -59,9 +57,6 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
   if (options.body) headers.set('Content-Type', 'application/json');
 
   const url = apiUrl(path);
-  console.log('POST URL =', url);
-  console.log('fetch() full URL =', url);
-  console.log('FINAL REQUEST URL', url);
   const response = await fetch(url, {
     ...options,
     headers,
@@ -96,25 +91,18 @@ interface AuthResult {
 }
 
 export async function bootstrapAuth(): Promise<boolean> {
-  console.log("bootstrapAuth started");
   const data = initData();
-  console.log("initData =", data);
   if (!data) {
-    console.log("initData is EMPTY");
     return false;
   }
-  console.log("Calling telegram-mini endpoint");
   const result = await api.post<AuthResult>('/api/auth/telegram-mini', { initData: data });
   setAccessToken(result.accessToken);
-  console.log("JWT received");
   return true;
 }
 
 export async function loginWithTelegram(payload: Record<string, string | number>): Promise<void> {
-  console.log("Calling /telegram-login");
   const result = await api.post<AuthResult>('/api/auth/telegram-login', payload);
   setAccessToken(result.accessToken);
-  console.log("JWT received");
 }
 
 export const api = {

@@ -32,13 +32,10 @@ let reportTelegramLoginError: (message: string) => void = () => {};
 function registerOnixTelegramAuth() {
   if (window.onixTelegramAuth) return;
   window.onixTelegramAuth = async (user: TelegramLoginPayload) => {
-    console.log('Telegram callback fired', user);
     try {
       if (isWebsiteAuthV2()) {
-        console.log('Sending /api/v2/auth/login (Auth V2 widget rollback)');
         await getWebsiteAuthProvider().loginWithTelegram(user);
       } else {
-        console.log('Sending /api/auth/telegram-login');
         await legacyLoginWithTelegram(user);
       }
       location.reload();
@@ -199,19 +196,6 @@ function BotTelegramLogin({ onAuthenticated }: { onAuthenticated: () => void }) 
   </div>;
 }
 
-function logTelegramWidgetDiagnostics(phase: string) {
-  const script = document.querySelector('script[data-telegram-login]');
-  const botName = script?.getAttribute('data-telegram-login')?.replace(/[^a-z0-9_]/ig, '-');
-  const iframe = botName ? document.getElementById(`telegram-login-${botName}`) : null;
-  console.log(`Telegram widget diagnostics [${phase}]`, {
-    typeofOnixTelegramAuth: typeof window.onixTelegramAuth,
-    dataOnauth: script?.getAttribute('data-onauth'),
-    iframeSrc: iframe?.getAttribute('src'),
-    windowTelegram: window.Telegram,
-    windowTelegramLoginWidget: window.TelegramLoginWidget,
-  });
-}
-
 function TelegramLogin() {
   const bot = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
   const [error, setError] = useState('');
@@ -222,12 +206,6 @@ function TelegramLogin() {
     if (!host) return;
     reportTelegramLoginError = setError;
     registerOnixTelegramAuth();
-    console.log("Telegram callback registered", typeof window.onixTelegramAuth);
-
-    const handleWindowMessage = (event: MessageEvent) => {
-      console.log("WINDOW MESSAGE", event.origin, event.data, event);
-    };
-    window.addEventListener('message', handleWindowMessage);
 
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
@@ -236,20 +214,12 @@ function TelegramLogin() {
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-userpic', 'false');
     script.setAttribute('data-onauth', 'onixTelegramAuth(user)');
-    const handleLoad = () => {
-      console.log("Telegram widget loaded");
-      logTelegramWidgetDiagnostics('after-script-load');
-    };
     const handleError = () => setError('Telegram Login Widget не загрузился.');
-    script.addEventListener('load', handleLoad);
     script.addEventListener('error', handleError);
     host.appendChild(script);
-    console.log("Telegram widget injected");
 
     return () => {
-      window.removeEventListener('message', handleWindowMessage);
       reportTelegramLoginError = () => {};
-      script.removeEventListener('load', handleLoad);
       script.removeEventListener('error', handleError);
       script.remove();
       host.replaceChildren();
