@@ -4,8 +4,10 @@ import { Public } from '../common';
 import { readRefreshTokenFromCookie, refreshCookieName } from './refresh-cookie';
 
 /**
- * Temporary session/cookie probe for RU WebView debugging.
+ * Cookie presence probe for Website Auth V2 (RU / no-VPN debug).
  * Never returns token values.
+ *
+ * GET /api/debug/session
  */
 @Public()
 @Controller('debug')
@@ -20,16 +22,16 @@ export class DebugSessionController {
     const secure = process.env.AUTH_COOKIE_SECURE !== 'false';
     return {
       cookiePresent: Boolean(readRefreshTokenFromCookie(cookieHeader)),
-      cookieName: refreshCookieName(),
+      host: headerString(headers, 'host') ?? req.hostname ?? null,
       origin: headerString(headers, 'origin') ?? null,
       userAgent: headerString(headers, 'user-agent') ?? null,
-      host: headerString(headers, 'host') ?? req.hostname ?? null,
       secure,
       sameSite: 'Lax' as const,
-      path: '/',
+      // Extra ops fields (no secrets):
+      cookieName: refreshCookieName(),
       httpOnly: true,
+      path: '/',
       domain: null,
-      note: '__Host- refresh is host-only on the API request host (www same-origin /api). Not shared with api.onixtg.shop.',
     };
   }
 }

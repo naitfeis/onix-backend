@@ -46,9 +46,10 @@ export function printBootstrapSummary(label = 'settled'): void {
   if (summaryPrinted) return;
   summaryPrinted = true;
   const total = performance.now() - bootStarted;
+  phases.set('bootstrap', total);
   const lines = [
     '[bootstrap]',
-    ...['telegram', 'restore-session', 'refresh', 'me', 'products', 'orders', 'chats', 'profile', 'marketplace']
+    ...['telegram', 'auth-session', 'cookie-check', 'refresh', 'me', 'products', 'orders', 'chats', 'profile', 'marketplace', 'bootstrap']
       .filter((key) => phases.has(key))
       .map((key) => `${key}=${Math.round(phases.get(key)!)} ms`),
     `${label}=${Math.round(total)} ms`,

@@ -8,7 +8,6 @@ import {
   bootstrapPhase,
   bootstrapPhaseSync,
   bootstrapStart,
-  getBootstrapPhases,
   markBootstrapPhase,
   printBootstrapSummary,
 } from '../perf/bootstrapTiming';
@@ -38,11 +37,53 @@ const notify = (kind: 'success' | 'error') => {
 /**
  * Mini App and Website share the same ONIX database/users — different auth entrypoints.
  *
- * Mini App: Telegram initData → /api/auth/telegram-mini → sessionStorage JWT (auto-login).
- * Website:  ONIX cookie refresh only — never requires Telegram on each launch.
+ * Mini App: Telegram initData → auto-login.
+ * Website:  GET /api/v2/auth/session → 401 guest immediately (NO refresh);
+ *           200 → then POST refresh for access token only.
+ * Telegram never used for website restore.
  */
+async function restoreWebsiteSession(): Promise<AuthBootstrap> {
+  const manager = getSharedAuthManager();
+  if (manager.getAccessToken() && !manager.isAccessExpired()) {
+    markBootstrapPhase('auth-session', 0);
+    markBootstrapPhase('cookie-check', 0);
+    markBootstrapPhase('telegram', 0);
+    return { status: 'authenticated', mode: 'website' };
+  }
+
+  // 1) Fast cookie probe — on 401 NEVER call refresh (that was the 12s hang).
+  try {
+    await bootstrapPhase('auth-session', () => getAuthV2Session());
+    markBootstrapPhase('cookie-check', 1);
+  } catch (error) {
+    markBootstrapPhase('telegram', 0);
+    markBootstrapPhase('cookie-check', 0);
+    // Explicit: no refresh after session 401/403.
+    if (error instanceof AuthV2ApiError && (error.status === 401 || error.status === 403)) {
+      return { status: 'guest' };
+    }
+    if (isTransientRefreshFailure(error)) {
+      return { status: 'network' };
+    }
+    return { status: 'guest' };
+  }
+
+  // 2) Session 200 only → mint access via refresh.
+  try {
+    await bootstrapPhase('refresh', () => manager.refreshAccessToken());
+    markBootstrapPhase('telegram', 0);
+    if (manager.getAccessToken()) {
+      return { status: 'authenticated', mode: 'website' };
+    }
+    return { status: 'guest' };
+  } catch (error) {
+    markBootstrapPhase('telegram', 0);
+    if (isTransientRefreshFailure(error)) return { status: 'network' };
+    return { status: 'guest' };
+  }
+}
+
 async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
-  // --- Mini App: Telegram auto-login FIRST (do not use website cookie path) ---
   if (isTelegramMiniApp()) {
     const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
     if (miniOk) return { status: 'authenticated', mode: 'mini' };
@@ -50,45 +91,7 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
     return { status: 'guest' };
   }
 
-  // --- Ordinary website: cookie restore only ---
-  const manager = getSharedAuthManager();
-  const hasMemory = Boolean(manager.getAccessToken() && !manager.isAccessExpired());
-
-  let restoreError: unknown;
-  const restored = hasMemory || await bootstrapPhase('restore-session', async () => {
-    try {
-      if (manager.getAccessToken() && !manager.isAccessExpired()) return true;
-      await manager.refreshAccessToken();
-      return Boolean(manager.getAccessToken());
-    } catch (error) {
-      restoreError = error;
-      return false;
-    }
-  });
-
-  if (restored && manager.getAccessToken()) {
-    markBootstrapPhase('refresh', getBootstrapPhases().get('restore-session') ?? 0);
-    markBootstrapPhase('telegram', 0);
-    return { status: 'authenticated', mode: 'website' };
-  }
-
-  if (restoreError && isTransientRefreshFailure(restoreError)) {
-    markBootstrapPhase('telegram', 0);
-    try {
-      await getAuthV2Session();
-      return { status: 'network' };
-    } catch (probeError) {
-      if (isTransientRefreshFailure(probeError)) return { status: 'network' };
-      if (probeError instanceof AuthV2ApiError && (probeError.status === 401 || probeError.status === 403)) {
-        /* cookie rejected — fall through to guest */
-      } else {
-        return { status: 'network' };
-      }
-    }
-  }
-
-  markBootstrapPhase('telegram', 0);
-  return { status: 'guest' };
+  return restoreWebsiteSession();
 }
 
 /**
@@ -162,57 +165,109 @@ export function useOnixCore() {
   const refreshAll = useCallback(async () => {
     try {
       setBanFromAuth(undefined);
-      const boot = await ensureWebsiteOrMiniAuth();
-      if (boot.status === 'guest') {
-        setProfile(null);
-        setStore(emptyStore);
-        setStates(previous => ({
+
+      // Mini App: Telegram auto-login, then market (unchanged).
+      if (isTelegramMiniApp()) {
+        const boot = await ensureWebsiteOrMiniAuth();
+        if (boot.status !== 'authenticated') {
+          setProfile(null);
+          setStore(emptyStore);
+          setStates((previous) => ({
+            ...previous,
+            profile: 'error',
+            products: 'idle',
+            deals: 'idle',
+            chats: 'idle',
+            notifications: 'idle',
+            reviews: 'idle',
+          }));
+          setErrors((previous) => ({
+            ...previous,
+            profile: 'Войдите через Telegram, чтобы продолжить.',
+          }));
+          printBootstrapSummary('bootstrap-guest');
+          markAppReady('bootstrap-settled');
+          return;
+        }
+        setStates((previous) => ({
           ...previous,
-          profile: 'error',
-          products: 'idle',
-          deals: 'idle',
-          chats: 'idle',
-          notifications: 'idle',
-          reviews: 'idle',
+          products: previous.products === 'success' ? previous.products : 'loading',
         }));
-        setErrors(previous => ({ ...previous, profile: 'Войдите через Telegram, чтобы продолжить.' }));
-        printBootstrapSummary('bootstrap-guest');
+        const current = await bootstrapMarketplace(loadProfile, load);
+        markAppReady('marketplace-ready');
+        printBootstrapSummary('bootstrap-settled');
         markAppReady('bootstrap-settled');
-        return;
-      }
-      if (boot.status === 'network') {
-        setProfile(null);
-        setStore(emptyStore);
-        setStates(previous => ({
-          ...previous,
-          profile: 'error',
-          products: 'idle',
-          deals: 'idle',
-          chats: 'idle',
-          notifications: 'idle',
-          reviews: 'idle',
-        }));
-        setErrors(previous => ({
-          ...previous,
-          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
-        }));
-        printBootstrapSummary('bootstrap-network');
-        markAppReady('bootstrap-settled');
+        warmSecondaryCollections(current, load);
+        setStates((previous) => ({ ...previous, notifications: 'idle' }));
         return;
       }
 
+      // Website: session probe + products start together.
+      // Guest settle MUST NOT await products (products can hang ~40s without VPN).
+      markBootstrapPhase('telegram', 0);
       setStates((previous) => ({
         ...previous,
         products: previous.products === 'success' ? previous.products : 'loading',
+        profile: 'loading',
       }));
 
-      // Critical path — market can render after this settles.
-      const current = await bootstrapMarketplace(loadProfile, load);
+      const productsPromise = bootstrapPhase('products', () =>
+        load('products', API_PATHS.productsList({ limit: 100 })),
+      );
+      const boot = await restoreWebsiteSession();
+
+      if (boot.status === 'guest') {
+        setProfile(null);
+        setStates((previous) => ({
+          ...previous,
+          profile: 'error',
+          deals: 'idle',
+          chats: 'idle',
+          notifications: 'idle',
+          reviews: 'idle',
+        }));
+        setErrors((previous) => ({
+          ...previous,
+          profile: 'Войдите через Telegram, чтобы продолжить.',
+        }));
+        markBootstrapPhase('marketplace', 0);
+        printBootstrapSummary('bootstrap-guest');
+        markAppReady('marketplace-ready');
+        markAppReady('bootstrap-settled');
+        // Products continue in background — do not block guest bootstrap.
+        void productsPromise;
+        return;
+      }
+
+      if (boot.status === 'network') {
+        setProfile(null);
+        setStates((previous) => ({
+          ...previous,
+          profile: 'error',
+          deals: 'idle',
+          chats: 'idle',
+          notifications: 'idle',
+          reviews: 'idle',
+        }));
+        setErrors((previous) => ({
+          ...previous,
+          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
+        }));
+        markBootstrapPhase('marketplace', 0);
+        printBootstrapSummary('bootstrap-network');
+        markAppReady('marketplace-ready');
+        markAppReady('bootstrap-settled');
+        void productsPromise;
+        return;
+      }
+
+      await productsPromise;
+      const current = await bootstrapPhase('me', () => loadProfile());
+      markBootstrapPhase('profile', 0);
+      markBootstrapPhase('marketplace', 0);
       markAppReady('marketplace-ready');
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
-
-      // Secondary — after first market opportunity (does not extend bootstrap-settled).
       warmSecondaryCollections(current, load);
       setStates((previous) => ({ ...previous, notifications: 'idle' }));
     } catch (error) {

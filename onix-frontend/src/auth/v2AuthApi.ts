@@ -1,4 +1,5 @@
 import type { ApiEnvelope } from '../api/contracts';
+import { resilientFetch } from '../api/fetchResilience';
 
 /** Exact shape returned inside `{ success, data }` from POST /api/v2/auth/login. */
 export type AuthV2LoginData = {
@@ -167,15 +168,22 @@ export type AuthV2SessionData = {
 
 /**
  * GET /api/v2/auth/session — HttpOnly refresh cookie only.
+ * Short timeout: 401 must fail fast (guest), never sit on the 12s refresh path.
  */
 export async function getAuthV2Session(
   fetchImpl: AuthV2Fetch = fetch,
   apiBase = '',
 ): Promise<AuthV2SessionData> {
-  const response = await fetchImpl(`${apiBase}/api/v2/auth/session`, {
+  const url = `${apiBase}/api/v2/auth/session`;
+  const init: RequestInit = {
     method: 'GET',
     credentials: 'include',
     headers: { Accept: 'application/json' },
-  });
+  };
+  // Production: short timeout so 401/guest never waits on the 12s refresh path.
+  // Tests inject fetchImpl and skip resilientFetch.
+  const response = fetchImpl === fetch
+    ? await resilientFetch(url, { ...init, timeoutMs: 2_500, maxRetries: 0 })
+    : await fetchImpl(url, init);
   return readEnvelope<AuthV2SessionData>(response);
 }

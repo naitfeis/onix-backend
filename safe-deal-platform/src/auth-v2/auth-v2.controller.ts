@@ -129,12 +129,33 @@ export class AuthV2Controller {
    * No Bearer, no Telegram — reads __Host-onix_rt only. Does not rotate tokens.
    */
   @Get('session')
-  async session(@Headers() headers: Record<string, string | string[] | undefined>) {
+  async session(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const t0 = performance.now();
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
+    const cookieMs = performance.now() - t0;
     if (!refreshToken) {
+      res.setHeader(
+        'Server-Timing',
+        `auth-session;dur=${(performance.now() - t0).toFixed(1)}, cookie-check;dur=${cookieMs.toFixed(1)}`,
+      );
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh cookie is missing.');
     }
+    const tDb = performance.now();
     const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken);
+    const dbMs = performance.now() - tDb;
+    const totalMs = performance.now() - t0;
+    res.setHeader(
+      'Server-Timing',
+      [
+        `auth-session;dur=${totalMs.toFixed(1)}`,
+        `cookie-check;dur=${cookieMs.toFixed(1)}`,
+        `db-session-lookup;dur=${dbMs.toFixed(1)}`,
+      ].join(', '),
+    );
+    res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
     return {
       authenticated: true,
       cookiePresent: true,
