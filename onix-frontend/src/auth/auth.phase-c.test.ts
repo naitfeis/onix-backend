@@ -285,6 +285,14 @@ describe('Mini App Regression', () => {
     vi.stubGlobal('Telegram', {
       WebApp: { initData: 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test' },
     });
+    vi.doMock('@twa-dev/sdk', () => ({
+      default: {
+        initData: 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test',
+        ready: () => {},
+        expand: () => {},
+        HapticFeedback: { notificationOccurred: () => {}, impactOccurred: () => {} },
+      },
+    }));
     vi.stubGlobal('sessionStorage', {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => { storage.set(key, value); },

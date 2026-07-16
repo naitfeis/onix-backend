@@ -36,12 +36,21 @@ const notify = (kind: 'success' | 'error') => {
 };
 
 /**
- * Website-first: ONIX cookie restore only.
- * Telegram Mini App auth ONLY when running inside Mini App (initData present).
- * Never waits on Telegram SDK for ordinary www.
- * Transient network on refresh → 'network' (cookie kept); not forced Telegram re-login.
+ * Mini App and Website share the same ONIX database/users — different auth entrypoints.
+ *
+ * Mini App: Telegram initData → /api/auth/telegram-mini → sessionStorage JWT (auto-login).
+ * Website:  ONIX cookie refresh only — never requires Telegram on each launch.
  */
 async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
+  // --- Mini App: Telegram auto-login FIRST (do not use website cookie path) ---
+  if (isTelegramMiniApp()) {
+    const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
+    if (miniOk) return { status: 'authenticated', mode: 'mini' };
+    if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
+    return { status: 'guest' };
+  }
+
+  // --- Ordinary website: cookie restore only ---
   const manager = getSharedAuthManager();
   const hasMemory = Boolean(manager.getAccessToken() && !manager.isAccessExpired());
 
@@ -59,6 +68,7 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
 
   if (restored && manager.getAccessToken()) {
     markBootstrapPhase('refresh', getBootstrapPhases().get('restore-session') ?? 0);
+    markBootstrapPhase('telegram', 0);
     return { status: 'authenticated', mode: 'website' };
   }
 
@@ -70,23 +80,14 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
     } catch (probeError) {
       if (isTransientRefreshFailure(probeError)) return { status: 'network' };
       if (probeError instanceof AuthV2ApiError && (probeError.status === 401 || probeError.status === 403)) {
-        /* cookie rejected — fall through */
+        /* cookie rejected — fall through to guest */
       } else {
         return { status: 'network' };
       }
     }
   }
 
-  // Ordinary web: stop here — show login. Do not poke Telegram.
-  if (!isTelegramMiniApp()) {
-    markBootstrapPhase('telegram', 0);
-    return { status: 'guest' };
-  }
-
-  const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
-  if (miniOk) return { status: 'authenticated', mode: 'mini' };
-
-  if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
+  markBootstrapPhase('telegram', 0);
   return { status: 'guest' };
 }
 

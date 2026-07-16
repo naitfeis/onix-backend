@@ -16,6 +16,15 @@ beforeEach(() => {
   vi.stubGlobal('Telegram', { WebApp: { initData: MINI_INIT } });
 });
 
+vi.mock('@twa-dev/sdk', () => ({
+  default: {
+    initData: 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test',
+    ready: () => {},
+    expand: () => {},
+    HapticFeedback: { notificationOccurred: () => {}, impactOccurred: () => {} },
+  },
+}));
+
 describe('Bearer auth bootstrap', () => {
   it('exchanges Mini App initData once and keeps JWT in session storage', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
