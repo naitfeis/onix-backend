@@ -44,8 +44,39 @@ function hasTgWebAppUrlMarker(): boolean {
   }
 }
 
-/** True inside Telegram Mini App (initData / WebApp / URL markers). */
-export function isTelegramMiniApp(): boolean {
+/** Temporary detect probe — logs only, no control-flow changes. */
+export function logTelegramDetect(label: string, detectResult?: boolean): void {
+  try {
+    const root = globalThis as typeof globalThis & {
+      Telegram?: { WebApp?: TelegramWebAppLike };
+      window?: Window & { Telegram?: { WebApp?: TelegramWebAppLike } };
+    };
+    const winTg = typeof window !== 'undefined'
+      ? (window as Window & { Telegram?: { WebApp?: TelegramWebAppLike } }).Telegram
+      : undefined;
+    const injected = root.Telegram?.WebApp ?? root.window?.Telegram?.WebApp ?? winTg?.WebApp;
+    const tg = telegramWebApp();
+    const initData = tg?.initData ?? '';
+    const platform = tg?.platform ?? '';
+    const result = detectResult ?? computeIsTelegramMiniApp();
+    // eslint-disable-next-line no-console
+    console.info('[tg-detect]', {
+      label,
+      now: Date.now(),
+      initDataLength: initData.length,
+      platform,
+      windowTelegramExists: Boolean(winTg ?? root.Telegram ?? root.window?.Telegram),
+      windowTelegramWebAppExists: Boolean(injected),
+      sdkWebAppExists: Boolean(WebApp),
+      isTelegramMiniApp: result,
+      urlHasTgWebAppData: hasTgWebAppUrlMarker(),
+    });
+  } catch {
+    /* ignore probe failures */
+  }
+}
+
+function computeIsTelegramMiniApp(): boolean {
   const tg = telegramWebApp();
   const data = tg?.initData;
   if (data && data.length > 0) return true;
@@ -53,6 +84,13 @@ export function isTelegramMiniApp(): boolean {
   const platform = tg?.platform;
   if (platform && platform !== 'unknown' && platform !== '') return true;
   return false;
+}
+
+/** True inside Telegram Mini App (initData / WebApp / URL markers). */
+export function isTelegramMiniApp(): boolean {
+  const result = computeIsTelegramMiniApp();
+  logTelegramDetect('isTelegramMiniApp()', result);
+  return result;
 }
 
 export function getTelegramInitData(): string {
@@ -69,15 +107,21 @@ export function getTelegramInitData(): string {
 export function signalTelegramReadyIfMiniApp(): void {
   try {
     const tg = telegramWebApp();
-    if (!tg && !hasTgWebAppUrlMarker()) return;
+    if (!tg && !hasTgWebAppUrlMarker()) {
+      logTelegramDetect('signalTelegramReadyIfMiniApp:skip-no-tg');
+      return;
+    }
     WebApp.ready();
+    logTelegramDetect('after WebApp.ready()');
     WebApp.expand();
   } catch {
     try {
       const tg = telegramWebApp();
       tg?.ready?.();
+      logTelegramDetect('after tg.ready() fallback');
       tg?.expand?.();
     } catch {
+      logTelegramDetect('signalTelegramReadyIfMiniApp:no-telegram');
       /* Ordinary www — no Telegram. */
     }
   }

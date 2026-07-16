@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
 import { getSharedAuthManager, probeAuthV2Session } from '../auth';
-import { isTelegramMiniApp, signalTelegramReadyIfMiniApp, telegramHaptic } from '../auth/telegramEnv';
+import { isTelegramMiniApp, signalTelegramReadyIfMiniApp, telegramHaptic, logTelegramDetect } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 import {
@@ -290,6 +290,7 @@ export function useOnixCore() {
     if (coldBootstrapOnce) return;
     coldBootstrapOnce = true;
     bootstrapStart();
+    logTelegramDetect('before refreshAll()');
     void refreshAll();
   }, [refreshAll]);
 
