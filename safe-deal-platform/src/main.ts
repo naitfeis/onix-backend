@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import compression = require('compression');
+import compression from 'compression';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
@@ -31,8 +31,10 @@ async function bootstrap(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
 
-  // gzip responses (brotli at Cloudflare edge when proxied).
-  app.use(compression({ threshold: 1024 }));
+  // gzip only in production (Render NODE_ENV=production). Dev stays uncompressed for easier debugging.
+  if (process.env.NODE_ENV === 'production') {
+    app.use(compression());
+  }
   app.use(requestTimingMiddleware);
 
   registerHealthEndpoint(app);
