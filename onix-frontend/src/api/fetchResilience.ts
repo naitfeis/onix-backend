@@ -3,8 +3,10 @@
  * Never retries 401/403 (auth must fail fast).
  */
 
-export const DEFAULT_FETCH_TIMEOUT_MS = 12_000;
-export const MAX_NETWORK_RETRIES = 2;
+/** Fail hung RU/CF sockets before the UI looks "stuck forever". */
+export const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
+/** One retry for reset/502–504 — enough for flaky paths, not endless pending. */
+export const MAX_NETWORK_RETRIES = 1;
 
 export function isRetryableHttpStatus(status: number): boolean {
   if (status === 401 || status === 403) return false;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
+import { resilientFetch } from '../api/fetchResilience';
 import {
   getAuthV2Me,
   getSharedAuthManager,
@@ -47,7 +48,7 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
   const restored = hasMemory || await manager.restoreSession();
   if (restored && manager.getAccessToken()) {
     try {
-      await getAuthV2Me(manager.getAccessToken()!, fetch, resolveApiBase());
+      await getAuthV2Me(manager.getAccessToken()!, resilientFetch, resolveApiBase());
       return 'website';
     } catch {
       manager.clearSession('refresh-failed');
@@ -58,20 +59,22 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
   return null;
 }
 
-/** Full marketplace bootstrap — parallel, non-blocking first paint (skeletons). */
+/**
+ * Web-first cold start: wait only for profile + products (market shell).
+ * Orders/chats/reviews warm in background — must not delay first paint.
+ */
 async function bootstrapAuthenticatedUser(
   loadProfile: () => Promise<Profile | null>,
   load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
 ): Promise<Profile | null> {
-  // Never waterfall: profile / products / orders / chats settle independently.
   const settled = await Promise.allSettled([
     loadProfile(),
     load('products', API_PATHS.productsList({ limit: 100 })),
-    load('deals', API_PATHS.orders),
-    load('chats', API_PATHS.chats),
   ]);
   const current = settled[0]?.status === 'fulfilled' ? settled[0].value : null;
-  // Reviews need onixId — do not block Marketplace first paint.
+  // Secondary tabs / badge — fire-and-forget after market path.
+  void load('deals', API_PATHS.orders);
+  void load('chats', API_PATHS.chats);
   if (current) {
     void load('reviews', API_PATHS.reviews(current.onixId));
   }
@@ -82,7 +85,8 @@ export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [store, setStore] = useState<Store>(emptyStore);
   const [states, setStates] = useState<Record<CollectionKey | 'profile', AsyncState>>({
-    profile: 'loading', products: 'loading', deals: 'loading', chats: 'loading', notifications: 'loading', reviews: 'loading',
+    // Market path starts loading; secondary collections stay idle until bootstrap kicks them.
+    profile: 'loading', products: 'idle', deals: 'idle', chats: 'idle', notifications: 'idle', reviews: 'idle',
   });
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
@@ -138,9 +142,13 @@ export function useOnixCore() {
         return;
       }
 
-      // Guest → Loading User → Authenticated (same bootstrap for Mini App, Website bot, legacy).
+      // Guest → authenticated: market shell (profile+products), then background collections.
+      setStates((previous) => ({
+        ...previous,
+        products: previous.products === 'success' ? previous.products : 'loading',
+      }));
       await bootstrapAuthenticatedUser(loadProfile, load);
-      // Badge uses chat unread only — skip notifications network on cold start.
+      // Badge uses chat unread — chats load in background from bootstrap.
       setStates((previous) => ({ ...previous, notifications: 'idle' }));
     } catch (error) {
       setProfile(null);
