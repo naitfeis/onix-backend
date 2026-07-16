@@ -1,5 +1,6 @@
 import { buildApiUrl } from './apiConfig';
 import type { ApiEnvelope } from '../api/contracts';
+import { resilientFetch } from '../api/fetchResilience';
 
 export type RefreshSuccess = {
   accessToken: string;
@@ -76,5 +77,6 @@ export async function postAuthV2Refresh(
 }
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
-  return fetch(url, init);
+  // Same timeout/retry as marketplace API — RU Telegram WebView connection resets.
+  return resilientFetch(url, init);
 }

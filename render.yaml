@@ -7,7 +7,8 @@ services:
     runtime: node
     plan: starter
     region: frankfurt
-    buildCommand: npm ci && npm run build
+    # --include=dev: NODE_ENV=production would otherwise omit destinies needed for tsc/prisma.
+    buildCommand: npm ci --include=dev && npm run build
     preDeployCommand: npx prisma migrate deploy
     startCommand: node dist/main.js
     healthCheckPath: /
