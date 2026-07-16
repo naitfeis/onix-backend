@@ -1,13 +1,13 @@
 import {
   BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext,
-  ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, UseGuards,
+  ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
 import { BanReason, Prisma } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { hostname as osHostname } from 'node:os';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } from './ban-policy';
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
@@ -234,28 +234,55 @@ class AdminRefundController {
 class HealthController {
   constructor(private readonly prisma: PrismaService) {}
 
-  @Public() @Get('live') live() { return { status: 'ok', service: 'onix-api' }; }
+  @Public()
+  @Get('live')
+  @Header('Cache-Control', 'no-store')
+  live() { return { status: 'ok', service: 'onix-api' }; }
 
-  @Public() @Get('ready') async ready() {
+  @Public()
+  @Get('ready')
+  @Header('Cache-Control', 'no-store')
+  async ready() {
     await this.prisma.$queryRaw`SELECT 1`;
     return { status: 'ready', database: 'ok' };
   }
 
-  /** Temporary network probe for RU / CDN path debugging (no secrets). */
+  /**
+   * Network path probe (RU / CDN / rewrite debugging).
+   * No secrets — hostname, region, response time only.
+   */
   @Public()
   @Get('network')
   @Header('Cache-Control', 'no-store')
-  network(@Req() req: Request) {
+  network(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const started = performance.now();
     const forwarded = req.headers['x-forwarded-for'];
     const forwardedIp = typeof forwarded === 'string'
       ? forwarded.split(',')[0]?.trim()
       : Array.isArray(forwarded) ? forwarded[0] : undefined;
+    const region = process.env.RENDER_REGION
+      ?? process.env.AWS_REGION
+      ?? process.env.FLY_REGION
+      ?? 'frankfurt';
+    const responseTimeMs = Math.round((performance.now() - started) * 1000) / 1000;
+    res.setHeader('X-Response-Time', `${responseTimeMs}ms`);
+    res.setHeader(
+      'Server-Timing',
+      `network;dur=${responseTimeMs}`,
+    );
     return {
       status: 'ok',
-      region: process.env.RENDER_REGION ?? process.env.AWS_REGION ?? 'unknown',
-      timestamp: new Date().toISOString(),
       hostname: osHostname(),
-      ip: forwardedIp || req.socket.remoteAddress || 'unknown',
+      region,
+      responseTimeMs,
+      timestamp: new Date().toISOString(),
+      // Client-facing path hints (no secrets)
+      via: {
+        host: req.headers.host ?? null,
+        forwardedFor: forwardedIp || null,
+        vercelId: typeof req.headers['x-vercel-id'] === 'string' ? req.headers['x-vercel-id'] : null,
+        cfRay: typeof req.headers['cf-ray'] === 'string' ? req.headers['cf-ray'] : null,
+      },
     };
   }
 }

@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Headers, Param, Post, Req, Res, UseGuards,
+  Body, Controller, Delete, Get, Header, Headers, Param, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Public } from '../common';
@@ -28,6 +28,7 @@ export class AuthV2Controller {
   ) {}
 
   @Post('login')
+  @Header('Cache-Control', 'no-store')
   async login(
     @Body() body: LoginDto,
     @Headers() headers: Record<string, string | string[] | undefined>,
@@ -74,6 +75,7 @@ export class AuthV2Controller {
   }
 
   @Post('refresh')
+  @Header('Cache-Control', 'no-store')
   async refresh(
     @Body() body: RefreshDto,
     @Headers() headers: Record<string, string | string[] | undefined>,
@@ -129,6 +131,7 @@ export class AuthV2Controller {
    * No Bearer, no Telegram — reads __Host-onix_rt only. Does not rotate tokens.
    */
   @Get('session')
+  @Header('Cache-Control', 'no-store')
   async session(
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Res({ passthrough: true }) res: Response,
