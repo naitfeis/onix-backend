@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, Controller, Delete, Get, Header, Injectable, Module,
-  NotFoundException, Optional, Param, Patch, Post, Query, Req, Req,
+  NotFoundException, Optional, Param, Patch, Post, Query, Req, Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
