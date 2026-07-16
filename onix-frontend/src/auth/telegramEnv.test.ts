@@ -50,8 +50,30 @@ describe('telegramEnv website isolation', () => {
         expand,
       },
     });
-    const { signalTelegramReadyIfMiniApp } = await import('./telegramEnv');
-    signalTelegramReadyIfMiniApp();
+    const { ensureTelegramMiniAppReady } = await import('./telegramEnv');
+    await expect(ensureTelegramMiniAppReady()).resolves.toContain('query_id=1');
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(expand).toHaveBeenCalledTimes(1);
+  });
+
+  it('awaits SDK when URL has tgWebAppData but initData is empty', async () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+    vi.stubGlobal('location', {
+      hash: '#tgWebAppData=query_id%3D1%26hash%3Dabc',
+      search: '',
+    });
+    vi.doMock('@twa-dev/sdk', () => ({
+      default: {
+        initData: 'query_id=1&hash=abc',
+        platform: 'ios',
+        ready,
+        expand,
+      },
+    }));
+    const { ensureTelegramMiniAppReady, isTelegramMiniApp } = await import('./telegramEnv');
+    expect(isTelegramMiniApp()).toBe(true);
+    await expect(ensureTelegramMiniAppReady()).resolves.toBe('query_id=1&hash=abc');
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
   });

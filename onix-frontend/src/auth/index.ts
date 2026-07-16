@@ -60,6 +60,7 @@ export type {
 export { normalizeTelegramLoginPayload } from './telegramPayload';
 export { collectDeviceInfo, collectDeviceInfoAsync } from './deviceInfo';
 export {
+  ensureTelegramMiniAppReady,
   getTelegramInitData,
   isTelegramMiniApp,
   signalTelegramReadyIfMiniApp,

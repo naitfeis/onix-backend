@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
 import { getSharedAuthManager, probeAuthV2Session } from '../auth';
-import { isTelegramMiniApp, signalTelegramReadyIfMiniApp, telegramHaptic, logTelegramDetect } from '../auth/telegramEnv';
+import {
+  ensureTelegramMiniAppReady,
+  isTelegramMiniApp,
+  signalTelegramReadyIfMiniApp,
+  telegramHaptic,
+  logTelegramDetect,
+} from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 import {
@@ -78,7 +84,11 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
 
 async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
   if (isTelegramMiniApp()) {
-    const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
+    const miniOk = await bootstrapPhase('telegram', async () => {
+      // Wait for initData (SDK may need to parse tgWebAppData) before /telegram-mini.
+      await ensureTelegramMiniAppReady();
+      return bootstrapAuth();
+    });
     if (miniOk) return { status: 'authenticated', mode: 'mini' };
     if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
     return { status: 'guest' };

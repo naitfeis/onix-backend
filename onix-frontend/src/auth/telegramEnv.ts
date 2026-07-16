@@ -5,8 +5,8 @@
  * The SDK stub creates window.Telegram.WebApp with empty initData / platform "unknown"
  * and auto-posts web_app_request_theme / web_app_request_viewport on import.
  *
- * Website cookie auth must not depend on Telegram. Mini App uses Telegram-injected WebApp
- * (and optionally loads the SDK only after real Mini App detection).
+ * Website cookie auth must not depend on Telegram. Mini App loads SDK only after
+ * real Mini App detection, and must await ready + initData before auto-login.
  */
 
 type TelegramWebAppLike = {
@@ -21,6 +21,10 @@ type TelegramWebAppLike = {
 };
 
 type TwaSdkModule = { default: TelegramWebAppLike };
+
+let miniAppReadyPromise: Promise<string> | null = null;
+/** Set after ensureTelegramMiniAppReady — covers SDK initData before inject sync. */
+let ensuredInitData = '';
 
 function readInjectedWebApp(): TelegramWebAppLike | undefined {
   try {
@@ -75,15 +79,19 @@ export function logTelegramDetect(label: string, detectResult?: boolean): void {
 
 /**
  * True only inside a real Telegram Mini App.
- * Do not treat SDK stubs (empty initData + platform "unknown") as Mini App.
+ * Without a static SDK import, platform "unknown" does not appear on ordinary www.
  */
 function computeIsTelegramMiniApp(): boolean {
-  const data = readInjectedWebApp()?.initData;
+  const tg = readInjectedWebApp();
+  const data = tg?.initData;
   if (data && data.length > 0) return true;
-  return hasTgWebAppUrlMarker();
+  if (hasTgWebAppUrlMarker()) return true;
+  const platform = tg?.platform;
+  if (platform && platform !== 'unknown' && platform !== '') return true;
+  return false;
 }
 
-/** True inside Telegram Mini App (non-empty initData or tgWebAppData URL markers). */
+/** True inside Telegram Mini App (initData / URL markers / native platform). */
 export function isTelegramMiniApp(): boolean {
   const result = computeIsTelegramMiniApp();
   logTelegramDetect('isTelegramMiniApp()', result);
@@ -91,7 +99,8 @@ export function isTelegramMiniApp(): boolean {
 }
 
 export function getTelegramInitData(): string {
-  return readInjectedWebApp()?.initData ?? '';
+  const live = readInjectedWebApp()?.initData ?? '';
+  return live || ensuredInitData;
 }
 
 async function loadTwaSdk(): Promise<TelegramWebAppLike | undefined> {
@@ -103,41 +112,59 @@ async function loadTwaSdk(): Promise<TelegramWebAppLike | undefined> {
   }
 }
 
+function signalReady(tg: TelegramWebAppLike | undefined): void {
+  try {
+    tg?.ready?.();
+    tg?.expand?.();
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
- * Call Telegram ready/expand only after Mini App is confirmed.
- * Prefer injected WebApp; load SDK only as a fallback (never on ordinary www).
+ * Mini App only: ensure WebApp is ready and initData is readable before auto-login.
+ * Loads @twa-dev/sdk only when needed (e.g. initData lives in tgWebAppData hash).
+ * Safe no-op on ordinary www.
+ */
+export async function ensureTelegramMiniAppReady(): Promise<string> {
+  if (!computeIsTelegramMiniApp()) {
+    logTelegramDetect('ensureTelegramMiniAppReady:skip-not-mini');
+    return '';
+  }
+
+  if (!miniAppReadyPromise) {
+    miniAppReadyPromise = (async () => {
+      let initData = readInjectedWebApp()?.initData ?? '';
+      if (initData) {
+        signalReady(readInjectedWebApp());
+        ensuredInitData = initData;
+        logTelegramDetect('ensureTelegramMiniAppReady:injected');
+        return initData;
+      }
+
+      // Hash/platform markers without initData yet — load SDK to parse tgWebAppData.
+      const sdk = await loadTwaSdk();
+      signalReady(sdk ?? readInjectedWebApp());
+      initData = (sdk?.initData && String(sdk.initData))
+        || (readInjectedWebApp()?.initData ?? '');
+      ensuredInitData = initData;
+      logTelegramDetect('ensureTelegramMiniAppReady:sdk', Boolean(initData));
+      return initData;
+    })();
+  }
+
+  return miniAppReadyPromise;
+}
+
+/**
+ * Fire-and-forget ready for shell mount. Auth path must use ensureTelegramMiniAppReady().
  */
 export function signalTelegramReadyIfMiniApp(): void {
   if (!computeIsTelegramMiniApp()) {
     logTelegramDetect('signalTelegramReadyIfMiniApp:skip-not-mini');
     return;
   }
-
-  const injected = readInjectedWebApp();
-  if (injected?.ready || injected?.expand) {
-    try {
-      injected.ready?.();
-      logTelegramDetect('after injected.ready()');
-      injected.expand?.();
-      return;
-    } catch {
-      /* fall through to SDK */
-    }
-  }
-
-  void loadTwaSdk().then((sdk) => {
-    if (!sdk) {
-      logTelegramDetect('signalTelegramReadyIfMiniApp:no-telegram');
-      return;
-    }
-    try {
-      sdk.ready?.();
-      logTelegramDetect('after WebApp.ready()');
-      sdk.expand?.();
-    } catch {
-      logTelegramDetect('signalTelegramReadyIfMiniApp:sdk-failed');
-    }
-  });
+  void ensureTelegramMiniAppReady();
 }
 
 export function telegramHaptic(kind: 'success' | 'error'): void {
