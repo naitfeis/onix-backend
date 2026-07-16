@@ -154,6 +154,19 @@ describe('AuthManager Phase B', () => {
     manager.dispose();
   });
 
+  it('network timeout on refresh does NOT logout (cookie may still be valid)', async () => {
+    const manager = new AuthManager({
+      refresh: async () => {
+        throw new RefreshError('aborted', 0, 'AUTH_NETWORK_TRANSIENT');
+      },
+      broadcast: new AuthBroadcast('test-net', () => null),
+    });
+    manager.setSession('still-here', 900, { broadcast: false });
+    await expect(manager.refreshAccessToken()).rejects.toMatchObject({ code: 'AUTH_NETWORK_TRANSIENT' });
+    expect(manager.getAccessToken()).toBe('still-here');
+    manager.dispose();
+  });
+
   it('missing cookie → clear session and no inner refresh loop', async () => {
     let refreshCalls = 0;
     const manager = new AuthManager({

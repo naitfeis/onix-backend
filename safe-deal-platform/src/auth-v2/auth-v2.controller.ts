@@ -124,6 +124,38 @@ export class AuthV2Controller {
     };
   }
 
+  /**
+   * Cookie-only session status (Website persistent login).
+   * No Bearer, no Telegram — reads __Host-onix_rt only. Does not rotate tokens.
+   */
+  @Get('session')
+  async session(@Headers() headers: Record<string, string | string[] | undefined>) {
+    const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
+    if (!refreshToken) {
+      throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh cookie is missing.');
+    }
+    const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken);
+    return {
+      authenticated: true,
+      cookiePresent: true,
+      user: {
+        id: user.id.toString(),
+        onixId: user.onixId,
+        isAdmin: user.isAdmin,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+      },
+      session: {
+        id: session.id,
+        rememberMe: session.rememberMe,
+        lastSeenAt: session.lastSeenAt.toISOString(),
+        createdAt: session.createdAt.toISOString(),
+        expiresAt: session.absoluteExpiresAt.toISOString(),
+        refreshExpiresAt: session.refreshExpiresAt.toISOString(),
+      },
+    };
+  }
+
   @UseGuards(AuthV2Guard)
   @Post('logout')
   async logout(

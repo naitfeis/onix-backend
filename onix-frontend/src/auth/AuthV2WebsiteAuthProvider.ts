@@ -14,6 +14,7 @@ import {
   type AuthV2Fetch,
   type AuthV2MeData,
 } from './v2AuthApi';
+import { isTransientRefreshFailure } from './refreshClient';
 import { resolveApiBase } from './apiConfig';
 
 export type AuthV2WebsiteAuthProviderOptions = {
@@ -63,7 +64,12 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
       const me = await this.fetchMeOrThrow();
       this.cachedUser = toWebsiteUser(me);
       return true;
-    } catch {
+    } catch (error) {
+      // Network blip must not force re-auth — cookie/session may still be valid.
+      if (isTransientRefreshFailure(error) || (error instanceof AuthV2ApiError && error.status >= 500)) {
+        this.cachedUser = null;
+        return Boolean(this.manager.getAccessToken());
+      }
       this.manager.clearSession('force-reauth');
       this.cachedUser = null;
       return false;
@@ -78,7 +84,8 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
     const login = await postAuthV2Login(
       {
         telegram,
-        rememberMe: options?.rememberMe,
+        // Website persistent session by default (survive browser close / next-day return).
+        rememberMe: options?.rememberMe !== false,
         device: await collectDeviceInfoAsync(),
       },
       this.fetchImpl,
@@ -115,7 +122,10 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
       const me = await this.fetchMeOrThrow();
       this.cachedUser = toWebsiteUser(me);
       return this.cachedUser;
-    } catch {
+    } catch (error) {
+      if (isTransientRefreshFailure(error) || (error instanceof AuthV2ApiError && error.status >= 500)) {
+        return null;
+      }
       this.manager.clearSession('force-reauth');
       this.cachedUser = null;
       return null;

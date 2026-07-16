@@ -4,7 +4,7 @@ import {
   readMemoryAccessToken,
   writeMemoryAccessToken,
 } from './memoryAccessToken';
-import { postAuthV2Refresh, RefreshError, type RefreshTransport } from './refreshClient';
+import { postAuthV2Refresh, RefreshError, isDefinitiveAuthRefreshFailure, type RefreshTransport } from './refreshClient';
 
 export type AuthManagerOptions = {
   /** Override refresh HTTP (tests / mocks). Default: real /api/v2/auth/refresh. */
@@ -136,7 +136,13 @@ export class AuthManager {
         this.setSession(result.accessToken, result.expiresIn);
         return result.accessToken;
       } catch (error) {
-        if (generation === this.sessionGeneration && !this.disposed) {
+        // Only logout when the server rejects the cookie/session.
+        // Network timeouts / 5xx must NOT clearSession — HttpOnly cookie remains valid.
+        if (
+          generation === this.sessionGeneration
+          && !this.disposed
+          && isDefinitiveAuthRefreshFailure(error)
+        ) {
           this.clearSession('refresh-failed');
         }
         throw error;
@@ -163,6 +169,7 @@ export class AuthManager {
 
   /**
    * Silent restore after full page reload (F5): no token in memory → refresh cookie.
+   * Transient network failures return false without wiping session cookie / peer tabs.
    */
   async restoreSession(): Promise<boolean> {
     this.assertOpen();
@@ -251,7 +258,7 @@ export class AuthManager {
       if (this.disposed) return;
       if (!this.getAccessToken()) return;
       void this.refreshAccessToken().catch(() => {
-        /* clearSession already invoked inside refreshAccessToken when generation matches */
+        /* definitive auth failure clears inside refreshAccessToken; transient is ignored */
       });
     }, delay);
   }

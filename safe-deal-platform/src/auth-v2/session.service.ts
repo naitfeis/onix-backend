@@ -277,6 +277,34 @@ export class SessionService {
     });
   }
 
+  /**
+   * Cookie-only session probe (no rotation, no Telegram).
+   * Used by GET /api/v2/auth/session for Website persistent login checks.
+   */
+  async getSessionByRefreshToken(refreshToken: string): Promise<{
+    user: User;
+    session: Session;
+  }> {
+    if (!refreshToken) {
+      throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh token is missing.');
+    }
+    const presentedHash = this.tokens.hashRefreshToken(refreshToken);
+    const now = new Date();
+    const session = await this.prisma.session.findUnique({
+      where: { refreshTokenHash: presentedHash },
+    });
+    if (!session) {
+      throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh token is unknown.');
+    }
+    this.assertSessionUsable(session, now);
+    const found = await this.prisma.user.findUnique({ where: { id: session.userId } });
+    if (!found) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
+    }
+    const user = await this.resolveUserAccountLock(found, this.prisma);
+    return { user, session };
+  }
+
   async rotateRefresh(
     refreshToken: string,
     device?: DeviceContext,

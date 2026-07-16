@@ -3,21 +3,28 @@ import react from '@vitejs/plugin-react';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-// Long-cache vendor chunks: React (framework) + Telegram SDK (optional Mini App path).
+/**
+ * Named chunks for ops / lazy route map.
+ * App screens use dynamic import() — Rollup creates separate files;
+ * manualChunks only shapes vendor + shared helpers.
+ */
 const manualChunks = (id: string) => {
   if (id.includes('node_modules')) {
-    if (id.includes('react') || id.includes('react-dom')) {
+    if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
       return 'framework';
     }
     if (id.includes('@twa-dev/sdk')) {
       return 'telegram';
     }
   }
+  // Keep screen shared helpers out of the shell when pulled by a lazy screen.
+  if (id.includes('/src/screens/shared')) {
+    return 'shared';
+  }
 };
 
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
-  // Browser always uses relative /api (empty VITE_API_URL). Proxy target is separate.
   const proxyTarget =
     env.VITE_API_PROXY_TARGET?.trim()
     || (env.VITE_API_URL?.trim().startsWith('http') ? env.VITE_API_URL.trim() : '')
@@ -55,9 +62,19 @@ export default ({ mode }: { mode: string }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
+      target: 'es2020',
+      cssCodeSplit: true,
+      modulePreload: {
+        resolveDependencies: (_filename, deps) => {
+          // Preload only framework for initial navigation — screens fetch on demand.
+          return deps.filter((dep) => dep.includes('framework'));
+        },
+      },
       rollupOptions: {
         output: {
           manualChunks,
+          chunkFileNames: 'assets/[name]-[hash].js',
+          entryFileNames: 'assets/[name]-[hash].js',
         },
       },
     },

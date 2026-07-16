@@ -82,7 +82,8 @@ export async function completeBotLogin(challengeId: string, signal?: AbortSignal
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ challengeId }),
+    // Website persistent session: rememberMe so cookie survives browser close (~30d idle).
+    body: JSON.stringify({ challengeId, rememberMe: true }),
     signal,
   });
   const data = await readData<{ accessToken: string; expiresIn: number }>(response);

@@ -30,7 +30,7 @@ export type { AuthManagerOptions } from './AuthManager';
 export { AuthBroadcast, MemoryAuthBroadcastBus } from './authBroadcast';
 export type { AuthBroadcastEvent } from './authBroadcast';
 
-export { postAuthV2Refresh, RefreshError } from './refreshClient';
+export { postAuthV2Refresh, RefreshError, isDefinitiveAuthRefreshFailure, isTransientRefreshFailure } from './refreshClient';
 export type { RefreshSuccess, RefreshTransport } from './refreshClient';
 
 export {
@@ -45,17 +45,25 @@ export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } f
 export {
   AuthV2ApiError,
   getAuthV2Me,
+  getAuthV2Session,
   postAuthV2Login,
 } from './v2AuthApi';
 export type {
   AuthV2LoginData,
   AuthV2LoginRequest,
   AuthV2MeData,
+  AuthV2SessionData,
 } from './v2AuthApi';
 
 export { normalizeTelegramLoginPayload } from './telegramPayload';
 export { collectDeviceInfo, collectDeviceInfoAsync } from './deviceInfo';
-
+export {
+  getTelegramInitData,
+  isTelegramMiniApp,
+  signalTelegramReadyIfMiniApp,
+  telegramHaptic,
+  telegramImpact,
+} from './telegramEnv';
 export {
   getWebsiteLoginProvider,
   openTelegramBotLogin,

@@ -1,5 +1,5 @@
-import WebApp from '@twa-dev/sdk';
 import { buildApiUrl, resolveApiBase, shouldIncludeCredentials } from '../auth/apiConfig';
+import { getTelegramInitData } from '../auth/telegramEnv';
 import { peekSharedAuthManager } from '../auth/sharedAuthManager';
 import { timedApi } from '../perf/timing';
 import type { ApiEnvelope } from './contracts';
@@ -57,11 +57,7 @@ export function clearAccessToken(): void {
 }
 
 function initData(): string {
-  try {
-    return WebApp.initData || '';
-  } catch {
-    return '';
-  }
+  return getTelegramInitData();
 }
 
 async function executeApiRequest<T>(path: string, options: RequestInit, token: string | null): Promise<T> {

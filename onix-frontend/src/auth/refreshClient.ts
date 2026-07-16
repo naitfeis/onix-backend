@@ -19,6 +19,46 @@ export class RefreshError extends Error {
   }
 }
 
+/** Server rejected the refresh cookie / session — safe to treat as logged out. */
+export function isDefinitiveAuthRefreshFailure(error: unknown): boolean {
+  if (!(error instanceof RefreshError)) return false;
+  if (error.code === 'AUTH_NETWORK_TRANSIENT') return false;
+  if (error.status === 401 || error.status === 403) return true;
+  const code = error.code ?? '';
+  return (
+    code === 'AUTH_REFRESH_MISSING'
+    || code === 'AUTH_REFRESH_REUSED'
+    || code === 'AUTH_SESSION_REVOKED'
+    || code === 'AUTH_SESSION_EXPIRED'
+    || code === 'AUTH_INVALID_TOKEN'
+    || code === 'AUTH_ACCOUNT_LOCKED'
+  );
+}
+
+/** Timeout / Failed to fetch / 5xx — cookie may still be valid; do not logout. */
+export function isTransientRefreshFailure(error: unknown): boolean {
+  if (error instanceof RefreshError) {
+    if (error.code === 'AUTH_NETWORK_TRANSIENT') return true;
+    if (error.status === 0 || error.status >= 500) return true;
+    if (error.status === 408 || error.status === 429) return true;
+    return false;
+  }
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+  if (error instanceof TypeError) return true;
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('failed to fetch')
+      || message.includes('networkerror')
+      || message.includes('aborted')
+      || message.includes('timeout')
+    );
+  }
+  return false;
+}
+
 export type RefreshTransport = (input: {
   url: string;
   init: RequestInit;
@@ -38,21 +78,30 @@ export async function postAuthV2Refresh(
     'X-ONIX-CSRF': '1',
   });
 
-  const response = await transport({
-    url,
-    init: {
-      method: 'POST',
-      headers,
-      // Refresh cookie is HttpOnly; Auth V2 always needs credentials on this call.
-      credentials: 'include',
-      body: '{}',
-    },
-  });
+  let response: Response;
+  try {
+    response = await transport({
+      url,
+      init: {
+        method: 'POST',
+        headers,
+        // Refresh cookie is HttpOnly; Auth V2 always needs credentials on this call.
+        credentials: 'include',
+        body: '{}',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network error during refresh.';
+    throw new RefreshError(message, 0, 'AUTH_NETWORK_TRANSIENT');
+  }
 
   let payload: ApiEnvelope<RefreshSuccess & Record<string, unknown>> | undefined;
   try {
     payload = await response.json() as ApiEnvelope<RefreshSuccess & Record<string, unknown>>;
   } catch {
+    if (response.status >= 500 || response.status === 0) {
+      throw new RefreshError('Refresh returned a non-JSON body.', response.status, 'AUTH_NETWORK_TRANSIENT');
+    }
     throw new RefreshError('Refresh returned a non-JSON body.', response.status);
   }
 
@@ -63,7 +112,7 @@ export async function postAuthV2Refresh(
     throw new RefreshError(
       message || payload.message || 'Refresh failed.',
       response.status,
-      code,
+      response.status >= 500 ? (code ?? 'AUTH_NETWORK_TRANSIENT') : code,
     );
   }
 

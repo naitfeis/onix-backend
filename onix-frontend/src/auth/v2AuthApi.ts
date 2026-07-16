@@ -143,3 +143,39 @@ export async function getAuthV2Me(
   });
   return readEnvelope<AuthV2MeData>(response);
 }
+
+/** Cookie-only session probe — no Bearer, no Telegram, no token rotation. */
+export type AuthV2SessionData = {
+  authenticated: true;
+  cookiePresent: true;
+  user: {
+    id: string;
+    onixId: string;
+    isAdmin: boolean;
+    sessionVersion: number;
+    permissionVersion: number;
+  };
+  session: {
+    id: string;
+    rememberMe: boolean;
+    lastSeenAt: string;
+    createdAt: string;
+    expiresAt: string;
+    refreshExpiresAt: string;
+  };
+};
+
+/**
+ * GET /api/v2/auth/session — HttpOnly refresh cookie only.
+ */
+export async function getAuthV2Session(
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<AuthV2SessionData> {
+  const response = await fetchImpl(`${apiBase}/api/v2/auth/session`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  return readEnvelope<AuthV2SessionData>(response);
+}

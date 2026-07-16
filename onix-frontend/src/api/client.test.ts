@@ -1,10 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const storage = new Map<string, string>();
-
-vi.mock('@twa-dev/sdk', () => ({
-  default: { initData: 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test' },
-}));
+const MINI_INIT = 'query_id=1&auth_date=1&user=%7B%22id%22%3A1%7D&hash=test';
 
 beforeEach(() => {
   storage.clear();
@@ -16,6 +13,7 @@ beforeEach(() => {
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => { storage.delete(key); },
   });
+  vi.stubGlobal('Telegram', { WebApp: { initData: MINI_INIT } });
 });
 
 describe('Bearer auth bootstrap', () => {

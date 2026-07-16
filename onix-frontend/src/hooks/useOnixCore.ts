@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import WebApp from '@twa-dev/sdk';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
-import { getSharedAuthManager } from '../auth';
+import { getSharedAuthManager, getAuthV2Session, AuthV2ApiError } from '../auth';
+import { isTelegramMiniApp, signalTelegramReadyIfMiniApp, telegramHaptic } from '../auth/telegramEnv';
+import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 import {
   bootstrapPhase,
@@ -15,6 +16,10 @@ import { markAppReady } from '../perf/timing';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
+type AuthBootstrap =
+  | { status: 'authenticated'; mode: AuthMode }
+  | { status: 'guest' }
+  | { status: 'network' };
 type Store = {
   products: Product[];
   deals: Deal[];
@@ -27,43 +32,62 @@ const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [
 /** Module-level — survives React StrictMode remount (useRef would reset). */
 let coldBootstrapOnce = false;
 const notify = (kind: 'success' | 'error') => {
-  try { WebApp.HapticFeedback.notificationOccurred(kind); } catch { /* Browser client. */ }
+  telegramHaptic(kind);
 };
 
-/** Tell Telegram the Mini App is ready before any React/API work. */
-function signalTelegramReady(): void {
-  try {
-    WebApp.ready();
-    WebApp.expand();
-  } catch {
-    /* Regular web. */
-  }
-}
-
 /**
- * Website-first auth for www:
- * 1) cookie restore (refresh) — primary
- * 2) Mini App initData — only if restore failed
- * 3) legacy sessionStorage
- *
- * Does NOT await /api/v2/auth/me before market — GET /users/me is the profile step.
+ * Website-first: ONIX cookie restore only.
+ * Telegram Mini App auth ONLY when running inside Mini App (initData present).
+ * Never waits on Telegram SDK for ordinary www.
+ * Transient network on refresh → 'network' (cookie kept); not forced Telegram re-login.
  */
-async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
+async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   const hasMemory = Boolean(manager.getAccessToken() && !manager.isAccessExpired());
 
-  const restored = hasMemory || await bootstrapPhase('restore-session', () => manager.restoreSession());
+  let restoreError: unknown;
+  const restored = hasMemory || await bootstrapPhase('restore-session', async () => {
+    try {
+      if (manager.getAccessToken() && !manager.isAccessExpired()) return true;
+      await manager.refreshAccessToken();
+      return Boolean(manager.getAccessToken());
+    } catch (error) {
+      restoreError = error;
+      return false;
+    }
+  });
+
   if (restored && manager.getAccessToken()) {
-    // restoreSession ≈ refresh when cookie path; expose as refresh for ops summary.
     markBootstrapPhase('refresh', getBootstrapPhases().get('restore-session') ?? 0);
-    return 'website';
+    return { status: 'authenticated', mode: 'website' };
+  }
+
+  if (restoreError && isTransientRefreshFailure(restoreError)) {
+    markBootstrapPhase('telegram', 0);
+    try {
+      await getAuthV2Session();
+      return { status: 'network' };
+    } catch (probeError) {
+      if (isTransientRefreshFailure(probeError)) return { status: 'network' };
+      if (probeError instanceof AuthV2ApiError && (probeError.status === 401 || probeError.status === 403)) {
+        /* cookie rejected — fall through */
+      } else {
+        return { status: 'network' };
+      }
+    }
+  }
+
+  // Ordinary web: stop here — show login. Do not poke Telegram.
+  if (!isTelegramMiniApp()) {
+    markBootstrapPhase('telegram', 0);
+    return { status: 'guest' };
   }
 
   const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
-  if (miniOk) return 'mini';
+  if (miniOk) return { status: 'authenticated', mode: 'mini' };
 
-  if (getAccessToken()) return 'legacy';
-  return null;
+  if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
+  return { status: 'guest' };
 }
 
 /**
@@ -137,8 +161,8 @@ export function useOnixCore() {
   const refreshAll = useCallback(async () => {
     try {
       setBanFromAuth(undefined);
-      const mode = await ensureWebsiteOrMiniAuth();
-      if (!mode) {
+      const boot = await ensureWebsiteOrMiniAuth();
+      if (boot.status === 'guest') {
         setProfile(null);
         setStore(emptyStore);
         setStates(previous => ({
@@ -152,6 +176,26 @@ export function useOnixCore() {
         }));
         setErrors(previous => ({ ...previous, profile: 'Войдите через Telegram, чтобы продолжить.' }));
         printBootstrapSummary('bootstrap-guest');
+        markAppReady('bootstrap-settled');
+        return;
+      }
+      if (boot.status === 'network') {
+        setProfile(null);
+        setStore(emptyStore);
+        setStates(previous => ({
+          ...previous,
+          profile: 'error',
+          products: 'idle',
+          deals: 'idle',
+          chats: 'idle',
+          notifications: 'idle',
+          reviews: 'idle',
+        }));
+        setErrors(previous => ({
+          ...previous,
+          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
+        }));
+        printBootstrapSummary('bootstrap-network');
         markAppReady('bootstrap-settled');
         return;
       }
@@ -184,7 +228,8 @@ export function useOnixCore() {
   }, [load, loadProfile]);
 
   useEffect(() => {
-    bootstrapPhaseSync('telegram', () => signalTelegramReady());
+    // Mini App only — never blocks ordinary www bootstrap.
+    bootstrapPhaseSync('telegram', () => signalTelegramReadyIfMiniApp());
     markAppReady('shell-mounted');
     if (coldBootstrapOnce) return;
     coldBootstrapOnce = true;
