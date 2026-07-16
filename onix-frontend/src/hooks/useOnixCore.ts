@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import WebApp from '@twa-dev/sdk';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
-import { resilientFetch } from '../api/fetchResilience';
-import {
-  getAuthV2Me,
-  getSharedAuthManager,
-  resolveApiBase,
-} from '../auth';
+import { getSharedAuthManager } from '../auth';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
-import { captureNavigationTiming, markAppReady } from '../perf/timing';
+import {
+  bootstrapPhase,
+  bootstrapPhaseSync,
+  bootstrapStart,
+  getBootstrapPhases,
+  markBootstrapPhase,
+  printBootstrapSummary,
+} from '../perf/bootstrapTiming';
+import { markAppReady } from '../perf/timing';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -21,11 +24,13 @@ type Store = {
 };
 
 const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [], reviews: [] };
+/** Module-level — survives React StrictMode remount (useRef would reset). */
+let coldBootstrapOnce = false;
 const notify = (kind: 'success' | 'error') => {
   try { WebApp.HapticFeedback.notificationOccurred(kind); } catch { /* Browser client. */ }
 };
 
-/** Tell Telegram the Mini App is ready before any React/API work (also mirrored in index.html). */
+/** Tell Telegram the Mini App is ready before any React/API work. */
 function signalTelegramReady(): void {
   try {
     WebApp.ready();
@@ -36,56 +41,63 @@ function signalTelegramReady(): void {
 }
 
 /**
- * Mini App → AuthManager (bot / V2 refresh cookie) → legacy sessionStorage.
- * After Website session: one GET /api/v2/auth/me, then domain bootstrap uses the same APIs as Mini App.
+ * Website-first auth for www:
+ * 1) cookie restore (refresh) — primary
+ * 2) Mini App initData — only if restore failed
+ * 3) legacy sessionStorage
+ *
+ * Does NOT await /api/v2/auth/me before market — GET /users/me is the profile step.
  */
 async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
-  const miniOk = await bootstrapAuth();
-  if (miniOk) return 'mini';
-
   const manager = getSharedAuthManager();
   const hasMemory = Boolean(manager.getAccessToken() && !manager.isAccessExpired());
-  const restored = hasMemory || await manager.restoreSession();
+
+  const restored = hasMemory || await bootstrapPhase('restore-session', () => manager.restoreSession());
   if (restored && manager.getAccessToken()) {
-    try {
-      await getAuthV2Me(manager.getAccessToken()!, resilientFetch, resolveApiBase());
-      return 'website';
-    } catch {
-      manager.clearSession('refresh-failed');
-    }
+    // restoreSession ≈ refresh when cookie path; expose as refresh for ops summary.
+    markBootstrapPhase('refresh', getBootstrapPhases().get('restore-session') ?? 0);
+    return 'website';
   }
+
+  const miniOk = await bootstrapPhase('telegram', () => bootstrapAuth());
+  if (miniOk) return 'mini';
 
   if (getAccessToken()) return 'legacy';
   return null;
 }
 
 /**
- * Web-first cold start: wait only for profile + products (market shell).
- * Orders/chats/reviews warm in background — must not delay first paint.
+ * Critical path only: profile + products (marketplace).
+ * Orders/chats/reviews start after first market render — never block bootstrap-settled.
  */
-async function bootstrapAuthenticatedUser(
+async function bootstrapMarketplace(
   loadProfile: () => Promise<Profile | null>,
   load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
 ): Promise<Profile | null> {
-  const settled = await Promise.allSettled([
-    loadProfile(),
-    load('products', API_PATHS.productsList({ limit: 100 })),
+  const [profileResult] = await Promise.all([
+    bootstrapPhase('me', () => loadProfile()),
+    bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 100 }))),
   ]);
-  const current = settled[0]?.status === 'fulfilled' ? settled[0].value : null;
-  // Secondary tabs / badge — fire-and-forget after market path.
-  void load('deals', API_PATHS.orders);
-  void load('chats', API_PATHS.chats);
-  if (current) {
-    void load('reviews', API_PATHS.reviews(current.onixId));
+  markBootstrapPhase('profile', 0);
+  markBootstrapPhase('marketplace', 0);
+  return profileResult;
+}
+
+function warmSecondaryCollections(
+  profile: Profile | null,
+  load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
+): void {
+  void bootstrapPhase('orders', () => load('deals', API_PATHS.orders));
+  void bootstrapPhase('chats', () => load('chats', API_PATHS.chats));
+  if (profile) {
+    void load('reviews', API_PATHS.reviews(profile.onixId));
   }
-  return current;
 }
 
 export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [store, setStore] = useState<Store>(emptyStore);
   const [states, setStates] = useState<Record<CollectionKey | 'profile', AsyncState>>({
-    // Market path starts loading; secondary collections stay idle until bootstrap kicks them.
     profile: 'loading', products: 'idle', deals: 'idle', chats: 'idle', notifications: 'idle', reviews: 'idle',
   });
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -139,16 +151,24 @@ export function useOnixCore() {
           reviews: 'idle',
         }));
         setErrors(previous => ({ ...previous, profile: 'Войдите через Telegram, чтобы продолжить.' }));
+        printBootstrapSummary('bootstrap-guest');
+        markAppReady('bootstrap-settled');
         return;
       }
 
-      // Guest → authenticated: market shell (profile+products), then background collections.
       setStates((previous) => ({
         ...previous,
         products: previous.products === 'success' ? previous.products : 'loading',
       }));
-      await bootstrapAuthenticatedUser(loadProfile, load);
-      // Badge uses chat unread — chats load in background from bootstrap.
+
+      // Critical path — market can render after this settles.
+      const current = await bootstrapMarketplace(loadProfile, load);
+      markAppReady('marketplace-ready');
+      printBootstrapSummary('bootstrap-settled');
+      markAppReady('bootstrap-settled');
+
+      // Secondary — after first market opportunity (does not extend bootstrap-settled).
+      warmSecondaryCollections(current, load);
       setStates((previous) => ({ ...previous, notifications: 'idle' }));
     } catch (error) {
       setProfile(null);
@@ -158,13 +178,18 @@ export function useOnixCore() {
         if (ban) setBanFromAuth(ban);
       }
       setErrors(previous => ({ ...previous, profile: friendlyError(error) }));
+      printBootstrapSummary('bootstrap-error');
+      markAppReady('bootstrap-settled');
     }
   }, [load, loadProfile]);
 
   useEffect(() => {
-    signalTelegramReady();
-    captureNavigationTiming();
-    void refreshAll().finally(() => markAppReady('bootstrap-settled'));
+    bootstrapPhaseSync('telegram', () => signalTelegramReady());
+    markAppReady('shell-mounted');
+    if (coldBootstrapOnce) return;
+    coldBootstrapOnce = true;
+    bootstrapStart();
+    void refreshAll();
   }, [refreshAll]);
 
   const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {

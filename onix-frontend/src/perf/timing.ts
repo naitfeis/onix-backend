@@ -16,13 +16,10 @@ const MAX_SAMPLES = 80;
 function push(sample: TimingSample): void {
   samples.push(sample);
   if (samples.length > MAX_SAMPLES) samples.shift();
-  if (import.meta.env.PROD) {
-    // One-line ops signal; avoid noisy objects in Telegram WebView consoles.
-    console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
-  }
+  console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
 }
 
-/** Capture Navigation Timing once after first paint. */
+/** Capture Navigation Timing (call as early as possible from main.tsx). */
 export function captureNavigationTiming(): void {
   try {
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
@@ -37,6 +34,16 @@ export function captureNavigationTiming(): void {
   } catch {
     /* WebView may omit PerformanceNavigationTiming. */
   }
+}
+
+/** Schedule capture after loadEventEnd is populated (often 0 if read too early). */
+export function captureNavigationTimingWhenReady(): void {
+  const run = () => captureNavigationTiming();
+  if (document.readyState === 'complete') {
+    setTimeout(run, 0);
+    return;
+  }
+  window.addEventListener('load', () => setTimeout(run, 0), { once: true });
 }
 
 /** Wrap an API call and record duration. */
@@ -61,7 +68,7 @@ export function getTimingSamples(): readonly TimingSample[] {
   return samples;
 }
 
-/** Mark Mini App / shell ready for ops comparison (<2s goal). */
+/** Mark shell / bootstrap milestones (ms since navigation start ≈ performance.now()). */
 export function markAppReady(label = 'app-ready'): void {
   push({ name: label, durationMs: performance.now(), at: Date.now() });
 }
