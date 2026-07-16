@@ -168,8 +168,11 @@ export type AuthV2SessionData = {
 
 /**
  * GET /api/v2/auth/session — HttpOnly refresh cookie only.
- * Short timeout: 401 must fail fast (guest), never sit on the 12s refresh path.
+ * RU paths (CF → Vercel → Render) often exceed 2.5s; keep under refresh budget
+ * and allow one fast network retry. Server 401 still fails as soon as it arrives.
  */
+export const AUTH_SESSION_PROBE_TIMEOUT_MS = 8_000;
+
 export async function getAuthV2Session(
   fetchImpl: AuthV2Fetch = fetch,
   apiBase = '',
@@ -180,10 +183,13 @@ export async function getAuthV2Session(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   };
-  // Production: short timeout so 401/guest never waits on the 12s refresh path.
   // Tests inject fetchImpl and skip resilientFetch.
   const response = fetchImpl === fetch
-    ? await resilientFetch(url, { ...init, timeoutMs: 2_500, maxRetries: 0 })
+    ? await resilientFetch(url, {
+      ...init,
+      timeoutMs: AUTH_SESSION_PROBE_TIMEOUT_MS,
+      maxRetries: 1,
+    })
     : await fetchImpl(url, init);
   return readEnvelope<AuthV2SessionData>(response);
 }

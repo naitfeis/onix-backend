@@ -125,8 +125,11 @@ export async function postAuthV2Refresh(
   return { accessToken, expiresIn };
 }
 
+/** Cookie refresh on RU → CF → Vercel → Render; keep cookie, never treat timeout as logout. */
+export const AUTH_REFRESH_TIMEOUT_MS = 18_000;
+
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
-  // Refresh is cookie+CSRF same-origin; allow a bit more time on slow RU paths.
-  // No timeout-retry (see resilientFetch) — avoids false "8s then 201".
-  return resilientFetch(url, { ...init, timeoutMs: 12_000, maxRetries: 1 });
+  // Refresh is cookie+CSRF same-origin; allow more time on slow RU paths.
+  // Retry only connection-reset style failures (not full-timeout aborts).
+  return resilientFetch(url, { ...init, timeoutMs: AUTH_REFRESH_TIMEOUT_MS, maxRetries: 1 });
 }

@@ -13,6 +13,7 @@ const manualChunks = (id: string) => {
     if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
       return 'framework';
     }
+    // Loaded only via dynamic import inside real Mini App (never on www boot).
     if (id.includes('@twa-dev/sdk')) {
       return 'telegram';
     }

@@ -284,8 +284,13 @@ export function useOnixCore() {
   }, [load, loadProfile]);
 
   useEffect(() => {
-    // Mini App only — never blocks ordinary www bootstrap.
-    bootstrapPhaseSync('telegram', () => signalTelegramReadyIfMiniApp());
+    // Ordinary www: zero Telegram SDK / ready / expand (required for RU cookie path).
+    // Mini App only: signal ready after real initData / tgWebAppData detection.
+    if (isTelegramMiniApp()) {
+      bootstrapPhaseSync('telegram', () => signalTelegramReadyIfMiniApp());
+    } else {
+      markBootstrapPhase('telegram', 0);
+    }
     markAppReady('shell-mounted');
     if (coldBootstrapOnce) return;
     coldBootstrapOnce = true;
