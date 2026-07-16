@@ -3,7 +3,7 @@
  * Avoids loading User.balanceCents / Product.deliveryCiphertext on hot paths.
  */
 
-export function sellerPublicSelect(viewerId: bigint) {
+export function sellerPublicSelect(viewerId?: bigint | null) {
   return {
     id: true,
     onixId: true,
@@ -17,11 +17,17 @@ export function sellerPublicSelect(viewerId: bigint) {
     isAdmin: true,
     isSupport: true,
     _count: { select: { followers: true as const } },
-    followers: {
-      where: { followerId: viewerId },
-      select: { followerId: true as const },
-      take: 1,
-    },
+    // Guest catalog: take 0 (no Follow probe). Authenticated: probe this viewer.
+    followers: viewerId != null
+      ? {
+          where: { followerId: viewerId },
+          select: { followerId: true as const },
+          take: 1 as const,
+        }
+      : {
+          select: { followerId: true as const },
+          take: 0 as const,
+        },
   } as const;
 }
 

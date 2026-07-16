@@ -1,7 +1,8 @@
 import {
   BadRequestException, Body, Controller, Delete, Get, Header, Injectable, Module,
-  NotFoundException, Param, Patch, Post, Query,
+  NotFoundException, Optional, Param, Patch, Post, Query, Req, Req,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
@@ -10,6 +11,9 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
+import { DualAccessService } from './auth-v2/dual-access.service';
+import { AuthModule, AuthService } from './auth.module';
+import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
 import { PrismaService } from './prisma.service';
@@ -102,7 +106,7 @@ export class MarketplaceService {
     return SUBCATEGORIES_BY_CATEGORY;
   }
 
-  async list(user: AuthUser, query: ProductQuery) {
+  async list(user: AuthUser | null, query: ProductQuery) {
     if (
       query.minPriceCents !== undefined
       && query.maxPriceCents !== undefined
@@ -117,6 +121,7 @@ export class MarketplaceService {
         throw new BadRequestException((e as Error).message);
       }
     }
+    const viewerId = user?.id ?? null;
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       ...(query.category ? { category: query.category } : {}),
@@ -144,28 +149,33 @@ export class MarketplaceService {
       where, orderBy, take: query.limit, skip: query.offset,
       select: {
         ...productListSelect,
-        seller: { select: sellerPublicSelect(user.id) },
-        favorites: { where: { userId: user.id }, select: { userId: true } },
+        seller: { select: sellerPublicSelect(viewerId) },
+        ...(viewerId != null
+          ? { favorites: { where: { userId: viewerId }, select: { userId: true } } }
+          : {}),
       },
     });
-    return products.map((product) => productDto(product, user.id));
+    return products.map((product) => productDto(product, viewerId ?? undefined));
   }
 
-  async get(user: AuthUser, id: string) {
+  async get(user: AuthUser | null, id: string) {
+    const viewerId = user?.id ?? null;
     const product = await this.prisma.product.findUnique({
       where: { id },
       select: {
         ...productListSelect,
         sellerId: true,
-        seller: { select: sellerPublicSelect(user.id) },
-        favorites: { where: { userId: user.id }, select: { userId: true } },
+        seller: { select: sellerPublicSelect(viewerId) },
+        ...(viewerId != null
+          ? { favorites: { where: { userId: viewerId }, select: { userId: true } } }
+          : {}),
       },
     });
     if (!product) throw new NotFoundException('Товар не найден.');
-    if (product.status !== ProductStatus.ACTIVE && product.sellerId !== user.id) {
+    if (product.status !== ProductStatus.ACTIVE && (viewerId == null || product.sellerId !== viewerId)) {
       throw new NotFoundException('Товар не найден.');
     }
-    return productDto(product, user.id);
+    return productDto(product, viewerId ?? undefined);
   }
 
   async create(user: AuthUser, dto: ProductDto) {
@@ -271,7 +281,11 @@ export class MarketplaceService {
 
 @Controller('products')
 export class MarketplaceController {
-  constructor(private readonly service: MarketplaceService) {}
+  constructor(
+    private readonly service: MarketplaceService,
+    @Optional() private readonly dualAccess?: DualAccessService,
+    @Optional() private readonly auth?: AuthService,
+  ) {}
 
   @Public()
   @Get('catalog/subcategories')
@@ -280,17 +294,45 @@ export class MarketplaceController {
     return this.service.catalog();
   }
 
-  /** Personalized (favorites) — never CDN-cache. */
+  /**
+   * Public catalog — never 401.
+   * Optional Bearer personalizes favorites/followed; invalid/missing token → guest catalog.
+   * Anonymous responses are cacheable; authenticated responses stay private.
+   */
+  @Public()
   @Get()
-  @Header('Cache-Control', 'private, no-store')
-  list(@CurrentUser() user: AuthUser, @Query() query: ProductQuery) {
+  async list(
+    @Req() req: { headers?: Record<string, string | string[] | undefined> },
+    @Res({ passthrough: true }) res: Response,
+    @Query() query: ProductQuery,
+  ) {
+    const user = await this.optionalViewer(req);
+    res.setHeader(
+      'Cache-Control',
+      user
+        ? 'private, no-store'
+        : 'public, max-age=30, stale-while-revalidate=120',
+    );
     return this.service.list(user, query);
   }
+
+  @Public()
   @Get(':id')
-  @Header('Cache-Control', 'private, no-store')
-  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  async get(
+    @Req() req: { headers?: Record<string, string | string[] | undefined> },
+    @Res({ passthrough: true }) res: Response,
+    @Param('id') id: string,
+  ) {
+    const user = await this.optionalViewer(req);
+    res.setHeader(
+      'Cache-Control',
+      user
+        ? 'private, no-store'
+        : 'public, max-age=30, stale-while-revalidate=120',
+    );
     return this.service.get(user, id);
   }
+
   @Post() create(@CurrentUser() user: AuthUser, @Body() dto: ProductDto) {
     return this.service.create(user, dto);
   }
@@ -303,7 +345,30 @@ export class MarketplaceController {
   @Delete(':id') archive(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.status(user, id, 'ARCHIVED');
   }
+
+  /** Soft auth for catalog — never throws 401. */
+  private async optionalViewer(req: { headers?: Record<string, string | string[] | undefined> }): Promise<AuthUser | null> {
+    const raw = req.headers?.authorization ?? req.headers?.Authorization;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (!value?.startsWith('Bearer ')) return null;
+    const token = value.slice('Bearer '.length).trim();
+    if (!token) return null;
+    try {
+      if (this.dualAccess?.isEdDsaAccessToken(token)) {
+        if (!this.dualAccess.isAcceptEnabled()) return null;
+        return await this.dualAccess.verifyEd25519AccessToken(token);
+      }
+      if (this.auth) return await this.auth.verifyToken(token);
+    } catch {
+      return null;
+    }
+    return null;
+  }
 }
 
-@Module({ controllers: [MarketplaceController], providers: [MarketplaceService] })
+@Module({
+  imports: [AuthV2Module, AuthModule],
+  controllers: [MarketplaceController],
+  providers: [MarketplaceService],
+})
 export class MarketplaceModule {}

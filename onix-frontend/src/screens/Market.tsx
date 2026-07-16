@@ -39,17 +39,7 @@ export function Market({
     : [];
 
   useEffect(() => {
-    if (core.states.profile === 'loading') {
-      setMarketState('loading');
-      return;
-    }
-    if (!core.profile) {
-      setItems([]);
-      setMarketError(core.errors.profile || 'Войдите через Telegram, чтобы продолжить.');
-      setMarketState('error');
-      return;
-    }
-
+    // Catalog is public — do not require profile. Guests browse; auth is parallel.
     if (!isDefaultView) return;
 
     if (core.states.products === 'loading' || core.states.products === 'idle') {
@@ -67,16 +57,13 @@ export function Market({
     setMarketState('success');
   }, [
     core.errors.products,
-    core.errors.profile,
     core.products,
-    core.profile,
     core.states.products,
-    core.states.profile,
     isDefaultView,
   ]);
 
   useEffect(() => {
-    if (core.states.profile === 'loading' || !core.profile) return;
+    // Search/filters still work for guests (public catalog).
     if (isDefaultView) return;
 
     const controller = new AbortController();
@@ -103,7 +90,7 @@ export function Market({
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [category, core.listProducts, core.profile, core.states.profile, isDefaultView, query, sort, subcategory]);
+  }, [category, core.listProducts, isDefaultView, query, sort, subcategory]);
 
   useEffect(() => {
     if (!selected) return;

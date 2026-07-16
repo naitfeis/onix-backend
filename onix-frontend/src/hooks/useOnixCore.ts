@@ -35,25 +35,21 @@ const notify = (kind: 'success' | 'error') => {
 };
 
 /**
- * Mini App and Website share the same ONIX database/users — different auth entrypoints.
- *
- * Mini App: Telegram initData → auto-login.
- * Website:  GET /api/v2/auth/session → 401 guest immediately (NO refresh);
- *           200 → then POST refresh for access token only.
- * Telegram never used for website restore.
+ * Website: public catalog first (never blocked by session).
+ * Session check runs in parallel; profile/orders/chats only after session OK.
+ * Telegram SDK is not used on website bootstrap.
  */
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   if (manager.getAccessToken() && !manager.isAccessExpired()) {
-    markBootstrapPhase('auth-session', 0);
+    markBootstrapPhase('session-check', 0);
     markBootstrapPhase('cookie-check', 0);
     markBootstrapPhase('telegram', 0);
     return { status: 'authenticated', mode: 'website' };
   }
 
-  // 1) Fast cookie probe — on 401 NEVER call refresh (that was the 12s hang).
   try {
-    await bootstrapPhase('auth-session', () => getAuthV2Session());
+    await bootstrapPhase('session-check', () => getAuthV2Session());
     markBootstrapPhase('cookie-check', 1);
   } catch (error) {
     markBootstrapPhase('telegram', 0);
@@ -68,7 +64,6 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     return { status: 'guest' };
   }
 
-  // 2) Session 200 only → mint access via refresh.
   try {
     await bootstrapPhase('refresh', () => manager.refreshAccessToken());
     markBootstrapPhase('telegram', 0);
@@ -202,8 +197,10 @@ export function useOnixCore() {
         return;
       }
 
-      // Website: session probe + products start together.
-      // Guest settle MUST NOT await products (products can hang ~40s without VPN).
+      // Website:
+      // 1) render shell (already)
+      // 2) load public products (first paint) + session-check in parallel
+      // 3) session OK → profile/orders/chats; 401 → guest (market already visible)
       markBootstrapPhase('telegram', 0);
       setStates((previous) => ({
         ...previous,
@@ -211,10 +208,18 @@ export function useOnixCore() {
         profile: 'loading',
       }));
 
-      const productsPromise = bootstrapPhase('products', () =>
+      const productsPromise = bootstrapPhase('products-public', () =>
         load('products', API_PATHS.productsList({ limit: 100 })),
       );
-      const boot = await restoreWebsiteSession();
+      const sessionPromise = restoreWebsiteSession();
+
+      // Catalog readiness is independent of session (guest or user).
+      const catalogReady = productsPromise.then(() => {
+        markBootstrapPhase('marketplace', 0);
+        markAppReady('marketplace-ready');
+      });
+
+      const boot = await sessionPromise;
 
       if (boot.status === 'guest') {
         setProfile(null);
@@ -230,12 +235,10 @@ export function useOnixCore() {
           ...previous,
           profile: 'Войдите через Telegram, чтобы продолжить.',
         }));
-        markBootstrapPhase('marketplace', 0);
         printBootstrapSummary('bootstrap-guest');
-        markAppReady('marketplace-ready');
         markAppReady('bootstrap-settled');
-        // Products continue in background — do not block guest bootstrap.
-        void productsPromise;
+        // Products continue in background — do not block guest on hung /api/products.
+        void catalogReady;
         return;
       }
 
@@ -253,19 +256,18 @@ export function useOnixCore() {
           ...previous,
           profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
         }));
-        markBootstrapPhase('marketplace', 0);
         printBootstrapSummary('bootstrap-network');
-        markAppReady('marketplace-ready');
         markAppReady('bootstrap-settled');
-        void productsPromise;
+        void catalogReady;
         return;
       }
 
-      await productsPromise;
-      const current = await bootstrapPhase('me', () => loadProfile());
+      // Session OK: profile loads without waiting for products (already in flight).
+      void catalogReady;
+      const current = await bootstrapPhase('profile-load', () => loadProfile());
       markBootstrapPhase('profile', 0);
-      markBootstrapPhase('marketplace', 0);
-      markAppReady('marketplace-ready');
+      // Re-fetch catalog with Bearer so favorites/followed personalize (same public endpoint).
+      void load('products', API_PATHS.productsList({ limit: 100 }));
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
       warmSecondaryCollections(current, load);

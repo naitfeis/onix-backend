@@ -49,7 +49,7 @@ export function printBootstrapSummary(label = 'settled'): void {
   phases.set('bootstrap', total);
   const lines = [
     '[bootstrap]',
-    ...['telegram', 'auth-session', 'cookie-check', 'refresh', 'me', 'products', 'orders', 'chats', 'profile', 'marketplace', 'bootstrap']
+    ...['telegram', 'products-public', 'session-check', 'cookie-check', 'refresh', 'profile-load', 'auth-session', 'me', 'products', 'orders', 'chats', 'profile', 'marketplace', 'bootstrap']
       .filter((key) => phases.has(key))
       .map((key) => `${key}=${Math.round(phases.get(key)!)} ms`),
     `${label}=${Math.round(total)} ms`,
