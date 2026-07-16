@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
-import { getSharedAuthManager, getAuthV2Session, AuthV2ApiError } from '../auth';
+import { getSharedAuthManager, probeAuthV2Session } from '../auth';
 import { isTelegramMiniApp, signalTelegramReadyIfMiniApp, telegramHaptic } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
@@ -36,7 +36,7 @@ const notify = (kind: 'success' | 'error') => {
 
 /**
  * Website: public catalog first (never blocked by session).
- * Session check runs in parallel; profile/orders/chats only after session OK.
+ * Session cookie probe is the only restore gate — 401/guest never calls refresh.
  * Telegram SDK is not used on website bootstrap.
  */
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
@@ -44,35 +44,33 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   if (manager.getAccessToken() && !manager.isAccessExpired()) {
     markBootstrapPhase('session-check', 0);
     markBootstrapPhase('cookie-check', 0);
+    markBootstrapPhase('refresh', 0);
     markBootstrapPhase('telegram', 0);
     return { status: 'authenticated', mode: 'website' };
   }
 
-  try {
-    await bootstrapPhase('session-check', () => getAuthV2Session());
-    markBootstrapPhase('cookie-check', 1);
-  } catch (error) {
-    markBootstrapPhase('telegram', 0);
+  const probe = await bootstrapPhase('session-check', () => probeAuthV2Session());
+  markBootstrapPhase('telegram', 0);
+
+  if (probe.ok === false) {
+    // Explicit: never POST /refresh after session 401/guest/network.
+    markBootstrapPhase('refresh', 0);
     markBootstrapPhase('cookie-check', 0);
-    // Explicit: no refresh after session 401/403.
-    if (error instanceof AuthV2ApiError && (error.status === 401 || error.status === 403)) {
-      return { status: 'guest' };
-    }
-    if (isTransientRefreshFailure(error)) {
-      return { status: 'network' };
-    }
+    if (probe.reason === 'network') return { status: 'network' };
     return { status: 'guest' };
   }
 
+  markBootstrapPhase('cookie-check', 1);
+
+  // Refresh only after successful session cookie probe (or explicit login elsewhere).
   try {
     await bootstrapPhase('refresh', () => manager.refreshAccessToken());
-    markBootstrapPhase('telegram', 0);
     if (manager.getAccessToken()) {
       return { status: 'authenticated', mode: 'website' };
     }
+    markBootstrapPhase('refresh', 0);
     return { status: 'guest' };
   } catch (error) {
-    markBootstrapPhase('telegram', 0);
     if (isTransientRefreshFailure(error)) return { status: 'network' };
     return { status: 'guest' };
   }

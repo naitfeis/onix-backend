@@ -46,6 +46,7 @@ export {
   AuthV2ApiError,
   getAuthV2Me,
   getAuthV2Session,
+  probeAuthV2Session,
   postAuthV2Login,
 } from './v2AuthApi';
 export type {
@@ -53,6 +54,7 @@ export type {
   AuthV2LoginRequest,
   AuthV2MeData,
   AuthV2SessionData,
+  AuthV2SessionProbe,
 } from './v2AuthApi';
 
 export { normalizeTelegramLoginPayload } from './telegramPayload';

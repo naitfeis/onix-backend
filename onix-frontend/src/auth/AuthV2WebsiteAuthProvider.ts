@@ -11,6 +11,7 @@ import {
   AuthV2ApiError,
   getAuthV2Me,
   postAuthV2Login,
+  probeAuthV2Session,
   type AuthV2Fetch,
   type AuthV2MeData,
 } from './v2AuthApi';
@@ -55,6 +56,16 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
   }
 
   async restoreSession(): Promise<boolean> {
+    // Cookie probe first — 401/guest must never call POST /refresh.
+    const probe = await probeAuthV2Session(this.fetchImpl, this.apiBase);
+    if (probe.ok === false) {
+      this.cachedUser = null;
+      if (probe.reason === 'network') {
+        return Boolean(this.manager.getAccessToken());
+      }
+      return false;
+    }
+
     const restored = await this.manager.restoreSession();
     if (!restored) {
       this.cachedUser = null;

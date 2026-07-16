@@ -187,3 +187,73 @@ export async function getAuthV2Session(
     : await fetchImpl(url, init);
   return readEnvelope<AuthV2SessionData>(response);
 }
+
+export type AuthV2SessionProbe =
+  | { ok: true; data: AuthV2SessionData }
+  | { ok: false; reason: 'guest'; status: number; code?: string }
+  | { ok: false; reason: 'network'; error: unknown };
+
+function errorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status: unknown }).status;
+    if (typeof status === 'number') return status;
+  }
+  return undefined;
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'code' in error) {
+    const code = (error as { code: unknown }).code;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
+
+/**
+ * Cookie probe for Website bootstrap — never triggers refresh.
+ * 401/403 / AUTH_REFRESH_MISSING → guest; network blips → network.
+ */
+export async function probeAuthV2Session(
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<AuthV2SessionProbe> {
+  try {
+    const data = await getAuthV2Session(fetchImpl, apiBase);
+    if (!data?.authenticated || !data?.cookiePresent) {
+      return { ok: false, reason: 'guest', status: 401 };
+    }
+    return { ok: true, data };
+  } catch (error) {
+    const status = errorStatus(error);
+    const code = errorCode(error);
+    if (
+      status === 401
+      || status === 403
+      || code === 'AUTH_REFRESH_MISSING'
+      || code === 'AUTH_SESSION_EXPIRED'
+      || code === 'AUTH_INVALID_TOKEN'
+    ) {
+      return { ok: false, reason: 'guest', status: status ?? 401, code };
+    }
+    if (
+      (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError')
+      || error instanceof TypeError
+      || (status !== undefined && (status === 0 || status >= 500 || status === 408 || status === 429))
+    ) {
+      return { ok: false, reason: 'network', error };
+    }
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+      if (
+        message.includes('failed to fetch')
+        || message.includes('networkerror')
+        || message.includes('aborted')
+        || message.includes('timeout')
+      ) {
+        return { ok: false, reason: 'network', error };
+      }
+    }
+    // Unknown auth failure → guest (never refresh).
+    return { ok: false, reason: 'guest', status: status ?? 401, code };
+  }
+}
