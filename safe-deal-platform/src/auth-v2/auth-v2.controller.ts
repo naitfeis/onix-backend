@@ -149,15 +149,17 @@ export class AuthV2Controller {
 
     if (!refreshToken) {
       const totalMs = performance.now() - t0;
+      const existing = res.getHeader('Server-Timing');
+      const phases = [
+        'edge;dur=0',
+        'middleware;dur=0',
+        `controller;dur=${totalMs.toFixed(1)}`,
+        'db;dur=0',
+        `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
+      ].join(', ');
       res.setHeader(
         'Server-Timing',
-        [
-          `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
-          `session-lookup;dur=0`,
-          `database-query;dur=0`,
-          `user-lookup;dur=0`,
-          `response;dur=${totalMs.toFixed(1)}`,
-        ].join(', '),
+        typeof existing === 'string' && existing.length > 0 ? `${existing}, ${phases}` : phases,
       );
       res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
       this.logger.log(`GET /v2/auth/session 401 missing-cookie ${totalMs.toFixed(1)}ms`);
@@ -171,19 +173,22 @@ export class AuthV2Controller {
     };
     const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken, phase);
     const totalMs = performance.now() - t0;
-    const responseMs = totalMs - cookieParseMs - phase.hashMs - phase.sessionLookupMs - phase.userLookupMs;
-
+    const controllerMs = totalMs;
+    const dbMs = phase.sessionLookupMs + phase.userLookupMs;
+    const existing = res.getHeader('Server-Timing');
+    const phases = [
+      'edge;dur=0',
+      'middleware;dur=0',
+      `controller;dur=${controllerMs.toFixed(1)}`,
+      `db;dur=${dbMs.toFixed(1)}`,
+      `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
+      `hash;dur=${phase.hashMs.toFixed(1)}`,
+      `session-lookup;dur=${phase.sessionLookupMs.toFixed(1)}`,
+      `user-lookup;dur=${phase.userLookupMs.toFixed(1)}`,
+    ].join(', ');
     res.setHeader(
       'Server-Timing',
-      [
-        `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
-        `hash;dur=${phase.hashMs.toFixed(1)}`,
-        `session-lookup;dur=${phase.sessionLookupMs.toFixed(1)}`,
-        `database-query;dur=${phase.sessionLookupMs.toFixed(1)}`,
-        `user-lookup;dur=${phase.userLookupMs.toFixed(1)}`,
-        `response;dur=${Math.max(0, responseMs).toFixed(1)}`,
-        `auth-session;dur=${totalMs.toFixed(1)}`,
-      ].join(', '),
+      typeof existing === 'string' && existing.length > 0 ? `${existing}, ${phases}` : phases,
     );
     res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
     this.logger.log(

@@ -285,6 +285,52 @@ class HealthController {
       },
     };
   }
+
+  /**
+   * Full hop debug for RU ERR_CONNECTION_RESET vs /products.
+   * No secrets — cookie size only, never token values.
+   */
+  @Public()
+  @Get('route-debug')
+  @Header('Cache-Control', 'no-store')
+  routeDebug(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const t0 = performance.now();
+    const cookieHeader = typeof req.headers.cookie === 'string' ? req.headers.cookie : '';
+    const forwarded = req.headers['x-forwarded-for'];
+    const forwardedIp = typeof forwarded === 'string'
+      ? forwarded.split(',')[0]?.trim()
+      : Array.isArray(forwarded) ? forwarded[0] : undefined;
+    const requestId = typeof req.headers['x-request-id'] === 'string'
+      ? req.headers['x-request-id']
+      : null;
+    const body = {
+      requestId,
+      cfRay: typeof req.headers['cf-ray'] === 'string' ? req.headers['cf-ray'] : null,
+      cfConnectingIp: typeof req.headers['cf-connecting-ip'] === 'string'
+        ? req.headers['cf-connecting-ip']
+        : null,
+      forwarded: forwardedIp || null,
+      host: typeof req.headers.host === 'string' ? req.headers.host : null,
+      origin: typeof req.headers.origin === 'string' ? req.headers.origin : null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      cookieSize: cookieHeader.length,
+      region: process.env.RENDER_REGION
+        ?? process.env.AWS_REGION
+        ?? process.env.FLY_REGION
+        ?? 'frankfurt',
+      timestamp: new Date().toISOString(),
+    };
+    const dur = performance.now() - t0;
+    const existing = res.getHeader('Server-Timing');
+    const metric = `controller;dur=${dur.toFixed(1)}, db;dur=0`;
+    if (typeof existing === 'string' && existing.length > 0) {
+      res.setHeader('Server-Timing', `${existing}, ${metric}`);
+    } else {
+      res.setHeader('Server-Timing', metric);
+    }
+    res.setHeader('X-Response-Time', `${dur.toFixed(1)}ms`);
+    return body;
+  }
 }
 
 @Module({

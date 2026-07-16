@@ -5,6 +5,7 @@ import compression from 'compression';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
+import { authSessionPathMiddleware } from './auth-v2/auth-session-path.middleware';
 import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
 import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
 import { registerHealthEndpoint } from './health';
@@ -41,6 +42,8 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
   app.use(requestIdMiddleware);
+  // Before Nest AuthGuard / controllers — must log even if handler never runs.
+  app.use(authSessionPathMiddleware);
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
