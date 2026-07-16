@@ -278,31 +278,112 @@ export class SessionService {
   }
 
   /**
-   * Cookie-only session probe (no rotation, no Telegram).
-   * Used by GET /api/v2/auth/session for Website persistent login checks.
+   * Lightweight cookie session probe for GET /api/v2/auth/session.
+   * Single DB round-trip (session + user select). No Telegram, refresh rotation,
+   * permissions, profile, or ban-clear writes.
    */
-  async getSessionByRefreshToken(refreshToken: string): Promise<{
-    user: User;
-    session: Session;
+  async getSessionByRefreshToken(
+    refreshToken: string,
+    timing?: {
+      hashMs?: number;
+      sessionLookupMs?: number;
+      userLookupMs?: number;
+    },
+  ): Promise<{
+    user: Pick<User, 'id' | 'onixId' | 'isAdmin' | 'sessionVersion' | 'permissionVersion'>;
+    session: Pick<
+      Session,
+      | 'id'
+      | 'rememberMe'
+      | 'lastSeenAt'
+      | 'createdAt'
+      | 'absoluteExpiresAt'
+      | 'refreshExpiresAt'
+    >;
   }> {
     if (!refreshToken) {
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh token is missing.');
     }
+
+    const tHash = performance.now();
     const presentedHash = this.tokens.hashRefreshToken(refreshToken);
+    if (timing) timing.hashMs = performance.now() - tHash;
+
     const now = new Date();
-    const session = await this.prisma.session.findUnique({
+    const tDb = performance.now();
+    const row = await this.prisma.session.findUnique({
       where: { refreshTokenHash: presentedHash },
+      select: {
+        id: true,
+        rememberMe: true,
+        lastSeenAt: true,
+        createdAt: true,
+        absoluteExpiresAt: true,
+        refreshExpiresAt: true,
+        revokedAt: true,
+        user: {
+          select: {
+            id: true,
+            onixId: true,
+            isAdmin: true,
+            sessionVersion: true,
+            permissionVersion: true,
+            deletedAt: true,
+            banReason: true,
+            banComment: true,
+            bannedAt: true,
+            bannedUntil: true,
+          },
+        },
+      },
     });
-    if (!session) {
+    if (timing) timing.sessionLookupMs = performance.now() - tDb;
+
+    if (!row) {
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh token is unknown.');
     }
-    this.assertSessionUsable(session, now);
-    const found = await this.prisma.user.findUnique({ where: { id: session.userId } });
-    if (!found) {
+
+    this.assertSessionUsable(
+      {
+        revokedAt: row.revokedAt,
+        absoluteExpiresAt: row.absoluteExpiresAt,
+        refreshExpiresAt: row.refreshExpiresAt,
+        lastSeenAt: row.lastSeenAt,
+        rememberMe: row.rememberMe,
+      } as Session,
+      now,
+    );
+
+    const tUser = performance.now();
+    const user = row.user;
+    if (!user) {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
-    const user = await this.resolveUserAccountLock(found, this.prisma);
-    return { user, session };
+    // Read-only lock check — never write BAN_CLEAR on the probe path.
+    if (user.deletedAt && isBanActive(user)) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.', {
+        ban: banPublicInfo(user),
+      });
+    }
+    if (timing) timing.userLookupMs = performance.now() - tUser;
+
+    return {
+      user: {
+        id: user.id,
+        onixId: user.onixId,
+        isAdmin: user.isAdmin,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+      },
+      session: {
+        id: row.id,
+        rememberMe: row.rememberMe,
+        lastSeenAt: row.lastSeenAt,
+        createdAt: row.createdAt,
+        absoluteExpiresAt: row.absoluteExpiresAt,
+        refreshExpiresAt: row.refreshExpiresAt,
+      },
+    };
   }
 
   async rotateRefresh(

@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Header, Headers, Param, Post, Req, Res, UseGuards,
+  Body, Controller, Delete, Get, Header, Headers, Logger, Param, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Public } from '../common';
@@ -22,6 +22,8 @@ import { SessionService } from './session.service';
 @Public()
 @Controller('v2/auth')
 export class AuthV2Controller {
+  private readonly logger = new Logger(AuthV2Controller.name);
+
   constructor(
     private readonly orchestrator: AuthOrchestrator,
     private readonly sessions: SessionService,
@@ -128,7 +130,8 @@ export class AuthV2Controller {
 
   /**
    * Cookie-only session status (Website persistent login).
-   * No Bearer, no Telegram — reads __Host-onix_rt only. Does not rotate tokens.
+   * No Bearer, no Telegram, no refresh rotation, no permissions / profile / orders.
+   * Path: cookie → hash → session+user lookup → 200/401.
    */
   @Get('session')
   @Header('Cache-Control', 'no-store')
@@ -137,28 +140,58 @@ export class AuthV2Controller {
     @Res({ passthrough: true }) res: Response,
   ) {
     const t0 = performance.now();
+    // Entry log so Render shows the hit even if the client aborts mid-flight.
+    this.logger.log('GET /v2/auth/session start');
+
+    const tCookie = performance.now();
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
-    const cookieMs = performance.now() - t0;
+    const cookieParseMs = performance.now() - tCookie;
+
     if (!refreshToken) {
+      const totalMs = performance.now() - t0;
       res.setHeader(
         'Server-Timing',
-        `auth-session;dur=${(performance.now() - t0).toFixed(1)}, cookie-check;dur=${cookieMs.toFixed(1)}`,
+        [
+          `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
+          `session-lookup;dur=0`,
+          `database-query;dur=0`,
+          `user-lookup;dur=0`,
+          `response;dur=${totalMs.toFixed(1)}`,
+        ].join(', '),
       );
+      res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
+      this.logger.log(`GET /v2/auth/session 401 missing-cookie ${totalMs.toFixed(1)}ms`);
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh cookie is missing.');
     }
-    const tDb = performance.now();
-    const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken);
-    const dbMs = performance.now() - tDb;
+
+    const phase = {
+      hashMs: 0,
+      sessionLookupMs: 0,
+      userLookupMs: 0,
+    };
+    const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken, phase);
     const totalMs = performance.now() - t0;
+    const responseMs = totalMs - cookieParseMs - phase.hashMs - phase.sessionLookupMs - phase.userLookupMs;
+
     res.setHeader(
       'Server-Timing',
       [
+        `cookie-parse;dur=${cookieParseMs.toFixed(1)}`,
+        `hash;dur=${phase.hashMs.toFixed(1)}`,
+        `session-lookup;dur=${phase.sessionLookupMs.toFixed(1)}`,
+        `database-query;dur=${phase.sessionLookupMs.toFixed(1)}`,
+        `user-lookup;dur=${phase.userLookupMs.toFixed(1)}`,
+        `response;dur=${Math.max(0, responseMs).toFixed(1)}`,
         `auth-session;dur=${totalMs.toFixed(1)}`,
-        `cookie-check;dur=${cookieMs.toFixed(1)}`,
-        `db-session-lookup;dur=${dbMs.toFixed(1)}`,
       ].join(', '),
     );
     res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
+    this.logger.log(
+      `GET /v2/auth/session 200 ${totalMs.toFixed(1)}ms `
+      + `(cookie=${cookieParseMs.toFixed(1)} hash=${phase.hashMs.toFixed(1)} `
+      + `db=${phase.sessionLookupMs.toFixed(1)} user=${phase.userLookupMs.toFixed(1)})`,
+    );
+
     return {
       authenticated: true,
       cookiePresent: true,
