@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Injectable, Module, NotFoundException, Param, Patch, Body,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Body,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { AuthUser, CurrentUser } from './common';
@@ -105,7 +105,9 @@ export class ProfilesService {
 @Controller()
 export class ProfilesController {
   constructor(private readonly profiles: ProfilesService) {}
-  @Get('users/me') me(@CurrentUser() user: AuthUser) { return this.profiles.getMe(user); }
+  @Get('users/me')
+  @Header('Cache-Control', 'private, no-store')
+  me(@CurrentUser() user: AuthUser) { return this.profiles.getMe(user); }
   @Patch('users/me') update(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.profiles.update(user, dto);
   }

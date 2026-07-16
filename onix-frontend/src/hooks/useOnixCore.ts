@@ -7,6 +7,7 @@ import {
   resolveApiBase,
 } from '../auth';
 import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
+import { captureNavigationTiming, markAppReady } from '../perf/timing';
 
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
@@ -22,6 +23,16 @@ const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [
 const notify = (kind: 'success' | 'error') => {
   try { WebApp.HapticFeedback.notificationOccurred(kind); } catch { /* Browser client. */ }
 };
+
+/** Tell Telegram the Mini App is ready before any React/API work (also mirrored in index.html). */
+function signalTelegramReady(): void {
+  try {
+    WebApp.ready();
+    WebApp.expand();
+  } catch {
+    /* Regular web. */
+  }
+}
 
 /**
  * Mini App → AuthManager (bot / V2 refresh cookie) → legacy sessionStorage.
@@ -47,18 +58,19 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthMode | null> {
   return null;
 }
 
-/** Full marketplace bootstrap — same paths/DTOs as Mini App (ONIX DB via Backend only). */
+/** Full marketplace bootstrap — parallel, non-blocking first paint (skeletons). */
 async function bootstrapAuthenticatedUser(
   loadProfile: () => Promise<Profile | null>,
   load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
 ): Promise<Profile | null> {
-  // Hot path in parallel: profile + market/deals/chats (notifications UI removed — skip).
-  const [current] = await Promise.all([
+  // Never waterfall: profile / products / orders / chats settle independently.
+  const settled = await Promise.allSettled([
     loadProfile(),
     load('products', API_PATHS.productsList({ limit: 100 })),
     load('deals', API_PATHS.orders),
     load('chats', API_PATHS.chats),
   ]);
+  const current = settled[0]?.status === 'fulfilled' ? settled[0].value : null;
   // Reviews need onixId — do not block Marketplace first paint.
   if (current) {
     void load('reviews', API_PATHS.reviews(current.onixId));
@@ -142,8 +154,9 @@ export function useOnixCore() {
   }, [load, loadProfile]);
 
   useEffect(() => {
-    try { WebApp.ready(); WebApp.expand(); } catch { /* Regular web. */ }
-    void refreshAll();
+    signalTelegramReady();
+    captureNavigationTiming();
+    void refreshAll().finally(() => markAppReady('bootstrap-settled'));
   }, [refreshAll]);
 
   const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {

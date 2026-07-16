@@ -1,7 +1,9 @@
 import WebApp from '@twa-dev/sdk';
 import { buildApiUrl, resolveApiBase, shouldIncludeCredentials } from '../auth/apiConfig';
 import { peekSharedAuthManager } from '../auth/sharedAuthManager';
+import { timedApi } from '../perf/timing';
 import type { ApiEnvelope } from './contracts';
+import { resilientFetch } from './fetchResilience';
 
 const TOKEN_KEY = 'onix.accessToken';
 
@@ -69,7 +71,7 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
   if (options.body) headers.set('Content-Type', 'application/json');
 
   const url = apiUrl(path);
-  const response = await fetch(url, {
+  const response = await resilientFetch(url, {
     ...options,
     headers,
     credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
@@ -106,17 +108,26 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
 /** In-flight GET dedupe — one network request, many subscribers (bootstrap / StrictMode). */
 const inflightGets = new Map<string, Promise<unknown>>();
 
+function timingLabel(path: string): string {
+  try {
+    const clean = path.split('?')[0] || path;
+    return clean.replace(/^\/api\//, '');
+  } catch {
+    return path;
+  }
+}
+
 export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method ?? 'GET').toUpperCase();
   const dedupe = method === 'GET' && !options.signal;
-  const run = async (): Promise<T> => {
+  const run = async (): Promise<T> => timedApi(timingLabel(path), async () => {
     const manager = peekSharedAuthManager();
     // Website Auth V2 / bot session: single-flight refresh + one 401 retry via AuthManager.
     if (manager?.getAccessToken()) {
       return manager.withAccessToken((accessToken) => executeApiRequest<T>(path, options, accessToken));
     }
     return executeApiRequest<T>(path, options, getAccessToken());
-  };
+  });
   if (!dedupe) return run();
   const existing = inflightGets.get(path);
   if (existing) return existing as Promise<T>;

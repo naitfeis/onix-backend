@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, Injectable, Module,
+  BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable, Module,
   NotFoundException, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -357,7 +357,9 @@ export class EngagementController {
     private readonly reviews: ReviewService,
   ) {}
 
-  @Get('chats') listChats(@CurrentUser() user: AuthUser) { return this.chats.list(user); }
+  @Get('chats')
+  @Header('Cache-Control', 'private, no-store')
+  listChats(@CurrentUser() user: AuthUser) { return this.chats.list(user); }
   @Post('chats/direct') direct(@CurrentUser() user: AuthUser, @Body() dto: DirectChatDto) {
     return this.chats.direct(user, dto.onixId);
   }

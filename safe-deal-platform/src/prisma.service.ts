@@ -24,8 +24,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       PrismaService.pool = new Pool({
         connectionString,
         max: Number(process.env.PG_POOL_MAX ?? 5),
-        idleTimeoutMillis: 30_000,
-        connectionTimeoutMillis: 5_000,
+        idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS ?? 30_000),
+        connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS ?? 5_000),
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 10_000,
       });
     }
 

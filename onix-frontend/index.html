@@ -1,19 +1,28 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>onix-frontend</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>ONIX</title>
+    <!-- Same-origin API via Vercel rewrite — warm DNS for origin edge only. -->
+    <link rel="dns-prefetch" href="https://www.onixtg.shop" />
+    <link rel="preconnect" href="https://www.onixtg.shop" crossorigin />
+    <!-- Early Telegram handshake before React / @twa-dev/sdk (Mini App WebView). -->
+    <script>
+      (function () {
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          if (tg) {
+            tg.ready();
+            tg.expand();
+          }
+        } catch (e) { /* browser */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script>
-      console.log("location.href =", location.href);
-      console.log("location.hash =", location.hash);
-      console.log("location.search =", location.search);
-      console.log("window.location.href =", window.location.href);
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

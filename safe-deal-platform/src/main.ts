@@ -1,11 +1,14 @@
 import 'reflect-metadata';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import compression = require('compression');
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
 import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
 import { registerHealthEndpoint } from './health';
+import { requestTimingMiddleware } from './request-timing.middleware';
 import { validationExceptionFactory } from './validation-errors';
 
 /** Same-process guard — Nest must bootstrap exactly once per Node process. */
@@ -23,10 +26,14 @@ async function bootstrap(): Promise<void> {
   logProductDeliveryKeyStatus(bootLog);
   bootLog.log('NestFactory starting');
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Single Nest logger — avoid duplicate framework noise on Render.
     logger: ['error', 'warn', 'log'],
   });
+
+  // gzip responses (brotli at Cloudflare edge when proxied).
+  app.use(compression({ threshold: 1024 }));
+  app.use(requestTimingMiddleware);
 
   registerHealthEndpoint(app);
 
@@ -47,14 +54,21 @@ async function bootstrap(): Promise<void> {
     origin: origins,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-ONIX-CSRF', 'Cookie', 'X-Request-Id'],
-    exposedHeaders: ['Set-Cookie', 'X-Request-Id'],
+    exposedHeaders: ['Set-Cookie', 'X-Request-Id', 'X-Response-Time', 'Server-Timing'],
     credentials: true,
   });
   app.enableShutdownHooks();
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
-  bootLog.log(`Listening on ${port}`);
+
+  // Keep-alive tuned for Render reverse proxy (avoid premature socket close).
+  const server = app.getHttpServer();
+  server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS ?? 65_000);
+  server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS ?? 66_000);
+  server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS ?? 120_000);
+
+  bootLog.log(`Listening on ${port} (single Node process, keepAlive=${server.keepAliveTimeout}ms)`);
 }
 
 void bootstrap();

@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, Injectable,
+  BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
   Module, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
@@ -534,7 +534,9 @@ export class EscrowService {
 @Controller('orders')
 export class EscrowController {
   constructor(private readonly service: EscrowService) {}
-  @Get() list(@CurrentUser() user: AuthUser, @Query() query: OrderQuery) {
+  @Get()
+  @Header('Cache-Control', 'private, no-store')
+  list(@CurrentUser() user: AuthUser, @Query() query: OrderQuery) {
     return this.service.list(user, query);
   }
   @Post('product/:productId') purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {

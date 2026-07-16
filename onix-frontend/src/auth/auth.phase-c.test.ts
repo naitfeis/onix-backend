@@ -139,7 +139,8 @@ describe('Phase C — Auth V2 Telegram login', () => {
     expect(provider.getAccessToken()).toBe('ed25519-access');
     const me = await provider.getMe();
     expect(me?.onixId).toBe('ONIX7');
-    expect(localStore.size).toBe(0);
+    // Browser id may live in localStorage; access token must not.
+    expect([...localStore.values()]).not.toContain('ed25519-access');
     expect(sessionStore.size).toBe(0);
     manager.dispose();
   });

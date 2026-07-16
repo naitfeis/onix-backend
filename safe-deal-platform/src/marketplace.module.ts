@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, Injectable, Module,
+  BadRequestException, Body, Controller, Delete, Get, Header, Injectable, Module,
   NotFoundException, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
@@ -275,14 +275,20 @@ export class MarketplaceController {
 
   @Public()
   @Get('catalog/subcategories')
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600')
   catalog() {
     return this.service.catalog();
   }
 
-  @Get() list(@CurrentUser() user: AuthUser, @Query() query: ProductQuery) {
+  /** Personalized (favorites) — never CDN-cache. */
+  @Get()
+  @Header('Cache-Control', 'private, no-store')
+  list(@CurrentUser() user: AuthUser, @Query() query: ProductQuery) {
     return this.service.list(user, query);
   }
-  @Get(':id') get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+  @Get(':id')
+  @Header('Cache-Control', 'private, no-store')
+  get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.service.get(user, id);
   }
   @Post() create(@CurrentUser() user: AuthUser, @Body() dto: ProductDto) {
