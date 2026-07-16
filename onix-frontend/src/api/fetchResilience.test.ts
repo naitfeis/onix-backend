@@ -52,6 +52,23 @@ describe('fetchResilience', () => {
     vi.useRealTimers();
   });
 
+  it('does not retry our own AbortController timeout', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = resilientFetch('/api/v2/auth/refresh', { maxRetries: 2, timeoutMs: 1_000 });
+    const expectation = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expectation;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
   it('does not retry 401 responses', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 401 });
     vi.stubGlobal('fetch', fetchMock);

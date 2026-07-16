@@ -1,12 +1,14 @@
 import {
   BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext,
-  ForbiddenException, Get, Injectable, Module, Param, Patch, Post, UseGuards,
+  ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, UseGuards,
 } from '@nestjs/common';
 import { BanReason, Prisma } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { Request } from 'express';
+import { hostname as osHostname } from 'node:os';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } from './ban-policy';
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
@@ -231,10 +233,30 @@ class AdminRefundController {
 @Controller('health')
 class HealthController {
   constructor(private readonly prisma: PrismaService) {}
+
   @Public() @Get('live') live() { return { status: 'ok', service: 'onix-api' }; }
+
   @Public() @Get('ready') async ready() {
     await this.prisma.$queryRaw`SELECT 1`;
     return { status: 'ready', database: 'ok' };
+  }
+
+  /** Temporary network probe for RU / CDN path debugging (no secrets). */
+  @Public()
+  @Get('network')
+  @Header('Cache-Control', 'no-store')
+  network(@Req() req: Request) {
+    const forwarded = req.headers['x-forwarded-for'];
+    const forwardedIp = typeof forwarded === 'string'
+      ? forwarded.split(',')[0]?.trim()
+      : Array.isArray(forwarded) ? forwarded[0] : undefined;
+    return {
+      status: 'ok',
+      region: process.env.RENDER_REGION ?? process.env.AWS_REGION ?? 'unknown',
+      timestamp: new Date().toISOString(),
+      hostname: osHostname(),
+      ip: forwardedIp || req.socket.remoteAddress || 'unknown',
+    };
   }
 }
 

@@ -50,7 +50,8 @@ async function bootstrap(): Promise<void> {
   }));
   app.useGlobalInterceptors(new ApiEnvelopeInterceptor());
   app.useGlobalFilters(new ApiExceptionFilter());
-  const origins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
+  const origins = (process.env.CORS_ORIGINS
+    ?? 'http://localhost:5173,https://www.onixtg.shop,https://onixtg.shop')
     .split(',').map((value) => value.trim()).filter(Boolean);
   app.enableCors({
     origin: origins,

@@ -1,11 +1,13 @@
 /**
  * Fetch timeout + retry for transient network / gateway failures.
  * Never retries 401/403 (auth must fail fast).
+ * Never retries our own AbortController timeout — that caused "refresh 201 after ~8s"
+ * (first attempt hung until timeout, second succeeded).
  */
 
-/** Fail hung RU/CF sockets before the UI looks "stuck forever". */
-export const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
-/** One retry for reset/502–504 — enough for flaky paths, not endless pending. */
+/** Bound hung sockets; keep under UX pain without double-waiting on retry. */
+export const DEFAULT_FETCH_TIMEOUT_MS = 12_000;
+/** Retry only fast network failures (reset), not full-timeout aborts. */
 export const MAX_NETWORK_RETRIES = 1;
 
 export function isRetryableHttpStatus(status: number): boolean {
@@ -82,9 +84,10 @@ export async function resilientFetch(
     } catch (error) {
       clearTimeout(timer);
       if (externalSignal?.aborted) throw error;
-      // Our timeout → retry as transient network failure (Telegram WebView resets).
+      // Do NOT retry our own timeout — avoids 8s abort + successful retry = "201 after 8s".
       const timedOut = timeout.signal.aborted && !externalSignal?.aborted;
-      if ((timedOut || isRetryableNetworkError(error)) && attempt < maxRetries) {
+      if (timedOut) throw error;
+      if (isRetryableNetworkError(error) && attempt < maxRetries) {
         attempt += 1;
         await delay(backoffMs(attempt));
         continue;

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AuthOrchestrator } from './auth-orchestrator.service';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
 import { AuthV2Controller } from './auth-v2.controller';
+import { DebugSessionController } from './debug-session.controller';
 import { AuthV2Guard, PermissionGuard, RolesGuard } from './auth-v2.guards';
 import { DualAccessService } from './dual-access.service';
 import { AuthRolloutService } from './auth-rollout.service';
@@ -22,7 +23,7 @@ import { TokenService } from './token.service';
  * Phase 3.3: AuthRolloutService canary % + mode ladder (USE_NEW_AUTH stays false until ops gate).
  */
 @Module({
-  controllers: [AuthV2Controller],
+  controllers: [AuthV2Controller, DebugSessionController],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
     { provide: AUTH_EVENT_PUBLISHER, useValue: new AuthEventPublisher() },

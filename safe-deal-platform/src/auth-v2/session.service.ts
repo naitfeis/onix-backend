@@ -280,6 +280,7 @@ export class SessionService {
   async rotateRefresh(
     refreshToken: string,
     device?: DeviceContext,
+    timing?: { dbMs: number; tokenMs: number },
   ): Promise<SessionAuthResult> {
     if (!refreshToken) {
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh token is missing.');
@@ -288,17 +289,21 @@ export class SessionService {
     const presentedHash = this.tokens.hashRefreshToken(refreshToken);
     const now = new Date();
 
+    const tDb0 = process.hrtime.bigint();
     const current = await this.prisma.session.findUnique({
       where: { refreshTokenHash: presentedHash },
     });
+    if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb0) / 1e6;
 
     if (current) {
-      return this.rotateCurrentSession(current, presentedHash, now, device);
+      return this.rotateCurrentSession(current, presentedHash, now, device, timing);
     }
 
+    const tDb1 = process.hrtime.bigint();
     const reused = await this.prisma.session.findFirst({
       where: { previousRefreshHash: presentedHash },
     });
+    if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb1) / 1e6;
     if (reused) {
       await this.handleRefreshReuse(reused, presentedHash, device);
       throw new AuthPlatformError('AUTH_REFRESH_REUSED', 'Refresh token reuse detected.');
@@ -424,18 +429,24 @@ export class SessionService {
     presentedHash: string,
     now: Date,
     device?: DeviceContext,
+    timing?: { dbMs: number; tokenMs: number },
   ): Promise<SessionAuthResult> {
     this.assertSessionUsable(session, now);
 
+    const tDb0 = process.hrtime.bigint();
     const found = await this.prisma.user.findUnique({ where: { id: session.userId } });
     if (!found) {
       throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked or missing.');
     }
     const user = await this.resolveUserAccountLock(found, this.prisma);
+    if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb0) / 1e6;
 
     const idleMs = session.rememberMe ? SESSION_REMEMBER_IDLE_TTL_MS : SESSION_IDLE_TTL_MS;
+    const tTok0 = process.hrtime.bigint();
     const nextRefresh = this.tokens.issueRefreshToken();
+    if (timing) timing.tokenMs += Number(process.hrtime.bigint() - tTok0) / 1e6;
 
+    const tDb1 = process.hrtime.bigint();
     const rotated = await this.prisma.$transaction(async (tx) => {
       const cas = await tx.session.updateMany({
         where: {
@@ -496,13 +507,20 @@ export class SessionService {
 
       return updated;
     });
+    if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb1) / 1e6;
 
+    const tTok1 = process.hrtime.bigint();
     const accessToken = this.tokens.issueAccessToken({
       userId: user.id,
       sessionId: rotated.id,
       sessionVersion: user.sessionVersion,
       permissionVersion: user.permissionVersion,
     });
+    if (timing) timing.tokenMs += Number(process.hrtime.bigint() - tTok1) / 1e6;
+
+    const tDb2 = process.hrtime.bigint();
+    const trustedDevice = await this.isTrustedDevice(user.id, rotated.fingerprintHash);
+    if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb2) / 1e6;
 
     return {
       session: rotated,
@@ -516,7 +534,7 @@ export class SessionService {
       },
       accessToken,
       refreshToken: nextRefresh.token,
-      trustedDevice: await this.isTrustedDevice(user.id, rotated.fingerprintHash),
+      trustedDevice,
     };
   }
 

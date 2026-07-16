@@ -77,6 +77,7 @@ export async function postAuthV2Refresh(
 }
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
-  // Same timeout/retry as marketplace API — RU Telegram WebView connection resets.
-  return resilientFetch(url, init);
+  // Refresh is cookie+CSRF same-origin; allow a bit more time on slow RU paths.
+  // No timeout-retry (see resilientFetch) — avoids false "8s then 201".
+  return resilientFetch(url, { ...init, timeoutMs: 12_000, maxRetries: 1 });
 }

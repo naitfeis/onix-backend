@@ -80,19 +80,32 @@ export class AuthV2Controller {
     @Req() req: { ip?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
+    const t0 = process.hrtime.bigint();
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     if (!refreshToken) {
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh cookie is missing.');
     }
 
+    const timing = { dbMs: 0, tokenMs: 0 };
     const result = await this.orchestrator.refresh(refreshToken, {
       ...body.device,
       userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
       ipAddress: body.device?.ipAddress ?? req.ip,
-    });
+    }, timing);
 
     res.setHeader('Set-Cookie', buildRefreshCookieHeader(result.refreshToken, result.refreshMaxAgeSeconds));
+
+    const totalMs = Number(process.hrtime.bigint() - t0) / 1e6;
+    res.setHeader(
+      'Server-Timing',
+      [
+        `refresh-total;dur=${totalMs.toFixed(1)}`,
+        `refresh-db;dur=${timing.dbMs.toFixed(1)}`,
+        `refresh-token;dur=${timing.tokenMs.toFixed(1)}`,
+      ].join(', '),
+    );
+    res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
 
     return {
       accessToken: result.accessToken,
