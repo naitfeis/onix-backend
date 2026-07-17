@@ -64,8 +64,8 @@
 .app-shell.is-booting .viewport { opacity: .72; }
 .app-shell.is-ready .viewport { transition: opacity 420ms var(--ease); opacity: 1; }
 @keyframes shell-rise {
-  from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes shell-fade {
   from { opacity: 0; }
@@ -125,26 +125,22 @@
   /* clip only horizontal slide; never crop lots vertically */
   overflow-x: clip;
   overflow-y: visible;
-  perspective: 1100px;
+  /* No perspective here — it forced fixed modals into a local containing block before portal. */
 }
 .screen-transition {
-  transform-origin: 50% 40%;
-  animation: page-turn 440ms var(--ease-out) both;
+  animation: page-turn 320ms var(--ease-out) both;
   min-height: 0;
 }
 @keyframes page-turn {
   from {
     opacity: 0;
-    filter: blur(5px);
     transform:
-      translateX(calc(var(--direction, 1) * 42px))
-      rotateY(calc(var(--direction, 1) * -14deg))
-      scale(.96);
+      translateX(calc(var(--direction, 1) * 28px))
+      scale(.985);
   }
   to {
     opacity: 1;
-    filter: blur(0);
-    transform: translateX(0) rotateY(0deg) scale(1);
+    transform: translateX(0) scale(1);
   }
 }
 .stack { display: flex; flex-direction: column; gap: 14px; }.stack.compact { gap: 10px; }.narrow { max-width: 720px; margin: 0 auto; }
@@ -242,32 +238,51 @@
 .user-summary b, .user-summary p, .user-summary > span:last-child { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-avatar-wrap {
   position: relative;
-  display: inline-flex;
+  display: inline-block;
   flex: 0 0 auto;
+  width: fit-content;
+  height: fit-content;
+  line-height: 0;
   vertical-align: middle;
+  /* Grid rows stretch children — keep wrap sized to the circle so the pip stays on the avatar */
+  align-self: start;
+  justify-self: start;
 }
-.user-avatar { flex: 0 0 auto; overflow: hidden; border: 1px solid #444; border-radius: 50%; display: grid; place-items: center; background: #09090b; color: #aaa; font-weight: 800; }
-.user-avatar--small { width: 28px; height: 28px; font-size: 9px; }.user-avatar--medium { width: 48px; height: 48px; font-size: 13px; }
-.user-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
-.user-avatar-wrap.is-online::after {
-  content: "";
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 9px;
-  height: 9px;
+.user-avatar {
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid #444;
   border-radius: 50%;
-  background: #22c55e;
+  display: grid;
+  place-items: center;
+  background: #09090b;
+  color: #aaa;
+  font-weight: 800;
+}
+.user-avatar--small { width: 28px; height: 28px; font-size: 9px; }
+.user-avatar--medium { width: 48px; height: 48px; font-size: 13px; }
+.user-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.user-avatar__presence {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
   border: 2px solid #070708;
   box-sizing: border-box;
   pointer-events: none;
+  z-index: 1;
+  background: #5a5a62;
 }
-.user-avatar-wrap.is-online.user-avatar-wrap--medium::after {
-  width: 12px;
-  height: 12px;
-  right: 0;
-  bottom: 0;
+.user-avatar-wrap--medium .user-avatar__presence {
+  width: 14px;
+  height: 14px;
+  right: -1px;
+  bottom: -1px;
 }
+.user-avatar-wrap.is-online .user-avatar__presence { background: #22c55e; }
+.user-avatar-wrap.is-offline .user-avatar__presence { background: #5a5a62; }
 .conversation__peer {
   display: flex;
   align-items: center;

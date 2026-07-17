@@ -155,7 +155,7 @@ export function Market({
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
           <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={isOnline(product.seller.lastOnline)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
           setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));

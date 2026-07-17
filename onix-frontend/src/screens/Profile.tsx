@@ -178,7 +178,7 @@ export function Profile({
             <h2>{item.title}</h2>
             <div className="seller-row">
               <span className="user-summary">
-                <UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} />
+                <UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={isOnline(item.seller.lastOnline)} />
                 <span>@{item.seller.username}</span>
               </span>
               <strong>{money(item.priceCents)}</strong>

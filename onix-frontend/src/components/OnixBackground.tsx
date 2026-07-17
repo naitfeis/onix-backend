@@ -194,16 +194,28 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     let frame = 0;
     let running = !document.hidden;
     const started = performance.now();
-    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1.2 : 1.6);
+    // Cap DPR harder on phones — raymarch cost scales with pixels.
+    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 0.85 : 1.25);
     let currentIntensity = 1;
+    let lastPaint = 0;
+    const minFrameMs = innerWidth < 640 ? 1000 / 30 : 1000 / 45;
 
     const targetForMode = () => {
+      if (document.body.classList.contains('modal-open')) return 0.35;
       const m = modeRef.current;
-      return m === 'chat' ? 0.7 : m === 'focus' ? 0.88 : 1.0;
+      return m === 'chat' ? 0.55 : m === 'focus' ? 0.75 : 0.9;
     };
 
+    const shouldRun = () => running && !document.hidden;
+
     const render = (now: number) => {
-      if (!running) return;
+      if (!shouldRun()) return;
+      if (now - lastPaint < minFrameMs) {
+        frame = requestAnimationFrame(render);
+        return;
+      }
+      lastPaint = now;
+
       const width = Math.floor(canvas.clientWidth * quality);
       const height = Math.floor(canvas.clientHeight * quality);
       if (canvas.width !== width || canvas.height !== height) {
@@ -213,7 +225,7 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
       }
 
       const targetIntensity = targetForMode();
-      currentIntensity += (targetIntensity - currentIntensity) * 0.06;
+      currentIntensity += (targetIntensity - currentIntensity) * 0.08;
 
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -230,15 +242,18 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
       frame = requestAnimationFrame(render);
     };
 
+    const kick = () => {
+      cancelAnimationFrame(frame);
+      if (shouldRun()) frame = requestAnimationFrame(render);
+    };
+
     const onVisibility = () => {
       running = !document.hidden;
-      if (running) {
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(render);
-      } else {
-        cancelAnimationFrame(frame);
-      }
+      kick();
     };
+
+    const modalObserver = new MutationObserver(kick);
+    modalObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     document.addEventListener('visibilitychange', onVisibility);
     frame = requestAnimationFrame(render);
@@ -246,6 +261,7 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     return () => {
       running = false;
       cancelAnimationFrame(frame);
+      modalObserver.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
       removeEventListener('pointermove', move);
       gl.deleteProgram(program);

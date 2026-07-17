@@ -19,25 +19,34 @@ export function installGlobalErrorHandlers(): void {
     console.error('[ONIX] unhandledrejection', event.reason);
   });
 
-  // Telegram Mini App + visualViewport: keep modal overlay sized to the visible screen.
+  // Telegram / visualViewport height for modal overlay — rAF-throttled, no scroll listener.
+  let lastH = 0;
+  let raf = 0;
   const syncTelegramViewport = () => {
-    try {
-      const wa = (window as unknown as {
-        Telegram?: { WebApp?: { viewportHeight?: number; viewportStableHeight?: number } };
-      }).Telegram?.WebApp;
-      const vv = window.visualViewport?.height;
-      const h = wa?.viewportStableHeight ?? wa?.viewportHeight ?? vv ?? window.innerHeight;
-      if (typeof h === 'number' && h > 0) {
-        document.documentElement.style.setProperty('--tg-viewport-height', `${Math.round(h)}px`);
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      try {
+        const wa = (window as unknown as {
+          Telegram?: { WebApp?: { viewportHeight?: number; viewportStableHeight?: number } };
+        }).Telegram?.WebApp;
+        const h = wa?.viewportStableHeight
+          ?? wa?.viewportHeight
+          ?? window.visualViewport?.height
+          ?? window.innerHeight;
+        const rounded = typeof h === 'number' && h > 0 ? Math.round(h) : 0;
+        if (rounded > 0 && rounded !== lastH) {
+          lastH = rounded;
+          document.documentElement.style.setProperty('--tg-viewport-height', `${rounded}px`);
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
-    }
+    });
   };
   syncTelegramViewport();
-  window.addEventListener('resize', syncTelegramViewport);
-  window.visualViewport?.addEventListener('resize', syncTelegramViewport);
-  window.visualViewport?.addEventListener('scroll', syncTelegramViewport);
+  window.addEventListener('resize', syncTelegramViewport, { passive: true });
+  window.visualViewport?.addEventListener('resize', syncTelegramViewport, { passive: true });
   try {
     const wa = (window as unknown as {
       Telegram?: { WebApp?: { onEvent?: (event: string, cb: () => void) => void } };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { money } from '../api/client';
-import type { Deal, OrderListQuery } from '../api/contracts';
+import { isOnline, type Deal, type OrderListQuery } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import type { Core, Screen } from './types';
@@ -64,7 +64,7 @@ export function Deals({
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
+      deals.map(deal => <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} online={isOnline(deal.counterparty.lastOnline)} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
