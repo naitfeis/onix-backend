@@ -167,7 +167,6 @@ export class MarketplaceService {
       where: { id },
       select: {
         ...productListSelect,
-        sellerId: true,
         seller: { select: sellerPublicSelect(viewerId) },
         ...(viewerId != null
           ? { favorites: { where: { userId: viewerId }, select: { userId: true } } }

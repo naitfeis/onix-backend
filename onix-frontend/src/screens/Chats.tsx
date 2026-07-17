@@ -500,6 +500,7 @@ export function Chats({
       {thread.kind === 'AI' && (
         <div className="ai-quick-replies" role="group" aria-label="Быстрые вопросы">
           {[
+            { label: 'О площадке ONIX', send: 'О площадке ONIX' },
             { label: 'Добавить товар', send: 'Добавить товар' },
             { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
             { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },

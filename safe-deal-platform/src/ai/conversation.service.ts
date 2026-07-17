@@ -6,9 +6,10 @@ import { IntentRecognizer } from './intent-recognizer';
 import { ProductCreationService } from './product-creation.service';
 
 const WELCOME = [
-  'Я ONIX AI — помощник платформы.',
+  'Я ONIX AI — помощник площадки ONIX.',
   '',
-  'Выберите тему кнопкой ниже или напишите «Создай товар».',
+  'Нажмите «О площадке ONIX» или «Создай товар».',
+  'Также: гарант · вывод · поддержка.',
 ].join('\n');
 
 @Injectable()

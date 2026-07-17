@@ -182,7 +182,7 @@ export function Market({
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><span>{product.category}</span></div>
           <h2>{product.title.length > 32 ? `${product.title.slice(0, 32)}…` : product.title}</h2>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)}</span></span><strong>{money(product.priceCents)}</strong></div>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} · {product.seller.reviewCount} отз.</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
           setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
@@ -204,7 +204,7 @@ export function Market({
             {sellerTrust.voiceVerified && <span>Голос</span>}
           </div>
         )}
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {
               try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }

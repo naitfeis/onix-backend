@@ -2,7 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { api, money } from '../api/client';
 import { API_PATHS, sellerIsPresent, type Product, type ProductDraft, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { Badge, Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
+import { Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { validateDraft } from '../utils/productValidation';
 import type { Core, Screen } from './types';
@@ -75,9 +75,14 @@ export function Profile({
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [historyVisible, setHistoryVisible] = useState(10);
   const profile = core.profile;
   const deposit = profile?.deposit ?? null;
   const ownerTrust = profile?.trustCard ?? null;
+  useEffect(() => {
+    if (section === 'overview') setHistoryVisible(10);
+  }, [section]);
+
   useEffect(() => {
     if (section !== 'favorites' || !core.profile) return;
     let cancelled = false;
@@ -189,7 +194,14 @@ export function Profile({
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
-    {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
+    {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
+      <div className="operations">{profile.walletHistory.slice(0, historyVisible).map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
+      {historyVisible < profile.walletHistory.length && (
+        <div className="card-actions" style={{ marginTop: 12 }}>
+          <Button variant="secondary" onClick={() => setHistoryVisible((n) => n + 10)}>Показать ещё</Button>
+        </div>
+      )}
+    </>}</Card>}
     {section === 'favorites' && (favoritesState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       favoritesState === 'error' ? <StateView title="Избранное недоступно" text="Не удалось загрузить список." /> :
       favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
@@ -208,7 +220,18 @@ export function Profile({
         </Card>
       ))}</div>)}
     {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
-      <div className="product-grid">{ownProducts.map(item => <Card key={item.id}><Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge><h2>{item.title}</h2><div className="seller-row"><strong>{money(item.priceCents)}</strong><Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button></div></Card>)}</div>)}
+      <div className="product-grid">{ownProducts.map(item => (
+        <Card key={item.id}>
+          <h2>{item.title}</h2>
+          <div className="listing-meta">
+            {item.viewCount != null && <span><b>{item.viewCount}</b> просмотров</span>}
+            <span><b>{money(item.priceCents)}</b></span>
+          </div>
+          <div className="seller-row">
+            <Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button>
+          </div>
+        </Card>
+      ))}</div>)}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
       core.reviews.map(review => <Card key={review.id}><div className="seller-row">
         {review.author.onixId

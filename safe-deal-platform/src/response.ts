@@ -73,6 +73,8 @@ export interface ProductDto {
   seller: ReturnType<typeof sellerDto>;
   favorite: boolean;
   createdAt: string;
+  /** Unique views — only for the listing owner. */
+  viewCount?: number;
 }
 
 function resolveStatus(user: Pick<PublicUser, 'platformStatus' | 'isAdmin' | 'isSupport'>): PlatformStatus {
@@ -146,9 +148,13 @@ export function productDto(product: {
   status: string;
   autoDeliver?: boolean;
   createdAt: Date;
+  sellerId?: bigint;
   seller: PublicUser;
   favorites?: Array<{ userId: bigint }>;
+  _count?: { viewUniques?: number };
 }, viewerId?: bigint): ProductDto {
+  const ownerId = product.sellerId ?? product.seller.id;
+  const isOwner = viewerId != null && ownerId === viewerId;
   return {
     id: product.id,
     ...(product.lotNumber != null ? { lotNumber: product.lotNumber } : {}),
@@ -163,6 +169,9 @@ export function productDto(product: {
     seller: sellerDto(product.seller),
     favorite: Boolean(viewerId && product.favorites?.some((item) => item.userId === viewerId)),
     createdAt: product.createdAt.toISOString(),
+    ...(isOwner && product._count?.viewUniques != null
+      ? { viewCount: product._count.viewUniques }
+      : {}),
   };
 }
 

@@ -42,6 +42,8 @@ export interface Product {
   seller: Seller;
   favorite?: boolean;
   createdAt: string;
+  /** Unique views — present only for the listing owner. */
+  viewCount?: number;
 }
 
 export interface DisputeCard {

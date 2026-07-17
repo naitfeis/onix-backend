@@ -61,6 +61,8 @@ export const productListSelect = {
   status: true,
   autoDeliver: true,
   createdAt: true,
+  sellerId: true,
+  _count: { select: { viewUniques: true as const } },
 } as const;
 
 export const dealProductSelect = {

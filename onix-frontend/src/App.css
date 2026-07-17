@@ -366,16 +366,51 @@
 .trust-strip b { color: var(--text); font-weight: 700; }
 
 .analytics-panel .analytics-stats { margin-top: 8px; }
+.analytics-chart-wrap {
+  position: relative;
+  margin-top: 8px;
+}
 .analytics-chart {
   width: 100%;
   height: auto;
-  margin-top: 8px;
   display: block;
 }
 .analytics-chart__label {
   fill: var(--muted);
   font-size: 9px;
 }
+.analytics-chart__guide {
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.analytics-chart__guide-label {
+  fill: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+}
+.analytics-chart__bar { cursor: pointer; }
+.analytics-chart__tooltip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.analytics-chart__tooltip b { color: var(--text); }
+.listing-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 8px;
+}
+.listing-meta b { color: var(--text); }
 .onix-id-link { color: var(--accent, #7dd3c0); text-decoration: underline; }
 
 .control {
