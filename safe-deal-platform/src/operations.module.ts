@@ -197,6 +197,13 @@ class OperationsService {
   }
 
   withdraw(user: AuthUser, dto: WithdrawalDto) {
+    // Stage 1: no external payout rail — keep debit disabled until WITHDRAWALS_ENABLED=true.
+    const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
+    if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') {
+      throw new BadRequestException(
+        'Вывод средств временно недоступен. Обратитесь в поддержку ONIX.',
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       const amount = BigInt(dto.amountCents);
       const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {

@@ -203,11 +203,11 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     let frame = 0;
     let running = !document.hidden;
     const started = performance.now();
-    // Higher pixel density → less jagged silhouettes; still capped for mobile cost.
-    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1.15 : 1.75);
+    // Balanced DPR: smoother than low-poly caps, without Retina fill blowups.
+    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1.0 : 1.35);
     let currentIntensity = 1;
     let lastPaint = 0;
-    const minFrameMs = innerWidth < 640 ? 1000 / 28 : 1000 / 40;
+    const minFrameMs = innerWidth < 640 ? 1000 / 30 : 1000 / 45;
 
     const targetForMode = () => {
       if (document.body.classList.contains('modal-open')) return 0.35;

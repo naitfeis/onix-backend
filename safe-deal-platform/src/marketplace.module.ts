@@ -1,6 +1,7 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, Header, Injectable, Module,
-  NotFoundException, Optional, Param, Patch, Post, Query, Req, Res,
+  BadRequestException, Body, CanActivate, Controller, Delete, ExecutionContext, ForbiddenException,
+  Get, Header, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query, Req, Res,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
@@ -10,7 +11,7 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
-import { AuthUser, CurrentUser, Public } from './common';
+import { AuthRequest, AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
 import { AuthModule, AuthService } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
@@ -294,6 +295,15 @@ export class MarketplaceService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product || product.sellerId !== user.id) throw new NotFoundException('Товар не найден.');
     if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке.');
+    if (status === 'ACTIVE') {
+      const seller = await this.prisma.user.findUnique({
+        where: { id: user.id },
+        select: { sellBannedAt: true },
+      });
+      if (seller?.sellBannedAt) {
+        throw new BadRequestException('Продажа товаров запрещена администратором.');
+      }
+    }
     await this.prisma.$transaction(async (tx) => {
       await tx.product.update({
         where: { id },
@@ -375,22 +385,15 @@ export class MarketplaceController {
     return this.service.list(user, query);
   }
 
-  @Public()
+  /** Auth required — blocks anonymous ONIXLOT enumeration / harvesting. */
   @Get('lot/:lotNumber')
-  async getByLot(
-    @Req() req: { headers?: Record<string, string | string[] | undefined> },
-    @Res({ passthrough: true }) res: Response,
+  @Header('Cache-Control', 'private, no-store')
+  getByLot(
+    @CurrentUser() user: AuthUser,
     @Param('lotNumber') lotNumber: string,
   ) {
     const n = Number(lotNumber);
     if (!Number.isInteger(n) || n < 1) throw new BadRequestException('Некорректный ONIXLOT.');
-    const user = await this.optionalViewer(req);
-    res.setHeader(
-      'Cache-Control',
-      user
-        ? 'private, no-store'
-        : 'public, max-age=30, stale-while-revalidate=120',
-    );
     return this.service.getByLot(user, n);
   }
 
@@ -444,7 +447,18 @@ export class MarketplaceController {
   }
 }
 
+@Injectable()
+class AdminGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    if (!context.switchToHttp().getRequest<AuthRequest>().user?.isAdmin) {
+      throw new ForbiddenException('Требуются права администратора ONIX.');
+    }
+    return true;
+  }
+}
+
 @Controller('admin/products')
+@UseGuards(AdminGuard)
 export class AdminProductsController {
   constructor(private readonly service: MarketplaceService) {}
 

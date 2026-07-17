@@ -15,6 +15,7 @@ import { createDomainNotification, pushTelegramToChatId } from './domain-notify'
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
+import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
@@ -66,14 +67,7 @@ export class ChatService {
   ) {}
 
   async list(user: AuthUser, search?: string) {
-    void this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastSeenAt: new Date() },
-    });
-
-    // Always ensure pinned ONIX AI system chat exists.
-    await this.ai.ensureChat(user);
-
+    // Presence heartbeat owns lastSeenAt — avoid write on every chat poll.
     const q = search?.trim();
     const chats = await this.prisma.chat.findMany({
       where: {
@@ -192,6 +186,20 @@ export class ChatService {
       };
     });
 
+    // Ensure AI chat only when missing (not on every poll).
+    if (!q && !mapped.some((c) => c.kind === 'AI')) {
+      const ai = await this.ai.ensureChat(user);
+      mapped.unshift({
+        id: ai.id,
+        kind: 'AI',
+        title: 'ONIX AI',
+        subtitle: 'Помощник платформы',
+        unreadCount: 0,
+        peerOnixId: undefined,
+        peerLastOnline: undefined,
+      });
+    }
+
     // ONIX AI always first in the dialog list.
     mapped.sort((a, b) => {
       if (a.kind === 'AI' && b.kind !== 'AI') return -1;
@@ -260,18 +268,19 @@ export class ChatService {
     }
 
     const chat = await this.prisma.$transaction(async (tx) => {
+      // Creator first (earlier createdAt) so addMembers owner check is stable.
       const created = await tx.chat.create({
         data: {
           kind: 'GROUP',
           title: name.slice(0, 80),
-          members: {
-            create: [
-              { userId: user.id },
-              ...members.map((m) => ({ userId: m.id })),
-            ],
-          },
+          members: { create: { userId: user.id } },
         },
       });
+      if (members.length) {
+        await tx.chatMember.createMany({
+          data: members.map((m) => ({ chatId: created.id, userId: m.id })),
+        });
+      }
       await tx.message.create({
         data: {
           chatId: created.id,
@@ -383,6 +392,13 @@ export class ChatService {
 
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
+
+    // Anti-spam: AI tighter (writes + FSM), regular chats looser.
+    if (chat.kind === 'AI') {
+      assertRateLimit(`chat-ai:${user.id}`, 20, 60_000);
+    } else {
+      assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
+    }
 
     if (chat.kind === 'AI') {
       const message = await this.prisma.$transaction(async (tx) => {
@@ -499,12 +515,21 @@ export class ChatService {
     return { ok: true, scope: 'GLOBAL' as const };
   }
 
-  /** Add members to an existing group chat. */
+  /** Add members to an existing group chat (creator / earliest member only). */
   async addMembers(user: AuthUser, chatId: string, memberOnixIds: string[]) {
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
     if (!chat) throw new NotFoundException('Чат не найден.');
     if (chat.kind !== 'GROUP') throw new BadRequestException('Добавлять участников можно только в группу.');
     await this.member(user.id, chatId);
+
+    const creator = await this.prisma.chatMember.findFirst({
+      where: { chatId },
+      orderBy: { createdAt: 'asc' },
+      select: { userId: true },
+    });
+    if (!creator || creator.userId !== user.id) {
+      throw new ForbiddenException('Добавлять участников может только создатель группы.');
+    }
 
     const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
     if (unique.length < 1) throw new BadRequestException('Укажите участников.');

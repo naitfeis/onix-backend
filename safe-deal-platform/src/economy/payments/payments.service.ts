@@ -54,8 +54,12 @@ export class PaymentsService {
   ) {
     if (dto.amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения — 1 ₽.');
     if (dto.provider === 'MANUAL') {
-      if (!user.isAdmin && !isManualPaymentsEnabled()) {
-        throw new ForbiddenException('Manual-пополнение отключено. Включите MANUAL_PAYMENTS_ENABLED или используйте admin.');
+      // Never allow non-admin self-credit, even when MANUAL_PAYMENTS_ENABLED=true.
+      if (!user.isAdmin) {
+        throw new ForbiddenException('Manual-пополнение доступно только администратору.');
+      }
+      if (!isManualPaymentsEnabled()) {
+        throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
       }
     }
     const provider = this.provider(dto.provider);
@@ -92,15 +96,15 @@ export class PaymentsService {
   }
 
   async confirmManual(user: AuthUser, intentId: string) {
-    if (!user.isAdmin && !isManualPaymentsEnabled()) {
-      throw new ForbiddenException('Подтверждение Manual-платежа недоступно.');
+    if (!user.isAdmin) {
+      throw new ForbiddenException('Подтверждение Manual-платежа доступно только администратору.');
+    }
+    if (!isManualPaymentsEnabled()) {
+      throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
     }
     return this.prisma.$transaction(async (tx) => {
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');
-      if (intent.userId !== user.id && !user.isAdmin) {
-        throw new NotFoundException('Платёж не найден.');
-      }
       if (intent.provider !== 'MANUAL') {
         throw new BadRequestException('Подтверждение доступно только для MANUAL.');
       }

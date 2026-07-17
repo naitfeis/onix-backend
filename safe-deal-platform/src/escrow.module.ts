@@ -70,41 +70,52 @@ export class EscrowService {
       query.sort === 'expensive' ? { totalAmountCents: 'desc' } :
       query.sort === 'cheap' ? { totalAmountCents: 'asc' } :
       { createdAt: 'desc' };
-    const [orders, arbCtx] = await Promise.all([
-      this.prisma.order.findMany({
-        where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
-        select: {
-          id: true,
-          buyerId: true,
-          sellerId: true,
-          totalAmountCents: true,
-          status: true,
-          createdAt: true,
-          product: { select: dealProductSelect },
-          buyer: { select: dealPartySelect },
-          seller: { select: dealPartySelect },
-          reviews: { select: { authorId: true } },
-          chat: { select: { id: true } },
-          supportTickets: {
-            select: { id: true, status: true, chatId: true },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
+    const orders = await this.prisma.order.findMany({
+      where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
+      select: {
+        id: true,
+        buyerId: true,
+        sellerId: true,
+        totalAmountCents: true,
+        status: true,
+        createdAt: true,
+        product: { select: dealProductSelect },
+        buyer: { select: dealPartySelect },
+        seller: { select: dealPartySelect },
+        reviews: { select: { authorId: true } },
+        chat: { select: { id: true } },
+        supportTickets: {
+          select: { id: true, status: true, chatId: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         },
-        orderBy,
-        take: 100,
-      }),
-      loadArbitrationContext(this.prisma),
-    ]);
+      },
+      orderBy,
+      take: 100,
+    });
+    const needsArbitration = orders.some(
+      (o) => o.status === 'DISPUTE' || o.supportTickets.length > 0,
+    );
+    const arbCtx = needsArbitration
+      ? await loadArbitrationContext(this.prisma)
+      : {
+          queue: [],
+          queueTotal: 0,
+          positionByOrderId: new Map<string, number>(),
+          avgWaitMinutes: null as number | null,
+          supportByChatId: new Map<string, string>(),
+        };
     return orders.map((order) => {
       const ticket = order.supportTickets[0] ?? null;
-      const dispute = buildDisputeCard({
-        orderId: order.id,
-        status: order.status,
-        chatId: order.chat?.id ?? ticket?.chatId,
-        ticket,
-        ctx: arbCtx,
-      });
+      const dispute = needsArbitration
+        ? buildDisputeCard({
+          orderId: order.id,
+          status: order.status,
+          chatId: order.chat?.id ?? ticket?.chatId,
+          ticket,
+          ctx: arbCtx,
+        })
+        : null;
       return dealDto({ ...order, dispute }, user);
     });
   }
@@ -362,17 +373,25 @@ export class EscrowService {
       }
       const existingPayout = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: `order:${id}:payout` } });
       if (!existingPayout) {
-        await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', {
-          idempotencyKey: `order:${id}:payout`,
-          orderId: id,
-          description: opts.requireBuyer ? 'Выплата продавцу' : 'Выплата продавцу (поддержка)',
-        });
-        await tx.user.update({
-          where: { id: order.sellerId },
-          data: { completedSales: { increment: 1 }, trustDirty: true },
-        });
+        // 0 ₽ orders: skip ledger credit (BalanceService rejects amount ≤ 0).
+        if (order.payoutCents > 0n) {
+          await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', {
+            idempotencyKey: `order:${id}:payout`,
+            orderId: id,
+            description: opts.requireBuyer ? 'Выплата продавцу' : 'Выплата продавцу (поддержка)',
+          });
+        }
+        // Paid sales only count toward public completedSales (anti-farming on free lots).
+        if (order.totalAmountCents > 0n) {
+          await tx.user.update({
+            where: { id: order.sellerId },
+            data: { completedSales: { increment: 1 }, trustDirty: true },
+          });
+        }
       }
-      await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.totalAmountCents);
+      if (order.totalAmountCents > 0n) {
+        await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.totalAmountCents);
+      }
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
       await tx.product.update({
         where: { id: order.productId },
@@ -518,7 +537,7 @@ export class EscrowService {
       }
 
       // After COMPLETED payout already left escrow → clawback from seller then credit buyer.
-      if (order.status === 'COMPLETED') {
+      if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
         await this.balance.debit(tx, order.sellerId, order.payoutCents, 'ADMIN_ADJUSTMENT', {
           idempotencyKey: `order:${id}:clawback`,
           orderId: id,
@@ -529,11 +548,13 @@ export class EscrowService {
       }
 
       const ledgerKey = `order:${id}:${target.toLowerCase()}`;
-      await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', {
-        idempotencyKey: ledgerKey,
-        orderId: id,
-        description: 'Возврат покупателю',
-      });
+      if (order.totalAmountCents > 0n) {
+        await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', {
+          idempotencyKey: ledgerKey,
+          orderId: id,
+          description: 'Возврат покупателю',
+        });
+      }
       // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.
       if (order.status !== 'COMPLETED') {
         await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
