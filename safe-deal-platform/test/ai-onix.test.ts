@@ -11,6 +11,7 @@ describe('ONIX AI IntentRecognizer', () => {
     assert.equal(ir.recognize('Создай товар'), 'CREATE_PRODUCT');
     assert.equal(ir.recognize('Создай новый товар'), 'CREATE_PRODUCT');
     assert.equal(ir.recognize('Новый товар'), 'CREATE_PRODUCT');
+    assert.equal(ir.recognize('Добавить товар'), 'CREATE_PRODUCT');
   });
 
   it('future feature for as yesterday', () => {
@@ -20,8 +21,9 @@ describe('ONIX AI IntentRecognizer', () => {
   it('help for greetings and FAQ', () => {
     assert.equal(ir.recognize('привет'), 'HELP');
     assert.equal(ir.recognize('Как продавать'), 'HELP');
-    assert.equal(ir.recognize('система гарантии'), 'HELP');
-    assert.equal(ir.recognize('где что находится'), 'HELP');
+    assert.equal(ir.recognize('Как работает система гаранта'), 'HELP');
+    assert.equal(ir.recognize('Сколько ждать вывод'), 'HELP');
+    assert.equal(ir.recognize('Как работает поддержка'), 'HELP');
   });
 
   it('publish/edit only when session ready', () => {

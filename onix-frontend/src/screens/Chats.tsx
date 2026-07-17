@@ -491,6 +491,24 @@ export function Chats({
         </button>
       )}
       </div>
+      {thread.kind === 'AI' && (
+        <div className="ai-quick-replies" role="group" aria-label="Быстрые вопросы">
+          {[
+            { label: 'Добавить товар', send: 'Добавить товар' },
+            { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
+            { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },
+            { label: 'Как работает поддержка', send: 'Как работает поддержка' },
+          ].map((item) => (
+            <button
+              key={item.send}
+              type="button"
+              className="ai-quick-replies__btn"
+              disabled={Boolean(core.actionBusy === `message-${thread.id}`)}
+              onClick={() => void sendMessage(thread.id, item.send).then((ok) => { if (ok) void loadMessages(thread.id); })}
+            >{item.label}</button>
+          ))}
+        </div>
+      )}
       <form className="composer" onSubmit={async event => {
         event.preventDefault();
         const sent = text;

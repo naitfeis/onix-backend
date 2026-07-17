@@ -497,6 +497,28 @@ select.control:focus {
 .message .receipt { display: inline-block; margin-top: 2px; opacity: .7; letter-spacing: -1px; }
 .message .receipt-admin { color: var(--muted); margin-top: 4px; }
 .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ai-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 9px 0;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: rgba(2,2,3,.98);
+}
+.ai-quick-replies__btn {
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--text);
+  background: #0e0e11;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.ai-quick-replies__btn:hover { border-color: #555; background: #141418; }
+.ai-quick-replies__btn:disabled { opacity: .55; cursor: default; }
 .composer {
   padding: 9px;
   display: grid;
@@ -506,6 +528,7 @@ select.control:focus {
   flex-shrink: 0;
   background: rgba(2,2,3,.98);
 }
+.conversation .ai-quick-replies + .composer { border-top: 0; padding-top: 8px; }
 
 .profile-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; min-width: 0; }
 .profile-main { min-width: 0; }

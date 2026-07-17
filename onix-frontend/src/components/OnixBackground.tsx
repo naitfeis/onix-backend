@@ -10,7 +10,7 @@ void main() { gl_Position = vec4(a_position, 0.0, 1.0); }
 `;
 
 const fragmentShader = `
-precision mediump float;
+precision highp float;
 uniform vec2 u_resolution;
 uniform vec2 u_pointer;
 uniform float u_time;
@@ -29,7 +29,7 @@ float sdTorus(vec3 p, vec2 t) {
 }
 
 float mapFigure(vec3 p, float t) {
-  // Mild scene tilt
+  // Mild scene tilt — same composition, smoother sampling only
   vec3 q = p;
   q.yz *= rot(0.88);
 
@@ -42,7 +42,6 @@ float mapFigure(vec3 p, float t) {
 
   // —— BALLS: free 3D paths, different heights / directions / speeds ——
   float tb = t;
-  // Explicit centers — spread in volume, not glued to ring sides
   d = min(d, sdSphere(q - vec3( 0.95 * cos(tb*0.55+0.2),  0.55*sin(tb*0.7),      0.35*sin(tb*0.55+0.2)), 0.09));
   d = min(d, sdSphere(q - vec3(-0.85 * cos(tb*0.4+1.5),  -0.45*cos(tb*0.6),     0.55*sin(tb*0.4+1.5)), 0.08));
   d = min(d, sdSphere(q - vec3( 0.25 * cos(tb*0.9),        0.72*sin(tb*0.5+0.8),  0.9*cos(tb*0.35)),     0.075));
@@ -74,12 +73,13 @@ void main() {
   float travel = 0.0;
   float hit = -1.0;
   vec3 p = ro;
-  for (int i = 0; i < 96; i++) {
+  // More steps + tighter epsilon → smoother surfaces (less faceted look)
+  for (int i = 0; i < 160; i++) {
     p = ro + rd * travel;
     float d = mapFigure(p, t);
-    if (d < 0.001) { hit = travel; break; }
+    if (d < 0.00035) { hit = travel; break; }
     if (travel > 10.0) break;
-    travel += max(d * 0.62, 0.005);
+    travel += clamp(d * 0.78, 0.002, 0.22);
   }
 
   // Solid soft gray / white — no mesh, no flicker
@@ -89,7 +89,7 @@ void main() {
   float alpha = 0.0;
 
   if (hit > 0.0) {
-    vec2 e = vec2(0.0035, 0.0);
+    vec2 e = vec2(0.0012, 0.0);
     vec3 n = normalize(vec3(
       mapFigure(p + e.xyy, t) - mapFigure(p - e.xyy, t),
       mapFigure(p + e.yxy, t) - mapFigure(p - e.yxy, t),
@@ -97,24 +97,33 @@ void main() {
     ));
 
     vec3 l1 = normalize(vec3(0.4, 0.9, 0.3));
-    float diff = 0.35 + 0.65 * max(dot(n, l1), 0.0);
-    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.4);
+    vec3 l2 = normalize(vec3(-0.55, 0.35, 0.7));
+    float diff = 0.28 + 0.52 * max(dot(n, l1), 0.0) + 0.22 * max(dot(n, l2), 0.0);
+    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.6);
+    float rim = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 4.0);
 
-    col = mix(gray, white, diff * 0.55 + fres * 0.35);
-    alpha = clamp(0.55 + fres * 0.25, 0.0, 0.88);
+    // Cheap AO from a few normal offsets — softens hard edges
+    float ao = 0.0;
+    ao += max(mapFigure(p + n * 0.02, t), 0.0);
+    ao += max(mapFigure(p + n * 0.05, t), 0.0);
+    ao = clamp(ao * 8.0, 0.0, 1.0);
+    float shade = mix(0.72, 1.0, ao);
+
+    col = mix(gray, white, diff * 0.55 + fres * 0.32 + rim * 0.12) * shade;
+    alpha = clamp(0.58 + fres * 0.28, 0.0, 0.9);
   }
 
-  // Soft halo (also solid, no noise)
+  // Soft halo (denser samples for smoother glow)
   float aura = 0.0;
   travel = 0.0;
-  for (int j = 0; j < 12; j++) {
+  for (int j = 0; j < 20; j++) {
     p = ro + rd * travel;
     float d = abs(mapFigure(p, t));
-    aura += exp(-d * 10.0) * 0.014;
-    travel += 0.15;
+    aura += exp(-d * 12.0) * 0.011;
+    travel += 0.11;
   }
-  col += gray * aura * 0.5;
-  alpha = max(alpha, clamp(aura * 0.9, 0.0, 0.16));
+  col += gray * aura * 0.55;
+  alpha = max(alpha, clamp(aura * 0.95, 0.0, 0.18));
 
   float vig = smoothstep(1.88, 0.26, length(uv * vec2(1.0, 1.05)));
   col *= vig;
@@ -194,11 +203,11 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     let frame = 0;
     let running = !document.hidden;
     const started = performance.now();
-    // Cap DPR harder on phones — raymarch cost scales with pixels.
-    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 0.85 : 1.25);
+    // Higher pixel density → less jagged silhouettes; still capped for mobile cost.
+    const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1.15 : 1.75);
     let currentIntensity = 1;
     let lastPaint = 0;
-    const minFrameMs = innerWidth < 640 ? 1000 / 30 : 1000 / 45;
+    const minFrameMs = innerWidth < 640 ? 1000 / 28 : 1000 / 40;
 
     const targetForMode = () => {
       if (document.body.classList.contains('modal-open')) return 0.35;

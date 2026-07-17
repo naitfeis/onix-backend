@@ -8,8 +8,7 @@ import { ProductCreationService } from './product-creation.service';
 const WELCOME = [
   'Я ONIX AI — помощник платформы.',
   '',
-  'Напишите «Создай товар», чтобы разместить лот.',
-  'Или спросите: как продавать, система гарантии, где что находится.',
+  'Выберите тему кнопкой ниже или напишите «Создай товар».',
 ].join('\n');
 
 @Injectable()
@@ -71,11 +70,10 @@ export class ConversationService {
       return 'Создание товара отменено. Напишите «Создай товар», когда будете готовы.';
     }
 
-    if (intent === 'HELP' && (!session || session.status === 'FINISHED' || session.status === 'READY')) {
-      // Allow help during READY only if not publish/edit — already filtered
-      if (!session || session.status !== 'READY') return helpReply(body);
+    // FAQ quick-replies always answer, even mid product draft.
+    if (intent === 'HELP') {
+      return helpReply(body);
     }
-    if (intent === 'HELP' && !session) return helpReply(body);
 
     if (intent === 'CREATE_PRODUCT') {
       let active = session;
@@ -84,7 +82,7 @@ export class ConversationService {
       }
       // Strip create phrase and ingest remainder in one shot
       const remainder = body
-        .replace(/^(создай\s+(новый\s+)?товар|новый\s+товар|создать\s+(новый\s+)?товар)\s*/i, '')
+        .replace(/^(создай\s+(новый\s+)?товар|новый\s+товар|создать\s+(новый\s+)?товар|добавить\s+товар)\s*/i, '')
         .trim();
       if (remainder) {
         active = await this.products.ingestMessage(active, remainder);
@@ -133,11 +131,9 @@ export class ConversationService {
       return this.products.promptFor(updated.status, updated);
     }
 
-    if (intent === 'HELP') return helpReply(body);
-
     return [
       'Я могу создать товар или ответить на базовые вопросы.',
-      'Напишите «Создай товар» или спросите про гарантию / как продавать.',
+      'Нажмите кнопку ниже или напишите «Создай товар».',
     ].join('\n');
   }
 
