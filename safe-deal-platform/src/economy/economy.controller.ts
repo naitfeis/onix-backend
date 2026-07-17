@@ -64,11 +64,11 @@ function parseVerificationKind(kind: string): SellerVerificationKind {
   return kind as SellerVerificationKind;
 }
 
-@Controller()
 class SellerAnalyticsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(7) @Max(90) days?: number;
 }
 
+@Controller()
 export class EconomyController {
   constructor(
     private readonly payments: PaymentsService,
