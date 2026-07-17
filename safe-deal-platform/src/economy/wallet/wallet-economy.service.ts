@@ -1,0 +1,199 @@
+import {
+  BadRequestException, ConflictException, Injectable, NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { AuthUser } from '../../common';
+import { PrismaService } from '../../prisma.service';
+import { DepositService } from './deposit.service';
+import { LockService } from './lock.service';
+import { TrustService } from '../trust/trust.service';
+import { buildPublicTrustCard } from '../trust/trust-card';
+import { ProSubscriptionService } from '../pro/pro.service';
+import { VerificationService } from '../verification/verification.service';
+
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+@Injectable()
+export class WalletEconomyService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly deposit: DepositService,
+    private readonly locks: LockService,
+    private readonly trust: TrustService,
+    private readonly verification: VerificationService,
+    private readonly pro: ProSubscriptionService,
+  ) {}
+
+  /** Owner deposit view — runs lazy unlock first. */
+  async getDepositWallet(user: AuthUser) {
+    await this.prisma.$transaction(async (tx) => {
+      await this.locks.releaseExpiredForUser(tx, user.id);
+    }, SERIALIZABLE);
+    const snap = await this.prisma.$transaction((tx) => this.deposit.getSnapshot(tx, user.id));
+    return {
+      availableCents: snap.availableCents.toString(),
+      lockedCents: snap.lockedCents.toString(),
+      totalCents: snap.totalCents.toString(),
+    };
+  }
+
+  async listDepositLedger(user: AuthUser) {
+    const rows = await this.prisma.depositLedgerEntry.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return rows.map((r) => ({
+      id: r.id.toString(),
+      type: r.type,
+      amountCents: r.amountCents.toString(),
+      availableAfterCents: r.availableAfterCents.toString(),
+      lockedAfterCents: r.lockedAfterCents.toString(),
+      orderId: r.orderId?.toString() ?? null,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async listLocks(user: AuthUser) {
+    await this.prisma.$transaction(async (tx) => {
+      await this.locks.releaseExpiredForUser(tx, user.id);
+    }, SERIALIZABLE);
+    const rows = await this.prisma.depositLock.findMany({
+      where: { userId: user.id, status: { in: ['ACTIVE', 'HELD_DISPUTE'] } },
+      orderBy: { unlockAt: 'asc' },
+      take: 100,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      orderId: r.orderId.toString(),
+      amountCents: r.amountCents.toString(),
+      status: r.status,
+      lockedAt: r.lockedAt.toISOString(),
+      unlockAt: r.unlockAt.toISOString(),
+    }));
+  }
+
+  async withdrawDeposit(user: AuthUser, amountCents: number, idempotencyKey: string) {
+    if (amountCents < 100) throw new BadRequestException('Минимальная сумма вывода залога — 1 ₽.');
+    const amount = BigInt(amountCents);
+    return this.prisma.$transaction(async (tx) => {
+      await this.locks.releaseExpiredForUser(tx, user.id);
+      const existing = await tx.depositLedgerEntry.findUnique({ where: { idempotencyKey } });
+      if (existing) {
+        if (existing.userId !== user.id || existing.type !== 'WITHDRAW' || existing.amountCents !== -amount) {
+          throw new ConflictException('Ключ идемпотентности уже использован.');
+        }
+        return existing;
+      }
+      const entry = await this.deposit.debitAvailable(tx, user.id, amount, 'WITHDRAW', {
+        idempotencyKey,
+        description: 'Вывод залога',
+      });
+      await this.trust.appendHistory(tx, user.id, 'DEPOSIT_CHANGED', {
+        deltaCents: (-amount).toString(),
+        reason: 'WITHDRAW',
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'DEPOSIT_WITHDRAWAL',
+          entity: 'DepositLedgerEntry',
+          entityId: entry.id.toString(),
+          metadata: { amountCents },
+        },
+      });
+      return entry;
+    }, SERIALIZABLE);
+  }
+
+  async getPublicTrustCard(onixId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { onixId },
+      select: {
+        id: true,
+        deletedAt: true,
+        trustLevel: true,
+        depositAvailableCents: true,
+        depositLockedCents: true,
+        createdAt: true,
+        ratingAverage: true,
+        ratingCount: true,
+        completedSales: true,
+        verifications: { select: { kind: true, status: true } },
+        sellerSubscription: { select: { status: true, endsAt: true } },
+      },
+    });
+    if (!user || user.deletedAt) throw new NotFoundException('Профиль не найден.');
+    const proActive = Boolean(
+      user.sellerSubscription
+      && user.sellerSubscription.status === 'ACTIVE'
+      && (!user.sellerSubscription.endsAt || user.sellerSubscription.endsAt > new Date()),
+    );
+    return buildPublicTrustCard({
+      trustLevel: user.trustLevel,
+      depositAvailableCents: user.depositAvailableCents,
+      depositLockedCents: user.depositLockedCents,
+      createdAt: user.createdAt,
+      ratingAverage: user.ratingAverage,
+      ratingCount: user.ratingCount,
+      completedSales: user.completedSales,
+      verifications: user.verifications,
+      proActive,
+    });
+  }
+
+  async getOwnerTrust(user: AuthUser) {
+    await this.trust.ensureFresh(user.id);
+    const [profile, history, verifications, pro, deposit] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: {
+          trustScore: true,
+          trustLevel: true,
+          trustScoreVersion: true,
+          trustComputedAt: true,
+          depositAvailableCents: true,
+          depositLockedCents: true,
+          createdAt: true,
+          ratingAverage: true,
+          ratingCount: true,
+          completedSales: true,
+        },
+      }),
+      this.prisma.trustHistoryEvent.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.verification.list(user.id),
+      this.pro.getStatus(user.id),
+      this.getDepositWallet(user),
+    ]);
+    return {
+      trustScore: profile.trustScore,
+      trustLevel: profile.trustLevel,
+      trustScoreVersion: profile.trustScoreVersion,
+      trustComputedAt: profile.trustComputedAt?.toISOString() ?? null,
+      deposit,
+      card: buildPublicTrustCard({
+        trustLevel: profile.trustLevel,
+        depositAvailableCents: profile.depositAvailableCents,
+        depositLockedCents: profile.depositLockedCents,
+        createdAt: profile.createdAt,
+        ratingAverage: profile.ratingAverage,
+        ratingCount: profile.ratingCount,
+        completedSales: profile.completedSales,
+        verifications,
+        proActive: pro.active,
+      }),
+      verifications,
+      pro,
+      history: history.map((h) => ({
+        id: h.id.toString(),
+        type: h.type,
+        payload: h.payload,
+        createdAt: h.createdAt.toISOString(),
+      })),
+    };
+  }
+}

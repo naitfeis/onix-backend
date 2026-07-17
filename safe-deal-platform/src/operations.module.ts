@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, CanActivate, ConflictException, Controller, ExecutionContext,
+  BadRequestException, Body, CanActivate, Controller, ExecutionContext,
   ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
 import { BanReason, Prisma } from '@prisma/client';
@@ -13,6 +13,8 @@ import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } fro
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
+import { EconomyModule } from './economy/economy.module';
+import { BalanceService } from './economy/wallet/balance.service';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
 
@@ -61,34 +63,31 @@ class OperationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly risk: RiskScoreService,
+    private readonly balance: BalanceService,
   ) {}
 
   adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
-      if (existing) return existing;
       const target = await tx.user.findUniqueOrThrow({ where: { onixId } });
       const amount = BigInt(dto.amountCents);
-      const user = await tx.user.update({
-        where: { id: target.id },
-        data: { balanceCents: amount >= 0n ? { increment: amount } : { decrement: -amount } },
-      });
-      if (user.balanceCents < 0n) throw new ForbiddenException('Корректировка создаёт отрицательный баланс.');
-      const entry = await tx.ledgerEntry.create({
-        data: {
-          userId: user.id, type: 'ADMIN_ADJUSTMENT', amountCents: amount,
-          balanceAfterCents: user.balanceCents, idempotencyKey: dto.idempotencyKey,
+      const entry = amount >= 0n
+        ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', {
+          idempotencyKey: dto.idempotencyKey,
           description: dto.reason,
-        },
-      });
+        })
+        : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', {
+          idempotencyKey: dto.idempotencyKey,
+          description: dto.reason,
+          allowNegative: true,
+        });
       await tx.auditLog.create({
         data: {
-          actorId: actor.id, action: 'BALANCE_ADJUST', entity: 'User', entityId: user.id.toString(),
+          actorId: actor.id, action: 'BALANCE_ADJUST', entity: 'User', entityId: target.id.toString(),
           metadata: { amountCents: dto.amountCents, idempotencyKey: dto.idempotencyKey, ...(dto.reason ? { reason: dto.reason } : {}) },
         },
       });
       return entry;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async ban(actor: AuthUser, onixId: string, dto: BanDto) {
@@ -146,29 +145,10 @@ class OperationsService {
 
   withdraw(user: AuthUser, dto: WithdrawalDto) {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
       const amount = BigInt(dto.amountCents);
-      if (existing) {
-        if (existing.userId !== user.id || existing.type !== 'WITHDRAWAL' || existing.amountCents !== -amount) {
-          throw new ConflictException('Ключ идемпотентности уже использован для другой операции.');
-        }
-        return existing;
-      }
-      const debited = await tx.user.updateMany({
-        where: { id: user.id, deletedAt: null, balanceCents: { gte: amount } },
-        data: { balanceCents: { decrement: amount } },
-      });
-      if (!debited.count) throw new BadRequestException('Недостаточно средств для вывода.');
-      const account = await tx.user.findUniqueOrThrow({ where: { id: user.id } });
-      const entry = await tx.ledgerEntry.create({
-        data: {
-          userId: user.id,
-          type: 'WITHDRAWAL',
-          amountCents: -amount,
-          balanceAfterCents: account.balanceCents,
-          idempotencyKey: dto.idempotencyKey,
-          description: 'Заявка пользователя на вывод средств',
-        },
+      const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
+        idempotencyKey: dto.idempotencyKey,
+        description: 'Заявка пользователя на вывод средств',
       });
       await tx.auditLog.create({
         data: {
@@ -336,6 +316,6 @@ class HealthController {
 @Module({
   controllers: [AdminController, AdminRefundController, SupportOpsController, HealthController, WalletController],
   providers: [AdminGuard, SupportGuard, OperationsService],
-  imports: [EscrowModule, AuthV2Module],
+  imports: [EscrowModule, AuthV2Module, EconomyModule],
 })
 export class OperationsModule {}

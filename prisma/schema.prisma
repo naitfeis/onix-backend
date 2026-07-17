@@ -17,52 +17,71 @@ model User {
   displayName       String?   @db.VarChar(120)
   avatarUrl         String?   @db.VarChar(500)
   bio               String?   @db.VarChar(500)
-  balanceCents      BigInt    @default(0)
-  ratingAverage     Decimal   @default(0) @db.Decimal(3, 2)
-  ratingCount       Int       @default(0)
-  completedSales    Int       @default(0)
-  sessionVersion    Int       @default(0)
-  permissionVersion Int       @default(0)
-  securityScore     Int       @default(0)
-  securityScoreAt   DateTime?
-  lastSeenAt        DateTime  @default(now())
-  lastLoginAt       DateTime?
-  isAdmin           Boolean   @default(false)
-  isSupport         Boolean   @default(false)
-  deletedAt         DateTime?
-  banReason         BanReason?
-  banComment        String?   @db.VarChar(1000)
-  bannedAt          DateTime?
-  bannedUntil       DateTime?
-  mergedIntoUserId  BigInt?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  balanceCents           BigInt    @default(0)
+  /** Deposit wallet — available to withdraw (not usable for purchases). */
+  depositAvailableCents  BigInt    @default(0)
+  /** Deposit wallet — frozen after sales / disputes. */
+  depositLockedCents     BigInt    @default(0)
+  /** Internal Trust Score 0..1000 — never expose on public seller DTOs. */
+  trustScore             Int       @default(0)
+  /** Cached public trust level 1..5 derived from trustScore. */
+  trustLevel             Int       @default(1) @db.SmallInt
+  trustScoreVersion      Int       @default(1)
+  trustComputedAt        DateTime?
+  trustDirty             Boolean   @default(true)
+  ratingAverage          Decimal   @default(0) @db.Decimal(3, 2)
+  ratingCount            Int       @default(0)
+  completedSales         Int       @default(0)
+  sessionVersion         Int       @default(0)
+  permissionVersion      Int       @default(0)
+  securityScore          Int       @default(0)
+  securityScoreAt        DateTime?
+  lastSeenAt             DateTime  @default(now())
+  lastLoginAt            DateTime?
+  isAdmin                Boolean   @default(false)
+  isSupport              Boolean   @default(false)
+  deletedAt              DateTime?
+  banReason              BanReason?
+  banComment             String?   @db.VarChar(1000)
+  bannedAt               DateTime?
+  bannedUntil            DateTime?
+  mergedIntoUserId       BigInt?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
-  products        Product[]
-  buyerOrders     Order[]        @relation("Buyer")
-  sellerOrders    Order[]        @relation("Seller")
-  ledgerEntries   LedgerEntry[]
-  favorites       Favorite[]
-  following       Follow[]       @relation("Following")
-  followers       Follow[]       @relation("Followers")
-  chatMembers     ChatMember[]
-  sentMessages    Message[]
-  visibleMessages Message[]      @relation("MessageVisibleTo")
-  blocksMade      UserBlock[]    @relation("Blocker")
-  blocksReceived  UserBlock[]    @relation("Blocked")
-  notifications   Notification[]
-  reviewsAuthored Review[]       @relation("ReviewAuthor")
-  reviewsReceived Review[]       @relation("ReviewSubject")
-  reportsMade     UserReport[]   @relation("ReportAuthor")
-  reportsReceived UserReport[]   @relation("ReportTarget")
-  auditLogs       AuditLog[]     @relation("AuditActor")
-  supportTickets  SupportTicket[]
-  identityLinks   IdentityLink[]
-  sessions        Session[]
-  userRoles       UserRole[]
-  trustedDevices  TrustedDevice[]
-  mfaFactors      MfaFactor[]
-  mfaChallenges   MfaChallenge[]
+  products              Product[]
+  buyerOrders           Order[]              @relation("Buyer")
+  sellerOrders          Order[]              @relation("Seller")
+  ledgerEntries         LedgerEntry[]
+  depositLedgerEntries  DepositLedgerEntry[]
+  depositLocks          DepositLock[]
+  paymentIntents        PaymentIntent[]
+  trustHistory          TrustHistoryEvent[]
+  verifications         SellerVerification[]
+  sellerSubscription    SellerSubscription?
+  sellerAnalyticsDaily  SellerAnalyticsDaily[]
+  productViewUniques    ProductViewUnique[]  @relation("ViewViewer")
+  favorites             Favorite[]
+  following             Follow[]             @relation("Following")
+  followers             Follow[]             @relation("Followers")
+  chatMembers           ChatMember[]
+  sentMessages          Message[]
+  visibleMessages       Message[]            @relation("MessageVisibleTo")
+  blocksMade            UserBlock[]          @relation("Blocker")
+  blocksReceived        UserBlock[]          @relation("Blocked")
+  notifications         Notification[]
+  reviewsAuthored       Review[]             @relation("ReviewAuthor")
+  reviewsReceived       Review[]             @relation("ReviewSubject")
+  reportsMade           UserReport[]         @relation("ReportAuthor")
+  reportsReceived       UserReport[]         @relation("ReportTarget")
+  auditLogs             AuditLog[]           @relation("AuditActor")
+  supportTickets        SupportTicket[]
+  identityLinks         IdentityLink[]
+  sessions              Session[]
+  userRoles             UserRole[]
+  trustedDevices        TrustedDevice[]
+  mfaFactors            MfaFactor[]
+  mfaChallenges         MfaChallenge[]
 }
 
 model Product {
@@ -84,9 +103,10 @@ model Product {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  seller    User       @relation(fields: [sellerId], references: [id])
-  orders    Order[]
-  favorites Favorite[]
+  seller      User               @relation(fields: [sellerId], references: [id])
+  orders      Order[]
+  favorites   Favorite[]
+  viewUniques ProductViewUnique[]
 
   @@index([category, status, createdAt])
   @@index([category, subcategory, status])
@@ -134,15 +154,16 @@ model Order {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  buyer         User              @relation("Buyer", fields: [buyerId], references: [id])
-  seller        User              @relation("Seller", fields: [sellerId], references: [id])
-  product       Product           @relation(fields: [productId], references: [id])
-  transitions   OrderTransition[]
-  ledgerEntries LedgerEntry[]
+  buyer          User               @relation("Buyer", fields: [buyerId], references: [id])
+  seller         User               @relation("Seller", fields: [sellerId], references: [id])
+  product        Product            @relation(fields: [productId], references: [id])
+  transitions    OrderTransition[]
+  ledgerEntries  LedgerEntry[]
+  depositLocks   DepositLock[]
   /** Personal pair chat shared across all deals between buyer and seller. */
-  chatId        String?
-  chat          Chat?             @relation(fields: [chatId], references: [id])
-  reviews       Review[]
+  chatId         String?
+  chat           Chat?              @relation(fields: [chatId], references: [id])
+  reviews        Review[]
   supportTickets SupportTicket[]
 
   @@index([buyerId, status])
@@ -308,6 +329,236 @@ model AuditLog {
   actor     User?    @relation("AuditActor", fields: [actorId], references: [id])
 
   @@index([entity, entityId])
+}
+
+// ─── Seller Trust & Economy foundation (Stage 1) ─────────────────────────────
+
+enum PaymentWallet {
+  MAIN
+  DEPOSIT
+}
+
+enum PaymentProviderCode {
+  MANUAL
+  YOOKASSA
+  TELEGRAM_WALLET
+  CRYPTO
+  CARD
+  STRIPE
+}
+
+enum PaymentIntentStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+enum DepositLedgerType {
+  TOPUP
+  WITHDRAW
+  LOCK
+  UNLOCK
+  SEIZE
+  ADMIN_ADJUST
+}
+
+enum DepositLockStatus {
+  ACTIVE
+  RELEASED
+  HELD_DISPUTE
+  SEIZED
+}
+
+enum TrustHistoryType {
+  LEVEL_UP
+  LEVEL_DOWN
+  DEPOSIT_CHANGED
+  DEPOSIT_LOCKED
+  DEPOSIT_UNLOCKED
+  PHONE_VERIFIED
+  PASSPORT_VERIFIED
+  VOICE_VERIFIED
+  VERIFICATION_REVOKED
+  PENALTY
+  PRO_GRANTED
+  PRO_ENDED
+  BADGE_GRANTED
+  RECOMPUTE
+}
+
+enum SellerVerificationKind {
+  PHONE_SMS
+  PHONE_CALL
+  PHONE_VOICE
+  PASSPORT
+  VOICE_IDENTITY
+}
+
+enum SellerVerificationStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum SellerSubscriptionPlan {
+  PRO
+}
+
+enum SellerSubscriptionStatus {
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+/// Provider-agnostic top-up intent. Business code never talks to PSP SDKs directly.
+model PaymentIntent {
+  id             String               @id @default(cuid())
+  userId         BigInt
+  wallet         PaymentWallet
+  provider       PaymentProviderCode
+  amountCents    BigInt
+  currency       String               @default("RUB") @db.VarChar(8)
+  status         PaymentIntentStatus  @default(CREATED)
+  idempotencyKey String               @unique @db.VarChar(120)
+  providerRef    String?              @db.VarChar(191)
+  metadata       Json?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  succeededAt    DateTime?
+  user           User                 @relation(fields: [userId], references: [id])
+
+  @@index([userId, status, createdAt])
+  @@index([provider, status])
+}
+
+model DepositLedgerEntry {
+  id                 BigInt            @id @default(autoincrement())
+  userId             BigInt
+  type               DepositLedgerType
+  amountCents        BigInt
+  availableAfterCents BigInt
+  lockedAfterCents   BigInt
+  orderId            BigInt?
+  lockId             String?
+  paymentIntentId    String?           @db.VarChar(64)
+  idempotencyKey     String            @unique @db.VarChar(120)
+  description        String?           @db.VarChar(500)
+  createdAt          DateTime          @default(now())
+  user               User              @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+model DepositLock {
+  id          String            @id @default(cuid())
+  userId      BigInt
+  orderId     BigInt
+  amountCents BigInt
+  status      DepositLockStatus @default(ACTIVE)
+  lockedAt    DateTime          @default(now())
+  unlockAt    DateTime
+  releasedAt  DateTime?
+  user        User              @relation(fields: [userId], references: [id])
+  order       Order             @relation(fields: [orderId], references: [id])
+
+  @@unique([orderId])
+  @@index([userId, status])
+  @@index([status, unlockAt])
+}
+
+/// Append-only trust journal for analytics and transparency.
+model TrustHistoryEvent {
+  id        BigInt           @id @default(autoincrement())
+  userId    BigInt
+  type      TrustHistoryType
+  payload   Json?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+/// Multi-stage seller verification. Never store voice/passport blobs — hash + status only.
+model SellerVerification {
+  id           String                   @id @default(cuid())
+  userId       BigInt
+  kind         SellerVerificationKind
+  status       SellerVerificationStatus @default(NONE)
+  evidenceHash String?                  @db.VarChar(64)
+  providerRef  String?                  @db.VarChar(191)
+  reviewedById BigInt?
+  verifiedAt   DateTime?
+  rejectedAt   DateTime?
+  expiresAt    DateTime?
+  metadata     Json?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  user         User                     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, kind])
+  @@index([status, kind])
+}
+
+/// Commercial ONIX PRO — independent of Trust Score / Level.
+model SellerSubscription {
+  id        String                   @id @default(cuid())
+  userId    BigInt                   @unique
+  plan      SellerSubscriptionPlan   @default(PRO)
+  status    SellerSubscriptionStatus @default(ACTIVE)
+  startsAt  DateTime                 @default(now())
+  endsAt    DateTime?
+  metadata  Json?
+  createdAt DateTime                 @default(now())
+  updatedAt DateTime                 @updatedAt
+  user      User                     @relation(fields: [userId], references: [id])
+
+  @@index([status, endsAt])
+}
+
+/// Unique product view — one row per (product, viewerKey). Foundation for Stage 2 analytics.
+model ProductViewUnique {
+  id         String   @id @default(cuid())
+  productId  String
+  sellerId   BigInt
+  viewerKey  String   @db.VarChar(96)
+  viewerUserId BigInt?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewer     User?    @relation("ViewViewer", fields: [viewerUserId], references: [id], onDelete: SetNull)
+
+  @@unique([productId, viewerKey])
+  @@index([sellerId, firstSeenAt])
+  @@index([productId, firstSeenAt])
+}
+
+/// Daily seller analytics rollup (Stage 2 UI reads this; Stage 1 creates schema only).
+model SellerAnalyticsDaily {
+  id                 String   @id @default(cuid())
+  sellerId           BigInt
+  day                DateTime @db.Date
+  revenueCents       BigInt   @default(0)
+  profitCents        BigInt   @default(0)
+  ordersCount        Int      @default(0)
+  completedCount     Int      @default(0)
+  uniqueViews        Int      @default(0)
+  favoritesAdded     Int      @default(0)
+  repeatBuyers       Int      @default(0)
+  impressions        Int      @default(0)
+  clicks             Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  seller             User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, day])
+  @@index([sellerId, day])
 }
 
 // ─── Auth platform (Phase 1 additive) ───────────────────────────────────────

@@ -9,6 +9,9 @@ import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
+import { EconomyModule } from './economy/economy.module';
+import { BalanceService } from './economy/wallet/balance.service';
+import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
@@ -45,7 +48,11 @@ const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
  */
 @Injectable()
 export class EscrowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly balance: BalanceService,
+    private readonly locks: LockService,
+  ) {}
 
   async list(user: AuthUser, query: OrderQuery = {}) {
     const statusWhere: Prisma.OrderWhereInput =
@@ -108,12 +115,10 @@ export class EscrowService {
         data: { status: 'RESERVED' },
       });
       if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
-      const debited = await tx.user.updateMany({
-        where: { id: user.id, balanceCents: { gte: totalAmountCents } },
-        data: { balanceCents: { decrement: totalAmountCents } },
+      await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
+        idempotencyKey: `order:${key}:hold`,
+        description: 'Оплата в Escrow',
       });
-      if (!debited.count) throw new BadRequestException('Недостаточно средств.');
-      const balance = await tx.user.findUniqueOrThrow({ where: { id: user.id }, select: { balanceCents: true } });
       // One personal chat per buyer↔seller pair — never create a new chat per deal.
       const chat = await ensurePairChat(tx, user.id, product.sellerId);
       const chatId = chat.id;
@@ -127,12 +132,12 @@ export class EscrowService {
             from: 'PENDING', to: 'PAYMENT_HOLD', actorId: user.id,
             idempotencyKey: `order:${key}:create`,
           } },
-          ledgerEntries: { create: {
-            userId: user.id, type: 'PURCHASE_HOLD', amountCents: -totalAmountCents,
-            balanceAfterCents: balance.balanceCents, idempotencyKey: `order:${key}:hold`,
-          } },
         },
         include: { chat: true },
+      });
+      await tx.ledgerEntry.updateMany({
+        where: { idempotencyKey: `order:${key}:hold` },
+        data: { orderId: created.id },
       });
       // SYSTEM message in the existing pair chat — FE shows «Открыть заказ» for this order id.
       await tx.message.create({
@@ -263,17 +268,17 @@ export class EscrowService {
       }
       const existingPayout = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: `order:${id}:payout` } });
       if (!existingPayout) {
-        const seller = await tx.user.update({
-          where: { id: order.sellerId },
-          data: { balanceCents: { increment: order.payoutCents }, completedSales: { increment: 1 } },
+        await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', {
+          idempotencyKey: `order:${id}:payout`,
+          orderId: id,
+          description: 'Выплата продавцу',
         });
-        await tx.ledgerEntry.create({
-          data: {
-            userId: order.sellerId, orderId: id, type: 'SALE_PAYOUT', amountCents: order.payoutCents,
-            balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:payout`,
-          },
+        await tx.user.update({
+          where: { id: order.sellerId },
+          data: { completedSales: { increment: 1 }, trustDirty: true },
         });
       }
+      await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.totalAmountCents);
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
       await tx.product.update({
         where: { id: order.productId },
@@ -324,6 +329,7 @@ export class EscrowService {
       await tx.orderTransition.create({
         data: { orderId: id, from: order.status, to: 'DISPUTE', actorId: user.id, idempotencyKey: key, reason },
       });
+      await this.locks.holdForDispute(tx, id);
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
     }, SERIALIZABLE);
     const order = await this.prisma.order.findUniqueOrThrow({
@@ -410,36 +416,22 @@ export class EscrowService {
 
       // After COMPLETED payout already left escrow → clawback from seller then credit buyer.
       if (order.status === 'COMPLETED') {
-        const claw = await tx.user.updateMany({
-          where: { id: order.sellerId, balanceCents: { gte: order.payoutCents } },
-          data: { balanceCents: { decrement: order.payoutCents } },
-        });
-        if (!claw.count) throw new BadRequestException('Недостаточно средств у продавца для возврата.');
-        const seller = await tx.user.findUniqueOrThrow({ where: { id: order.sellerId }, select: { balanceCents: true } });
-        await tx.ledgerEntry.create({
-          data: {
-            userId: order.sellerId, orderId: id, type: 'ADMIN_ADJUSTMENT', amountCents: -order.payoutCents,
-            balanceAfterCents: seller.balanceCents, idempotencyKey: `order:${id}:clawback`,
-            description: sellerInitiated
-              ? 'Возврат после COMPLETED (продавец)'
-              : 'Возврат после COMPLETED (поддержка)',
-          },
+        await this.balance.debit(tx, order.sellerId, order.payoutCents, 'ADMIN_ADJUSTMENT', {
+          idempotencyKey: `order:${id}:clawback`,
+          orderId: id,
+          description: sellerInitiated
+            ? 'Возврат после COMPLETED (продавец)'
+            : 'Возврат после COMPLETED (поддержка)',
         });
       }
 
       const ledgerKey = `order:${id}:${target.toLowerCase()}`;
-      const existingRefund = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: ledgerKey } });
-      if (!existingRefund) {
-        const buyer = await tx.user.update({
-          where: { id: order.buyerId }, data: { balanceCents: { increment: order.totalAmountCents } },
-        });
-        await tx.ledgerEntry.create({
-          data: {
-            userId: order.buyerId, orderId: id, type: 'REFUND', amountCents: order.totalAmountCents,
-            balanceAfterCents: buyer.balanceCents, idempotencyKey: ledgerKey,
-          },
-        });
-      }
+      await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', {
+        idempotencyKey: ledgerKey,
+        orderId: id,
+        description: 'Возврат покупателю',
+      });
+      // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.
       if (order.status !== 'COMPLETED') {
         await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
       }
@@ -563,5 +555,10 @@ export class EscrowController {
   }
 }
 
-@Module({ controllers: [EscrowController], providers: [EscrowService], exports: [EscrowService] })
+@Module({
+  imports: [EconomyModule],
+  controllers: [EscrowController],
+  providers: [EscrowService],
+  exports: [EscrowService],
+})
 export class EscrowModule {}

@@ -10,13 +10,14 @@ import { OperationsModule } from './operations.module';
 import { ProfilesModule } from './profiles.module';
 import { SocialModule } from './social.module';
 import { SupportModule } from './support.module';
+import { EconomyModule } from './economy/economy.module';
 
 import { LoginChallengeModule } from './login-challenge/login-challenge.module';
 
 @Module({
   imports: [
     DatabaseModule, AuthModule, AuthV2Module, LoginChallengeModule, ProfilesModule, MarketplaceModule, SocialModule,
-    EscrowModule, EngagementModule, SupportModule, OperationsModule,
+    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
