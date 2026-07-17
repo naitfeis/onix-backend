@@ -277,7 +277,7 @@ export function Chats({
 
   const memberPickerFields = (
     <>
-      <Field label="Поиск" hint="1 2 3 · ONIX-1 ONIX-2 · @nick1 @nick2">
+      <Field label="Поиск" hint="ONIX-1 · имя · 7">
         <Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX ID или ник" />
       </Field>
       <div className="card-actions">

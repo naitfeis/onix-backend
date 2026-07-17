@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, CanActivate, Controller, ExecutionContext,
-  ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, Res, UseGuards,
+  ForbiddenException, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
 import { BanReason, PlatformStatus, Prisma } from '@prisma/client';
 import {
@@ -20,6 +20,7 @@ import { requireUserByOnixId } from './onix-id-lookup';
 import { flagsFromPlatformStatus, isPlatformStatus } from './platform-status';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
+import { debugEndpointsEnabled } from './debug-endpoints';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -353,6 +354,7 @@ class HealthController {
   @Get('network')
   @Header('Cache-Control', 'no-store')
   network(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    if (!debugEndpointsEnabled()) throw new NotFoundException();
     const started = performance.now();
     const forwarded = req.headers['x-forwarded-for'];
     const forwardedIp = typeof forwarded === 'string'
@@ -392,6 +394,7 @@ class HealthController {
   @Get('route-debug')
   @Header('Cache-Control', 'no-store')
   routeDebug(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    if (!debugEndpointsEnabled()) throw new NotFoundException();
     const t0 = performance.now();
     const cookieHeader = typeof req.headers.cookie === 'string' ? req.headers.cookie : '';
     const forwarded = req.headers['x-forwarded-for'];

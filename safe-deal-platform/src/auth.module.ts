@@ -1,5 +1,5 @@
 import {
-  Body, CanActivate, Controller, ExecutionContext, Injectable, Module, Optional, Post,
+  Body, CanActivate, Controller, ExecutionContext, Injectable, Module, Optional, Post, Req,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -17,6 +17,7 @@ import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from './ban-policy';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
 import { RiskScoreService } from './risk-score.service';
 import { formatErrorForLog } from './safe-error-log';
+import { assertRateLimit } from './rate-limit';
 
 interface TelegramIdentity {
   id: bigint;
@@ -239,10 +240,13 @@ export class AuthService {
   }
 
   private async issue(user: AuthUser) {
+    if (user.onixId.startsWith('PENDING-')) {
+      throw new UnauthorizedException('Аккаунт ещё не готов. Повторите вход через несколько секунд.');
+    }
     const now = Math.floor(Date.now() / 1000);
     const days = Number(process.env.JWT_TTL_DAYS ?? 7);
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    // Never embed telegramId in JWT — reload from DB on verify; clients only see nick via profile.
+    // Never embed telegramId / telegramNick in JWT — clients see displayName via profile.
     const body = Buffer.from(JSON.stringify({
       sub: user.id.toString(),
       iss: 'onix-api', iat: now, exp: now + days * 86400,
@@ -350,13 +354,15 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @Public()
   @Post('telegram-mini')
-  miniApp(@Body() dto: MiniAppDto) {
+  miniApp(@Body() dto: MiniAppDto, @Req() req: { ip?: string }) {
+    assertRateLimit(`auth:telegram-mini:${req.ip ?? 'unknown'}`, 30, 60_000);
     return this.auth.miniApp(dto.initData);
   }
 
   @Public()
   @Post('telegram-login')
-  telegramLogin(@Body() dto: TelegramLoginDto) {
+  telegramLogin(@Body() dto: TelegramLoginDto, @Req() req: { ip?: string }) {
+    assertRateLimit(`auth:telegram-login:${req.ip ?? 'unknown'}`, 20, 60_000);
     return this.auth.telegramLogin(dto);
   }
 }

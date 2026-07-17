@@ -75,6 +75,13 @@ async function bootstrap(): Promise<void> {
   server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS ?? 120_000);
 
   bootLog.log(`Listening on ${port} (single Node process, keepAlive=${server.keepAliveTimeout}ms)`);
+
+  process.on('unhandledRejection', (reason) => {
+    bootLog.error(`unhandledRejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`);
+  });
+  process.on('uncaughtException', (err) => {
+    bootLog.error(`uncaughtException: ${err.stack ?? err.message}`);
+  });
 }
 
 void bootstrap();

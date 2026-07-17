@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, type Type } from '@nestjs/common';
 import { AuthOrchestrator } from './auth-orchestrator.service';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
 import { AuthV2Controller } from './auth-v2.controller';
@@ -15,6 +15,11 @@ import { SessionService } from './session.service';
 import { SigningKeyService } from './signing-key.service';
 import { TelegramLoginVerifier } from './telegram-login.verifier';
 import { TokenService } from './token.service';
+import { debugEndpointsEnabled } from '../debug-endpoints';
+
+const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
+  ? [DebugSessionController, SessionProbeController]
+  : [];
 
 /**
  * Website auth v2 (Phase 2 complete surface).
@@ -24,7 +29,7 @@ import { TokenService } from './token.service';
  * Phase 3.3: AuthRolloutService canary % + mode ladder (USE_NEW_AUTH stays false until ops gate).
  */
 @Module({
-  controllers: [AuthV2Controller, DebugSessionController, SessionProbeController],
+  controllers: [AuthV2Controller, ...debugControllers],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
     { provide: AUTH_EVENT_PUBLISHER, useValue: new AuthEventPublisher() },

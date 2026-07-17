@@ -362,7 +362,16 @@ function parseLoginChallengeId(startParam: string): string | null {
 
 function assertWebhookSecret(secret: string | undefined): void {
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expected) return; // allow unset in local/test
+  if (!expected) {
+    // Production must never accept unauthenticated webhook POSTs.
+    if (process.env.NODE_ENV === 'production') {
+      throw new AuthPlatformError(
+        'AUTH_PROVIDER_REJECTED',
+        'Telegram webhook secret is not configured.',
+      );
+    }
+    return; // local / test only
+  }
   if (secret !== expected) {
     throw new AuthPlatformError('AUTH_PROVIDER_REJECTED', 'Invalid Telegram webhook secret.');
   }

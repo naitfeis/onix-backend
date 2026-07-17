@@ -1,6 +1,6 @@
 /**
  * Parse group-member tokens from free text.
- * Accepts: "1 2 3", "ONIX-1, ONIX-2", "@user1 @user2"
+ * Accepts: "1 2 3", "ONIX-1, ONIX-2", display names
  */
 export function parseMemberTokens(raw: string): string[] {
   const parts = raw.trim().split(/[\s,;]+/).map((part) => part.trim()).filter(Boolean);

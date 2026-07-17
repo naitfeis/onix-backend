@@ -11,7 +11,7 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     preDeployCommand: npx prisma migrate deploy
     startCommand: node dist/main.js
-    healthCheckPath: /
+    healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV
         value: production

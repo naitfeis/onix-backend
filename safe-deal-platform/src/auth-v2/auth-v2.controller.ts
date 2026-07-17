@@ -14,6 +14,7 @@ import {
   readRefreshTokenFromCookie,
 } from './refresh-cookie';
 import { SessionService } from './session.service';
+import { assertRateLimit } from '../rate-limit';
 
 /**
  * Website auth API. Marked @Public so legacy APP AuthGuard skips.
@@ -37,6 +38,7 @@ export class AuthV2Controller {
     @Req() req: { ip?: string; headers: Record<string, string | undefined> },
     @Res({ passthrough: true }) res: Response,
   ) {
+    assertRateLimit(`auth:v2:login:${req.ip ?? 'unknown'}`, 20, 60_000);
     const result = await this.orchestrator.loginWithTelegram({
       telegram: body.telegram,
       rememberMe: body.rememberMe,
@@ -85,6 +87,7 @@ export class AuthV2Controller {
     @Res({ passthrough: true }) res: Response,
   ) {
     const t0 = process.hrtime.bigint();
+    assertRateLimit(`auth:v2:refresh:${req.ip ?? 'unknown'}`, 120, 60_000);
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     if (!refreshToken) {

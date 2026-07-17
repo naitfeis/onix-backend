@@ -1,23 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { publicTelegramNick, publicUsername } from '../src/public-username';
+import { publicDisplayName } from '../src/public-username';
 
-test('publicTelegramNick accepts real Telegram usernames', () => {
-  assert.equal(publicTelegramNick('shoprub'), 'shoprub');
-  assert.equal(publicTelegramNick('@Shop_Rub'), 'Shop_Rub');
+test('publicDisplayName uses displayName, never telegram nick', () => {
+  assert.equal(publicDisplayName('Иван', 'ONIX-000007'), 'Иван');
+  assert.equal(publicDisplayName('Max Shop', 'ONIX-7'), 'Max Shop');
 });
 
-test('publicTelegramNick rejects ids / names / onix', () => {
-  assert.equal(publicTelegramNick('123456789'), null);
-  assert.equal(publicTelegramNick('ONIX-7'), null);
-  assert.equal(publicTelegramNick('PENDING-42'), null);
-  assert.equal(publicTelegramNick('Иван'), null);
-  assert.equal(publicTelegramNick('ab'), null);
-  assert.equal(publicTelegramNick(null), null);
-});
-
-test('publicUsername never falls back to displayName/onix', () => {
-  assert.equal(publicUsername('shoprub'), 'shoprub');
-  assert.equal(publicUsername('12345'), 'user');
-  assert.equal(publicUsername(undefined), 'user');
+test('publicDisplayName falls back to ONIX id', () => {
+  assert.equal(publicDisplayName(null, 'ONIX-000007'), 'ONIX-7');
+  assert.equal(publicDisplayName('', 'ONIX-000042'), 'ONIX-42');
+  assert.equal(publicDisplayName('123456789', 'ONIX-000007'), 'ONIX-7');
+  assert.equal(publicDisplayName('ONIX-99', 'ONIX-000007'), 'ONIX-7');
 });

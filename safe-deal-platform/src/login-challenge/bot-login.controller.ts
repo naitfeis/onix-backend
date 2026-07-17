@@ -13,6 +13,7 @@ import {
   buildLoginSessionCookieHeader,
   readLoginSessionId,
 } from './login-session-cookie';
+import { assertRateLimit } from '../rate-limit';
 
 @Public()
 @Controller('v2/auth/telegram-bot')
@@ -31,6 +32,7 @@ export class BotLoginController {
     @Req() req: { ip?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
+    assertRateLimit(`auth:bot:start:${req.ip ?? 'unknown'}`, 10, 60_000);
     const existing = readLoginSessionId(headerString(headers, 'cookie'));
     const started = await this.challenges.start({
       loginSessionId: existing,
@@ -58,7 +60,11 @@ export class BotLoginController {
   }
 
   @Get('status')
-  async status(@Query('challengeId') challengeId: string) {
+  async status(
+    @Query('challengeId') challengeId: string,
+    @Req() req: { ip?: string },
+  ) {
+    assertRateLimit(`auth:bot:status:${req.ip ?? 'unknown'}`, 60, 60_000);
     return this.challenges.status(challengeId);
   }
 
@@ -74,6 +80,7 @@ export class BotLoginController {
     @Req() req: { ip?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
+    assertRateLimit(`auth:bot:complete:${req.ip ?? 'unknown'}`, 20, 60_000);
     const loginSessionId = readLoginSessionId(headerString(headers, 'cookie'));
     if (!loginSessionId) {
       throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Login session cookie is required.');

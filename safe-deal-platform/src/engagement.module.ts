@@ -16,7 +16,7 @@ import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { statusBadge } from './platform-status';
-import { publicTelegramNick, publicUsername } from './public-username';
+import { publicDisplayName } from './public-username';
 import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 
@@ -83,7 +83,6 @@ export class ChatService {
                   userId: { not: user.id },
                   user: {
                     OR: [
-                      { telegramNick: { contains: q, mode: 'insensitive' } },
                       { displayName: { contains: q, mode: 'insensitive' } },
                       { onixId: { in: onixIdLookupCandidates(q) } },
                     ],
@@ -167,7 +166,9 @@ export class ChatService {
           ? 'ONIX AI'
           : isGroup
             ? (chat.title ?? 'Группа')
-            : (publicTelegramNick(other?.user.telegramNick) ?? peerOnix ?? 'Диалог'),
+            : (other
+              ? publicDisplayName(other.user.displayName, peerOnix ?? other.user.onixId)
+              : (peerOnix ?? 'Диалог')),
         subtitle: isAi ? (subtitle || 'Помощник платформы') : subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
         peerOnixId: isGroup || isAi ? undefined : peerOnix,
@@ -227,13 +228,12 @@ export class ChatService {
         id: { not: user.id },
         OR: [
           { onixId: { in: candidates } },
-          { telegramNick: { contains: query, mode: 'insensitive' } },
           { displayName: { contains: query, mode: 'insensitive' } },
         ],
       },
       take,
       select: {
-        onixId: true, telegramNick: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
+        onixId: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
       },
       orderBy: { id: 'asc' },
     });
@@ -243,7 +243,7 @@ export class ChatService {
         ?? (row.isAdmin ? 'ADMIN' : row.isSupport ? 'MODERATOR' : 'USER'));
       return {
         onixId,
-        username: publicUsername(row.telegramNick),
+        username: publicDisplayName(row.displayName, onixId),
         ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
         ...(badge ? { badge } : {}),
       };
@@ -339,7 +339,7 @@ export class ChatService {
     return {
       id: chat.id,
       kind: 'DIRECT' as const,
-      title: publicTelegramNick(target.telegramNick) ?? peerOnix,
+      title: publicDisplayName(target.displayName, peerOnix),
       unreadCount: 0,
       peerOnixId: peerOnix,
       peerLastOnline: target.lastSeenAt.toISOString(),
@@ -362,7 +362,7 @@ export class ChatService {
     const memberReads = memberRows.map((m) => ({
       userId: m.userId,
       onixId: m.user.onixId,
-      username: publicUsername(m.user.telegramNick),
+      username: publicDisplayName(m.user.displayName, m.user.onixId),
       lastReadAt: m.lastReadAt,
     }));
 
@@ -440,7 +440,7 @@ export class ChatService {
     const memberReads = memberRows.map((m) => ({
       userId: m.userId,
       onixId: m.user.onixId,
-      username: publicUsername(m.user.telegramNick),
+      username: publicDisplayName(m.user.displayName, m.user.onixId),
       lastReadAt: m.lastReadAt,
     }));
 
@@ -613,7 +613,7 @@ export class ChatService {
           const onixId = formatOnixId(r.user.onixId);
           return {
             onixId,
-            username: publicUsername(r.user.telegramNick),
+            username: publicDisplayName(r.user.displayName, onixId),
             avatarUrl: r.user.avatarUrl ?? undefined,
             badge: statusBadge(r.user.platformStatus
               ?? (r.user.isAdmin ? 'ADMIN' : r.user.isSupport ? 'MODERATOR' : 'USER')),

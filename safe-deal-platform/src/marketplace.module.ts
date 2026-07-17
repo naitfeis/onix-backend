@@ -132,7 +132,7 @@ export class MarketplaceService {
       ...(query.search ? {
         OR: [
           { title: { contains: query.search, mode: 'insensitive' } },
-          { seller: { telegramNick: { contains: query.search, mode: 'insensitive' } } },
+          { seller: { displayName: { contains: query.search, mode: 'insensitive' } } },
           { seller: { onixId: { in: onixIdLookupCandidates(query.search) } } },
         ],
       } : {}),

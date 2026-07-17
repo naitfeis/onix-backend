@@ -1,27 +1,21 @@
-/**
- * Public display handle: Telegram @username only.
- * Never expose numeric telegramId, firstName/displayName, or ONIX id as "username".
- */
-
-/** Telegram username: 5–32 chars, starts with a letter, [A-Za-z0-9_]. */
-const TG_USERNAME_RE = /^[A-Za-z][A-Za-z0-9_]{4,31}$/;
+import { formatOnixId } from './onix-id';
 
 /**
- * Returns a cleaned Telegram nick (no @), or null if missing/invalid.
- * Rejects pure digits (telegram user id mistaken for nick) and ONIX-* ids.
+ * Public display label for API `username` field.
+ * Never expose Telegram @username — only displayName (fallback: ONIX id).
  */
-export function publicTelegramNick(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const nick = raw.replace(/^@+/, '').trim();
-  if (!nick) return null;
-  if (/^\d+$/.test(nick)) return null;
-  if (/^ONIX-/i.test(nick)) return null;
-  if (/^PENDING-/i.test(nick)) return null;
-  if (!TG_USERNAME_RE.test(nick)) return null;
-  return nick;
-}
-
-/** API `username` field — nick only; placeholder when user has no public Telegram username. */
-export function publicUsername(telegramNick: string | null | undefined): string {
-  return publicTelegramNick(telegramNick) ?? 'user';
+export function publicDisplayName(
+  displayName: string | null | undefined,
+  onixId: string,
+): string {
+  const name = displayName?.replace(/^@+/, '').trim() ?? '';
+  if (
+    name
+    && !/^\d+$/.test(name)
+    && !/^ONIX-/i.test(name)
+    && !/^PENDING-/i.test(name)
+  ) {
+    return name.slice(0, 120);
+  }
+  return formatOnixId(onixId);
 }
