@@ -4,7 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 const logger = new Logger('RequestTiming');
 
 /**
- * Sets Server-Timing / X-Response-Time and warns on slow handlers (≥800ms).
+ * Sets Server-Timing / X-Response-Time and warns on slow handlers (≥1000ms).
  * Appends `app` metric — does not wipe controller-provided Server-Timing phases.
  */
 export function requestTimingMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -29,7 +29,7 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
         res.setHeader('X-Response-Time', `${durationMs.toFixed(1)}ms`);
       }
     }
-    if (durationMs >= 800) {
+    if (durationMs >= 1000) {
       logger.warn(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(0)}ms`);
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

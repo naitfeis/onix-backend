@@ -140,8 +140,6 @@ export class AuthV2Controller {
     @Res({ passthrough: true }) res: Response,
   ) {
     const t0 = performance.now();
-    // Entry log so Render shows the hit even if the client aborts mid-flight.
-    this.logger.log('GET /v2/auth/session start');
 
     const tCookie = performance.now();
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
@@ -162,7 +160,7 @@ export class AuthV2Controller {
         typeof existing === 'string' && existing.length > 0 ? `${existing}, ${phases}` : phases,
       );
       res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
-      this.logger.log(`GET /v2/auth/session 401 missing-cookie ${totalMs.toFixed(1)}ms`);
+      // Guest without cookie is normal — do not log.
       throw new AuthPlatformError('AUTH_REFRESH_MISSING', 'Refresh cookie is missing.');
     }
 
@@ -191,11 +189,12 @@ export class AuthV2Controller {
       typeof existing === 'string' && existing.length > 0 ? `${existing}, ${phases}` : phases,
     );
     res.setHeader('X-Response-Time', `${totalMs.toFixed(1)}ms`);
-    this.logger.log(
-      `GET /v2/auth/session 200 ${totalMs.toFixed(1)}ms `
-      + `(cookie=${cookieParseMs.toFixed(1)} hash=${phase.hashMs.toFixed(1)} `
-      + `db=${phase.sessionLookupMs.toFixed(1)} user=${phase.userLookupMs.toFixed(1)})`,
-    );
+    if (totalMs >= 1000) {
+      this.logger.warn(
+        `GET /v2/auth/session slow ${totalMs.toFixed(0)}ms `
+        + `(db=${(phase.sessionLookupMs + phase.userLookupMs).toFixed(0)})`,
+      );
+    }
 
     return {
       authenticated: true,

@@ -140,7 +140,7 @@ export function productDto(product: {
   id: string;
   lotNumber?: number;
   title: string;
-  description: string | null;
+  description?: string | null;
   priceCents: bigint;
   quantity: number;
   category: string;

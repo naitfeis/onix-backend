@@ -16,8 +16,7 @@ function pathOf(req: Request): string {
 
 /**
  * Early path probe — runs before Nest controllers / AuthGuard.
- * Logs AUTH_SESSION_REQUEST_START even if the handler never runs
- * (client abort, proxy reset after accept, etc.).
+ * Production: silent on happy path; warn only on slow/error finishes.
  */
 export function authSessionPathMiddleware(req: Request, res: Response, next: NextFunction): void {
   const path = pathOf(req);
@@ -32,27 +31,9 @@ export function authSessionPathMiddleware(req: Request, res: Response, next: Nex
 
   const started = performance.now();
   const requestId = headerString(req, 'x-request-id') ?? 'missing';
-  const cookieHeader = headerString(req, 'cookie') ?? '';
-  const cookieLength = cookieHeader.length;
-  const host = headerString(req, 'host') ?? null;
-  const origin = headerString(req, 'origin') ?? null;
-  const userAgent = headerString(req, 'user-agent') ?? null;
-
-  if (isAuthSession) {
-    logger.log(
-      `AUTH_SESSION_REQUEST_START requestId=${requestId} `
-      + `host=${host ?? '-'} origin=${origin ?? '-'} `
-      + `cookieLength=${cookieLength} userAgent=${userAgent ?? '-'}`,
-    );
-  } else {
-    logger.log(
-      `AUTH_PATH_PROBE_START path=${path} requestId=${requestId} `
-      + `cookieLength=${cookieLength}`,
-    );
-  }
 
   const existing = res.getHeader('Server-Timing');
-  const mwMetric = `middleware;dur=0.1`;
+  const mwMetric = 'middleware;dur=0.1';
   if (typeof existing === 'string' && existing.length > 0) {
     res.setHeader('Server-Timing', `${existing}, ${mwMetric}`);
   } else {
@@ -61,12 +42,13 @@ export function authSessionPathMiddleware(req: Request, res: Response, next: Nex
 
   res.on('finish', () => {
     const totalMs = performance.now() - started;
-    if (isAuthSession) {
-      logger.log(
-        `AUTH_SESSION_REQUEST_END requestId=${requestId} `
-        + `status=${res.statusCode} dur=${totalMs.toFixed(1)}ms cookieLength=${cookieLength}`,
-      );
-    }
+    const failed = res.statusCode >= 400;
+    const slow = totalMs >= 1000;
+    if (!failed && !slow) return;
+    logger.warn(
+      `${isAuthSession ? 'AUTH_SESSION' : 'AUTH_PATH'} `
+      + `path=${path} requestId=${requestId} status=${res.statusCode} dur=${totalMs.toFixed(0)}ms`,
+    );
   });
 
   next();

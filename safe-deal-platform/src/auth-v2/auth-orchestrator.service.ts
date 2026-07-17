@@ -195,11 +195,6 @@ export class AuthOrchestrator {
   ): Promise<SessionAuthResult & { refreshMaxAgeSeconds: number }> {
     try {
       const result = await this.sessions.rotateRefresh(refreshToken, device, timing);
-      this.logger.log(JSON.stringify({
-        msg: 'auth_v2_refresh_success',
-        userId: result.user.id.toString(),
-        sessionId: result.session.id,
-      }));
       await this.events.publish('RefreshRotated.v1', {
         userId: result.user.id.toString(),
         sessionId: result.session.id,

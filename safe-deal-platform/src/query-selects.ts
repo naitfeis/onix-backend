@@ -49,11 +49,11 @@ export const dealPartySelect = {
   _count: { select: { followers: true as const } },
 } as const;
 
+/** Hot catalog path — no description / view counts (owner views attached in service). */
 export const productListSelect = {
   id: true,
   lotNumber: true,
   title: true,
-  description: true,
   priceCents: true,
   quantity: true,
   category: true,
@@ -62,7 +62,12 @@ export const productListSelect = {
   autoDeliver: true,
   createdAt: true,
   sellerId: true,
-  _count: { select: { viewUniques: true as const } },
+} as const;
+
+/** Single product / owner edit — includes description. */
+export const productDetailSelect = {
+  ...productListSelect,
+  description: true,
 } as const;
 
 export const dealProductSelect = {

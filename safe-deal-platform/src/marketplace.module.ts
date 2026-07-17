@@ -20,7 +20,7 @@ import { pushNewProductToFollowers } from './domain-notify';
 import { onixIdLookupCandidates } from './onix-id';
 import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
-import { productListSelect, sellerPublicSelect } from './query-selects';
+import { productDetailSelect, productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
 
@@ -158,7 +158,17 @@ export class MarketplaceService {
           : {}),
       },
     });
-    return products.map((product) => productDto(product, viewerId ?? undefined));
+    const viewCounts = await this.ownerViewCounts(viewerId, products);
+    return products.map((product) => productDto(
+      {
+        ...product,
+        description: null,
+        ...(viewCounts.has(product.id)
+          ? { _count: { viewUniques: viewCounts.get(product.id)! } }
+          : {}),
+      },
+      viewerId ?? undefined,
+    ));
   }
 
   async get(user: AuthUser | null, id: string) {
@@ -166,7 +176,7 @@ export class MarketplaceService {
     const product = await this.prisma.product.findUnique({
       where: { id },
       select: {
-        ...productListSelect,
+        ...productDetailSelect,
         seller: { select: sellerPublicSelect(viewerId) },
         ...(viewerId != null
           ? { favorites: { where: { userId: viewerId }, select: { userId: true } } }
@@ -177,7 +187,34 @@ export class MarketplaceService {
     if (product.status !== ProductStatus.ACTIVE && (viewerId == null || product.sellerId !== viewerId)) {
       throw new NotFoundException('Товар не найден.');
     }
-    return productDto(product, viewerId ?? undefined);
+    const viewCounts = await this.ownerViewCounts(viewerId, [product]);
+    return productDto(
+      {
+        ...product,
+        ...(viewCounts.has(product.id)
+          ? { _count: { viewUniques: viewCounts.get(product.id)! } }
+          : {}),
+      },
+      viewerId ?? undefined,
+    );
+  }
+
+  /** Unique view counts only for products owned by the viewer (never for market peers). */
+  private async ownerViewCounts(
+    viewerId: bigint | null,
+    products: Array<{ id: string; sellerId: bigint }>,
+  ): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (viewerId == null) return out;
+    const ownedIds = products.filter((p) => p.sellerId === viewerId).map((p) => p.id);
+    if (!ownedIds.length) return out;
+    const rows = await this.prisma.productViewUnique.groupBy({
+      by: ['productId'],
+      where: { productId: { in: ownedIds } },
+      _count: { _all: true },
+    });
+    for (const row of rows) out.set(row.productId, row._count._all);
+    return out;
   }
 
   async getByLot(user: AuthUser | null, lotNumber: number) {
