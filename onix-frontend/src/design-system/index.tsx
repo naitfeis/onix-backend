@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
@@ -81,19 +82,24 @@ function telegramBackButton(): TelegramBackButton | null {
 }
 
 export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return;
     openModalCount += 1;
     syncModalBodyClass();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
     const back = telegramBackButton();
-    const onBack = () => onClose();
+    const onBack = () => onCloseRef.current();
     if (back) {
       back.show();
       back.onClick(onBack);
@@ -101,13 +107,14 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
     return () => {
       openModalCount = Math.max(0, openModalCount - 1);
       syncModalBodyClass();
+      if (openModalCount === 0) document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', onKey);
       if (back) {
         back.offClick(onBack);
         if (openModalCount === 0) back.hide();
       }
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   const closeFromBackdrop = (event: ReactMouseEvent | ReactTouchEvent) => {

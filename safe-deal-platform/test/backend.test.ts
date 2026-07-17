@@ -5,6 +5,7 @@ import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { createHmac } from 'node:crypto';
 import { AuthGuard, AuthService } from '../src/auth.module';
+import { AuthPlatformError } from '../src/auth-v2/auth-errors';
 import { parseId } from '../src/common';
 import {
   backfillTelegramIdentityLinks,
@@ -137,14 +138,14 @@ test('Mini App synchronizes changed Telegram profile fields without replacing di
   const persisted = {
     id: 7n, telegramId: 42n, onixId: 'ONIX-000007', telegramNick: 'onix_user',
     firstName: 'Onix', lastName: 'User', languageCode: 'en', displayName: 'Trusted Trader',
-    avatarUrl: 'https://t.me/old.svg', deletedAt: null, isAdmin: false,
+    avatarUrl: 'https://t.me/old.svg', deletedAt: null, isAdmin: false, isSupport: false,
   };
-  let updateData: Record<string, unknown> | undefined;
+  let updateData: Record<string, unknown> = {};
   const prisma = {
     user: {
       findUnique: async () => persisted,
       update: async ({ data }: { data: Record<string, unknown> }) => {
-        updateData = data;
+        updateData = { ...updateData, ...data };
         return { ...persisted, ...data };
       },
     },
@@ -156,12 +157,12 @@ test('Mini App synchronizes changed Telegram profile fields without replacing di
     language_code: 'ru', photo_url: 'https://t.me/new.svg',
   }));
 
-  assert.equal(updateData?.languageCode, 'ru');
-  assert.equal(updateData?.avatarUrl, 'https://t.me/new.svg');
-  assert.ok(updateData?.lastLoginAt instanceof Date);
-  assert.ok(updateData?.lastSeenAt instanceof Date);
+  assert.equal(updateData.languageCode, 'ru');
+  assert.equal(updateData.avatarUrl, 'https://t.me/new.svg');
+  assert.ok(updateData.lastLoginAt instanceof Date);
+  assert.ok(updateData.lastSeenAt instanceof Date);
   for (const unchanged of ['telegramNick', 'firstName', 'lastName', 'displayName']) {
-    assert.equal(Object.hasOwn(updateData ?? {}, unchanged), false);
+    assert.equal(Object.hasOwn(updateData, unchanged), false);
   }
 });
 
@@ -210,7 +211,7 @@ test('Mini App does not synchronize a blocked user', async () => {
 
   await assert.rejects(
     () => new AuthService(prisma as never).miniApp(miniAppInitData({ id: 42 })),
-    UnauthorizedException,
+    (error: unknown) => error instanceof AuthPlatformError && error.code === 'AUTH_ACCOUNT_LOCKED',
   );
   assert.equal(updateCalled, false);
 });

@@ -49,6 +49,7 @@ function baseUser(overrides: Partial<User> = {}): User {
     lastSeenAt: new Date(),
     lastLoginAt: null,
     isAdmin: false,
+    isSupport: false,
     deletedAt: null,
     mergedIntoUserId: null,
     createdAt: new Date(),
@@ -253,6 +254,7 @@ test('AuthGuard: Ed25519 passes when AUTH_ACCEPT_V2_ACCESS=true', async () => {
     telegramId: 42n,
     onixId: 'ONIX-000007',
     isAdmin: false,
+    isSupport: false,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });
@@ -362,6 +364,7 @@ test('DualAccessService maps Ed25519 claims to AuthUser without controller branc
     telegramId: 42n,
     onixId: 'ONIX-000007',
     isAdmin: true,
+    isSupport: true,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });

@@ -178,7 +178,7 @@ export class ChatService {
   }
 
   async searchUsers(user: AuthUser, q: string, limit: number) {
-    const query = q.trim();
+    const query = q.trim().replace(/^@+/, '');
     if (!query) return [];
     const take = Math.min(Math.max(limit, 1), 30);
     const candidates = onixIdLookupCandidates(query);
@@ -411,16 +411,18 @@ export class ChatService {
     return { ok: true, scope: 'SELF' as const };
   }
 
-  /** Soft-delete globally — admin/support only. Row kept for audit. */
+  /** Soft-delete globally. Sender may delete own; admin/support may delete any. */
   async softDelete(user: AuthUser, chatId: string, messageId: bigint, reason?: string) {
-    if (!user.isAdmin && !user.isSupport) {
-      throw new ForbiddenException('Глобальное удаление доступно только модерации.');
-    }
     await this.member(user.id, chatId);
     const message = await this.prisma.message.findFirst({
       where: { id: messageId, chatId },
     });
     if (!message) throw new NotFoundException('Сообщение не найдено.');
+    const staff = user.isAdmin || user.isSupport;
+    const own = message.senderId === user.id;
+    if (!staff && !own) {
+      throw new ForbiddenException('Можно удалить только своё сообщение.');
+    }
     if (message.deletedAt) return { ok: true, scope: 'GLOBAL' as const };
     await this.prisma.message.update({
       where: { id: messageId },

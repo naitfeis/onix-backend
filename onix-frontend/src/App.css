@@ -533,6 +533,9 @@ select.control:focus {
 .nav-count { position: absolute; top: 6px; right: calc(50% - 18px); color: #000; }
 
 /* Hide dock while any modal is open — actions stay fully visible (Telegram-style). */
+body.modal-open {
+  overflow: hidden;
+}
 body.modal-open .bottom-nav { display: none; }
 body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 

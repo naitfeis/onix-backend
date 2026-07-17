@@ -290,6 +290,7 @@ export const API_PATHS = {
   walletDepositLedger: '/api/wallet/deposit/ledger',
   walletDepositLocks: '/api/wallet/deposit/locks',
   walletDepositFund: '/api/wallet/deposit/fund',
+  walletDepositTopup: '/api/wallet/deposit/topup',
   walletDepositWithdraw: '/api/wallet/deposit/withdrawals',
   paymentsIntents: '/api/payments/intents',
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,

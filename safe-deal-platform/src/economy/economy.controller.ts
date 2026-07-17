@@ -113,6 +113,12 @@ export class EconomyController {
     return this.wallet.fundDepositFromBalance(user, dto.amountCents, dto.idempotencyKey);
   }
 
+  /** Canonical Stage 1 alias — Balance → Deposit (same as /fund). */
+  @Post('wallet/deposit/topup')
+  topupDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+    return this.wallet.fundDepositFromBalance(user, dto.amountCents, dto.idempotencyKey);
+  }
+
   @Post('wallet/deposit/withdrawals')
   withdrawDeposit(@CurrentUser() user: AuthUser, @Body() dto: WithdrawDepositDto) {
     return this.wallet.withdrawDeposit(user, dto.amountCents, dto.idempotencyKey);

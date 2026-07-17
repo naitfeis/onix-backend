@@ -7,6 +7,8 @@ import { formatOnixId } from '../utils/onixId';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
 
+const NEAR_BOTTOM_PX = 96;
+
 export function Chats({
   core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast,
 }: {
@@ -30,39 +32,56 @@ export function Chats({
   const [groupSelected, setGroupSelected] = useState<ChatUserHit[]>([]);
   const [groupBusy, setGroupBusy] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
+  const prevChatQueryRef = useRef('');
   const isStaff = Boolean(core.profile?.roles.includes('ADMIN') || core.profile?.roles.includes('SUPPORT'));
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
+  const { loadMessages, searchChats, refreshChats, sendMessage } = core;
 
   const openOnixProfile = async (onixId: string) => {
     if (peerProfile?.onixId === onixId) return;
     try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
   };
 
-  useEffect(() => { if (threadId) void core.loadMessages(threadId); }, [core.loadMessages, threadId]);
+  useEffect(() => {
+    if (threadId) void loadMessages(threadId);
+  }, [loadMessages, threadId]);
+
   useEffect(() => {
     if (!focusChatId) return;
     setThreadId(focusChatId);
     onFocusChatHandled();
   }, [focusChatId, onFocusChatHandled]);
 
+  // Open thread → always land on latest. New messages → scroll only if user was near bottom.
+  useEffect(() => {
+    stickToBottomRef.current = true;
+  }, [threadId]);
+
   useEffect(() => {
     const el = messagesRef.current;
     if (!el || !threadId) return;
+    if (!stickToBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
   }, [threadId, messages.length, messages[messages.length - 1]?.id]);
 
+  // Search only when query changes — never depend on whole `core` (caused infinite GET /chats).
   useEffect(() => {
     const q = chatQuery.trim();
+    const prev = prevChatQueryRef.current;
+    prevChatQueryRef.current = q;
+
     if (!q) {
-      void core.refreshChats?.();
+      // Cleared search → one restore. Initial empty mount must NOT refetch (bootstrap already loaded).
+      if (prev) void refreshChats();
       return;
     }
     const timer = window.setTimeout(() => {
-      void core.searchChats?.(q);
+      void searchChats(q);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [chatQuery, core]);
+  }, [chatQuery, searchChats, refreshChats]);
 
   useEffect(() => {
     const q = groupSearch.trim();
@@ -79,7 +98,7 @@ export function Chats({
   const deleteMessage = async (messageId: string, scope: 'self' | 'global') => {
     try {
       await api.delete(API_PATHS.messageDelete(threadId, messageId, scope));
-      await core.loadMessages(threadId);
+      await loadMessages(threadId);
       setToast(scope === 'global' ? 'Сообщение удалено.' : 'Сообщение скрыто у вас.');
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Не удалось удалить.');
@@ -94,7 +113,7 @@ export function Chats({
         title: groupTitle.trim(),
         memberOnixIds: groupSelected.map((u) => u.onixId),
       });
-      await core.refreshChats?.();
+      await refreshChats();
       setGroupOpen(false);
       setGroupTitle('');
       setGroupSearch('');
@@ -108,7 +127,10 @@ export function Chats({
     }
   };
 
-  if (core.states.chats === 'loading') return <Card><Skeleton lines={6} /></Card>;
+  if (core.states.chats === 'loading' && core.chats.length === 0) {
+    return <Card><Skeleton lines={6} /></Card>;
+  }
+
   return <div className="chat-layout">
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
@@ -143,7 +165,15 @@ export function Chats({
           <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · Escrow</span></div>
         <Button variant="secondary" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
       </div>}
-      <div className="messages" ref={messagesRef}>{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
+      <div
+        className="messages"
+        ref={messagesRef}
+        onScroll={() => {
+          const el = messagesRef.current;
+          if (!el) return;
+          stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+        }}
+      >{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
         <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
           {!message.mine && <UserAvatar avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
           <div className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''} ${message.deleted ? 'deleted' : ''}`}>
@@ -168,18 +198,18 @@ export function Chats({
               if (!orderId) return null;
               return <Button variant="secondary" onClick={() => openDeal(orderId)}>Открыть заказ</Button>;
             })()}
-            {message.kind !== 'SYSTEM' && (
+            {message.kind !== 'SYSTEM' && !message.deleted && (
               <div className="message-actions">
-                <button type="button" className="linkish" onClick={() => void deleteMessage(message.id, 'self')}>Удалить у себя</button>
-                {isStaff && !message.deleted && (
+                {(message.mine || isStaff) && (
                   <button type="button" className="linkish" onClick={() => void deleteMessage(message.id, 'global')}>Удалить</button>
                 )}
+                <button type="button" className="linkish" onClick={() => void deleteMessage(message.id, 'self')}>Удалить у себя</button>
               </div>
             )}
             <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
           </div>
         </div>)}</div>
-      <form className="composer" onSubmit={async event => { event.preventDefault(); if (await core.sendMessage(thread.id, text)) setText(''); }}>
+      <form className="composer" onSubmit={async event => { event.preventDefault(); if (await sendMessage(thread.id, text)) setText(''); }}>
         <Input value={text} onChange={event => setText(event.target.value)} maxLength={1000} placeholder="Введите сообщение..." aria-label="Сообщение" />
         <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>Отправить</Button>
       </form>
@@ -187,7 +217,7 @@ export function Chats({
     <Modal open={groupOpen} title="Создать группу" onClose={() => setGroupOpen(false)}>
       <div className="form">
         <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>
-        <Field label="Добавить пользователей"><Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX-1 или ник" /></Field>
+        <Field label="Добавить пользователей"><Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX-1 или @ник" /></Field>
         {groupHits.length > 0 && <div className="chips">
           {groupHits.map((hit) => (
             <button

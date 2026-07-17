@@ -136,8 +136,10 @@ export function useOnixCore() {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
 
-  const load = useCallback(async <K extends CollectionKey>(key: K, path: string) => {
-    setStates(previous => ({ ...previous, [key]: 'loading' }));
+  const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setStates(previous => ({ ...previous, [key]: 'loading' }));
+    }
     try {
       const data = await api.get<Store[K]>(path);
       setStore(previous => ({ ...previous, [key]: data }));
@@ -473,12 +475,12 @@ export function useOnixCore() {
   }, []);
 
   const refreshChats = useCallback(async () => {
-    await load('chats', API_PATHS.chats);
+    await load('chats', API_PATHS.chats, { silent: true });
   }, [load]);
 
   const searchChats = useCallback(async (q: string) => {
     const trimmed = q.trim();
-    await load('chats', trimmed ? API_PATHS.chatsSearch(trimmed) : API_PATHS.chats);
+    await load('chats', trimmed ? API_PATHS.chatsSearch(trimmed) : API_PATHS.chats, { silent: true });
   }, [load]);
 
   const sendMessage = useCallback(async (threadId: string, text: string) => {
