@@ -114,11 +114,16 @@ export default function App() {
     setFocusDealId(dealId);
     switchTo('deals');
   };
+  // Background stays alive on every tab (chat only slightly softer inside the shader).
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
   const showAuth = core.states.profile === 'error' || Boolean(banNotice);
+  const shellReady = core.states.products === 'success'
+    || core.states.products === 'error'
+    || Boolean(core.profile)
+    || core.states.profile === 'error';
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}`}>
     {bgReady && (
       <Suspense fallback={null}>
         <OnixBackground mode={mode} />

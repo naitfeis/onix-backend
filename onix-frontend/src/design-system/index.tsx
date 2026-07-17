@@ -30,8 +30,8 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className="control control--area" {...props} />;
 }
 
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className="control" {...props} />;
+export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={['control', className].filter(Boolean).join(' ')} {...props} />;
 }
 
 export function Skeleton({ lines = 3 }: { lines?: number }) {

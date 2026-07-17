@@ -1,11 +1,19 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { min-width: 320px; min-height: 100%; color-scheme: dark; background: #000; scroll-behavior: smooth; }
 body, #root { min-height: 100dvh; }
-body { overflow-x: hidden; color: #f4f4f5; background: #000; font-family: "SFMono-Regular", Consolas, "Liberation Mono", "Courier New", monospace; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+  overflow-x: hidden;
+  color: #f2f1ef;
+  background: #000;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 2px solid #b9f9fa !important; outline-offset: 3px; }
-::selection { color: #000; background: #b9f9fa; }
+:focus-visible { outline: 2px solid #eee !important; outline-offset: 3px; }
+::selection { color: #000; background: #eee; }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: #25252a; border-radius: 999px; }
+::-webkit-scrollbar-thumb { background: #2a2a2c; border-radius: 999px; }

@@ -41,14 +41,32 @@ describe('fetchResilience', () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
 
-    const pending = resilientFetch('/api/users/me', { maxRetries: 2, timeoutMs: 5_000 });
+    const pending = resilientFetch('/api/users/me', { maxRetries: 3, timeoutMs: 5_000 });
     await vi.runAllTimersAsync();
     const response = await pending;
     expect(response.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
+
+  it('uses default maxRetries of 3 for RU connection resets', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = resilientFetch('/api/products', { timeoutMs: 5_000 });
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     vi.useRealTimers();
   });
 

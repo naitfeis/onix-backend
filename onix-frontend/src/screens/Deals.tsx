@@ -4,7 +4,7 @@ import type { Deal, OrderListQuery } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import type { Core, Screen } from './types';
-import { DEAL_FILTERS, SectionHeader, StaffBadge, dealLabels, dealProgress } from './shared';
+import { DEAL_FILTERS, StaffBadge, dealLabels, dealProgress } from './shared';
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [rating, setRating] = useState(5);
@@ -58,7 +58,7 @@ export function Deals({
   }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
   const isSupport = Boolean(core.profile?.roles.includes('SUPPORT') || core.profile?.roles.includes('ADMIN'));
-  return <div className="stack"><SectionHeader title="ESCROW ГАРАНТ" subtitle="КОНТРОЛЬ ЗАМОРОЖЕННЫХ СДЕЛОК" />
+  return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
     <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>

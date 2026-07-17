@@ -1,14 +1,19 @@
 /**
  * Fetch timeout + retry for transient network / gateway failures.
+ * Tuned for RU website paths (Vercel rewrite → Render): frequent
+ * net::ERR_CONNECTION_RESET / Failed to fetch that often succeed on retry.
  * Never retries 401/403 (auth must fail fast).
  * Never retries our own AbortController timeout — that caused "refresh 201 after ~8s"
  * (first attempt hung until timeout, second succeeded).
  */
 
 /** Bound hung sockets; keep under UX pain without double-waiting on retry. */
-export const DEFAULT_FETCH_TIMEOUT_MS = 12_000;
-/** Retry only fast network failures (reset), not full-timeout aborts. */
-export const MAX_NETWORK_RETRIES = 1;
+export const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
+/**
+ * Retry only fast network failures (reset) and 502–504 — not full-timeout aborts.
+ * RU ISPs often reset the first TCP attempt; 3 quick retries recover without VPN.
+ */
+export const MAX_NETWORK_RETRIES = 3;
 
 export function isRetryableHttpStatus(status: number): boolean {
   if (status === 401 || status === 403) return false;
@@ -97,8 +102,10 @@ export async function resilientFetch(
   }
 }
 
+/** Fast first retry (RU reset), then short backoff; cap so total wait stays usable. */
 function backoffMs(attempt: number): number {
-  return Math.min(1000 * attempt, 2500);
+  if (attempt <= 1) return 300;
+  return Math.min(600 * attempt, 2_000);
 }
 
 function delay(ms: number): Promise<void> {

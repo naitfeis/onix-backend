@@ -130,6 +130,6 @@ export const AUTH_REFRESH_TIMEOUT_MS = 18_000;
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
   // Refresh is cookie+CSRF same-origin; allow more time on slow RU paths.
-  // Retry only connection-reset style failures (not full-timeout aborts).
-  return resilientFetch(url, { ...init, timeoutMs: AUTH_REFRESH_TIMEOUT_MS, maxRetries: 1 });
+  // Retry connection-reset style failures (not full-timeout aborts) — keeps cookie.
+  return resilientFetch(url, { ...init, timeoutMs: AUTH_REFRESH_TIMEOUT_MS, maxRetries: 3 });
 }

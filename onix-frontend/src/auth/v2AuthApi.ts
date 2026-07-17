@@ -188,7 +188,7 @@ export async function getAuthV2Session(
     ? await resilientFetch(url, {
       ...init,
       timeoutMs: AUTH_SESSION_PROBE_TIMEOUT_MS,
-      maxRetries: 1,
+      maxRetries: 3,
     })
     : await fetchImpl(url, init);
   return readEnvelope<AuthV2SessionData>(response);

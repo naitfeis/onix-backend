@@ -4,7 +4,7 @@ import { API_PATHS, formatLastSeen, type PublicProfile } from '../api/contracts'
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Input, Skeleton, StateView } from '../design-system';
 import type { Core } from './types';
-import { MessageText, PublicProfileModal, ReportUserModal, SectionHeader, StaffBadge, dealLabels } from './shared';
+import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
 
 export function Chats({
   core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast,
@@ -35,7 +35,7 @@ export function Chats({
   }, [focusChatId, onFocusChatHandled]);
   if (core.states.chats === 'loading') return <Card><Skeleton lines={6} /></Card>;
   return <div className="chat-layout">
-    <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}><SectionHeader title="ЧАТЫ" subtitle="СООБЩЕНИЯ СДЕЛОК" />
+    <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
         core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}>
           <span className="thread-peer"><UserAvatar avatarUrl={chat.peerAvatarUrl} name={chat.title} /><span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.subtitle || 'Открыть диалог'}</small></span></span>
