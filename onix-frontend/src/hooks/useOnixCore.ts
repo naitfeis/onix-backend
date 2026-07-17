@@ -472,6 +472,15 @@ export function useOnixCore() {
     }
   }, []);
 
+  const refreshChats = useCallback(async () => {
+    await load('chats', API_PATHS.chats);
+  }, [load]);
+
+  const searchChats = useCallback(async (q: string) => {
+    const trimmed = q.trim();
+    await load('chats', trimmed ? API_PATHS.chatsSearch(trimmed) : API_PATHS.chats);
+  }, [load]);
+
   const sendMessage = useCallback(async (threadId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return false;
@@ -566,7 +575,7 @@ export function useOnixCore() {
 
   return {
     profile, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
-    refreshAll, loadProfile, loadMessages, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction, reportUser,
   };

@@ -13,7 +13,7 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
   const reasonOption = BAN_REASON_OPTIONS.find(item => item.value === reason);
   const banReady = Boolean(userId.trim() && reason && comment.trim() && (reason !== 'OTHER' || Number(durationDays) > 0));
   return <Card className="admin-card"><h2>// ADMIN · МОДЕРАЦИЯ</h2><p className="muted">Доступ показан только по роли, полученной от сервера.</p>
-    <Field label="ONIX ID пользователя"><Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-000007" /></Field>
+    <Field label="ONIX ID пользователя"><Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-7 или 7" /></Field>
     <Field label="Причина блокировки" hint={reasonOption?.hint}>
       <Select value={reason} onChange={event => setReason(event.target.value as BanReasonCode | '')}>
         <option value="">Выберите причину</option>

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { AuthUser } from './common';
+import { formatOnixId } from './onix-id';
 
 type PublicUser = {
   id: bigint;
@@ -43,7 +44,7 @@ export interface ProfileDto {
 
 export interface LedgerDto {
   id: string;
-  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL';
+  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
   amountCents: string;
   /** API contract: LedgerEntry has no DB status; posted entries are always COMPLETED. */
   status: 'COMPLETED';
@@ -67,10 +68,11 @@ export interface ProductDto {
 
 export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: bigint }> }) {
   const staff = Boolean(user.isAdmin || user.isSupport);
+  const onixId = formatOnixId(user.onixId);
   return {
     id: user.id.toString(),
-    onixId: user.onixId,
-    username: user.telegramNick ?? user.displayName ?? user.onixId,
+    onixId,
+    username: user.telegramNick ?? user.displayName ?? onixId,
     ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
     rating: Number(user.ratingAverage),
     reviewCount: user.ratingCount,
@@ -181,26 +183,66 @@ export function messageDto(message: {
   kind?: string;
   text: string;
   createdAt: Date;
+  deletedAt?: Date | null;
+  deletedById?: bigint | null;
+  deletedReason?: string | null;
   sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'> | null;
-}, viewerId: bigint) {
+}, viewerId: bigint, opts?: {
+  staffViewer?: boolean;
+  /** Other members' lastReadAt for receipts */
+  memberReads?: Array<{
+    userId: bigint;
+    onixId: string;
+    username: string;
+    lastReadAt: Date | null;
+  }>;
+}) {
   const system = message.kind === 'SYSTEM' || message.senderId == null;
   const sender = message.sender;
   const staffBadge = !system && sender
     ? (sender.isAdmin ? 'ADMIN' as const : sender.isSupport ? 'SUPPORT' as const : undefined)
     : undefined;
+  const mine = !system && message.senderId === viewerId;
+  const deleted = Boolean(message.deletedAt);
+  const staffViewer = Boolean(opts?.staffViewer);
+  const showOriginal = !deleted || staffViewer;
+  const memberReads = opts?.memberReads ?? [];
+  const readers = !system
+    ? memberReads
+      .filter((m) => m.userId !== message.senderId && m.lastReadAt && m.lastReadAt >= message.createdAt)
+      .map((m) => ({
+        onixId: formatOnixId(m.onixId),
+        username: m.username,
+        readAt: m.lastReadAt!.toISOString(),
+      }))
+    : [];
+  const deliveryStatus: 'SENT' | 'READ' | undefined = system || !mine
+    ? undefined
+    : (readers.length > 0 ? 'READ' : 'SENT');
+
   return {
     id: message.id.toString(),
     threadId: message.chatId,
     kind: system ? 'SYSTEM' as const : 'USER' as const,
     sender: {
       id: system ? '0' : sender!.id.toString(),
-      username: system ? 'ONIX' : (sender!.telegramNick ?? sender!.displayName ?? sender!.onixId),
+      username: system ? 'ONIX' : (sender!.telegramNick ?? sender!.displayName ?? formatOnixId(sender!.onixId)),
       ...(system ? {} : (sender!.avatarUrl ? { avatarUrl: sender!.avatarUrl } : {})),
       ...(staffBadge ? { badge: staffBadge } : {}),
     },
-    text: message.text,
+    text: showOriginal ? message.text : 'Сообщение удалено',
     createdAt: message.createdAt.toISOString(),
-    mine: !system && message.senderId === viewerId,
+    mine,
+    ...(deliveryStatus ? { deliveryStatus } : {}),
+    ...(deleted ? {
+      deleted: true,
+      ...(staffViewer ? {
+        deletedAt: message.deletedAt!.toISOString(),
+        deletedReason: message.deletedReason ?? null,
+        originalText: message.text,
+      } : {}),
+    } : {}),
+    ...(staffViewer && readers.length > 0 ? { readBy: readers } : {}),
   };
 }
 
@@ -224,12 +266,13 @@ export function reviewDto(item: {
   author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'>;
 }) {
   const staff = Boolean(item.author.isAdmin || item.author.isSupport);
+  const onixId = formatOnixId(item.author.onixId);
   return {
     id: item.id.toString(),
     author: {
       id: item.author.id.toString(),
-      onixId: item.author.onixId,
-      username: item.author.telegramNick ?? item.author.displayName ?? item.author.onixId,
+      onixId,
+      username: item.author.telegramNick ?? item.author.displayName ?? onixId,
       ...(item.author.avatarUrl ? { avatarUrl: item.author.avatarUrl } : {}),
       ...(staff ? { badge: (item.author.isAdmin ? 'ADMIN' : 'SUPPORT') as 'ADMIN' | 'SUPPORT' } : {}),
     },

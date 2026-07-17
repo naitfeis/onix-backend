@@ -15,6 +15,8 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
+import { formatOnixId } from './onix-id';
+import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
 
@@ -66,9 +68,10 @@ class OperationsService {
     private readonly balance: BalanceService,
   ) {}
 
-  adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
+  async adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
+    const resolved = await requireUserByOnixId(this.prisma, onixId);
     return this.prisma.$transaction(async (tx) => {
-      const target = await tx.user.findUniqueOrThrow({ where: { onixId } });
+      const target = await tx.user.findUniqueOrThrow({ where: { id: resolved.id } });
       const amount = BigInt(dto.amountCents);
       const entry = amount >= 0n
         ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', {
@@ -91,6 +94,8 @@ class OperationsService {
   }
 
   async ban(actor: AuthUser, onixId: string, dto: BanDto) {
+    const resolved = await requireUserByOnixId(this.prisma, onixId);
+    const displayId = formatOnixId(resolved.onixId);
     if (dto.banned) {
       if (!dto.reason) throw new BadRequestException('Укажите причину блокировки.');
       const comment = dto.comment?.trim();
@@ -104,7 +109,7 @@ class OperationsService {
       const now = new Date();
       const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86400_000);
       const user = await this.prisma.user.update({
-        where: { onixId },
+        where: { id: resolved.id },
         data: {
           deletedAt: now,
           banReason: dto.reason,
@@ -129,18 +134,18 @@ class OperationsService {
           },
         },
       });
-      return { onixId, banned: true, ban: banPublicInfo(user) };
+      return { onixId: displayId, banned: true, ban: banPublicInfo(user) };
     }
 
     const user = await this.prisma.user.update({
-      where: { onixId },
+      where: { id: resolved.id },
       data: { ...BAN_CLEAR_DATA },
     });
     await this.risk.revokeBanMarkers(this.prisma, user.id);
     await this.prisma.auditLog.create({
       data: { actorId: actor.id, action: 'USER_UNBAN', entity: 'User', entityId: user.id.toString() },
     });
-    return { onixId, banned: false, ban: null };
+    return { onixId: displayId, banned: false, ban: null };
   }
 
   withdraw(user: AuthUser, dto: WithdrawalDto) {

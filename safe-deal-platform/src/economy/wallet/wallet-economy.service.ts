@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
 import { PrismaService } from '../../prisma.service';
 import { requireUserByOnixId } from '../../onix-id-lookup';
+import { BalanceService } from './balance.service';
 import { DepositService } from './deposit.service';
 import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
@@ -18,6 +19,7 @@ const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
 export class WalletEconomyService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly balance: BalanceService,
     private readonly deposit: DepositService,
     private readonly locks: LockService,
     private readonly trust: TrustService,
@@ -74,6 +76,51 @@ export class WalletEconomyService {
     }));
   }
 
+  /** Main balance → deposit available (locked untouched). */
+  async fundDepositFromBalance(user: AuthUser, amountCents: number, idempotencyKey: string) {
+    if (amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения залога — 1 ₽.');
+    const amount = BigInt(amountCents);
+    return this.prisma.$transaction(async (tx) => {
+      await this.locks.releaseExpiredForUser(tx, user.id);
+      const existing = await tx.depositLedgerEntry.findUnique({ where: { idempotencyKey } });
+      if (existing) {
+        if (existing.userId !== user.id || existing.type !== 'TOPUP' || existing.amountCents !== amount) {
+          throw new ConflictException('Ключ идемпотентности уже использован.');
+        }
+        return {
+          depositEntryId: existing.id.toString(),
+          amountCents: amount.toString(),
+        };
+      }
+      await this.balance.debit(tx, user.id, amount, 'DEPOSIT_FUND', {
+        idempotencyKey: `bal:${idempotencyKey}`,
+        description: 'Перевод в залог',
+      });
+      const entry = await this.deposit.creditAvailable(tx, user.id, amount, 'TOPUP', {
+        idempotencyKey,
+        description: 'Пополнение залога с баланса',
+      });
+      await this.trust.appendHistory(tx, user.id, 'DEPOSIT_CHANGED', {
+        deltaCents: amount.toString(),
+        reason: 'FUND_FROM_BALANCE',
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action: 'DEPOSIT_FUND',
+          entity: 'DepositLedgerEntry',
+          entityId: entry.id.toString(),
+          metadata: { amountCents },
+        },
+      });
+      return {
+        depositEntryId: entry.id.toString(),
+        amountCents: amount.toString(),
+      };
+    }, SERIALIZABLE);
+  }
+
+  /** Deposit available → main balance. Locked deposit cannot be withdrawn. */
   async withdrawDeposit(user: AuthUser, amountCents: number, idempotencyKey: string) {
     if (amountCents < 100) throw new BadRequestException('Минимальная сумма вывода залога — 1 ₽.');
     const amount = BigInt(amountCents);
@@ -84,15 +131,22 @@ export class WalletEconomyService {
         if (existing.userId !== user.id || existing.type !== 'WITHDRAW' || existing.amountCents !== -amount) {
           throw new ConflictException('Ключ идемпотентности уже использован.');
         }
-        return existing;
+        return {
+          depositEntryId: existing.id.toString(),
+          amountCents: amount.toString(),
+        };
       }
       const entry = await this.deposit.debitAvailable(tx, user.id, amount, 'WITHDRAW', {
         idempotencyKey,
-        description: 'Вывод залога',
+        description: 'Вывод залога на баланс',
+      });
+      await this.balance.credit(tx, user.id, amount, 'DEPOSIT_RETURN', {
+        idempotencyKey: `bal:${idempotencyKey}`,
+        description: 'Возврат из залога',
       });
       await this.trust.appendHistory(tx, user.id, 'DEPOSIT_CHANGED', {
         deltaCents: (-amount).toString(),
-        reason: 'WITHDRAW',
+        reason: 'WITHDRAW_TO_BALANCE',
       });
       await tx.auditLog.create({
         data: {
@@ -103,7 +157,10 @@ export class WalletEconomyService {
           metadata: { amountCents },
         },
       });
-      return entry;
+      return {
+        depositEntryId: entry.id.toString(),
+        amountCents: amount.toString(),
+      };
     }, SERIALIZABLE);
   }
 

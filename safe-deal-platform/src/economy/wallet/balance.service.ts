@@ -22,7 +22,7 @@ export class BalanceService {
     tx: Tx,
     userId: bigint,
     amountCents: bigint,
-    type: 'DEPOSIT' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT',
+    type: 'DEPOSIT' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_RETURN',
     opts: {
       idempotencyKey: string;
       orderId?: bigint;
@@ -59,7 +59,7 @@ export class BalanceService {
     tx: Tx,
     userId: bigint,
     amountCents: bigint,
-    type: 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT',
+    type: 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND',
     opts: {
       idempotencyKey: string;
       orderId?: bigint;

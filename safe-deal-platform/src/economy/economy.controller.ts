@@ -30,6 +30,11 @@ class WithdrawDepositDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
 }
 
+class FundDepositDto {
+  @Type(() => Number) @IsInt() @Min(100) @Max(50_000_000) amountCents!: number;
+  @IsString() @Length(16, 100) idempotencyKey!: string;
+}
+
 class ConfirmVerificationDto {
   @IsOptional() @IsString() @MaxLength(2000) evidencePayload?: string;
   @IsOptional() @IsString() @MaxLength(191) providerRef?: string;
@@ -101,6 +106,11 @@ export class EconomyController {
   @Header('Cache-Control', 'private, no-store')
   depositLocks(@CurrentUser() user: AuthUser) {
     return this.wallet.listLocks(user);
+  }
+
+  @Post('wallet/deposit/fund')
+  fundDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+    return this.wallet.fundDepositFromBalance(user, dto.amountCents, dto.idempotencyKey);
   }
 
   @Post('wallet/deposit/withdrawals')

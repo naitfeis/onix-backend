@@ -67,6 +67,8 @@ model User {
   chatMembers           ChatMember[]
   sentMessages          Message[]
   visibleMessages       Message[]            @relation("MessageVisibleTo")
+  deletedMessages       Message[]            @relation("MessageDeletedBy")
+  messageHides          MessageHide[]
   blocksMade            UserBlock[]          @relation("Blocker")
   blocksReceived        UserBlock[]          @relation("Blocked")
   notifications         Notification[]
@@ -208,6 +210,8 @@ model Chat {
   id        String          @id @default(cuid())
   /** Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. */
   pairKey   String?         @unique @db.VarChar(64)
+  kind      ChatKind        @default(DIRECT)
+  title     String?         @db.VarChar(120)
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   orders    Order[]
@@ -239,12 +243,31 @@ model Message {
   kind            MessageKind @default(USER)
   text            String      @db.VarChar(4500)
   createdAt       DateTime    @default(now())
+  /** Soft global delete — row kept for admin audit. */
+  deletedAt       DateTime?
+  deletedById     BigInt?
+  deletedReason   String?     @db.VarChar(500)
   chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender          User?       @relation(fields: [senderId], references: [id])
+  deletedBy       User?       @relation("MessageDeletedBy", fields: [deletedById], references: [id])
   visibleTo       User?       @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
+  hides           MessageHide[]
 
   @@index([chatId, createdAt])
   @@index([visibleToUserId])
+  @@index([deletedAt])
+}
+
+/** Per-user hide ("удалить у себя") — message stays for peers / admin. */
+model MessageHide {
+  messageId BigInt
+  userId    BigInt
+  createdAt DateTime @default(now())
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([userId])
 }
 
 model UserReport {
@@ -983,6 +1006,11 @@ enum ProductSubcategory {
   OTHER_MISC
 }
 
+enum ChatKind {
+  DIRECT
+  GROUP
+}
+
 enum MessageKind {
   USER
   SYSTEM
@@ -1018,6 +1046,10 @@ enum LedgerEntryType {
   SALE_PAYOUT
   ADMIN_ADJUSTMENT
   WITHDRAWAL
+  /** Main balance → deposit wallet */
+  DEPOSIT_FUND
+  /** Deposit wallet → main balance */
+  DEPOSIT_RETURN
 }
 
 enum NotificationType {

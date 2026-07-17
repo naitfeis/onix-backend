@@ -57,6 +57,7 @@ export interface ChatThread {
   id: string;
   title: string;
   subtitle?: string;
+  kind?: 'DIRECT' | 'GROUP';
   unreadCount: number;
   dealId?: string;
   peerOnixId?: string;
@@ -75,11 +76,24 @@ export interface Message {
   createdAt: string;
   mine: boolean;
   pending?: boolean;
+  deliveryStatus?: 'SENT' | 'READ';
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedReason?: string | null;
+  originalText?: string;
+  readBy?: Array<{ onixId: string; username: string; readAt: string }>;
+}
+
+export interface ChatUserHit {
+  onixId: string;
+  username: string;
+  avatarUrl?: string;
+  badge?: 'ADMIN' | 'SUPPORT';
 }
 
 export interface WalletOperation {
   id: string;
-  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL';
+  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
   amountCents: string;
   /** API contract: matches ledgerDto — no DB status column. */
   status: 'COMPLETED';
@@ -261,8 +275,13 @@ export const API_PATHS = {
   supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   chats: '/api/chats',
+  chatsSearch: (q: string) => `/api/chats?q=${encodeURIComponent(q)}`,
+  chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
   directChat: '/api/chats/direct',
+  createGroupChat: '/api/chats/groups',
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
+  messageDelete: (threadId: string, messageId: string, scope?: 'self' | 'global') =>
+    `/api/chats/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}${scope === 'global' ? '?scope=global' : ''}`,
   userPublic: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}`,
   reviews: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/reviews`,
   reviewCreate: (orderId: string) => `/api/orders/${encodeURIComponent(orderId)}/reviews`,
@@ -270,6 +289,7 @@ export const API_PATHS = {
   walletDeposit: '/api/wallet/deposit',
   walletDepositLedger: '/api/wallet/deposit/ledger',
   walletDepositLocks: '/api/wallet/deposit/locks',
+  walletDepositFund: '/api/wallet/deposit/fund',
   walletDepositWithdraw: '/api/wallet/deposit/withdrawals',
   paymentsIntents: '/api/payments/intents',
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,

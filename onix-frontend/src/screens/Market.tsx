@@ -6,6 +6,7 @@ import {
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
+import { formatOnixId } from '../utils/onixId';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 
@@ -164,7 +165,7 @@ export function Market({
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{selected.seller.onixId} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button variant="secondary" onClick={async () => {
               try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }

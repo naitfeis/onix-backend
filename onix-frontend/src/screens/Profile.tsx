@@ -10,7 +10,11 @@ import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from 
 
 const Admin = lazy(() => import('./Admin'));
 
-type TopUpWallet = 'MAIN' | 'DEPOSIT';
+type MoneyModal = 'MAIN_TOPUP' | 'MAIN_WITHDRAW' | 'DEPOSIT_FUND' | 'DEPOSIT_WITHDRAW' | null;
+
+function rublesToCents(rubles: number): number {
+  return Math.round(rubles * 100);
+}
 
 export function EditProduct({ product, core, onClose, setToast }: { product: Product | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
@@ -60,9 +64,8 @@ export function Profile({
   openProductCard: (productId: string) => void;
 }) {
   const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'admin'>('overview');
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [topUp, setTopUp] = useState<TopUpWallet | null>(null);
-  const [topUpBusy, setTopUpBusy] = useState(false);
+  const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
+  const [moneyBusy, setMoneyBusy] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
@@ -87,30 +90,51 @@ export function Profile({
     return () => { cancelled = true; };
   }, [core.listFavorites, core.profile, section]);
 
-  const submitTopUp = async () => {
+  const openMoney = (kind: Exclude<MoneyModal, null>) => {
+    setAmount('');
+    setMoneyModal(kind);
+  };
+
+  const submitMoney = async () => {
     const rubles = Number(amount);
-    if (!topUp || !(rubles >= 1)) return;
-    setTopUpBusy(true);
+    if (!moneyModal || !(rubles >= 1)) return;
+    setMoneyBusy(true);
     try {
-      const amountCents = Math.round(rubles * 100);
-      const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
-        wallet: topUp,
-        amountCents,
-        provider: 'MANUAL',
-        idempotencyKey: crypto.randomUUID(),
-      });
-      await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
-      await core.loadProfile();
-      setTopUp(null);
+      const amountCents = rublesToCents(rubles);
+      const key = crypto.randomUUID();
+      if (moneyModal === 'MAIN_WITHDRAW') {
+        if (!(await core.withdraw(rubles))) return;
+        setToast('Заявка на вывод создана.');
+      } else if (moneyModal === 'MAIN_TOPUP') {
+        const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
+          wallet: 'MAIN',
+          amountCents,
+          provider: 'MANUAL',
+          idempotencyKey: key,
+        });
+        await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
+        await core.loadProfile();
+        setToast('Баланс пополнен.');
+      } else if (moneyModal === 'DEPOSIT_FUND') {
+        await api.post(API_PATHS.walletDepositFund, { amountCents, idempotencyKey: key });
+        await core.loadProfile();
+        setToast('Залог пополнен с баланса.');
+      } else if (moneyModal === 'DEPOSIT_WITHDRAW') {
+        await api.post(API_PATHS.walletDepositWithdraw, { amountCents, idempotencyKey: key });
+        await core.loadProfile();
+        setToast('Залог выведен на баланс.');
+      }
+      setMoneyModal(null);
       setAmount('');
-      setToast(topUp === 'DEPOSIT' ? 'Залог пополнен.' : 'Баланс пополнен.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Пополнение недоступно.';
-      setToast(message.includes('не подключ') || message.includes('отключено') || message.includes('Manual')
-        ? 'Скоро: Telegram Wallet / ЮKassa. Manual-пополнение пока отключено.'
-        : message);
+      const message = error instanceof Error ? error.message : 'Операция недоступна.';
+      if (moneyModal === 'MAIN_TOPUP' && (message.includes('не подключ') || message.includes('отключено') || message.includes('Manual'))) {
+        setToast('Скоро: Telegram Wallet / ЮKassa. Manual-пополнение пока отключено.');
+      } else {
+        setToast(message);
+      }
     } finally {
-      setTopUpBusy(false);
+      setMoneyBusy(false);
     }
   };
 
@@ -123,9 +147,23 @@ export function Profile({
     if (authorProfile?.onixId === onixId) return;
     try { setAuthorProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
   };
+
+  const moneyTitle = moneyModal === 'MAIN_TOPUP' ? 'Пополнить баланс'
+    : moneyModal === 'MAIN_WITHDRAW' ? 'Вывод средств'
+    : moneyModal === 'DEPOSIT_FUND' ? 'Пополнить залог'
+    : moneyModal === 'DEPOSIT_WITHDRAW' ? 'Вывести залог'
+    : '';
+  const moneyHint = moneyModal === 'DEPOSIT_FUND'
+    ? 'Сумма спишется с основного баланса и зачислится в доступный залог.'
+    : moneyModal === 'DEPOSIT_WITHDRAW'
+      ? 'Только доступный залог. Замороженные средства после сделки нельзя вывести до конца HOLD.'
+      : moneyModal === 'MAIN_TOPUP'
+        ? 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'
+        : 'Сумма и комиссия будут подтверждены сервером до списания.';
+
   return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
-      <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => { setAmount(''); setWithdrawOpen(true); }}>Вывести</Button><Button variant="secondary" onClick={() => { setAmount(''); setTopUp('MAIN'); }}>Пополнить</Button></div></div>
-      <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit?.totalCents ?? '0')}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => { setAmount(''); setTopUp('DEPOSIT'); }}>Пополнить</Button></div></div>
+      <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</Button></div></div>
+      <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit?.totalCents ?? '0')}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('DEPOSIT_FUND')}>Пополнить</Button><Button variant="secondary" onClick={() => openMoney('DEPOSIT_WITHDRAW')}>Вывести</Button></div></div>
       {deposit && <div className="stats"><span><b>{money(deposit.totalCents)}</b> всего</span><span><b>{money(deposit.availableCents)}</b> доступно</span><span><b>{money(deposit.lockedCents)}</b> заморожено</span></div>}
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
@@ -178,16 +216,17 @@ export function Profile({
       setToast={setToast}
     />
     <EditProduct product={editing} core={core} onClose={() => setEditing(null)} setToast={setToast} />
-    <Modal open={withdrawOpen} title="Вывод средств" onClose={() => setWithdrawOpen(false)}><div className="form"><p className="modal__text">Сумма и комиссия будут подтверждены сервером до списания.</p><Field label="Сумма, ₽"><Input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></Field><div className="modal__actions"><Button variant="secondary" onClick={() => setWithdrawOpen(false)}>Отмена</Button><Button busy={core.actionBusy === 'withdraw'} disabled={Number(amount) < 1} onClick={async () => { if (await core.withdraw(Number(amount))) { setWithdrawOpen(false); setToast('Заявка на вывод создана.'); } }}>Продолжить</Button></div></div></Modal>
-    <Modal open={Boolean(topUp)} title={topUp === 'DEPOSIT' ? 'Пополнить залог' : 'Пополнить баланс'} onClose={() => setTopUp(null)}>
+    <Modal open={Boolean(moneyModal)} title={moneyTitle} onClose={() => setMoneyModal(null)}>
       <div className="form">
-        <p className="modal__text">{topUp === 'DEPOSIT'
-          ? 'Залог — отдельная гарантия доверия. Позже: Telegram Wallet / ЮKassa.'
-          : 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'}</p>
+        <p className="modal__text">{moneyHint}</p>
         <Field label="Сумма, ₽"><Input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></Field>
         <div className="modal__actions">
-          <Button variant="secondary" onClick={() => setTopUp(null)}>Отмена</Button>
-          <Button busy={topUpBusy} disabled={Number(amount) < 1} onClick={() => void submitTopUp()}>Продолжить</Button>
+          <Button variant="secondary" onClick={() => setMoneyModal(null)}>Отмена</Button>
+          <Button
+            busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.actionBusy === 'withdraw')}
+            disabled={Number(amount) < 1}
+            onClick={() => void submitMoney()}
+          >Продолжить</Button>
         </div>
       </div>
     </Modal>

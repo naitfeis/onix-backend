@@ -1,13 +1,16 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable, Module,
-  NotFoundException, Param, Patch, Post, Query,
+  BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header,
+  Injectable, Module, NotFoundException, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
+} from 'class-validator';
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { messageDto, notificationDto, reviewDto } from './response';
@@ -23,8 +26,24 @@ class ReviewDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(5) rating!: number;
   @IsOptional() @IsString() @Length(1, 1000) text?: string;
 }
+class CreateGroupDto {
+  @IsString() @Length(1, 80) title!: string;
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40)
+  @IsString({ each: true }) @Length(1, 32, { each: true })
+  memberOnixIds!: string[];
+}
+class UserSearchQuery {
+  @IsString() @Length(1, 64) q!: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(30) limit = 20;
+}
+class DeleteMessageDto {
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
+}
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+const SENDER_SELECT = {
+  id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true,
+} as const;
 
 /**
  * Chat + notification domain (HTTP polling today; methods are WS-ready — no transport in service).
@@ -36,15 +55,36 @@ const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
 export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(user: AuthUser) {
-    // Presence heartbeat (architecture for Stage 5.6 WebSocket presence).
+  async list(user: AuthUser, search?: string) {
     void this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
 
+    const q = search?.trim();
     const chats = await this.prisma.chat.findMany({
-      where: { members: { some: { userId: user.id } } },
+      where: {
+        members: { some: { userId: user.id } },
+        ...(q ? {
+          OR: [
+            { title: { contains: q, mode: 'insensitive' } },
+            {
+              members: {
+                some: {
+                  userId: { not: user.id },
+                  user: {
+                    OR: [
+                      { telegramNick: { contains: q, mode: 'insensitive' } },
+                      { displayName: { contains: q, mode: 'insensitive' } },
+                      { onixId: { in: onixIdLookupCandidates(q) } },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        } : {}),
+      },
       include: {
         members: {
           where: { OR: [{ userId: user.id }, { userId: { not: user.id } }] },
@@ -60,10 +100,11 @@ export class ChatService {
         messages: {
           where: {
             OR: [{ visibleToUserId: null }, { visibleToUserId: user.id }],
+            hides: { none: { userId: user.id } },
           },
           orderBy: { createdAt: 'desc' },
           take: 1,
-          select: { text: true, kind: true },
+          select: { text: true, kind: true, deletedAt: true },
         },
         orders: {
           orderBy: { createdAt: 'desc' },
@@ -76,7 +117,6 @@ export class ChatService {
     });
     if (chats.length === 0) return [];
 
-    // One grouped unread query instead of N× message.count (was up to 50 round-trips).
     const chatIds = chats.map((chat) => chat.id);
     const unreadRows = await this.prisma.$queryRaw<Array<{ chatId: string; cnt: bigint }>>`
       SELECT m."chatId" AS "chatId", COUNT(*)::bigint AS cnt
@@ -87,28 +127,42 @@ export class ChatService {
         AND m.kind = 'USER'
         AND m."senderId" IS NOT NULL
         AND m."senderId" <> ${user.id}
+        AND m."deletedAt" IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "MessageHide" h
+          WHERE h."messageId" = m.id AND h."userId" = ${user.id}
+        )
         AND (cm."lastReadAt" IS NULL OR m."createdAt" > cm."lastReadAt")
       GROUP BY m."chatId"
     `;
     const unreadByChat = new Map(unreadRows.map((row) => [row.chatId, Number(row.cnt)]));
 
     return chats.map((chat) => {
-      // Prefer counterparty over support/admin who joined via ChatMember.
+      const isGroup = chat.kind === 'GROUP';
       const other = chat.members.find((member) => (
         member.userId !== user.id
         && !member.user.isAdmin
         && !member.user.isSupport
       )) ?? chat.members.find((member) => member.userId !== user.id);
       const latestOrder = chat.orders[0];
+      const subtitleRaw = chat.messages[0];
+      const subtitle = subtitleRaw?.deletedAt && !(user.isAdmin || user.isSupport)
+        ? 'Сообщение удалено'
+        : subtitleRaw?.text;
+      const peerOnix = other?.user.onixId ? formatOnixId(other.user.onixId) : undefined;
       return {
         id: chat.id,
-        title: other?.user.displayName ?? other?.user.telegramNick ?? other?.user.onixId ?? 'Диалог',
-        subtitle: chat.messages[0]?.text,
+        kind: chat.kind,
+        title: isGroup
+          ? (chat.title ?? 'Группа')
+          : (other?.user.displayName ?? other?.user.telegramNick ?? peerOnix ?? 'Диалог'),
+        subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
-        peerOnixId: other?.user.onixId,
-        peerLastOnline: other?.user.lastSeenAt?.toISOString(),
-        ...(other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
-        ...(other?.user.isAdmin ? { peerBadge: 'ADMIN' as const } : other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
+        peerOnixId: isGroup ? undefined : peerOnix,
+        peerLastOnline: isGroup ? undefined : other?.user.lastSeenAt?.toISOString(),
+        ...(!isGroup && other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
+        ...(!isGroup && other?.user.isAdmin ? { peerBadge: 'ADMIN' as const }
+          : !isGroup && other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
         ...(latestOrder ? {
           dealId: latestOrder.id.toString(),
           orderCard: {
@@ -121,6 +175,84 @@ export class ChatService {
         } : {}),
       };
     });
+  }
+
+  async searchUsers(user: AuthUser, q: string, limit: number) {
+    const query = q.trim();
+    if (!query) return [];
+    const take = Math.min(Math.max(limit, 1), 30);
+    const candidates = onixIdLookupCandidates(query);
+    const rows = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        id: { not: user.id },
+        OR: [
+          { onixId: { in: candidates } },
+          { telegramNick: { contains: query, mode: 'insensitive' } },
+          { displayName: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      take,
+      select: {
+        onixId: true, telegramNick: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true,
+      },
+      orderBy: { id: 'asc' },
+    });
+    return rows.map((row) => {
+      const onixId = formatOnixId(row.onixId);
+      return {
+        onixId,
+        username: row.telegramNick ?? row.displayName ?? onixId,
+        ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+        ...(row.isAdmin ? { badge: 'ADMIN' as const } : row.isSupport ? { badge: 'SUPPORT' as const } : {}),
+      };
+    });
+  }
+
+  async createGroup(user: AuthUser, title: string, memberOnixIds: string[]) {
+    const name = title.trim();
+    if (!name) throw new BadRequestException('Укажите название группы.');
+    const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
+    if (unique.length < 1) throw new BadRequestException('Добавьте хотя бы одного участника.');
+    const members: Array<{ id: bigint; onixId: string; deletedAt: Date | null }> = [];
+    for (const raw of unique) {
+      const u = await requireUserByOnixId(this.prisma, raw);
+      if (u.id === user.id) continue;
+      if (u.deletedAt) throw new BadRequestException(`Пользователь ${formatOnixId(u.onixId)} недоступен.`);
+      members.push({ id: u.id, onixId: u.onixId, deletedAt: u.deletedAt });
+    }
+    if (members.length < 1) throw new BadRequestException('Добавьте хотя бы одного участника.');
+
+    const chat = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.chat.create({
+        data: {
+          kind: 'GROUP',
+          title: name.slice(0, 80),
+          members: {
+            create: [
+              { userId: user.id },
+              ...members.map((m) => ({ userId: m.id })),
+            ],
+          },
+        },
+      });
+      await tx.message.create({
+        data: {
+          chatId: created.id,
+          senderId: null,
+          kind: 'SYSTEM',
+          text: `Группа «${name.slice(0, 80)}» создана.`,
+        },
+      });
+      return created;
+    }, SERIALIZABLE);
+
+    return {
+      id: chat.id,
+      kind: 'GROUP' as const,
+      title: name.slice(0, 80),
+      unreadCount: 0,
+    };
   }
 
   async direct(user: AuthUser, onixId: string) {
@@ -136,7 +268,6 @@ export class ChatService {
         SERIALIZABLE,
       );
     } catch (error) {
-      // Concurrent create: unique pairKey wins — reuse existing chat (no duplicates).
       if (
         typeof error === 'object'
         && error !== null
@@ -149,11 +280,13 @@ export class ChatService {
       }
     }
 
+    const peerOnix = formatOnixId(target.onixId);
     return {
       id: chat.id,
-      title: target.displayName ?? target.telegramNick ?? target.onixId,
+      kind: 'DIRECT' as const,
+      title: target.displayName ?? target.telegramNick ?? peerOnix,
       unreadCount: 0,
-      peerOnixId: target.onixId,
+      peerOnixId: peerOnix,
       peerLastOnline: target.lastSeenAt.toISOString(),
       ...(target.avatarUrl ? { peerAvatarUrl: target.avatarUrl } : {}),
     };
@@ -163,17 +296,34 @@ export class ChatService {
     await this.member(user.id, chatId);
     const take = Math.min(Math.max(limit, 1), 100);
     const beforeId = before ? parseId(before) : undefined;
+    const staffViewer = user.isAdmin || user.isSupport;
+
+    const memberRows = await this.prisma.chatMember.findMany({
+      where: { chatId },
+      include: {
+        user: { select: { onixId: true, displayName: true, telegramNick: true } },
+      },
+    });
+    const memberReads = memberRows.map((m) => ({
+      userId: m.userId,
+      onixId: m.user.onixId,
+      username: m.user.telegramNick ?? m.user.displayName ?? formatOnixId(m.user.onixId),
+      lastReadAt: m.lastReadAt,
+    }));
+
     const rows = await this.prisma.message.findMany({
       where: {
         chatId,
         OR: [{ visibleToUserId: null }, { visibleToUserId: user.id }],
+        hides: { none: { userId: user.id } },
         ...(beforeId !== undefined ? { id: { lt: beforeId } } : {}),
+        // Non-staff: still see soft-deleted as placeholder (filter none); staff see all.
       },
       orderBy: { createdAt: 'desc' },
       take,
-      include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
+      include: { sender: { select: SENDER_SELECT } },
     });
-    // Mark entire thread read in one updateMany — not per-message.
+
     await this.prisma.chatMember.updateMany({
       where: { chatId, userId: user.id },
       data: { lastReadAt: new Date() },
@@ -182,42 +332,114 @@ export class ChatService {
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
-    return rows.reverse().map((message) => messageDto(message, user.id));
+
+    return rows.reverse().map((message) => messageDto(message, user.id, {
+      staffViewer,
+      memberReads,
+    }));
   }
 
   async send(user: AuthUser, chatId: string, text: string) {
     await this.member(user.id, chatId);
     const body = text.trim();
     if (!body) throw new BadRequestException('Сообщение не может быть пустым.');
-    const other = await this.prisma.chatMember.findFirst({ where: { chatId, userId: { not: user.id } } });
-    if (!other) throw new BadRequestException('В чате нет получателя.');
-    await this.assertNotBlocked(user.id, other.userId);
+
+    const others = await this.prisma.chatMember.findMany({
+      where: { chatId, userId: { not: user.id } },
+      select: { userId: true },
+    });
+    if (others.length === 0) throw new BadRequestException('В чате нет получателя.');
+    for (const other of others) {
+      await this.assertNotBlocked(user.id, other.userId);
+    }
+
+    const memberRows = await this.prisma.chatMember.findMany({
+      where: { chatId },
+      include: { user: { select: { onixId: true, displayName: true, telegramNick: true } } },
+    });
+    const memberReads = memberRows.map((m) => ({
+      userId: m.userId,
+      onixId: m.user.onixId,
+      username: m.user.telegramNick ?? m.user.displayName ?? formatOnixId(m.user.onixId),
+      lastReadAt: m.lastReadAt,
+    }));
 
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: { chatId, senderId: user.id, kind: 'USER', text: body },
-        include: { sender: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
+        include: { sender: { select: SENDER_SELECT } },
       });
       await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
-      await createDomainNotification(tx, {
-        userId: other.userId,
-        type: 'NEW_MESSAGE',
-        title: 'Новое сообщение',
-        body: body.slice(0, 160),
-        data: { chatId },
-      });
+      for (const other of others) {
+        await createDomainNotification(tx, {
+          userId: other.userId,
+          type: 'NEW_MESSAGE',
+          title: 'Новое сообщение',
+          body: body.slice(0, 160),
+          data: { chatId },
+        });
+      }
       return created;
     });
 
-    const peer = await this.prisma.user.findUnique({
-      where: { id: other.userId },
+    const peers = await this.prisma.user.findMany({
+      where: { id: { in: others.map((o) => o.userId) } },
       select: { telegramId: true },
     });
-    if (peer) {
+    for (const peer of peers) {
       void pushTelegramToChatId(peer.telegramId, 'Новое сообщение', body.slice(0, 200));
     }
 
-    return messageDto(message, user.id);
+    return messageDto(message, user.id, {
+      staffViewer: user.isAdmin || user.isSupport,
+      memberReads,
+    });
+  }
+
+  /** Hide message for current user only. */
+  async hideForSelf(user: AuthUser, chatId: string, messageId: bigint) {
+    await this.member(user.id, chatId);
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, chatId },
+    });
+    if (!message) throw new NotFoundException('Сообщение не найдено.');
+    await this.prisma.messageHide.upsert({
+      where: { messageId_userId: { messageId, userId: user.id } },
+      create: { messageId, userId: user.id },
+      update: {},
+    });
+    return { ok: true, scope: 'SELF' as const };
+  }
+
+  /** Soft-delete globally — admin/support only. Row kept for audit. */
+  async softDelete(user: AuthUser, chatId: string, messageId: bigint, reason?: string) {
+    if (!user.isAdmin && !user.isSupport) {
+      throw new ForbiddenException('Глобальное удаление доступно только модерации.');
+    }
+    await this.member(user.id, chatId);
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, chatId },
+    });
+    if (!message) throw new NotFoundException('Сообщение не найдено.');
+    if (message.deletedAt) return { ok: true, scope: 'GLOBAL' as const };
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: {
+        deletedAt: new Date(),
+        deletedById: user.id,
+        deletedReason: reason?.trim().slice(0, 500) || null,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: user.id,
+        action: 'MESSAGE_SOFT_DELETE',
+        entity: 'Message',
+        entityId: messageId.toString(),
+        metadata: { chatId, reason: reason?.trim() ?? null },
+      },
+    });
+    return { ok: true, scope: 'GLOBAL' as const };
   }
 
   private async member(userId: bigint, chatId: string) {
@@ -360,10 +582,25 @@ export class EngagementController {
 
   @Get('chats')
   @Header('Cache-Control', 'private, no-store')
-  listChats(@CurrentUser() user: AuthUser) { return this.chats.list(user); }
+  listChats(@CurrentUser() user: AuthUser, @Query('q') q?: string) {
+    return this.chats.list(user, q);
+  }
+
+  @Get('chats/users/search')
+  @Header('Cache-Control', 'private, no-store')
+  searchUsers(@CurrentUser() user: AuthUser, @Query() query: UserSearchQuery) {
+    return this.chats.searchUsers(user, query.q, query.limit);
+  }
+
   @Post('chats/direct') direct(@CurrentUser() user: AuthUser, @Body() dto: DirectChatDto) {
     return this.chats.direct(user, dto.onixId);
   }
+
+  @Post('chats/groups')
+  createGroup(@CurrentUser() user: AuthUser, @Body() dto: CreateGroupDto) {
+    return this.chats.createGroup(user, dto.title, dto.memberOnixIds);
+  }
+
   @Get('chats/:id/messages') messages(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
@@ -371,12 +608,28 @@ export class EngagementController {
   ) {
     return this.chats.messages(user, id, query.limit, query.before);
   }
+
   @Post('chats/:id/messages') send(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: MessageDto,
   ) {
     return this.chats.send(user, id, dto.text);
+  }
+
+  @Delete('chats/:id/messages/:messageId')
+  deleteMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Query('scope') scope: string | undefined,
+    @Body() body?: DeleteMessageDto,
+  ) {
+    const mid = parseId(messageId);
+    if (scope === 'global') {
+      return this.chats.softDelete(user, id, mid, body?.reason);
+    }
+    return this.chats.hideForSelf(user, id, mid);
   }
 
   @Get('notifications') listNotifications(@CurrentUser() user: AuthUser) {
