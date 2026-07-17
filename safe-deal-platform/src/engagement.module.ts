@@ -8,10 +8,11 @@ import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { messageDto, notificationDto, reviewDto } from './response';
 
-class DirectChatDto { @IsString() @Length(7, 20) onixId!: string; }
+class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
 class MessageDto { @IsString() @Length(1, 2000) text!: string; }
 class MessagesQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 50;
@@ -123,8 +124,7 @@ export class ChatService {
   }
 
   async direct(user: AuthUser, onixId: string) {
-    const target = await this.prisma.user.findUnique({ where: { onixId } });
-    if (!target) throw new NotFoundException('Пользователь не найден.');
+    const target = await requireUserByOnixId(this.prisma, onixId);
     if (target.id === user.id) throw new BadRequestException('Нельзя открыть чат с собой.');
     await this.assertNotBlocked(user.id, target.id);
 
@@ -262,8 +262,9 @@ export class ReviewService {
   constructor(private readonly prisma: PrismaService) {}
 
   async list(onixId: string) {
+    const subject = await requireUserByOnixId(this.prisma, onixId);
     const reviews = await this.prisma.review.findMany({
-      where: { subject: { onixId } },
+      where: { subjectId: subject.id },
       include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,

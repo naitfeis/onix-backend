@@ -1,4 +1,14 @@
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import {
+  useEffect,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type InputHTMLAttributes,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+  type TouchEvent as ReactTouchEvent,
+} from 'react';
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <svg className="icon" width={size} height={size} aria-hidden="true"><use href={`/icons.svg#${name}`} /></svg>;
@@ -47,11 +57,80 @@ export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'succ
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }
 
+let openModalCount = 0;
+
+function syncModalBodyClass() {
+  if (typeof document === 'undefined') return;
+  document.body.classList.toggle('modal-open', openModalCount > 0);
+}
+
+type TelegramBackButton = {
+  show: () => void;
+  hide: () => void;
+  onClick: (cb: () => void) => void;
+  offClick: (cb: () => void) => void;
+};
+
+function telegramBackButton(): TelegramBackButton | null {
+  try {
+    const wa = (window as unknown as { Telegram?: { WebApp?: { BackButton?: TelegramBackButton } } }).Telegram?.WebApp;
+    return wa?.BackButton ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return;
+    openModalCount += 1;
+    syncModalBodyClass();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    const back = telegramBackButton();
+    const onBack = () => onClose();
+    if (back) {
+      back.show();
+      back.onClick(onBack);
+    }
+    return () => {
+      openModalCount = Math.max(0, openModalCount - 1);
+      syncModalBodyClass();
+      window.removeEventListener('keydown', onKey);
+      if (back) {
+        back.offClick(onBack);
+        if (openModalCount === 0) back.hide();
+      }
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
-  return <div className="modal" role="presentation" onMouseDown={event => event.target === event.currentTarget && onClose()}>
-    <div className="modal__panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div className="modal__head"><h2 id="modal-title">{title}</h2><Button variant="ghost" onClick={onClose} aria-label="Закрыть">×</Button></div>
+  const closeFromBackdrop = (event: ReactMouseEvent | ReactTouchEvent) => {
+    if (event.target === event.currentTarget) onClose();
+  };
+  return <div
+    className="modal"
+    role="presentation"
+    onMouseDown={closeFromBackdrop}
+    onClick={closeFromBackdrop}
+  >
+    <div
+      className="modal__panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      onMouseDown={event => event.stopPropagation()}
+      onClick={event => event.stopPropagation()}
+    >
+      <div className="modal__head">
+        <h2 id="modal-title">{title}</h2>
+        <Button type="button" variant="ghost" onClick={onClose} aria-label="Закрыть">×</Button>
+      </div>
       {children}
     </div>
   </div>;

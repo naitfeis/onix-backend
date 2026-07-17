@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, CanActivate, Controller, ExecutionContext, ForbiddenException,
-  Get, Header, Injectable, NotFoundException, Param, Post, Query, UseGuards,
+  Get, Header, Injectable, Param, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
@@ -9,6 +9,7 @@ import {
 import type { PaymentProviderCode, PaymentWallet, SellerVerificationKind } from '@prisma/client';
 import { AuthRequest, AuthUser, CurrentUser, parseId } from '../common';
 import { PrismaService } from '../prisma.service';
+import { requireUserByOnixId } from '../onix-id-lookup';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
@@ -203,15 +204,13 @@ export class AdminEconomyController {
     @Param('onixId') onixId: string,
     @Body() body: GrantProDto,
   ) {
-    const user = await this.prisma.user.findUnique({ where: { onixId }, select: { id: true } });
-    if (!user) throw new NotFoundException('Пользователь не найден.');
+    const user = await requireUserByOnixId(this.prisma, onixId);
     return this.pro.grant(actor, user.id, body.endsAt ? new Date(body.endsAt) : undefined);
   }
 
   @Post('users/:onixId/pro/revoke')
   async revokePro(@CurrentUser() actor: AuthUser, @Param('onixId') onixId: string) {
-    const user = await this.prisma.user.findUnique({ where: { onixId }, select: { id: true } });
-    if (!user) throw new NotFoundException('Пользователь не найден.');
+    const user = await requireUserByOnixId(this.prisma, onixId);
     return this.pro.revoke(actor, user.id);
   }
 }

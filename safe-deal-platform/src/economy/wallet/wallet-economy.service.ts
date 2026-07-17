@@ -4,10 +4,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
 import { PrismaService } from '../../prisma.service';
+import { requireUserByOnixId } from '../../onix-id-lookup';
 import { DepositService } from './deposit.service';
 import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
-import { buildPublicTrustCard, assertNoTrustScore } from '../trust/trust-card';
+import { assertNoTrustScore, buildPublicTrustCard } from '../trust/trust-card';
 import { ProSubscriptionService } from '../pro/pro.service';
 import { VerificationService } from '../verification/verification.service';
 
@@ -107,8 +108,9 @@ export class WalletEconomyService {
   }
 
   async getPublicTrustCard(onixId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { onixId },
+    const user = await requireUserByOnixId(this.prisma, onixId);
+    const full = await this.prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
       select: {
         id: true,
         deletedAt: true,
@@ -123,21 +125,21 @@ export class WalletEconomyService {
         sellerSubscription: { select: { status: true, endsAt: true } },
       },
     });
-    if (!user || user.deletedAt) throw new NotFoundException('Профиль не найден.');
+    if (full.deletedAt) throw new NotFoundException('Профиль не найден.');
     const proActive = Boolean(
-      user.sellerSubscription
-      && user.sellerSubscription.status === 'ACTIVE'
-      && (!user.sellerSubscription.endsAt || user.sellerSubscription.endsAt > new Date()),
+      full.sellerSubscription
+      && full.sellerSubscription.status === 'ACTIVE'
+      && (!full.sellerSubscription.endsAt || full.sellerSubscription.endsAt > new Date()),
     );
     const card = buildPublicTrustCard({
-      trustLevel: user.trustLevel,
-      depositAvailableCents: user.depositAvailableCents,
-      depositLockedCents: user.depositLockedCents,
-      createdAt: user.createdAt,
-      ratingAverage: user.ratingAverage,
-      ratingCount: user.ratingCount,
-      completedSales: user.completedSales,
-      verifications: user.verifications,
+      trustLevel: full.trustLevel,
+      depositAvailableCents: full.depositAvailableCents,
+      depositLockedCents: full.depositLockedCents,
+      createdAt: full.createdAt,
+      ratingAverage: full.ratingAverage,
+      ratingCount: full.ratingCount,
+      completedSales: full.completedSales,
+      verifications: full.verifications,
       proActive,
     });
     assertNoTrustScore(card);

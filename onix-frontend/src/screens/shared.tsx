@@ -6,6 +6,7 @@ import {
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
+import { formatOnixId } from '../utils/onixId';
 import type { Core } from './types';
 
 export const emptyDraft: ProductDraft = {
@@ -41,7 +42,7 @@ export function MessageText({ text, onOpenOnix }: { text: string; onOpenOnix: (o
   return <>{parts.map((part, index) => {
     if (/^ONIX-\d+$/i.test(part)) {
       const onixId = part.toUpperCase();
-      return <button key={`${index}-${onixId}`} type="button" className="onix-id-link" onClick={() => onOpenOnix(onixId)}>{onixId}</button>;
+      return <button key={`${index}-${onixId}`} type="button" className="onix-id-link" onClick={() => onOpenOnix(onixId)}>{formatOnixId(onixId)}</button>;
     }
     return <span key={index}>{part}</span>;
   })}</>;
@@ -99,7 +100,7 @@ export function PublicProfileModal({
         <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" />
         <div className="profile-main">
           <h1>@{profile.username} <StaffBadge badge={profile.badge} /></h1>
-          <p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p>
+          <p>{formatOnixId(profile.onixId)} · {formatLastSeen(profile.lastOnline)}</p>
           <div className="stats">
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
@@ -143,8 +144,12 @@ export function PublicProfileModal({
             }}
           >Пожаловаться</Button>
         </div>}
-        {trustCard && <div className="balance"><small>ЗАЛОГ</small><strong>{money(trustCard.depositTotal)}</strong></div>}
+        <div className="balance">
+          <small>ЗАЛОГ</small>
+          <strong>{money(trustCard?.depositTotal ?? '0')}</strong>
+        </div>
       </Card>
+      <p className="muted">Пополняется продавцом добровольно. Используется как дополнительная гарантия.</p>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}
       <div className="chips profile-tabs">

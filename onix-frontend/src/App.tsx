@@ -6,6 +6,7 @@ import UserAvatar from './components/UserAvatar';
 import { Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import type { Screen } from './screens/types';
+import { formatOnixId } from './utils/onixId';
 import './App.css';
 
 const OnixBackground = lazy(() => import('./components/OnixBackground'));
@@ -139,7 +140,7 @@ export default function App() {
           <span className="user-summary identity-user">
             <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} />
             <strong>{money(core.profile.balanceCents)}</strong>
-            <span>// @{core.profile.username} · {core.profile.onixId}</span>
+            <span>// @{core.profile.username} · {formatOnixId(core.profile.onixId)}</span>
           </span>
         ) : (
           <><strong>ГОСТЬ</strong><span>// БЕЗ СЕССИИ</span></>

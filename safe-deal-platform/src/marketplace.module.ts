@@ -16,6 +16,7 @@ import { AuthModule, AuthService } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
+import { onixIdLookupCandidates } from './onix-id';
 import { PrismaService } from './prisma.service';
 import { productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
@@ -130,7 +131,7 @@ export class MarketplaceService {
         OR: [
           { title: { contains: query.search, mode: 'insensitive' } },
           { seller: { telegramNick: { contains: query.search, mode: 'insensitive' } } },
-          { seller: { onixId: { equals: query.search, mode: 'insensitive' } } },
+          { seller: { onixId: { in: onixIdLookupCandidates(query.search) } } },
         ],
       } : {}),
       ...((query.minPriceCents || query.maxPriceCents) ? {

@@ -7,6 +7,7 @@ import { AuthUser, CurrentUser } from './common';
 import { EconomyModule } from './economy/economy.module';
 import { buildPublicTrustCard } from './economy/trust/trust-card';
 import { LockService } from './economy/wallet/lock.service';
+import { findUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
@@ -88,8 +89,10 @@ export class ProfilesService {
 
   /** Public profile — no balance / ledger / private deal history / trustScore. */
   async getPublic(viewer: AuthUser, onixId: string) {
+    const resolved = await findUserByOnixId(this.prisma, onixId);
+    if (!resolved) throw new NotFoundException('Профиль не найден.');
     const profile = await this.prisma.user.findUnique({
-      where: { onixId },
+      where: { id: resolved.id },
       select: {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,

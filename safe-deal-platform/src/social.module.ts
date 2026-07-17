@@ -7,6 +7,7 @@ import { IsEnum, IsString, MaxLength, MinLength } from 'class-validator';
 import { BAN_REASON_LABELS } from './ban-policy';
 import { AuthUser, CurrentUser } from './common';
 import { pushTelegramToChatId } from './domain-notify';
+import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
@@ -138,9 +139,7 @@ export class SocialService {
   }
 
   private async target(onixId: string) {
-    const user = await this.prisma.user.findUnique({ where: { onixId } });
-    if (!user) throw new NotFoundException('Пользователь не найден.');
-    return user;
+    return requireUserByOnixId(this.prisma, onixId);
   }
 }
 
