@@ -247,6 +247,8 @@ model Message {
   deletedAt       DateTime?
   deletedById     BigInt?
   deletedReason   String?     @db.VarChar(500)
+  /** True when removed for everyone (not just MessageHide for one user). */
+  deletedForAll   Boolean     @default(false)
   chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender          User?       @relation(fields: [senderId], references: [id])
   deletedBy       User?       @relation("MessageDeletedBy", fields: [deletedById], references: [id])

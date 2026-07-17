@@ -279,6 +279,7 @@ export const API_PATHS = {
   chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
   directChat: '/api/chats/direct',
   createGroupChat: '/api/chats/groups',
+  addChatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
   messageDelete: (threadId: string, messageId: string, scope?: 'self' | 'global') =>
     `/api/chats/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}${scope === 'global' ? '?scope=global' : ''}`,

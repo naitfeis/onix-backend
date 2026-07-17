@@ -32,6 +32,11 @@ class CreateGroupDto {
   @IsString({ each: true }) @Length(1, 64, { each: true })
   memberOnixIds!: string[];
 }
+class AddMembersDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(200)
+  @IsString({ each: true }) @Length(1, 64, { each: true })
+  memberOnixIds!: string[];
+}
 class UserSearchQuery {
   @IsString() @Length(1, 64) q!: string;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(30) limit = 20;
@@ -442,6 +447,7 @@ export class ChatService {
       data: {
         deletedAt: new Date(),
         deletedById: user.id,
+        deletedForAll: true,
         deletedReason: reason?.trim().slice(0, 500) || null,
       },
     });
@@ -451,10 +457,64 @@ export class ChatService {
         action: 'MESSAGE_SOFT_DELETE',
         entity: 'Message',
         entityId: messageId.toString(),
-        metadata: { chatId, reason: reason?.trim() ?? null },
+        metadata: { chatId, reason: reason?.trim() ?? null, deletedForAll: true },
       },
     });
     return { ok: true, scope: 'GLOBAL' as const };
+  }
+
+  /** Add members to an existing group chat. */
+  async addMembers(user: AuthUser, chatId: string, memberOnixIds: string[]) {
+    const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind !== 'GROUP') throw new BadRequestException('Добавлять участников можно только в группу.');
+    await this.member(user.id, chatId);
+
+    const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
+    if (unique.length < 1) throw new BadRequestException('Укажите участников.');
+
+    const added: string[] = [];
+    const missing: string[] = [];
+    const already: string[] = [];
+
+    for (const raw of unique) {
+      try {
+        const target = await requireUserByOnixId(this.prisma, raw);
+        if (target.id === user.id || target.deletedAt) {
+          missing.push(formatOnixId(raw) || raw);
+          continue;
+        }
+        const exists = await this.prisma.chatMember.findUnique({
+          where: { chatId_userId: { chatId, userId: target.id } },
+        });
+        if (exists) {
+          already.push(formatOnixId(target.onixId));
+          continue;
+        }
+        await this.prisma.chatMember.create({ data: { chatId, userId: target.id } });
+        added.push(formatOnixId(target.onixId));
+      } catch {
+        missing.push(formatOnixId(raw) || raw);
+      }
+    }
+
+    if (added.length > 0) {
+      await this.prisma.message.create({
+        data: {
+          chatId,
+          senderId: null,
+          kind: 'SYSTEM',
+          text: `Добавлены: ${added.join(', ')}`,
+        },
+      });
+      await this.prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+    }
+
+    if (added.length < 1 && missing.length > 0) {
+      throw new BadRequestException(`${missing.join(', ')} не найден`);
+    }
+
+    return { added, missing, already };
   }
 
   private async member(userId: bigint, chatId: string) {
@@ -614,6 +674,11 @@ export class EngagementController {
   @Post('chats/groups')
   createGroup(@CurrentUser() user: AuthUser, @Body() dto: CreateGroupDto) {
     return this.chats.createGroup(user, dto.title, dto.memberOnixIds);
+  }
+
+  @Post('chats/:id/members')
+  addMembers(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: AddMembersDto) {
+    return this.chats.addMembers(user, id, dto.memberOnixIds);
   }
 
   @Get('chats/:id/messages') messages(

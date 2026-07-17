@@ -69,7 +69,7 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
   useEffect(() => {
     if (!open) return;
     const { id, depth } = pushModal(() => onCloseRef.current());
-    setZIndex(2000 + depth);
+    setZIndex(2100 + depth * 10);
     return () => popModal(id);
   }, [open]);
 
@@ -98,7 +98,7 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
         <h2 id={titleId}>{title}</h2>
         <Button type="button" variant="ghost" onClick={onClose} aria-label="Закрыть">×</Button>
       </div>
-      {children}
+      <div className="modal__body">{children}</div>
     </div>
   </div>;
 }

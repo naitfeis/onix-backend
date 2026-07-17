@@ -8,6 +8,9 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.favorite('p1')).toBe('/api/favorites/p1');
     expect(API_PATHS.follow('ONIX-000007')).toBe('/api/users/ONIX-000007/follow');
     expect(API_PATHS.messages('chat/1')).toBe('/api/chats/chat%2F1/messages');
+    expect(API_PATHS.addChatMembers('chat/1')).toBe('/api/chats/chat%2F1/members');
+    expect(API_PATHS.createGroupChat).toBe('/api/chats/groups');
+    expect(API_PATHS.messageDelete('c1', 'm1', 'global')).toBe('/api/chats/c1/messages/m1?scope=global');
     expect(API_PATHS.reviewCreate('42')).toBe('/api/orders/42/reviews');
     expect(API_PATHS.walletWithdraw).toBe('/api/wallet/withdrawals');
     expect(API_PATHS.walletDeposit).toBe('/api/wallet/deposit');
