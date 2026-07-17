@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Screenshot background only:
- * organic ring + spheres, dense pale-cyan point-cloud mesh on black.
+ * Long thin ring + free-floating spheres (independent motion).
+ * Solid gray/white shading — no point-cloud flicker.
  */
 const vertexShader = `
 attribute vec2 a_position;
@@ -21,14 +21,6 @@ mat2 rot(float a) {
   return mat2(c, -s, s, c);
 }
 
-float hash(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-}
-
-float hash3(vec3 p) {
-  return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
-}
-
 float sdSphere(vec3 p, float r) { return length(p) - r; }
 
 float sdTorus(vec3 p, vec2 t) {
@@ -37,49 +29,41 @@ float sdTorus(vec3 p, vec2 t) {
 }
 
 float mapFigure(vec3 p, float t) {
-  p.yz *= rot(0.88);
+  // Mild scene tilt
+  vec3 q = p;
+  q.yz *= rot(0.88);
 
-  float ringSpin = t * 0.08;
-  float stretchX = 0.68;
+  // —— RING only: own spin + stretch (balls do NOT use this frame) ——
+  vec3 pr = q;
+  pr.xz *= rot(t * 0.1 + 0.2);
+  pr.xy *= rot(t * 0.04);
+  pr.x *= 0.68;
+  float d = sdTorus(pr, vec2(0.98, 0.04));
 
-  // Shared spin frame (no stretch yet)
-  vec3 frame = p;
-  frame.xz *= rot(ringSpin + 0.2);
-  frame.xy *= rot(t * 0.05);
-
-  // Ring only gets horizontal stretch → long thin ellipse
-  vec3 pr = frame;
-  pr.x *= stretchX;
-  float d = sdTorus(pr, vec2(0.98, 0.042));
-
-  // Round balls scattered ON the ellipse (not in the center), own drift
-  float tb = t * 0.65;
-  for (int i = 0; i < 12; i++) {
-    float fi = float(i);
-    float a = fi * 0.5235988 + tb * 0.2 + fi * 0.04;
-    float R = 0.98;
-    // Ellipse matching stretched torus; spheres stay round (no stretch on sdSphere)
-    vec3 c = vec3(cos(a) * (R / stretchX), 0.06 * sin(tb * 1.2 + fi * 1.4), sin(a) * R);
-    // Drift along the ring independently of ring spin
-    c += vec3(-sin(a), 0.0, cos(a)) * (0.14 * sin(tb * 0.9 + fi * 2.2));
-    c.y += 0.05 * cos(tb * 0.7 + fi);
-    float rad = 0.038 + 0.028 * fract(sin(fi * 12.9898) * 43758.5453);
-    if (i == 3 || i == 8) rad *= 1.55;
-    d = min(d, sdSphere(frame - c, rad));
-  }
+  // —— BALLS: free 3D paths, different heights / directions / speeds ——
+  float tb = t;
+  // Explicit centers — spread in volume, not glued to ring sides
+  d = min(d, sdSphere(q - vec3( 0.95 * cos(tb*0.55+0.2),  0.55*sin(tb*0.7),      0.35*sin(tb*0.55+0.2)), 0.09));
+  d = min(d, sdSphere(q - vec3(-0.85 * cos(tb*0.4+1.5),  -0.45*cos(tb*0.6),     0.55*sin(tb*0.4+1.5)), 0.08));
+  d = min(d, sdSphere(q - vec3( 0.25 * cos(tb*0.9),        0.72*sin(tb*0.5+0.8),  0.9*cos(tb*0.35)),     0.075));
+  d = min(d, sdSphere(q - vec3(-0.4  * sin(tb*0.65),      -0.7*sin(tb*0.45),    -0.75*cos(tb*0.5)),     0.07));
+  d = min(d, sdSphere(q - vec3( 1.15 * cos(tb*-0.32+2.0),  0.15*sin(tb*1.1),     0.2*sin(tb*-0.32+2.0)), 0.085));
+  d = min(d, sdSphere(q - vec3(-1.1  * cos(tb*0.28+3.2),   0.35*cos(tb*0.8),    -0.15*sin(tb*0.28+3.2)), 0.08));
+  d = min(d, sdSphere(q - vec3( 0.55 * cos(tb*0.75+0.5),  -0.2+0.5*sin(tb*0.95), 0.65*sin(tb*0.75+0.5)), 0.065));
+  d = min(d, sdSphere(q - vec3(-0.6  * cos(tb*-0.5+2.8),   0.4*sin(tb*0.55),    -0.5*cos(tb*-0.5+2.8)),  0.07));
+  d = min(d, sdSphere(q - vec3( 0.1  * cos(tb*0.2),        0.85*cos(tb*0.4),     0.15*sin(tb*1.2)),      0.06));
+  d = min(d, sdSphere(q - vec3( 0.7  * sin(tb*0.48+1.0),  -0.55*cos(tb*0.7),    -0.35*sin(tb*0.48+1.0)), 0.055));
 
   return d;
 }
 
 void main() {
   vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
-  // Smaller on screen — not oversized
   uv *= 0.92;
   uv += (u_pointer - 0.5) * 0.02;
 
   float t = u_time * 0.38;
-  float camA = t * 0.13;
-  // Pull camera back — figure reads smaller / lighter like the ideal shot
+  float camA = t * 0.12;
   vec3 ro = vec3(sin(camA) * 2.7, 0.85 + 0.05 * sin(t * 0.28), cos(camA) * 2.7);
   vec3 ta = vec3(0.0, 0.0, 0.0);
   vec3 ww = normalize(ta - ro);
@@ -98,56 +82,45 @@ void main() {
     travel += max(d * 0.62, 0.005);
   }
 
-  // Icy cyan like the ideal shot (~#A0D0D8)
-  vec3 glow = vec3(0.627, 0.816, 0.847);
+  // Solid soft gray / white — no mesh, no flicker
+  vec3 gray = vec3(0.72, 0.74, 0.76);
+  vec3 white = vec3(0.9, 0.91, 0.92);
   vec3 col = vec3(0.0);
   float alpha = 0.0;
 
   if (hit > 0.0) {
-    vec2 e = vec2(0.0028, 0.0);
+    vec2 e = vec2(0.0035, 0.0);
     vec3 n = normalize(vec3(
       mapFigure(p + e.xyy, t) - mapFigure(p - e.xyy, t),
       mapFigure(p + e.yxy, t) - mapFigure(p - e.yxy, t),
       mapFigure(p + e.yyx, t) - mapFigure(p - e.yyx, t)
     ));
 
-    float lat = acos(clamp(n.y, -1.0, 1.0));
-    float lon = atan(n.z, n.x);
+    vec3 l1 = normalize(vec3(0.4, 0.9, 0.3));
+    float diff = 0.35 + 0.65 * max(dot(n, l1), 0.0);
+    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.4);
 
-    // Sharper contours
-    float c1 = abs(fract(lat * 16.0) - 0.5);
-    float c2 = abs(fract(lon * 12.0 / 3.14159265) - 0.5);
-    float lines = 1.0 - smoothstep(0.0, 0.022, min(c1, c2));
-
-    // Crisper point cloud
-    vec2 cellA = floor(vec2(lon, lat) * vec2(80.0, 54.0));
-    float dots = step(0.48, hash(cellA));
-    float dots2 = step(0.62, hash3(floor(p * 44.0)));
-    float pattern = max(lines, max(dots * 0.8, dots2 * 0.5));
-
-    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.6);
-    col = glow * pattern * (0.9 + fres * 0.3);
-    col += glow * fres * 0.08;
-
-    alpha = clamp(pattern * 0.9 + fres * 0.1, 0.0, 0.92);
+    col = mix(gray, white, diff * 0.55 + fres * 0.35);
+    alpha = clamp(0.55 + fres * 0.25, 0.0, 0.88);
   }
 
+  // Soft halo (also solid, no noise)
   float aura = 0.0;
   travel = 0.0;
-  for (int j = 0; j < 14; j++) {
+  for (int j = 0; j < 12; j++) {
     p = ro + rd * travel;
     float d = abs(mapFigure(p, t));
-    aura += exp(-d * 12.0) * 0.015;
-    travel += 0.14;
+    aura += exp(-d * 10.0) * 0.014;
+    travel += 0.15;
   }
-  col += glow * aura * 0.55;
-  alpha = max(alpha, clamp(aura * 1.05, 0.0, 0.18));
+  col += gray * aura * 0.5;
+  alpha = max(alpha, clamp(aura * 0.9, 0.0, 0.16));
 
   float vig = smoothstep(1.88, 0.26, length(uv * vec2(1.0, 1.05)));
   col *= vig;
   alpha *= vig * u_intensity;
 
-  gl_FragColor = vec4(col * u_intensity, clamp(alpha, 0.0, 0.92));
+  gl_FragColor = vec4(col * u_intensity, clamp(alpha, 0.0, 0.9));
 }
 `;
 
