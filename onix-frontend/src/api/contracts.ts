@@ -19,6 +19,8 @@ export interface Seller {
 
 export interface Product {
   id: string;
+  /** Public short code for ONIXLOT-{n}. */
+  lotNumber?: number;
   title: string;
   description?: string;
   priceCents: string;
@@ -71,7 +73,7 @@ export interface ChatThread {
   id: string;
   title: string;
   subtitle?: string;
-  kind?: 'DIRECT' | 'GROUP';
+  kind?: 'DIRECT' | 'GROUP' | 'AI';
   unreadCount: number;
   dealId?: string;
   peerOnixId?: string;
@@ -338,6 +340,8 @@ export const API_PATHS = {
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
   subcategories: '/api/products/catalog/subcategories',
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
+  productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
+  aiChat: '/api/ai/chat',
 } as const;
 
 export type BanReasonCode =

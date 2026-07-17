@@ -53,6 +53,8 @@ export interface LedgerDto {
 
 export interface ProductDto {
   id: string;
+  /** Public short code number for ONIXLOT-{n}. */
+  lotNumber?: number;
   title: string;
   description?: string;
   priceCents: string;
@@ -119,6 +121,7 @@ export function ledgerDto(entry: { id: bigint; type: string; amountCents: bigint
 
 export function productDto(product: {
   id: string;
+  lotNumber?: number;
   title: string;
   description: string | null;
   priceCents: bigint;
@@ -133,6 +136,7 @@ export function productDto(product: {
 }, viewerId?: bigint): ProductDto {
   return {
     id: product.id,
+    ...(product.lotNumber != null ? { lotNumber: product.lotNumber } : {}),
     title: product.title,
     ...(product.description ? { description: product.description } : {}),
     priceCents: product.priceCents.toString(),

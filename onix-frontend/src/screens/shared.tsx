@@ -37,9 +37,27 @@ export function StaffBadge({ badge }: { badge?: 'ADMIN' | 'SUPPORT' }) {
   return <span className="badge badge--staff">{badge}</span>;
 }
 
-export function MessageText({ text, onOpenOnix }: { text: string; onOpenOnix: (onixId: string) => void }) {
-  const parts = text.split(/(ONIX-\d+)/gi);
+export function MessageText({
+  text, onOpenOnix, onOpenLot,
+}: {
+  text: string;
+  onOpenOnix: (onixId: string) => void;
+  onOpenLot?: (lotNumber: number) => void;
+}) {
+  const parts = text.split(/(ONIXLOT-\d+|ONIX-\d+)/gi);
   return <>{parts.map((part, index) => {
+    if (/^ONIXLOT-\d+$/i.test(part)) {
+      const lotNumber = Number(part.replace(/ONIXLOT-/i, ''));
+      if (!onOpenLot || !Number.isFinite(lotNumber)) return <span key={index}>{part.toUpperCase()}</span>;
+      return (
+        <button
+          key={`${index}-lot-${lotNumber}`}
+          type="button"
+          className="onix-id-link"
+          onClick={() => onOpenLot(lotNumber)}
+        >{`ONIXLOT-${lotNumber}`}</button>
+      );
+    }
     if (/^ONIX-\d+$/i.test(part)) {
       const onixId = part.toUpperCase();
       return <button key={`${index}-${onixId}`} type="button" className="onix-id-link" onClick={() => onOpenOnix(onixId)}>{formatOnixId(onixId)}</button>;

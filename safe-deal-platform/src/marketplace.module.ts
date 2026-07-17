@@ -180,6 +180,15 @@ export class MarketplaceService {
     return productDto(product, viewerId ?? undefined);
   }
 
+  async getByLot(user: AuthUser | null, lotNumber: number) {
+    const row = await this.prisma.product.findUnique({
+      where: { lotNumber },
+      select: { id: true },
+    });
+    if (!row) throw new NotFoundException('Товар не найден.');
+    return this.get(user, row.id);
+  }
+
   async create(user: AuthUser, dto: ProductDto) {
     const seller = await this.prisma.user.findUnique({
       where: { id: user.id },
@@ -364,6 +373,25 @@ export class MarketplaceController {
         : 'public, max-age=30, stale-while-revalidate=120',
     );
     return this.service.list(user, query);
+  }
+
+  @Public()
+  @Get('lot/:lotNumber')
+  async getByLot(
+    @Req() req: { headers?: Record<string, string | string[] | undefined> },
+    @Res({ passthrough: true }) res: Response,
+    @Param('lotNumber') lotNumber: string,
+  ) {
+    const n = Number(lotNumber);
+    if (!Number.isInteger(n) || n < 1) throw new BadRequestException('Некорректный ONIXLOT.');
+    const user = await this.optionalViewer(req);
+    res.setHeader(
+      'Cache-Control',
+      user
+        ? 'private, no-store'
+        : 'public, max-age=30, stale-while-revalidate=120',
+    );
+    return this.service.getByLot(user, n);
   }
 
   @Public()

@@ -49,6 +49,7 @@ export const dealPartySelect = {
 
 export const productListSelect = {
   id: true,
+  lotNumber: true,
   title: true,
   description: true,
   priceCents: true,

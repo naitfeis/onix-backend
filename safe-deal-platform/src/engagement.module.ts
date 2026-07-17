@@ -7,6 +7,8 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
 } from 'class-validator';
+import { AIService } from './ai/ai.service';
+import { AiModule } from './ai/ai.module';
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
@@ -58,13 +60,19 @@ const SENDER_SELECT = {
  */
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ai: AIService,
+  ) {}
 
   async list(user: AuthUser, search?: string) {
     void this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
+
+    // Always ensure pinned ONIX AI system chat exists.
+    await this.ai.ensureChat(user);
 
     const q = search?.trim();
     const chats = await this.prisma.chat.findMany({
@@ -142,8 +150,9 @@ export class ChatService {
     `;
     const unreadByChat = new Map(unreadRows.map((row) => [row.chatId, Number(row.cnt)]));
 
-    return chats.map((chat) => {
+    const mapped = chats.map((chat) => {
       const isGroup = chat.kind === 'GROUP';
+      const isAi = chat.kind === 'AI';
       const other = chat.members.find((member) => (
         member.userId !== user.id
         && !member.user.isAdmin
@@ -158,17 +167,19 @@ export class ChatService {
       return {
         id: chat.id,
         kind: chat.kind,
-        title: isGroup
-          ? (chat.title ?? 'Группа')
-          : (other?.user.displayName ?? other?.user.telegramNick ?? peerOnix ?? 'Диалог'),
-        subtitle,
+        title: isAi
+          ? 'ONIX AI'
+          : isGroup
+            ? (chat.title ?? 'Группа')
+            : (other?.user.displayName ?? other?.user.telegramNick ?? peerOnix ?? 'Диалог'),
+        subtitle: isAi ? (subtitle || 'Помощник платформы') : subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
-        peerOnixId: isGroup ? undefined : peerOnix,
-        peerLastOnline: isGroup ? undefined : other?.user.lastSeenAt?.toISOString(),
-        ...(!isGroup && other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
-        ...(!isGroup && other?.user.isAdmin ? { peerBadge: 'ADMIN' as const }
-          : !isGroup && other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
-        ...(latestOrder ? {
+        peerOnixId: isGroup || isAi ? undefined : peerOnix,
+        peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
+        ...(!isGroup && !isAi && other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
+        ...(!isGroup && !isAi && other?.user.isAdmin ? { peerBadge: 'ADMIN' as const }
+          : !isGroup && !isAi && other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
+        ...(latestOrder && !isAi ? {
           dealId: latestOrder.id.toString(),
           orderCard: {
             id: latestOrder.id.toString(),
@@ -180,6 +191,14 @@ export class ChatService {
         } : {}),
       };
     });
+
+    // ONIX AI always first in the dialog list.
+    mapped.sort((a, b) => {
+      if (a.kind === 'AI' && b.kind !== 'AI') return -1;
+      if (b.kind === 'AI' && a.kind !== 'AI') return 1;
+      return 0;
+    });
+    return mapped;
   }
 
   async searchUsers(user: AuthUser, q: string, limit: number) {
@@ -361,6 +380,24 @@ export class ChatService {
     await this.member(user.id, chatId);
     const body = text.trim();
     if (!body) throw new BadRequestException('Сообщение не может быть пустым.');
+
+    const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+
+    if (chat.kind === 'AI') {
+      const message = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.message.create({
+          data: { chatId, senderId: user.id, kind: 'USER', text: body },
+          include: { sender: { select: SENDER_SELECT } },
+        });
+        await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+        return created;
+      });
+      await this.ai.reply(user, chatId, body);
+      return messageDto(message, user.id, {
+        staffViewer: user.isAdmin || user.isSupport,
+      });
+    }
 
     const others = await this.prisma.chatMember.findMany({
       where: { chatId, userId: { not: user.id } },
@@ -555,6 +592,7 @@ export class ChatService {
   async leaveGroup(user: AuthUser, chatId: string) {
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
     if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI удалить нельзя.');
     if (chat.kind !== 'GROUP') throw new BadRequestException('Выйти можно только из группы.');
     await this.member(user.id, chatId);
     await this.prisma.chatMember.delete({
@@ -796,6 +834,7 @@ export class EngagementController {
 }
 
 @Module({
+  imports: [AiModule],
   controllers: [EngagementController],
   providers: [ChatService, NotificationService, ReviewService],
 })

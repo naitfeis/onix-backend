@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { AiModule } from './ai/ai.module';
 import { AuthGuard, AuthModule } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { DatabaseModule } from './database.module';
@@ -17,7 +18,7 @@ import { LoginChallengeModule } from './login-challenge/login-challenge.module';
 @Module({
   imports: [
     DatabaseModule, AuthModule, AuthV2Module, LoginChallengeModule, ProfilesModule, MarketplaceModule, SocialModule,
-    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule,
+    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule, AiModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })

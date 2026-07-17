@@ -80,6 +80,7 @@ model User {
   reportsReceived       UserReport[]         @relation("ReportTarget")
   auditLogs             AuditLog[]           @relation("AuditActor")
   supportTickets        SupportTicket[]
+  productCreationSessions ProductCreationSession[]
   identityLinks         IdentityLink[]
   sessions              Session[]
   userRoles             UserRole[]
@@ -90,6 +91,8 @@ model User {
 
 model Product {
   id                 String              @id @default(cuid())
+  /** Public short code ONIXLOT-{lotNumber}. */
+  lotNumber          Int                 @unique @default(autoincrement())
   title              String              @db.VarChar(255)
   description        String?             @db.Text
   priceCents         BigInt
@@ -210,7 +213,7 @@ model LedgerEntry {
 
 model Chat {
   id        String          @id @default(cuid())
-  /** Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. */
+  /** Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. `ai:{userId}` for ONIX AI. */
   pairKey   String?         @unique @db.VarChar(64)
   kind      ChatKind        @default(DIRECT)
   title     String?         @db.VarChar(120)
@@ -220,8 +223,32 @@ model Chat {
   members   ChatMember[]
   messages  Message[]
   tickets   SupportTicket[]
+  productCreationSessions ProductCreationSession[]
 
   @@index([updatedAt])
+}
+
+/** ONIX AI guided product draft — no LLM; filled via EntityExtractor. */
+model ProductCreationSession {
+  id           String                 @id @default(cuid())
+  userId       BigInt
+  chatId       String
+  title        String?                @db.VarChar(32)
+  category     ProductCategory?
+  subcategory  ProductSubcategory?
+  priceCents   BigInt?
+  quantity     Int?
+  description  String?                @db.Text
+  images       Json?
+  status       ProductCreationStatus  @default(WAIT_TITLE)
+  productId    String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chat         Chat                   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([chatId, status])
 }
 
 model ChatMember {
@@ -1016,6 +1043,18 @@ enum ProductSubcategory {
 enum ChatKind {
   DIRECT
   GROUP
+  AI
+}
+
+enum ProductCreationStatus {
+  WAIT_TITLE
+  WAIT_CATEGORY
+  WAIT_SUBCATEGORY
+  WAIT_PRICE
+  WAIT_QUANTITY
+  WAIT_DESCRIPTION
+  READY
+  FINISHED
 }
 
 enum MessageKind {
