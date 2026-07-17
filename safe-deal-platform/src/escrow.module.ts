@@ -13,6 +13,7 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
+import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
 
@@ -82,6 +83,7 @@ export class EscrowService {
         seller: { select: dealPartySelect },
         reviews: { select: { authorId: true } },
         chat: { select: { id: true } },
+        supportTickets: { select: { id: true }, take: 1 },
       },
       orderBy,
       take: 100,
@@ -109,6 +111,7 @@ export class EscrowService {
       if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
       if (product.priceCents <= 0n) throw new BadRequestException('Некорректная цена товара.');
       const totalAmountCents = product.priceCents * BigInt(quantity);
+      const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
       // Optimistic lock: only one buyer can reserve an ACTIVE listing.
       const reserved = await tx.product.updateMany({
         where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
@@ -125,7 +128,7 @@ export class EscrowService {
       const created = await tx.order.create({
         data: {
           productId, buyerId: user.id, sellerId: product.sellerId,
-          totalAmountCents, payoutCents: totalAmountCents, quantity,
+          totalAmountCents, feeCents, payoutCents, quantity,
           status: 'PAYMENT_HOLD', idempotencyKey: key,
           chatId,
           transitions: { create: {
@@ -285,6 +288,21 @@ export class EscrowService {
         chat: { select: { id: true } },
       },
     });
+    if (order.chat?.id) {
+      await this.prisma.message.create({
+        data: {
+          chatId: order.chat.id,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: [
+            `Решение поддержки по заказу #${id}: подтверждение продавцу.`,
+            'Средства из Escrow зачислены продавцу (за вычетом комиссии площадки 5%).',
+            'Сделка завершена.',
+          ].join('\n'),
+        },
+      });
+      await this.prisma.chat.update({ where: { id: order.chat.id }, data: { updatedAt: new Date() } });
+    }
     const sellerTg = await this.prisma.user.findUnique({
       where: { id: order.sellerId },
       select: { telegramId: true },
@@ -366,6 +384,10 @@ export class EscrowService {
   }
 
   async dispute(user: AuthUser, id: bigint, key: string, reason?: string) {
+    const priorTicket = await this.prisma.supportTicket.findFirst({ where: { orderId: id }, select: { id: true } });
+    if (priorTicket) {
+      throw new BadRequestException('По этой сделке обращение уже было создано.');
+    }
     await this.prisma.$transaction(async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
@@ -528,6 +550,21 @@ export class EscrowService {
           chat: { select: { id: true } },
         },
       });
+      if (order.chat?.id) {
+        await this.prisma.message.create({
+          data: {
+            chatId: order.chat.id,
+            kind: 'SYSTEM',
+            senderId: null,
+            text: [
+              `Решение поддержки по заказу #${id}: возврат покупателю.`,
+              'Средства из Escrow возвращены покупателю.',
+              'Сделка закрыта. Продавец выплату не получает.',
+            ].join('\n'),
+          },
+        });
+        await this.prisma.chat.update({ where: { id: order.chat.id }, data: { updatedAt: new Date() } });
+      }
       return dealDto(order, actor);
     }
     return this.one(actor, id);

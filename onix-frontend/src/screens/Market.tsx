@@ -5,7 +5,7 @@ import {
   formatLastSeen, sellerIsPresent, type Product, type PublicProfile,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { Badge, Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
+import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
@@ -32,66 +32,70 @@ export function Market({
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE = 10;
+  const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
 
-  const isDefaultView = query.trim() === '' && category === 'Все' && !subcategory && sort === 'new';
   const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
   const marketSubs = category !== 'Все'
     ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
 
   useEffect(() => {
-    // Catalog is public — do not require profile. Guests browse; auth is parallel.
-    if (!isDefaultView) return;
-
-    if (core.states.products === 'loading' || core.states.products === 'idle') {
-      setMarketState('loading');
-      return;
-    }
-    if (core.states.products === 'error') {
-      setItems([]);
-      setMarketError(core.errors.products || 'Витрина недоступна');
-      setMarketState('error');
-      return;
-    }
-    setItems(core.products);
-    setMarketError(undefined);
-    setMarketState('success');
-  }, [
-    core.errors.products,
-    core.products,
-    core.states.products,
-    isDefaultView,
-  ]);
-
-  useEffect(() => {
-    // Search/filters still work for guests (public catalog).
-    if (isDefaultView) return;
-
     const controller = new AbortController();
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
       setMarketState('loading');
+      setOffset(0);
       const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
       void core.listProducts({
         search: query.trim() || undefined,
         category: category === 'Все' ? undefined : category,
         subcategory: subcategory || undefined,
         sort: serverSort,
-        limit: 30,
+        limit: PAGE,
         offset: 0,
       }, controller.signal).then((data) => {
         setItems(data);
+        setHasMore(data.length >= PAGE);
         setMarketError(undefined);
         setMarketState('success');
       }).catch((error: unknown) => {
         if (controller.signal.aborted) return;
         setItems([]);
+        setHasMore(false);
         setMarketError(friendlyError(error));
         setMarketState('error');
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [category, core.listProducts, isDefaultView, query, sort, subcategory]);
+  }, [category, core.listProducts, query, sort, subcategory]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const next = offset + PAGE;
+    const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
+    try {
+      const data = await core.listProducts({
+        search: query.trim() || undefined,
+        category: category === 'Все' ? undefined : category,
+        subcategory: subcategory || undefined,
+        sort: serverSort,
+        limit: PAGE,
+        offset: next,
+      });
+      setItems((prev) => [...prev, ...data]);
+      setOffset(next);
+      setHasMore(data.length >= PAGE);
+    } catch (error) {
+      setToast(friendlyError(error));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (!selected) return;
@@ -151,19 +155,22 @@ export function Market({
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
       marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
-      <div className="product-grid">{items.map(product => <Card key={product.id} interactive className="product-card">
+      <div className="product-grid product-grid--compact">{items.map(product => <Card key={product.id} interactive className="product-card product-card--compact">
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
-          <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
-          <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
+          <div className="product-card__top"><span>{product.category}</span></div>
+          <h2>{product.title.length > 32 ? `${product.title.slice(0, 32)}…` : product.title}</h2>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)}</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
           setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
           void core.toggleFavorite(product);
         }} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
       </Card>)}</div>}
+    {marketState === 'success' && hasMore && (
+      <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Загрузить ещё</Button>
+    )}
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
-      {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
+      {selected && <div className="stack compact"><div className="product-detail"><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
         <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
@@ -190,7 +197,20 @@ export function Market({
               }}
             >{selected.seller.followed ? 'Отписаться' : '+ Подписаться'}</Button>
           </div></Card>
-        <div className="modal__actions"><Button variant="secondary" onClick={async () => {
+        <div className="modal__actions">
+          {isAdmin && (
+            <Button variant="danger" busy={core.actionBusy === `admin-del-${selected.id}`} onClick={async () => {
+              try {
+                await api.delete(API_PATHS.adminProductRemove(selected.id));
+                setItems((prev) => prev.filter((p) => p.id !== selected.id));
+                setSelected(null);
+                setToast('Объявление удалено админом.');
+              } catch (error) {
+                setToast(friendlyError(error));
+              }
+            }}>Удалить</Button>
+          )}
+          <Button variant="secondary" onClick={async () => {
           setSelected(null);
           await openDirectChat(selected.seller.onixId);
         }}>Написать</Button><Button disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>

@@ -516,6 +516,27 @@ export class ChatService {
     return { added, missing, already };
   }
 
+  /** Leave a group chat (does not delete the group for others). */
+  async leaveGroup(user: AuthUser, chatId: string) {
+    const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind !== 'GROUP') throw new BadRequestException('Выйти можно только из группы.');
+    await this.member(user.id, chatId);
+    await this.prisma.chatMember.delete({
+      where: { chatId_userId: { chatId, userId: user.id } },
+    });
+    await this.prisma.message.create({
+      data: {
+        chatId,
+        senderId: null,
+        kind: 'SYSTEM',
+        text: `${formatOnixId(user.onixId)} вышел(а) из группы`,
+      },
+    });
+    await this.prisma.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+    return { ok: true as const };
+  }
+
   private async member(userId: bigint, chatId: string) {
     const member = await this.prisma.chatMember.findUnique({ where: { chatId_userId: { chatId, userId } } });
     if (!member) throw new NotFoundException('Чат не найден.');
@@ -678,6 +699,11 @@ export class EngagementController {
   @Post('chats/:id/members')
   addMembers(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: AddMembersDto) {
     return this.chats.addMembers(user, id, dto.memberOnixIds);
+  }
+
+  @Delete('chats/:id/members/me')
+  leaveGroup(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.chats.leaveGroup(user, id);
   }
 
   @Get('chats/:id/messages') messages(

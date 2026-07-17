@@ -17,6 +17,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
 import { onixIdLookupCandidates } from './onix-id';
+import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
 import { productListSelect, sellerPublicSelect } from './query-selects';
 import { productDto } from './response';
@@ -31,8 +32,8 @@ function toBoolean(value: unknown): boolean | undefined {
 }
 
 class ProductDto {
-  @IsString() @Length(5, 255) title!: string;
-  @IsOptional() @IsString() @Length(0, 1500) description?: string;
+  @IsString() @Length(5, 32) title!: string;
+  @IsOptional() @IsString() @MaxLength(20_000) description?: string;
   @IsString() @Matches(/^[1-9]\d*$/) priceCents!: string;
   @IsEnum(ProductCategory) category!: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
@@ -46,8 +47,8 @@ class ProductDto {
 }
 
 class UpdateProductDto {
-  @IsOptional() @IsString() @Length(5, 255) title?: string;
-  @IsOptional() @IsString() @Length(0, 1500) description?: string;
+  @IsOptional() @IsString() @Length(5, 32) title?: string;
+  @IsOptional() @IsString() @MaxLength(20_000) description?: string;
   @IsOptional() @IsString() @Matches(/^[1-9]\d*$/) priceCents?: string;
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
@@ -185,6 +186,11 @@ export class MarketplaceService {
     } catch (e) {
       throw fieldBadRequest('subcategory', (e as Error).message);
     }
+    try {
+      assertListingPrice(BigInt(dto.priceCents), dto.subcategory);
+    } catch (e) {
+      throw fieldBadRequest('priceCents', (e as Error).message);
+    }
     const secret = deliveryFields(dto);
     const { deliveryText: _omit, autoDeliver: _a, ...rest } = dto;
     const product = await this.prisma.product.create({
@@ -226,6 +232,13 @@ export class MarketplaceService {
       throw fieldBadRequest('subcategory', (e as Error).message);
     }
     const { priceCents, deliveryText, autoDeliver, ...data } = dto;
+    if (priceCents) {
+      try {
+        assertListingPrice(BigInt(priceCents), subcategory);
+      } catch (e) {
+        throw fieldBadRequest('priceCents', (e as Error).message);
+      }
+    }
     const patch: Prisma.ProductUpdateInput = {
       ...data,
       ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
@@ -269,6 +282,28 @@ export class MarketplaceService {
       }
     });
     return this.get(user, id);
+  }
+
+  /** Admin-only: force-remove listing from market in one click. */
+  async adminRemove(actor: AuthUser, id: string) {
+    if (!actor.isAdmin) throw new BadRequestException('Удалить объявление может только админ.');
+    const product = await this.prisma.product.findUnique({ where: { id } });
+    if (!product) throw new NotFoundException('Товар не найден.');
+    if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке — сначала завершите заказ.');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({ where: { id }, data: { status: 'ARCHIVED' } });
+      await tx.favorite.deleteMany({ where: { productId: id } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'PRODUCT_ADMIN_REMOVE',
+          entity: 'Product',
+          entityId: id,
+          metadata: { sellerId: product.sellerId.toString(), title: product.title },
+        },
+      });
+    });
+    return { ok: true as const, id, status: 'ARCHIVED' as const };
   }
 
   private async ownedActive(user: AuthUser, id: string) {
@@ -367,9 +402,20 @@ export class MarketplaceController {
   }
 }
 
+@Controller('admin/products')
+export class AdminProductsController {
+  constructor(private readonly service: MarketplaceService) {}
+
+  @Delete(':id')
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.service.adminRemove(user, id);
+  }
+}
+
 @Module({
   imports: [AuthV2Module, AuthModule],
-  controllers: [MarketplaceController],
+  controllers: [MarketplaceController, AdminProductsController],
   providers: [MarketplaceService],
+  exports: [MarketplaceService],
 })
 export class MarketplaceModule {}

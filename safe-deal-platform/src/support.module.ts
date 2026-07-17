@@ -36,12 +36,20 @@ export class SupportService {
       throw new NotFoundException('Сделка не найдена.');
     }
 
-    const open = await this.prisma.supportTicket.findFirst({
-      where: { orderId, status: 'OPEN' },
-      select: { id: true, chatId: true },
+    // One complaint per order (support ticket or already in dispute).
+    const existingAny = await this.prisma.supportTicket.findFirst({
+      where: { orderId },
+      select: { id: true, chatId: true, status: true },
+      orderBy: { createdAt: 'desc' },
     });
-    if (open) {
-      return { ticketId: open.id, chatId: open.chatId, status: 'OPEN' as const };
+    if (existingAny) {
+      if (existingAny.status === 'OPEN') {
+        return { ticketId: existingAny.id, chatId: existingAny.chatId, status: 'OPEN' as const };
+      }
+      throw new BadRequestException('По этой сделке обращение уже было создано.');
+    }
+    if (order.status === 'DISPUTE') {
+      throw new BadRequestException('По этой сделке уже открыт спор.');
     }
 
     const staff = await this.prisma.user.findMany({
@@ -248,6 +256,41 @@ export class SupportService {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }
+
+  /** People reports inbox for staff. */
+  async listReports(actor: AuthUser) {
+    if (!canActAsSupport(actor)) {
+      throw new ForbiddenException('Жалобы доступны только staff.');
+    }
+    const rows = await this.prisma.userReport.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        reason: true,
+        comment: true,
+        createdAt: true,
+        reporter: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
+        target: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      comment: r.comment,
+      createdAt: r.createdAt.toISOString(),
+      reporter: {
+        onixId: formatOnixId(r.reporter.onixId),
+        username: r.reporter.telegramNick ?? r.reporter.displayName ?? formatOnixId(r.reporter.onixId),
+        avatarUrl: r.reporter.avatarUrl ?? undefined,
+      },
+      target: {
+        onixId: formatOnixId(r.target.onixId),
+        username: r.target.telegramNick ?? r.target.displayName ?? formatOnixId(r.target.onixId),
+        avatarUrl: r.target.avatarUrl ?? undefined,
+      },
+    }));
+  }
 }
 
 @Controller()
@@ -258,6 +301,12 @@ export class SupportController {
   @Header('Cache-Control', 'private, no-store')
   queue(@CurrentUser() user: AuthUser) {
     return this.support.listQueue(user);
+  }
+
+  @Get('support/reports')
+  @Header('Cache-Control', 'private, no-store')
+  reports(@CurrentUser() user: AuthUser) {
+    return this.support.listReports(user);
   }
 
   @Post('orders/:id/support')

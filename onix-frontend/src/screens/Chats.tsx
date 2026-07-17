@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, money } from '../api/client';
 import { API_PATHS, formatLastSeen, isOnline, type ChatUserHit, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { Button, Card, Field, Input, Modal, Skeleton, StateView } from '../design-system';
+import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { parseMemberTokens } from '../utils/parseMemberTokens';
 import type { Core } from './types';
@@ -37,6 +37,8 @@ export function Chats({
   const [groupBusy, setGroupBusy] = useState(false);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
+  const [leaveGroupId, setLeaveGroupId] = useState<string | null>(null);
+  const groupPressRef = useRef<number | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const prevChatQueryRef = useRef('');
@@ -302,14 +304,31 @@ export function Chats({
         <Button type="button" variant="secondary" aria-label="Создать группу" onClick={() => { resetMemberPicker(); setGroupOpen(true); }}>+</Button>
       </div>
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
-        core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}>
+        core.chats.map(chat => <button
+          className="thread"
+          key={chat.id}
+          onClick={() => setThreadId(chat.id)}
+          onContextMenu={(event) => {
+            if (chat.kind !== 'GROUP') return;
+            event.preventDefault();
+            setLeaveGroupId(chat.id);
+          }}
+          onPointerDown={() => {
+            if (chat.kind !== 'GROUP') return;
+            if (groupPressRef.current) window.clearTimeout(groupPressRef.current);
+            groupPressRef.current = window.setTimeout(() => setLeaveGroupId(chat.id), 480);
+          }}
+          onPointerUp={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
+          onPointerLeave={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
+          onPointerCancel={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
+        >
           <span className="thread-peer">
             <UserAvatar
               avatarUrl={chat.peerAvatarUrl}
               name={chat.title}
-              online={chat.kind !== 'GROUP' && isOnline(chat.peerLastOnline)}
+              online={chat.kind === 'GROUP' ? undefined : isOnline(chat.peerLastOnline)}
             />
-            <span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.subtitle || 'Открыть диалог'}</small></span>
+            <span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}</small></span>
           </span>
           {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
         </button>)}</div>
@@ -329,7 +348,7 @@ export function Chats({
           <UserAvatar
             avatarUrl={thread.peerAvatarUrl}
             name={thread.title}
-            online={thread.kind !== 'GROUP' && isOnline(thread.peerLastOnline)}
+            online={thread.kind === 'GROUP' ? undefined : isOnline(thread.peerLastOnline)}
           />
         ) : null}
         <div>
@@ -474,6 +493,26 @@ export function Chats({
       core={core}
       onClose={() => setReportOnixId(null)}
       setToast={setToast}
+    />
+    <Confirm
+      open={Boolean(leaveGroupId)}
+      title="Выйти из группы?"
+      text="Чат исчезнет из списка. Вернуться можно только по новому приглашению."
+      dangerous
+      onCancel={() => setLeaveGroupId(null)}
+      onConfirm={async () => {
+        if (!leaveGroupId) return;
+        const id = leaveGroupId;
+        setLeaveGroupId(null);
+        try {
+          await api.delete(API_PATHS.leaveGroupChat(id));
+          if (threadId === id) setThreadId('');
+          await core.refreshChats();
+          setToast('Вы вышли из группы');
+        } catch (error) {
+          setToast(error instanceof Error ? error.message : 'Не удалось выйти');
+        }
+      }}
     />
   </div>;
 }

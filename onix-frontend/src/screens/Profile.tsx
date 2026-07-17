@@ -42,8 +42,8 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
       onClose();
     }
   }}>
-    <Field label="Название"><Input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field>
-    <Field label="Описание"><Textarea value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
+    <Field label="Название" hint="До 32 символов"><Input maxLength={32} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field>
+    <Field label="Описание"><Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
     <div className="form-grid"><Field label="Цена, ₽"><Input value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field><Field label="Количество"><Input type="number" min={1} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
     <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
     {draft.autoDeliver && <Field label="Текст товара" hint={product?.autoDeliver ? 'Оставьте пустым, чтобы сохранить текущий секрет. Новый текст заменит старый.' : 'login / password / код — выдаётся один раз после оплаты'}>
@@ -66,6 +66,7 @@ export function Profile({
   openDealChat: (chatId: string) => void;
 }) {
   const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'support' | 'admin'>('overview');
+  const [moneyOpen, setMoneyOpen] = useState(false);
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -168,9 +169,20 @@ export function Profile({
         : 'Сумма и комиссия будут подтверждены сервером до списания.';
 
   return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
-      <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</Button></div></div>
-      <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit?.totalCents ?? '0')}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('DEPOSIT_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('DEPOSIT_FUND')}>Пополнить</Button></div></div>
-      {deposit && <div className="stats"><span><b>{money(deposit.totalCents)}</b> всего</span><span><b>{money(deposit.availableCents)}</b> доступно</span><span><b>{money(deposit.lockedCents)}</b> заморожено</span></div>}
+      <div className="wallet-strip">
+        <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
+          <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
+          <span><small>Залог</small><strong>{money(deposit?.totalCents ?? '0')}</strong></span>
+          <em className={`wallet-strip__chevron${moneyOpen ? ' open' : ''}`} aria-hidden="true">▾</em>
+        </button>
+        {moneyOpen && (
+          <div className="wallet-strip__panel">
+            <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</Button></div></div>
+            <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit?.totalCents ?? '0')}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('DEPOSIT_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('DEPOSIT_FUND')}>Пополнить</Button></div></div>
+            {deposit && <div className="stats"><span><b>{money(deposit.totalCents)}</b> всего</span><span><b>{money(deposit.availableCents)}</b> доступно</span><span><b>{money(deposit.lockedCents)}</b> заморожено</span></div>}
+          </div>
+        )}
+      </div>
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
@@ -203,7 +215,13 @@ export function Profile({
       </div><p className="muted">{review.text}</p></Card>))}
     {section === 'support' && isStaff && (
       <Suspense fallback={<Card><Skeleton lines={4} /></Card>}>
-        <SupportQueue core={core} setToast={setToast} openDealChat={openDealChat} />
+        <SupportQueue
+          core={core}
+          setToast={setToast}
+          openDealChat={openDealChat}
+          openDirectChat={openDirectChat}
+          openUserProfile={(onixId) => void openAuthorProfile(onixId)}
+        />
       </Suspense>
     )}
     {section === 'admin' && profile.roles.includes('ADMIN') && (

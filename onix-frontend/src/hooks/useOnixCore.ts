@@ -107,7 +107,7 @@ async function bootstrapMarketplace(
 ): Promise<Profile | null> {
   const [profileResult] = await Promise.all([
     bootstrapPhase('me', () => loadProfile()),
-    bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 100 }))),
+    bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 10 }))),
   ]);
   markBootstrapPhase('profile', 0);
   markBootstrapPhase('marketplace', 0);
@@ -219,7 +219,7 @@ export function useOnixCore() {
       }));
 
       const productsPromise = bootstrapPhase('products-public', () =>
-        load('products', API_PATHS.productsList({ limit: 100 })),
+        load('products', API_PATHS.productsList({ limit: 10 })),
       );
       const sessionPromise = restoreWebsiteSession();
 

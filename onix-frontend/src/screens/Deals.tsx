@@ -69,16 +69,21 @@ export function Deals({
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
-          {!['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>}
+          {!deal.complaintOpen && !['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && (
+            <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>
+          )}
           {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
-          <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
-            const ticket = await core.openSupport(deal.id);
-            if (!ticket) return;
-            setToast('Обращение создано. Поддержка в чате.');
-            if (ticket.chatId) openDealChat(ticket.chatId);
-            else if (deal.chatId) openDealChat(deal.chatId);
-            else switchTo('chat');
-          }}>Обратиться в поддержку</Button>
+          {!deal.complaintOpen && (
+            <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
+              const ticket = await core.openSupport(deal.id);
+              if (!ticket) return;
+              setToast('Обращение создано. Поддержка в чате.');
+              if (ticket.chatId) openDealChat(ticket.chatId);
+              else if (deal.chatId) openDealChat(deal.chatId);
+              else switchTo('chat');
+            }}>Обратиться в поддержку</Button>
+          )}
+          {deal.complaintOpen && <span className="muted">Обращение по сделке уже создано</span>}
           {isSupport && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="danger" busy={core.actionBusy === `refund-${deal.id}`} onClick={async () => {
             if (await core.supportRefund(deal.id, 'Возврат поддержкой')) setToast('Возврат через Escrow выполнен.');
           }}>Refund</Button>}

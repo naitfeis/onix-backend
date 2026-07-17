@@ -41,6 +41,8 @@ export interface Deal {
   counterparty: Seller;
   createdAt: string;
   canReview?: boolean;
+  /** True when support/dispute already used for this order. */
+  complaintOpen?: boolean;
   /** Shared buyer↔seller pair chat (same id for all deals + direct). */
   chatId?: string;
 }
@@ -276,7 +278,10 @@ export const API_PATHS = {
   supportComplete: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/complete`,
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   supportQueue: '/api/support/queue',
+  supportReports: '/api/support/reports',
   mePresence: '/api/users/me/presence',
+  leaveGroupChat: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members/me`,
+  adminProductRemove: (id: string) => `/api/admin/products/${encodeURIComponent(id)}`,
   chats: '/api/chats',
   chatsSearch: (q: string) => `/api/chats?q=${encodeURIComponent(q)}`,
   chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
@@ -386,6 +391,15 @@ export interface SupportQueueItem {
   seller: { onixId: string; username: string };
   createdAt: string;
   kind: 'SUPPORT' | 'DISPUTE';
+}
+
+export interface UserReportItem {
+  id: string;
+  reason: string;
+  comment: string;
+  createdAt: string;
+  reporter: { onixId: string; username: string; avatarUrl?: string };
+  target: { onixId: string; username: string; avatarUrl?: string };
 }
 
 /** lastSeen display — precise online arrives with WebSocket (5.6). */

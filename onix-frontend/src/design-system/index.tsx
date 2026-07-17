@@ -61,7 +61,9 @@ export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'succ
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }
 
-export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) {
+export function Modal({ open, title, children, onClose, size = 'default' }: {
+  open: boolean; title: string; children: ReactNode; onClose: () => void; size?: 'default' | 'wide';
+}) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [zIndex, setZIndex] = useState(2000);
@@ -91,7 +93,7 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
       onClick={closeFromBackdrop}
     >
       <div
-        className="modal__panel"
+        className={`modal__panel${size === 'wide' ? ' modal__panel--wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

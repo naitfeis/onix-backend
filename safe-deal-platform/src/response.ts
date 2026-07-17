@@ -159,8 +159,13 @@ export function dealDto(order: {
   seller: PublicUser;
   reviews: Array<{ authorId: bigint }>;
   chat?: { id: string } | null;
+  supportTickets?: Array<{ id: string }>;
 }, viewer: AuthUser) {
   const buyer = order.buyerId === viewer.id;
+  const complaintOpen = Boolean(order.supportTickets?.length)
+    || order.status === 'DISPUTE'
+    || order.status === 'REFUNDED'
+    || order.status === 'CANCELED';
   return {
     id: order.id.toString(),
     product: order.product,
@@ -172,6 +177,7 @@ export function dealDto(order: {
     canReview: order.status === 'COMPLETED'
       && buyer
       && !order.reviews.some((review) => review.authorId === viewer.id),
+    complaintOpen,
     ...(order.chat?.id ? { chatId: order.chat.id } : {}),
   };
 }

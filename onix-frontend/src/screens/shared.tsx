@@ -94,7 +94,7 @@ export function PublicProfileModal({
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
 
-  return <Modal open title="Профиль" onClose={onClose}>
+  return <Modal open title="Профиль" onClose={onClose} size="wide">
     <div className="stack public-profile">
       <Card className="profile-card">
         <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />

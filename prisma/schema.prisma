@@ -89,7 +89,7 @@ model User {
 model Product {
   id                 String              @id @default(cuid())
   title              String              @db.VarChar(255)
-  description        String?             @db.VarChar(1500)
+  description        String?             @db.Text
   priceCents         BigInt
   category           ProductCategory
   subcategory        ProductSubcategory?
