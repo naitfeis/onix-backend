@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile, type TrustCard,
+  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type ProductDraft, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Input, Modal, Select, StateView, Textarea } from '../design-system';
@@ -26,15 +26,34 @@ export const DEAL_FILTERS: Array<{ id: string; label: string; status?: OrderList
   { id: 'completed', label: 'Завершённые', status: 'completed' },
 ];
 
-export function staffBadgeFromRoles(roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>): 'ADMIN' | 'SUPPORT' | undefined {
+const STATUS_LABEL: Record<PlatformStatus, string> = {
+  USER: 'USER',
+  VERIFIED_SELLER: 'ПРОВЕРЕН',
+  MODERATOR: 'МОДЕРАТОР',
+  ADMIN: 'ADMIN',
+  VIP: 'VIP',
+};
+
+/** @deprecated use status from profile — kept for call sites during Stage 2. */
+export function staffBadgeFromRoles(roles: PlatformStatus[]): PlatformStatus | undefined {
   if (roles.includes('ADMIN')) return 'ADMIN';
-  if (roles.includes('SUPPORT')) return 'SUPPORT';
+  if (roles.includes('MODERATOR')) return 'MODERATOR';
+  if (roles.includes('VIP')) return 'VIP';
+  if (roles.includes('VERIFIED_SELLER')) return 'VERIFIED_SELLER';
   return undefined;
 }
 
-export function StaffBadge({ badge }: { badge?: 'ADMIN' | 'SUPPORT' }) {
-  if (!badge) return null;
-  return <span className="badge badge--staff">{badge}</span>;
+export function StaffBadge({ badge }: { badge?: PlatformStatus | 'SUPPORT' }) {
+  if (!badge || badge === 'USER') return null;
+  const status: PlatformStatus = badge === 'SUPPORT' ? 'MODERATOR' : badge;
+  const tone = status === 'ADMIN' || status === 'MODERATOR'
+    ? 'staff'
+    : status === 'VIP'
+      ? 'vip'
+      : status === 'VERIFIED_SELLER'
+        ? 'verified'
+        : 'staff';
+  return <span className={`badge badge--${tone}`}>{STATUS_LABEL[status]}</span>;
 }
 
 export function MessageText({
@@ -119,7 +138,11 @@ export function PublicProfileModal({
   const reviews = profile.reviews ?? [];
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
-  const isAdmin = Boolean(core?.profile?.roles.includes('ADMIN'));
+  const isAdmin = Boolean(
+    core?.profile?.isAdmin
+    || core?.profile?.status === 'ADMIN'
+    || core?.profile?.roles.includes('ADMIN'),
+  );
   const banReady = Boolean(banReason && banComment.trim() && (banReason !== 'OTHER' || Number(banDays) > 0));
 
   return <Modal open title="Профиль" onClose={onClose} size="wide">

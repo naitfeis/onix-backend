@@ -57,7 +57,13 @@ export function Deals({
     onFocusDealHandled();
   }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
-  const isSupport = Boolean(core.profile?.roles.includes('SUPPORT') || core.profile?.roles.includes('ADMIN'));
+  const isSupport = Boolean(
+    core.profile?.isAdmin
+    || core.profile?.status === 'ADMIN'
+    || core.profile?.status === 'MODERATOR'
+    || core.profile?.roles.includes('ADMIN')
+    || core.profile?.roles.includes('MODERATOR'),
+  );
   return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>

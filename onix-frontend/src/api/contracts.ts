@@ -2,6 +2,14 @@ export type AsyncState = 'idle' | 'loading' | 'success' | 'error';
 export type ProductStatus = 'ACTIVE' | 'RESERVED' | 'SOLD_OUT' | 'ARCHIVED';
 export type DealStatus = 'PENDING' | 'PAYMENT_HOLD' | 'DELIVERING' | 'COMPLETED' | 'CANCELED' | 'DISPUTE' | 'REFUNDED';
 
+/** Public platform status — everyone defaults to USER. */
+export type PlatformStatus =
+  | 'USER'
+  | 'VERIFIED_SELLER'
+  | 'MODERATOR'
+  | 'ADMIN'
+  | 'VIP';
+
 export interface Seller {
   id: string;
   onixId: string;
@@ -13,8 +21,10 @@ export interface Seller {
   followersCount: number;
   lastOnline?: string;
   followed?: boolean;
-  /** Yellow staff badge — ADMIN or SUPPORT. */
-  badge?: 'ADMIN' | 'SUPPORT';
+  /** Always present from API (default USER). */
+  status?: PlatformStatus;
+  /** Non-USER status badge for UI chips. */
+  badge?: PlatformStatus;
 }
 
 export interface Product {
@@ -79,7 +89,7 @@ export interface ChatThread {
   peerOnixId?: string;
   peerLastOnline?: string;
   peerAvatarUrl?: string;
-  peerBadge?: 'ADMIN' | 'SUPPORT';
+  peerBadge?: PlatformStatus;
   orderCard?: OrderCard;
 }
 
@@ -104,7 +114,7 @@ export interface ChatUserHit {
   onixId: string;
   username: string;
   avatarUrl?: string;
-  badge?: 'ADMIN' | 'SUPPORT';
+  badge?: PlatformStatus;
 }
 
 export interface WalletOperation {
@@ -128,11 +138,38 @@ export interface Profile extends Seller {
   bio?: string;
   balanceCents: string;
   isAdmin: boolean;
-  roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
+  status: PlatformStatus;
+  roles: PlatformStatus[];
   walletHistory: WalletOperation[];
   /** Embedded by GET /users/me after Stage 1 — prefer over extra RTT. */
   deposit?: DepositWallet;
   trustCard?: TrustCard;
+}
+
+/** GET /api/users/me/analytics */
+export interface SellerAnalyticsDay {
+  day: string;
+  uniqueViews: number;
+  ordersCount: number;
+  completedCount: number;
+  revenueCents: string;
+  profitCents: string;
+  favoritesAdded: number;
+}
+
+export interface SellerAnalytics {
+  days: number;
+  from: string;
+  to: string;
+  totals: {
+    uniqueViews: number;
+    ordersCount: number;
+    completedCount: number;
+    revenueCents: string;
+    profitCents: string;
+    favoritesAdded: number;
+  };
+  series: SellerAnalyticsDay[];
 }
 
 /** Owner deposit wallet snapshot — also embedded on GET /api/users/me */
@@ -187,7 +224,7 @@ export interface ChatMemberItem {
   onixId: string;
   username: string;
   avatarUrl?: string;
-  badge?: 'ADMIN' | 'SUPPORT';
+  badge?: PlatformStatus;
   lastOnline?: string;
 }
 
@@ -332,6 +369,9 @@ export const API_PATHS = {
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,
   meTrust: '/api/users/me/trust',
   meTrustHistory: '/api/users/me/trust/history',
+  meAnalytics: (days?: number) => (
+    days ? `/api/users/me/analytics?days=${encodeURIComponent(String(days))}` : '/api/users/me/analytics'
+  ),
   userTrustCard: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/trust-card`,
   meVerifications: '/api/users/me/verifications',
   mePro: '/api/users/me/pro',
@@ -340,9 +380,18 @@ export const API_PATHS = {
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
   subcategories: '/api/products/catalog/subcategories',
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
+  adminStatus: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/status`,
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
   aiChat: '/api/ai/chat',
 } as const;
+
+export const PLATFORM_STATUS_OPTIONS: Array<{ value: PlatformStatus; label: string }> = [
+  { value: 'USER', label: 'Пользователь' },
+  { value: 'VERIFIED_SELLER', label: 'Проверенный продавец' },
+  { value: 'MODERATOR', label: 'Модератор' },
+  { value: 'ADMIN', label: 'Админ' },
+  { value: 'VIP', label: 'VIP' },
+];
 
 export type BanReasonCode =
   | 'MISCONDUCT'

@@ -46,7 +46,13 @@ export function Chats({
   const prevChatQueryRef = useRef('');
   const lastSeenMsgIdRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
-  const isStaff = Boolean(core.profile?.roles.includes('ADMIN') || core.profile?.roles.includes('SUPPORT'));
+  const isStaff = Boolean(
+    core.profile?.isAdmin
+    || core.profile?.status === 'ADMIN'
+    || core.profile?.status === 'MODERATOR'
+    || core.profile?.roles.includes('ADMIN')
+    || core.profile?.roles.includes('MODERATOR'),
+  );
   const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];

@@ -15,6 +15,7 @@ import { createDomainNotification, pushTelegramToChatId } from './domain-notify'
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
+import { statusBadge } from './platform-status';
 import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 
@@ -50,7 +51,7 @@ class DeleteMessageDto {
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 const SENDER_SELECT = {
-  id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true,
+  id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
 } as const;
 
 /**
@@ -99,7 +100,7 @@ export class ChatService {
             user: {
               select: {
                 onixId: true, displayName: true, telegramNick: true, lastSeenAt: true, avatarUrl: true,
-                isAdmin: true, isSupport: true,
+                isAdmin: true, isSupport: true, platformStatus: true,
               },
             },
           },
@@ -171,8 +172,13 @@ export class ChatService {
         peerOnixId: isGroup || isAi ? undefined : peerOnix,
         peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
         ...(!isGroup && !isAi && other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
-        ...(!isGroup && !isAi && other?.user.isAdmin ? { peerBadge: 'ADMIN' as const }
-          : !isGroup && !isAi && other?.user.isSupport ? { peerBadge: 'SUPPORT' as const } : {}),
+        ...(!isGroup && !isAi && other
+          ? (() => {
+            const b = statusBadge(other.user.platformStatus
+              ?? (other.user.isAdmin ? 'ADMIN' : other.user.isSupport ? 'MODERATOR' : 'USER'));
+            return b ? { peerBadge: b } : {};
+          })()
+          : {}),
         ...(latestOrder && !isAi ? {
           dealId: latestOrder.id.toString(),
           orderCard: {
@@ -226,17 +232,19 @@ export class ChatService {
       },
       take,
       select: {
-        onixId: true, telegramNick: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true,
+        onixId: true, telegramNick: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
       },
       orderBy: { id: 'asc' },
     });
     return rows.map((row) => {
       const onixId = formatOnixId(row.onixId);
+      const badge = statusBadge(row.platformStatus
+        ?? (row.isAdmin ? 'ADMIN' : row.isSupport ? 'MODERATOR' : 'USER'));
       return {
         onixId,
         username: row.telegramNick ?? row.displayName ?? onixId,
         ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
-        ...(row.isAdmin ? { badge: 'ADMIN' as const } : row.isSupport ? { badge: 'SUPPORT' as const } : {}),
+        ...(badge ? { badge } : {}),
       };
     });
   }
@@ -588,7 +596,7 @@ export class ChatService {
         user: {
           select: {
             onixId: true, telegramNick: true, displayName: true, avatarUrl: true,
-            isAdmin: true, isSupport: true, lastSeenAt: true, deletedAt: true,
+            isAdmin: true, isSupport: true, platformStatus: true, lastSeenAt: true, deletedAt: true,
           },
         },
       },
@@ -606,7 +614,8 @@ export class ChatService {
             onixId,
             username: r.user.telegramNick ?? r.user.displayName ?? onixId,
             avatarUrl: r.user.avatarUrl ?? undefined,
-            badge: r.user.isAdmin ? 'ADMIN' as const : r.user.isSupport ? 'SUPPORT' as const : undefined,
+            badge: statusBadge(r.user.platformStatus
+              ?? (r.user.isAdmin ? 'ADMIN' : r.user.isSupport ? 'MODERATOR' : 'USER')),
             lastOnline: r.user.lastSeenAt.toISOString(),
           };
         }),
@@ -680,7 +689,7 @@ export class ReviewService {
     const subject = await requireUserByOnixId(this.prisma, onixId);
     const reviews = await this.prisma.review.findMany({
       where: { subjectId: subject.id },
-      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
+      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -738,8 +747,8 @@ export class ReviewService {
         });
         const row = await tx.review.findUniqueOrThrow({
           where: { id: review.id },
-          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
-        });
+      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
+    });
         return { dto: reviewDto(row), subjectId };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 

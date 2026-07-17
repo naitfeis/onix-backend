@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminEconomyController, EconomyController } from './economy.controller';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
+import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { ManualPaymentProvider } from './payments/manual.provider';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
@@ -24,6 +25,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
     VerificationService,
     ProSubscriptionService,
     AnalyticsFoundationService,
+    SellerAnalyticsService,
   ],
   exports: [
     BalanceService,
@@ -34,6 +36,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
     VerificationService,
     ProSubscriptionService,
     AnalyticsFoundationService,
+    SellerAnalyticsService,
   ],
 })
 export class EconomyModule {}

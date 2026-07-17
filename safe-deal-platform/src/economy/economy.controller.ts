@@ -11,6 +11,7 @@ import { AuthRequest, AuthUser, CurrentUser, parseId } from '../common';
 import { PrismaService } from '../prisma.service';
 import { requireUserByOnixId } from '../onix-id-lookup';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
+import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
@@ -64,6 +65,10 @@ function parseVerificationKind(kind: string): SellerVerificationKind {
 }
 
 @Controller()
+class SellerAnalyticsQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(7) @Max(90) days?: number;
+}
+
 export class EconomyController {
   constructor(
     private readonly payments: PaymentsService,
@@ -71,6 +76,7 @@ export class EconomyController {
     private readonly verification: VerificationService,
     private readonly pro: ProSubscriptionService,
     private readonly analytics: AnalyticsFoundationService,
+    private readonly sellerAnalytics: SellerAnalyticsService,
     private readonly trust: TrustService,
   ) {}
 
@@ -142,7 +148,14 @@ export class EconomyController {
     return this.trust.recompute(user.id);
   }
 
-  /** Public trust card — models/API only (no final UI in Stage 1). */
+  /** Owner seller analytics + charts series (Stage 2). */
+  @Get('users/me/analytics')
+  @Header('Cache-Control', 'private, no-store')
+  myAnalytics(@CurrentUser() user: AuthUser, @Query() query: SellerAnalyticsQueryDto) {
+    return this.sellerAnalytics.getOwnerAnalytics(user, query.days);
+  }
+
+  /** Public trust card — never includes trustScore. */
   @Get('users/:onixId/trust-card')
   @Header('Cache-Control', 'private, no-store')
   trustCard(@Param('onixId') onixId: string) {

@@ -40,6 +40,8 @@ model User {
   lastLoginAt            DateTime?
   isAdmin                Boolean   @default(false)
   isSupport              Boolean   @default(false)
+  /** Public platform status — default USER; admin assigns others. Syncs isAdmin/isSupport. */
+  platformStatus         PlatformStatus @default(USER)
   deletedAt              DateTime?
   banReason              BanReason?
   banComment             String?   @db.VarChar(1000)
@@ -87,6 +89,8 @@ model User {
   trustedDevices        TrustedDevice[]
   mfaFactors            MfaFactor[]
   mfaChallenges         MfaChallenge[]
+
+  @@index([platformStatus])
 }
 
 model Product {
@@ -1065,6 +1069,15 @@ enum MessageKind {
 enum SupportTicketStatus {
   OPEN
   CLOSED
+}
+
+/** Public account status (everyone starts as USER). */
+enum PlatformStatus {
+  USER
+  VERIFIED_SELLER
+  MODERATOR
+  ADMIN
+  VIP
 }
 
 enum BanReason {

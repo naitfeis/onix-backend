@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, money, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  formatLastSeen, sellerIsPresent, type Product, type PublicProfile,
+  formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
@@ -35,8 +35,13 @@ export function Market({
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const PAGE = 10;
-  const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
+  const isAdmin = Boolean(
+    core.profile?.isAdmin
+    || core.profile?.status === 'ADMIN'
+    || core.profile?.roles.includes('ADMIN'),
+  );
 
   const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
   const marketSubs = category !== 'Все'
@@ -112,6 +117,24 @@ export function Market({
   }, [core.products, items, selected]);
 
   useEffect(() => {
+    if (!selected) {
+      setSellerTrust(null);
+      return;
+    }
+    let cancelled = false;
+    setSellerTrust(null);
+    void api.get<TrustCard>(API_PATHS.userTrustCard(selected.seller.onixId))
+      .then((card) => { if (!cancelled) setSellerTrust(card); })
+      .catch(() => { if (!cancelled) setSellerTrust(null); });
+    if (core.profile) {
+      void api.post(API_PATHS.productView(selected.id), {
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+      }).catch(() => { /* ignore view errors */ });
+    }
+    return () => { cancelled = true; };
+  }, [selected?.id, selected?.seller.onixId, core.profile?.id]);
+
+  useEffect(() => {
     if (!focusProductId) return;
     let cancelled = false;
     void (async () => {
@@ -169,9 +192,18 @@ export function Market({
     {marketState === 'success' && hasMore && (
       <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Загрузить ещё</Button>
     )}
-    <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
+    <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); }}>
       {selected && <div className="stack compact"><div className="product-detail"><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
+        {sellerTrust && (
+          <div className="trust-strip">
+            <span><b>Уровень {sellerTrust.level}</b></span>
+            <span><b>{money(sellerTrust.depositTotal)}</b> залог</span>
+            {sellerTrust.phoneVerified && <span>Телефон</span>}
+            {sellerTrust.passportVerified && <span>Паспорт</span>}
+            {sellerTrust.voiceVerified && <span>Голос</span>}
+          </div>
+        )}
         <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {

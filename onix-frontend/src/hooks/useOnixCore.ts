@@ -9,7 +9,7 @@ import {
   logTelegramDetect,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
-import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
+import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
 import {
   bootstrapPhase,
   bootstrapPhaseSync,
@@ -609,6 +609,9 @@ export function useOnixCore() {
     return api.patch(API_PATHS.adminBan(userId), { banned: false });
   }), [run]);
 
+  const setUserStatus = useCallback((userId: string, status: PlatformStatus) =>
+    run('admin-status', () => api.patch(API_PATHS.adminStatus(userId), { status })), [run]);
+
   // Badge: chat unread only (in-app notifications stay for API/history; UI tab removed).
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
@@ -616,6 +619,6 @@ export function useOnixCore() {
     profile, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
-    markNotificationRead, adminAction, reportUser,
+    markNotificationRead, adminAction, setUserStatus, reportUser,
   };
 }

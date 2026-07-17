@@ -46,7 +46,7 @@ export class ProfilesService {
             depositAvailableCents: true, depositLockedCents: true,
             trustLevel: true, createdAt: true,
             ratingAverage: true, ratingCount: true, completedSales: true,
-            lastSeenAt: true, isAdmin: true, isSupport: true,
+            lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
             _count: { select: { followers: true } },
             verifications: { select: { kind: true, status: true } },
             sellerSubscription: { select: { status: true, endsAt: true } },
@@ -96,7 +96,7 @@ export class ProfilesService {
       select: {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
-        createdAt: true, isAdmin: true, isSupport: true, deletedAt: true, sellBannedAt: true,
+        createdAt: true, isAdmin: true, isSupport: true, platformStatus: true, deletedAt: true, sellBannedAt: true,
         _count: { select: { followers: true } },
         followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
         products: {
@@ -111,7 +111,7 @@ export class ProfilesService {
         reviewsReceived: {
           orderBy: { createdAt: 'desc' },
           take: 50,
-          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true } } },
+          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
         },
       },
     });

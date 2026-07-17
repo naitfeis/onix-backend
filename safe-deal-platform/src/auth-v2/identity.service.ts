@@ -59,6 +59,7 @@ export class IdentityService {
         device,
       });
       const isAdmin = process.env.ADMIN_TELEGRAM_ID === identity.telegramId.toString();
+      const isSupport = resolveIsSupport(identity.telegramId, isAdmin);
       const created = await tx.user.create({
         data: {
           telegramId: identity.telegramId,
@@ -71,7 +72,8 @@ export class IdentityService {
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
           isAdmin,
-          isSupport: resolveIsSupport(identity.telegramId, isAdmin),
+          isSupport,
+          platformStatus: isAdmin ? 'ADMIN' : isSupport ? 'MODERATOR' : 'USER',
         },
       });
       user = await tx.user.update({

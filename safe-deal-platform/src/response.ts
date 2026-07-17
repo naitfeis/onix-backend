@@ -1,6 +1,7 @@
-import { Prisma } from '@prisma/client';
+import { PlatformStatus, Prisma } from '@prisma/client';
 import { AuthUser } from './common';
 import { formatOnixId } from './onix-id';
+import { statusBadge, type PlatformStatusCode } from './platform-status';
 
 type PublicUser = {
   id: bigint;
@@ -14,8 +15,11 @@ type PublicUser = {
   lastSeenAt: Date;
   isAdmin?: boolean;
   isSupport?: boolean;
+  platformStatus?: PlatformStatus;
   _count?: { followers: number };
 };
+
+export type StatusBadge = PlatformStatusCode;
 
 export interface ProfileDto {
   id: string;
@@ -29,7 +33,10 @@ export interface ProfileDto {
   followersCount: number;
   lastOnline: string;
   isAdmin: boolean;
-  roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
+  /** Primary platform status — always present, default USER. */
+  status: PlatformStatusCode;
+  /** Backward-compatible roles list derived from status. */
+  roles: PlatformStatusCode[];
   balanceCents: string;
   walletHistory: LedgerDto[];
   /** Additive Stage 1 — owner deposit after lazy unlock. */
@@ -68,8 +75,16 @@ export interface ProductDto {
   createdAt: string;
 }
 
+function resolveStatus(user: Pick<PublicUser, 'platformStatus' | 'isAdmin' | 'isSupport'>): PlatformStatus {
+  if (user.platformStatus) return user.platformStatus;
+  if (user.isAdmin) return 'ADMIN';
+  if (user.isSupport) return 'MODERATOR';
+  return 'USER';
+}
+
 export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: bigint }> }) {
-  const staff = Boolean(user.isAdmin || user.isSupport);
+  const status = resolveStatus(user);
+  const badge = statusBadge(status);
   const onixId = formatOnixId(user.onixId);
   return {
     id: user.id.toString(),
@@ -81,9 +96,10 @@ export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: b
     salesCount: user.completedSales,
     followersCount: user._count?.followers ?? 0,
     lastOnline: user.lastSeenAt.toISOString(),
+    status,
     // Present when marketplace includes viewer-scoped Follow rows (take: 1).
     followed: Boolean(user.followers?.length),
-    ...(staff ? { badge: (user.isAdmin ? 'ADMIN' : 'SUPPORT') as 'ADMIN' | 'SUPPORT' } : {}),
+    ...(badge ? { badge } : {}),
   };
 }
 
@@ -96,15 +112,14 @@ export function profileDto(
   },
   ledger: Array<{ id: bigint; type: string; amountCents: bigint; createdAt: Date }>,
 ): ProfileDto {
-  const roles: ProfileDto['roles'] = ['USER'];
-  if (user.isAdmin) roles.push('ADMIN');
-  if (user.isSupport || user.isAdmin) roles.push('SUPPORT');
+  const status = resolveStatus(user);
   return {
     ...sellerDto(user),
     ...(user.bio ? { bio: user.bio } : {}),
     balanceCents: user.balanceCents.toString(),
-    isAdmin: user.isAdmin,
-    roles,
+    isAdmin: status === 'ADMIN' || user.isAdmin,
+    status,
+    roles: [status],
     walletHistory: ledger.map(ledgerDto),
   };
 }
@@ -207,7 +222,7 @@ export function messageDto(message: {
   deletedAt?: Date | null;
   deletedById?: bigint | null;
   deletedReason?: string | null;
-  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'> | null;
+  sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport' | 'platformStatus'> | null;
 }, viewerId: bigint, opts?: {
   staffViewer?: boolean;
   /** Other members' lastReadAt for receipts */
@@ -220,9 +235,7 @@ export function messageDto(message: {
 }) {
   const system = message.kind === 'SYSTEM' || message.senderId == null;
   const sender = message.sender;
-  const staffBadge = !system && sender
-    ? (sender.isAdmin ? 'ADMIN' as const : sender.isSupport ? 'SUPPORT' as const : undefined)
-    : undefined;
+  const staffBadge = !system && sender ? statusBadge(resolveStatus(sender)) : undefined;
   const mine = !system && message.senderId === viewerId;
   const deleted = Boolean(message.deletedAt);
   const staffViewer = Boolean(opts?.staffViewer);
@@ -284,9 +297,9 @@ export function reviewDto(item: {
   rating: number;
   text: string | null;
   createdAt: Date;
-  author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport'>;
+  author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport' | 'platformStatus'>;
 }) {
-  const staff = Boolean(item.author.isAdmin || item.author.isSupport);
+  const badge = statusBadge(resolveStatus(item.author));
   const onixId = formatOnixId(item.author.onixId);
   return {
     id: item.id.toString(),
@@ -295,7 +308,7 @@ export function reviewDto(item: {
       onixId,
       username: item.author.telegramNick ?? item.author.displayName ?? onixId,
       ...(item.author.avatarUrl ? { avatarUrl: item.author.avatarUrl } : {}),
-      ...(staff ? { badge: (item.author.isAdmin ? 'ADMIN' : 'SUPPORT') as 'ADMIN' | 'SUPPORT' } : {}),
+      ...(badge ? { badge } : {}),
     },
     rating: item.rating,
     text: item.text ?? '',

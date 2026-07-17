@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, CanActivate, Controller, ExecutionContext,
   ForbiddenException, Get, Header, Injectable, Module, Param, Patch, Post, Req, Res, UseGuards,
 } from '@nestjs/common';
-import { BanReason, Prisma } from '@prisma/client';
+import { BanReason, PlatformStatus, Prisma } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
 } from 'class-validator';
@@ -17,6 +17,7 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
+import { flagsFromPlatformStatus, isPlatformStatus } from './platform-status';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
 
@@ -40,6 +41,9 @@ class RefundDto { @IsOptional() @IsString() @MaxLength(1000) reason?: string; }
 class WithdrawalDto {
   @IsString() @Matches(/^[1-9]\d*$/) amountCents!: string;
   @IsString() @Length(16, 100) idempotencyKey!: string;
+}
+class PlatformStatusDto {
+  @IsEnum(PlatformStatus) status!: PlatformStatus;
 }
 
 @Injectable()
@@ -152,6 +156,46 @@ class OperationsService {
     return { onixId: displayId, banned: false, ban: null };
   }
 
+  /** Assign public platform status (USER / VERIFIED_SELLER / MODERATOR / ADMIN / VIP). */
+  async setPlatformStatus(actor: AuthUser, onixId: string, status: PlatformStatus) {
+    if (!isPlatformStatus(status)) {
+      throw new BadRequestException('Некорректный статус.');
+    }
+    const resolved = await requireUserByOnixId(this.prisma, onixId);
+    const displayId = formatOnixId(resolved.onixId);
+    if (resolved.id === actor.id && status !== 'ADMIN' && actor.isAdmin) {
+      throw new BadRequestException('Нельзя снять статус ADMIN с собственного аккаунта.');
+    }
+    const flags = flagsFromPlatformStatus(status);
+    const user = await this.prisma.user.update({
+      where: { id: resolved.id },
+      data: {
+        platformStatus: status,
+        isAdmin: flags.isAdmin,
+        isSupport: flags.isSupport,
+        permissionVersion: { increment: 1 },
+      },
+      select: {
+        onixId: true, platformStatus: true, isAdmin: true, isSupport: true,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'USER_STATUS_SET',
+        entity: 'User',
+        entityId: resolved.id.toString(),
+        metadata: { status, onixId: displayId },
+      },
+    });
+    return {
+      onixId: formatOnixId(user.onixId),
+      status: user.platformStatus,
+      isAdmin: user.isAdmin,
+      isSupport: user.isSupport,
+    };
+  }
+
   /** Block listing/selling without locking the whole account. */
   async setSellBan(actor: AuthUser, onixId: string, banned: boolean, comment?: string) {
     const resolved = await requireUserByOnixId(this.prisma, onixId);
@@ -244,6 +288,10 @@ class AdminController {
   @Patch('users/:onixId/ban')
   ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {
     return this.service.ban(actor, id, dto);
+  }
+  @Patch('users/:onixId/status')
+  setStatus(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: PlatformStatusDto) {
+    return this.service.setPlatformStatus(actor, id, dto.status);
   }
   @Patch('users/:onixId/sell-ban')
   sellBan(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: SellBanDto) {

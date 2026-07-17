@@ -16,6 +16,7 @@ export function sellerPublicSelect(viewerId?: bigint | null) {
     lastSeenAt: true,
     isAdmin: true,
     isSupport: true,
+    platformStatus: true,
     _count: { select: { followers: true as const } },
     // Guest catalog: take 0 (no Follow probe). Authenticated: probe this viewer.
     followers: viewerId != null
@@ -44,6 +45,7 @@ export const dealPartySelect = {
   lastSeenAt: true,
   isAdmin: true,
   isSupport: true,
+  platformStatus: true,
   _count: { select: { followers: true as const } },
 } as const;
 

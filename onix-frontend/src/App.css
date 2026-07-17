@@ -349,6 +349,33 @@
 .badge { display: inline-flex; width: fit-content; border: 1px solid var(--line); border-radius: 999px; padding: 3px 7px; color: var(--muted); font-size: 8px; font-weight: 800; }
 .badge--success { color: var(--success); border-color: #173b30; }.badge--warning { color: var(--warning); border-color: #3b2a19; }.badge--danger { color: var(--danger); border-color: #492026; }
 .badge--staff { color: #e8c547; border-color: #5a4a18; }
+.badge--verified { color: #7dd3c0; border-color: #2a4f48; }
+.badge--vip { color: #d4a5ff; border-color: #4a3560; }
+
+.trust-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(125, 211, 192, 0.08), rgba(232, 197, 71, 0.06));
+  font-size: 12px;
+  color: var(--muted);
+}
+.trust-strip b { color: var(--text); font-weight: 700; }
+
+.analytics-panel .analytics-stats { margin-top: 8px; }
+.analytics-chart {
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  display: block;
+}
+.analytics-chart__label {
+  fill: var(--muted);
+  font-size: 9px;
+}
 .onix-id-link { color: var(--accent, #7dd3c0); text-decoration: underline; }
 
 .control {

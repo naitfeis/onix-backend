@@ -10,6 +10,7 @@ import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from 
 
 const Admin = lazy(() => import('./Admin'));
 const SupportQueue = lazy(() => import('./SupportQueue'));
+const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
 
 type MoneyModal = 'MAIN_TOPUP' | 'MAIN_WITHDRAW' | 'DEPOSIT_FUND' | 'DEPOSIT_WITHDRAW' | null;
 
@@ -65,7 +66,7 @@ export function Profile({
   openProductCard: (productId: string) => void;
   openDealChat: (chatId: string) => void;
 }) {
-  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'support' | 'admin'>('overview');
+  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'>('overview');
   const [moneyOpen, setMoneyOpen] = useState(false);
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
@@ -144,11 +145,13 @@ export function Profile({
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
   const ownProducts = core.products.filter(product => product.seller.id === profile.id);
-  const isStaff = profile.roles.includes('ADMIN') || profile.roles.includes('SUPPORT');
-  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'support' | 'admin'> = [
-    'overview', 'listings', 'favorites', 'reviews',
+  const status = profile.status ?? (profile.roles[0] ?? 'USER');
+  const isStaff = status === 'ADMIN' || status === 'MODERATOR' || profile.isAdmin;
+  const isAdmin = status === 'ADMIN' || profile.isAdmin || profile.roles.includes('ADMIN');
+  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'> = [
+    'overview', 'listings', 'favorites', 'reviews', 'analytics',
     ...(isStaff ? (['support'] as const) : []),
-    ...(profile.roles.includes('ADMIN') ? (['admin'] as const) : []),
+    ...(isAdmin ? (['admin'] as const) : []),
   ];
   const openAuthorProfile = async (onixId: string) => {
     if (authorProfile?.onixId === onixId) return;
@@ -168,7 +171,7 @@ export function Profile({
         ? 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'
         : 'Сумма и комиссия будут подтверждены сервером до списания.';
 
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="wallet-strip">
         <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
           <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
@@ -185,7 +188,7 @@ export function Profile({
       </div>
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
-      <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
+      <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <div className="operations">{profile.walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>}</Card>}
     {section === 'favorites' && (favoritesState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       favoritesState === 'error' ? <StateView title="Избранное недоступно" text="Не удалось загрузить список." /> :
@@ -213,6 +216,11 @@ export function Profile({
           : <b>@{review.author.username} <StaffBadge badge={review.author.badge} /></b>}
         <span>{'★'.repeat(review.rating)}</span>
       </div><p className="muted">{review.text}</p></Card>))}
+    {section === 'analytics' && (
+      <Suspense fallback={<Card><Skeleton lines={6} /></Card>}>
+        <SellerAnalyticsPanel days={30} />
+      </Suspense>
+    )}
     {section === 'support' && isStaff && (
       <Suspense fallback={<Card><Skeleton lines={4} /></Card>}>
         <SupportQueue
@@ -224,7 +232,7 @@ export function Profile({
         />
       </Suspense>
     )}
-    {section === 'admin' && profile.roles.includes('ADMIN') && (
+    {section === 'admin' && isAdmin && (
       <Suspense fallback={<Card><Skeleton lines={4} /></Card>}>
         <Admin core={core} setToast={setToast} />
       </Suspense>
