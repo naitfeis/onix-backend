@@ -8,6 +8,7 @@ import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
 import { formatOnixId } from './onix-id';
 import { PrismaService } from './prisma.service';
+import { publicUsername } from './public-username';
 
 class OpenSupportDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
@@ -215,7 +216,7 @@ export class SupportService {
 
     const party = (u: { onixId: string; telegramNick: string | null; displayName: string | null }) => ({
       onixId: formatOnixId(u.onixId),
-      username: u.telegramNick ?? u.displayName ?? formatOnixId(u.onixId),
+      username: publicUsername(u.telegramNick),
     });
 
     for (const t of tickets) {
@@ -282,12 +283,12 @@ export class SupportService {
       createdAt: r.createdAt.toISOString(),
       reporter: {
         onixId: formatOnixId(r.reporter.onixId),
-        username: r.reporter.telegramNick ?? r.reporter.displayName ?? formatOnixId(r.reporter.onixId),
+        username: publicUsername(r.reporter.telegramNick),
         avatarUrl: r.reporter.avatarUrl ?? undefined,
       },
       target: {
         onixId: formatOnixId(r.target.onixId),
-        username: r.target.telegramNick ?? r.target.displayName ?? formatOnixId(r.target.onixId),
+        username: publicUsername(r.target.telegramNick),
         avatarUrl: r.target.avatarUrl ?? undefined,
       },
     }));

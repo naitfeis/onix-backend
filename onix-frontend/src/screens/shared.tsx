@@ -7,6 +7,7 @@ import {
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Input, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
+import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 
 export const emptyDraft: ProductDraft = {
@@ -150,7 +151,7 @@ export function PublicProfileModal({
       <Card className="profile-card">
         <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />
         <div className="profile-main">
-          <h1>@{profile.username} <StaffBadge badge={profile.badge} /></h1>
+          <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge} /></h1>
           <p>{formatOnixId(profile.onixId)} · {formatLastSeen(profile.lastOnline)}</p>
           <div className="stats">
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
@@ -241,8 +242,8 @@ export function PublicProfileModal({
         ? <StateView title="Отзывов нет" text="Пока никто не оставил отзыв." />
         : reviews.map(review => <Card key={review.id}><div className="seller-row">
           {review.author.onixId && onOpenOnix
-            ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>@{review.author.username}</b> <StaffBadge badge={review.author.badge} /></button>
-            : <b>@{review.author.username} <StaffBadge badge={review.author.badge} /></b>}
+            ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
+            : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
           <span>{'★'.repeat(review.rating)}</span>
         </div><p className="muted">{review.text}</p></Card>))}
     </div>

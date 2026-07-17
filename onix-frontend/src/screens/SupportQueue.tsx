@@ -4,6 +4,7 @@ import { API_PATHS, type SupportQueueItem, type UserReportItem } from '../api/co
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
+import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 
 export function SupportQueue({
@@ -73,7 +74,7 @@ export function SupportQueue({
               <small>{item.kind === 'DISPUTE' ? 'Спор' : 'Поддержка'} · Заказ #{item.orderId} · {item.status}</small>
               <b>{item.productTitle}</b>
               <p className="muted">
-                @{item.buyer.username} ↔ @{item.seller.username}
+                {publicAt(item.buyer.username)} ↔ {publicAt(item.seller.username)}
                 {item.reason ? ` · ${item.reason}` : ''}
               </p>
             </div>
@@ -101,8 +102,8 @@ export function SupportQueue({
             <div className="user-summary">
               <UserAvatar avatarUrl={r.target.avatarUrl} name={r.target.username} />
               <div>
-                <b>На @{r.target.username}</b>
-                <p className="muted">{formatOnixId(r.target.onixId)} · от @{r.reporter.username}</p>
+                <b>На {publicAt(r.target.username)}</b>
+                <p className="muted">{formatOnixId(r.target.onixId)} · от {publicAt(r.reporter.username)}</p>
                 <p className="muted">{r.reason}: {r.comment}</p>
               </div>
             </div>

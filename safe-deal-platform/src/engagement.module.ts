@@ -16,6 +16,7 @@ import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { statusBadge } from './platform-status';
+import { publicTelegramNick, publicUsername } from './public-username';
 import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 
@@ -166,7 +167,7 @@ export class ChatService {
           ? 'ONIX AI'
           : isGroup
             ? (chat.title ?? 'Группа')
-            : (other?.user.displayName ?? other?.user.telegramNick ?? peerOnix ?? 'Диалог'),
+            : (publicTelegramNick(other?.user.telegramNick) ?? peerOnix ?? 'Диалог'),
         subtitle: isAi ? (subtitle || 'Помощник платформы') : subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
         peerOnixId: isGroup || isAi ? undefined : peerOnix,
@@ -242,7 +243,7 @@ export class ChatService {
         ?? (row.isAdmin ? 'ADMIN' : row.isSupport ? 'MODERATOR' : 'USER'));
       return {
         onixId,
-        username: row.telegramNick ?? row.displayName ?? onixId,
+        username: publicUsername(row.telegramNick),
         ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
         ...(badge ? { badge } : {}),
       };
@@ -338,7 +339,7 @@ export class ChatService {
     return {
       id: chat.id,
       kind: 'DIRECT' as const,
-      title: target.displayName ?? target.telegramNick ?? peerOnix,
+      title: publicTelegramNick(target.telegramNick) ?? peerOnix,
       unreadCount: 0,
       peerOnixId: peerOnix,
       peerLastOnline: target.lastSeenAt.toISOString(),
@@ -361,7 +362,7 @@ export class ChatService {
     const memberReads = memberRows.map((m) => ({
       userId: m.userId,
       onixId: m.user.onixId,
-      username: m.user.telegramNick ?? m.user.displayName ?? formatOnixId(m.user.onixId),
+      username: publicUsername(m.user.telegramNick),
       lastReadAt: m.lastReadAt,
     }));
 
@@ -439,7 +440,7 @@ export class ChatService {
     const memberReads = memberRows.map((m) => ({
       userId: m.userId,
       onixId: m.user.onixId,
-      username: m.user.telegramNick ?? m.user.displayName ?? formatOnixId(m.user.onixId),
+      username: publicUsername(m.user.telegramNick),
       lastReadAt: m.lastReadAt,
     }));
 
@@ -612,7 +613,7 @@ export class ChatService {
           const onixId = formatOnixId(r.user.onixId);
           return {
             onixId,
-            username: r.user.telegramNick ?? r.user.displayName ?? onixId,
+            username: publicUsername(r.user.telegramNick),
             avatarUrl: r.user.avatarUrl ?? undefined,
             badge: statusBadge(r.user.platformStatus
               ?? (r.user.isAdmin ? 'ADMIN' : r.user.isSupport ? 'MODERATOR' : 'USER')),

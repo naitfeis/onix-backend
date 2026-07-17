@@ -4,6 +4,7 @@ import { API_PATHS, sellerIsPresent, type Product, type ProductDraft, type Publi
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
+import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
@@ -176,7 +177,7 @@ export function Profile({
         ? 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'
         : 'Сумма и комиссия будут подтверждены сервером до списания.';
 
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="wallet-strip">
         <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
           <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
@@ -212,7 +213,7 @@ export function Profile({
             <div className="seller-row">
               <span className="user-summary">
                 <UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile)} />
-                <span>@{item.seller.username}</span>
+                <span>{publicAt(item.seller.username)}</span>
               </span>
               <strong>{money(item.priceCents)}</strong>
             </div>
@@ -235,8 +236,8 @@ export function Profile({
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
       core.reviews.map(review => <Card key={review.id}><div className="seller-row">
         {review.author.onixId
-          ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>@{review.author.username}</b> <StaffBadge badge={review.author.badge} /></button>
-          : <b>@{review.author.username} <StaffBadge badge={review.author.badge} /></b>}
+          ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
+          : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
         <span>{'★'.repeat(review.rating)}</span>
       </div><p className="muted">{review.text}</p></Card>))}
     {section === 'analytics' && (

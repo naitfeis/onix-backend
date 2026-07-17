@@ -2,6 +2,7 @@ import { PlatformStatus, Prisma } from '@prisma/client';
 import { AuthUser } from './common';
 import { formatOnixId } from './onix-id';
 import { statusBadge, type PlatformStatusCode } from './platform-status';
+import { publicUsername } from './public-username';
 
 type PublicUser = {
   id: bigint;
@@ -88,12 +89,11 @@ export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: b
   const status = resolveStatus(user);
   const badge = statusBadge(status);
   const onixId = formatOnixId(user.onixId);
-  // Public handle: Telegram nick only (never numeric telegramId). Fallback: displayName → ONIX id.
-  const nick = user.telegramNick?.replace(/^@+/, '').trim();
   return {
     id: user.id.toString(),
     onixId,
-    username: nick || user.displayName || onixId,
+    // Only Telegram @nick (e.g. shoprub). Never displayName / telegramId / ONIX id.
+    username: publicUsername(user.telegramNick),
     ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
     rating: Number(user.ratingAverage),
     reviewCount: user.ratingCount,
@@ -271,7 +271,7 @@ export function messageDto(message: {
     kind: system ? 'SYSTEM' as const : 'USER' as const,
     sender: {
       id: system ? '0' : sender!.id.toString(),
-      username: system ? 'ONIX' : (sender!.telegramNick ?? sender!.displayName ?? formatOnixId(sender!.onixId)),
+      username: system ? 'ONIX' : publicUsername(sender!.telegramNick),
       ...(system ? {} : (sender!.avatarUrl ? { avatarUrl: sender!.avatarUrl } : {})),
       ...(staffBadge ? { badge: staffBadge } : {}),
     },
@@ -317,7 +317,7 @@ export function reviewDto(item: {
     author: {
       id: item.author.id.toString(),
       onixId,
-      username: item.author.telegramNick ?? item.author.displayName ?? onixId,
+      username: publicUsername(item.author.telegramNick),
       ...(item.author.avatarUrl ? { avatarUrl: item.author.avatarUrl } : {}),
       ...(badge ? { badge } : {}),
     },

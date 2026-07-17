@@ -5,6 +5,7 @@ import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { parseMemberTokens } from '../utils/parseMemberTokens';
+import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
 
@@ -297,7 +298,7 @@ export function Chats({
                   : [...prev, hit]
               ));
             }}
-          >{formatOnixId(hit.onixId)} · @{hit.username}</button>
+          >{formatOnixId(hit.onixId)} · {publicAt(hit.username)}</button>
         ))}
       </div>}
       {groupSelected.length > 0 && <p className="muted">Выбрано: {groupSelected.map((s) => formatOnixId(s.onixId)).join(', ')}</p>}
@@ -440,7 +441,7 @@ export function Chats({
             onPointerLeave={clearLongPress}
             onPointerCancel={clearLongPress}
           >
-            {message.kind !== 'SYSTEM' && <small>@{message.sender.username} <StaffBadge badge={message.sender.badge} /></small>}
+            {message.kind !== 'SYSTEM' && <small>{publicAt(message.sender.username)} <StaffBadge badge={message.sender.badge} /></small>}
             {message.kind === 'SYSTEM' && <small>{thread.kind === 'AI' ? 'ONIX AI' : '🛡 ONIX'}</small>}
             <p><MessageText
               text={isStaff && message.deleted && message.originalText ? message.originalText : message.text}
@@ -612,7 +613,7 @@ export function Chats({
                   online={isOnline(member.lastOnline)}
                 />
                 <span>
-                  <b>@{member.username} <StaffBadge badge={member.badge} /></b>
+                  <b>{publicAt(member.username)} <StaffBadge badge={member.badge} /></b>
                   <small>{formatOnixId(member.onixId)} · {formatLastSeen(member.lastOnline)}</small>
                 </span>
               </span>
