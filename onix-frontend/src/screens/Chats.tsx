@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, formatLastSeen, type ChatUserHit, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, isOnline, type ChatUserHit, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -43,6 +43,7 @@ export function Chats({
   const lastSeenMsgIdRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const isStaff = Boolean(core.profile?.roles.includes('ADMIN') || core.profile?.roles.includes('SUPPORT'));
+  const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
   const { loadMessages, searchChats, refreshChats, sendMessage } = core;
@@ -302,18 +303,40 @@ export function Chats({
       </div>
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
         core.chats.map(chat => <button className="thread" key={chat.id} onClick={() => setThreadId(chat.id)}>
-          <span className="thread-peer"><UserAvatar avatarUrl={chat.peerAvatarUrl} name={chat.title} /><span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.subtitle || 'Открыть диалог'}</small></span></span>
+          <span className="thread-peer">
+            <UserAvatar
+              avatarUrl={chat.peerAvatarUrl}
+              name={chat.title}
+              online={chat.kind !== 'GROUP' && isOnline(chat.peerLastOnline)}
+            />
+            <span><b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b><small>{chat.subtitle || 'Открыть диалог'}</small></span>
+          </span>
           {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
         </button>)}</div>
     <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
-      {thread.peerAvatarUrl !== undefined || thread.title ? <UserAvatar avatarUrl={thread.peerAvatarUrl} name={thread.title} /> : null}
-      <div>
-      <button type="button" className="linkish" onClick={async () => {
-        if (!thread.peerOnixId) return;
-        if (peerProfile?.onixId === thread.peerOnixId) return;
-        try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
-      }}><b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b></button>
-      <small>{thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(thread.peerLastOnline)}</small></div>
+      <button
+        type="button"
+        className="conversation__peer"
+        disabled={!thread.peerOnixId}
+        aria-label={thread.peerOnixId ? `Профиль ${thread.title}` : undefined}
+        onClick={async () => {
+          if (!thread.peerOnixId) return;
+          if (peerProfile?.onixId === thread.peerOnixId) return;
+          try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
+        }}
+      >
+        {(thread.peerAvatarUrl !== undefined || thread.title) ? (
+          <UserAvatar
+            avatarUrl={thread.peerAvatarUrl}
+            name={thread.title}
+            online={thread.kind !== 'GROUP' && isOnline(thread.peerLastOnline)}
+          />
+        ) : null}
+        <div>
+          <b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
+          <small>{thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(thread.peerLastOnline)}</small>
+        </div>
+      </button>
       {thread.kind === 'GROUP' && (
         <Button
           variant="ghost"
@@ -389,7 +412,7 @@ export function Chats({
                 <button type="button" role="menuitem" onClick={() => void deleteMessage(message.id, 'self')}>
                   Удалить у меня
                 </button>
-                {(message.mine || isStaff) && (
+                {(message.mine || isAdmin) && (
                   <button type="button" role="menuitem" onClick={() => void deleteMessage(message.id, 'global')}>
                     Удалить у всех
                   </button>

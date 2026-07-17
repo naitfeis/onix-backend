@@ -19,15 +19,16 @@ export function installGlobalErrorHandlers(): void {
     console.error('[ONIX] unhandledrejection', event.reason);
   });
 
-  // Telegram Mini App: keep CSS viewport vars in sync when the footer / keyboard resizes.
+  // Telegram Mini App + visualViewport: keep modal overlay sized to the visible screen.
   const syncTelegramViewport = () => {
     try {
       const wa = (window as unknown as {
         Telegram?: { WebApp?: { viewportHeight?: number; viewportStableHeight?: number } };
       }).Telegram?.WebApp;
-      const h = wa?.viewportStableHeight ?? wa?.viewportHeight;
+      const vv = window.visualViewport?.height;
+      const h = wa?.viewportStableHeight ?? wa?.viewportHeight ?? vv ?? window.innerHeight;
       if (typeof h === 'number' && h > 0) {
-        document.documentElement.style.setProperty('--tg-viewport-height', `${h}px`);
+        document.documentElement.style.setProperty('--tg-viewport-height', `${Math.round(h)}px`);
       }
     } catch {
       /* ignore */
@@ -35,6 +36,8 @@ export function installGlobalErrorHandlers(): void {
   };
   syncTelegramViewport();
   window.addEventListener('resize', syncTelegramViewport);
+  window.visualViewport?.addEventListener('resize', syncTelegramViewport);
+  window.visualViewport?.addEventListener('scroll', syncTelegramViewport);
   try {
     const wa = (window as unknown as {
       Telegram?: { WebApp?: { onEvent?: (event: string, cb: () => void) => void } };

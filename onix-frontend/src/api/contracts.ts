@@ -347,13 +347,23 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 
+const ONLINE_WINDOW_MS = 2 * 60_000;
+
+/** True when lastOnline is within the online window (~2 min). */
+export function isOnline(iso?: string | null): boolean {
+  if (!iso) return false;
+  const at = new Date(iso).getTime();
+  if (!Number.isFinite(at)) return false;
+  return Date.now() - at < ONLINE_WINDOW_MS;
+}
+
 /** lastSeen display — precise online arrives with WebSocket (5.6). */
 export function formatLastSeen(iso?: string | null): string {
   if (!iso) return 'был(а) недавно';
   const at = new Date(iso).getTime();
   if (!Number.isFinite(at)) return 'был(а) недавно';
   const diffMs = Date.now() - at;
-  if (diffMs < 2 * 60_000) return 'Online';
+  if (diffMs < ONLINE_WINDOW_MS) return 'Online';
   if (diffMs < 60 * 60_000) return `Был ${Math.max(1, Math.round(diffMs / 60_000))} минут назад`;
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);

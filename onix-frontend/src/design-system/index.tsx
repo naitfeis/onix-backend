@@ -11,6 +11,7 @@ import {
   type TextareaHTMLAttributes,
   type TouchEvent as ReactTouchEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { popModal, pushModal } from './modalStack';
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
@@ -73,34 +74,49 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
     return () => popModal(id);
   }, [open]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const closeFromBackdrop = (event: ReactMouseEvent | ReactTouchEvent) => {
     if (event.target === event.currentTarget) onClose();
   };
 
-  return <div
-    className="modal"
-    role="presentation"
-    style={{ zIndex }}
-    onMouseDown={closeFromBackdrop}
-    onClick={closeFromBackdrop}
-  >
+  // Portal to body: ancestors with transform/perspective break position:fixed
+  // (tab slide animation), so modals were stuck to page scroll top instead of viewport center.
+  return createPortal(
     <div
-      className="modal__panel"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      onMouseDown={event => event.stopPropagation()}
-      onClick={event => event.stopPropagation()}
+      className="modal"
+      role="presentation"
+      style={{ zIndex }}
+      onMouseDown={closeFromBackdrop}
+      onClick={closeFromBackdrop}
     >
-      <div className="modal__head">
-        <h2 id={titleId}>{title}</h2>
-        <Button type="button" variant="ghost" onClick={onClose} aria-label="Закрыть">×</Button>
+      <div
+        className="modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={event => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
+      >
+        <div className="modal__head">
+          <h2 id={titleId}>{title}</h2>
+          <Button
+            type="button"
+            variant="ghost"
+            className="modal__close"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }}
+            aria-label="Закрыть"
+          >×</Button>
+        </div>
+        <div className="modal__body">{children}</div>
       </div>
-      <div className="modal__body">{children}</div>
-    </div>
-  </div>;
+    </div>,
+    document.body,
+  );
 }
 
 export function Confirm({ open, title, text, dangerous, busy, onCancel, onConfirm }: {

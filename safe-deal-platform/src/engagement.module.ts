@@ -429,17 +429,16 @@ export class ChatService {
     return { ok: true, scope: 'SELF' as const };
   }
 
-  /** Soft-delete globally. Sender may delete own; admin/support may delete any. */
+  /** Soft-delete globally. Sender may delete own; admin may delete any. */
   async softDelete(user: AuthUser, chatId: string, messageId: bigint, reason?: string) {
     await this.member(user.id, chatId);
     const message = await this.prisma.message.findFirst({
       where: { id: messageId, chatId },
     });
     if (!message) throw new NotFoundException('Сообщение не найдено.');
-    const staff = user.isAdmin || user.isSupport;
     const own = message.senderId === user.id;
-    if (!staff && !own) {
-      throw new ForbiddenException('Можно удалить только своё сообщение.');
+    if (!user.isAdmin && !own) {
+      throw new ForbiddenException('Удалить у всех может только отправитель или админ.');
     }
     if (message.deletedAt) return { ok: true, scope: 'GLOBAL' as const };
     await this.prisma.message.update({

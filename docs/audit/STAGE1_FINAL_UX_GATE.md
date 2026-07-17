@@ -109,3 +109,15 @@ npm test           ✅
 ## Gate rule
 
 **Stage 2 не начинать**, пока все пункты ручного чеклиста не зелёные.
+
+---
+
+## Follow-up (2026-07-17 evening)
+
+| Bug | Fix |
+|---|---|
+| Modal at page top after tab scroll | `Modal` → `createPortal(document.body)`; fixed overlay uses `--tg-viewport-height` |
+| Profile × from lot dead | Same portal + explicit `modal__close` stopPropagation |
+| Chat → profile | Avatar / nick / last-seen as one `conversation__peer` control |
+| Online green dot | `UserAvatar online` + `isOnline()` (~2 min) |
+| Delete for all | Sender or **admin only** (support cannot) |

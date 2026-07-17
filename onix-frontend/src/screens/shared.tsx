@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile, type TrustCard,
+  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
@@ -97,7 +97,7 @@ export function PublicProfileModal({
   return <Modal open title="Профиль" onClose={onClose}>
     <div className="stack public-profile">
       <Card className="profile-card">
-        <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" />
+        <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />
         <div className="profile-main">
           <h1>@{profile.username} <StaffBadge badge={profile.badge} /></h1>
           <p>{formatOnixId(profile.onixId)} · {formatLastSeen(profile.lastOnline)}</p>
