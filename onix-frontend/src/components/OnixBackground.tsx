@@ -37,55 +37,36 @@ float sdTorus(vec3 p, vec2 t) {
 }
 
 float mapFigure(vec3 p, float t) {
-  // Shared mild tilt only (no global stretch — that was flattening the balls)
   p.yz *= rot(0.88);
 
-  // —— RING: own spin + horizontal stretch (ellipse) ——
-  vec3 pr = p;
-  pr.xy *= rot(t * 0.11);
-  pr.xz *= rot(t * 0.07 + 0.25);
-  pr.x *= 0.7;
-  pr.z *= 1.04;
-  float d = sdTorus(pr, vec2(0.95, 0.048));
+  float ringSpin = t * 0.08;
+  float stretchX = 0.68;
 
-  // —— SPHERES: round (no stretch), each moves on its own path ——
-  float tb = t * 0.85;
-  vec3 c;
-  c = vec3(0.08 * cos(tb * 0.35), 0.04 * sin(tb * 0.55), 0.05 * sin(tb * 0.4));
-  d = min(d, sdSphere(p - c, 0.18));
+  // Shared spin frame (no stretch yet)
+  vec3 frame = p;
+  frame.xz *= rot(ringSpin + 0.2);
+  frame.xy *= rot(t * 0.05);
 
-  c = vec3(0.72 * cos(tb * 0.42 + 0.8), 0.22 + 0.1 * sin(tb * 0.7), 0.38 * sin(tb * 0.42 + 0.8));
-  d = min(d, sdSphere(p - c, 0.13));
+  // Ring only gets horizontal stretch → long thin ellipse
+  vec3 pr = frame;
+  pr.x *= stretchX;
+  float d = sdTorus(pr, vec2(0.98, 0.042));
 
-  c = vec3(0.65 * cos(tb * -0.38 + 2.4), -0.18 + 0.08 * cos(tb * 0.5), 0.32 * sin(tb * -0.38 + 2.4));
-  d = min(d, sdSphere(p - c, 0.11));
-
-  c = vec3(1.05 * cos(tb * 0.28 + 1.5), 0.3 * sin(tb * 0.45 + 0.3), 0.2 * sin(tb * 0.28 + 1.5));
-  d = min(d, sdSphere(p - c, 0.1));
-
-  c = vec3(0.95 * cos(tb * -0.33 + 3.8), -0.25 + 0.07 * sin(tb * 0.6), 0.25 * sin(tb * -0.33 + 3.8));
-  d = min(d, sdSphere(p - c, 0.095));
-
-  c = vec3(0.4 * cos(tb * 0.5 + 0.2), -0.4 + 0.06 * cos(tb * 0.8), -0.5 * abs(sin(tb * 0.35 + 0.5)));
-  d = min(d, sdSphere(p - c, 0.09));
-
-  c = vec3(-0.35 * cos(tb * 0.47 + 1.1), 0.45 + 0.05 * sin(tb * 0.65), -0.42 * cos(tb * 0.47));
-  d = min(d, sdSphere(p - c, 0.085));
-
-  c = vec3(0.55 * cos(tb * -0.55 + 2.0), -0.28 + 0.09 * sin(tb * 0.9), 0.48 * sin(tb * -0.55 + 2.0));
-  d = min(d, sdSphere(p - c, 0.078));
-
-  c = vec3(-0.58 * cos(tb * 0.36 + 0.6), 0.2 + 0.08 * cos(tb * 0.75), -0.4 * sin(tb * 0.36 + 0.6));
-  d = min(d, sdSphere(p - c, 0.072));
-
-  c = vec3(0.15 * cos(tb * 0.9), 0.08 * sin(tb * 1.1), 0.68 * cos(tb * 0.25 + 0.4));
-  d = min(d, sdSphere(p - c, 0.068));
-
-  c = vec3(-0.12 * sin(tb * 0.7), -0.05 * cos(tb * 0.85), -0.65 * cos(tb * 0.3 + 1.2));
-  d = min(d, sdSphere(p - c, 0.062));
-
-  c = vec3(0.82 * cos(tb * -0.22 + 4.2), 0.06 * sin(tb * 1.3), -0.28 * sin(tb * -0.22 + 4.2));
-  d = min(d, sdSphere(p - c, 0.055));
+  // Round balls scattered ON the ellipse (not in the center), own drift
+  float tb = t * 0.65;
+  for (int i = 0; i < 12; i++) {
+    float fi = float(i);
+    float a = fi * 0.5235988 + tb * 0.2 + fi * 0.04;
+    float R = 0.98;
+    // Ellipse matching stretched torus; spheres stay round (no stretch on sdSphere)
+    vec3 c = vec3(cos(a) * (R / stretchX), 0.06 * sin(tb * 1.2 + fi * 1.4), sin(a) * R);
+    // Drift along the ring independently of ring spin
+    c += vec3(-sin(a), 0.0, cos(a)) * (0.14 * sin(tb * 0.9 + fi * 2.2));
+    c.y += 0.05 * cos(tb * 0.7 + fi);
+    float rad = 0.038 + 0.028 * fract(sin(fi * 12.9898) * 43758.5453);
+    if (i == 3 || i == 8) rad *= 1.55;
+    d = min(d, sdSphere(frame - c, rad));
+  }
 
   return d;
 }
@@ -117,14 +98,13 @@ void main() {
     travel += max(d * 0.62, 0.005);
   }
 
-  // Cool desaturated teal / light-grey particles (exact shot palette)
-  vec3 glow = vec3(0.72, 0.86, 0.88);
-  vec3 teal = vec3(0.45, 0.72, 0.78);
+  // Icy cyan like the ideal shot (~#A0D0D8)
+  vec3 glow = vec3(0.627, 0.816, 0.847);
   vec3 col = vec3(0.0);
   float alpha = 0.0;
 
   if (hit > 0.0) {
-    vec2 e = vec2(0.003, 0.0);
+    vec2 e = vec2(0.0028, 0.0);
     vec3 n = normalize(vec3(
       mapFigure(p + e.xyy, t) - mapFigure(p - e.xyy, t),
       mapFigure(p + e.yxy, t) - mapFigure(p - e.yxy, t),
@@ -134,41 +114,34 @@ void main() {
     float lat = acos(clamp(n.y, -1.0, 1.0));
     float lon = atan(n.z, n.x);
 
-    // Dense swirling contour lines
-    float swirl = lon * 2.2 + lat * 3.5 + length(p) * 2.0 + t * 0.15;
-    float c1 = abs(fract(swirl * 1.8) - 0.5);
-    float c2 = abs(fract(lat * 14.0 + lon * 0.5) - 0.5);
-    float c3 = abs(fract(lon * 11.0 / 3.14159265) - 0.5);
-    float lines = 1.0 - smoothstep(0.0, 0.03, min(c1, min(c2, c3)));
+    // Sharper contours
+    float c1 = abs(fract(lat * 16.0) - 0.5);
+    float c2 = abs(fract(lon * 12.0 / 3.14159265) - 0.5);
+    float lines = 1.0 - smoothstep(0.0, 0.022, min(c1, c2));
 
-    // Point cloud: many tiny luminous dots, black voids between
-    vec2 cellA = floor(vec2(lon, lat) * vec2(72.0, 48.0));
-    vec2 cellB = floor(p.xy * 36.0 + p.z * 18.0);
-    float dots = step(0.42, hash(cellA));
-    float dots2 = step(0.55, hash3(floor(p * 40.0)));
-    float dust = step(0.7, hash(cellB));
+    // Crisper point cloud
+    vec2 cellA = floor(vec2(lon, lat) * vec2(80.0, 54.0));
+    float dots = step(0.48, hash(cellA));
+    float dots2 = step(0.62, hash3(floor(p * 44.0)));
+    float pattern = max(lines, max(dots * 0.8, dots2 * 0.5));
 
-    float pattern = max(lines * 0.9, max(dots * 0.75, max(dots2 * 0.55, dust * 0.35)));
+    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.6);
+    col = glow * pattern * (0.9 + fres * 0.3);
+    col += glow * fres * 0.08;
 
-    float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 2.8);
-    vec3 tint = mix(glow, teal, 0.35 + 0.25 * fres);
-    col = tint * pattern * (0.8 + fres * 0.35);
-    col += teal * fres * 0.1;
-
-    alpha = clamp(pattern * 0.86 + fres * 0.12, 0.0, 0.9);
+    alpha = clamp(pattern * 0.9 + fres * 0.1, 0.0, 0.92);
   }
 
-  // Soft cool bloom
   float aura = 0.0;
   travel = 0.0;
-  for (int j = 0; j < 16; j++) {
+  for (int j = 0; j < 14; j++) {
     p = ro + rd * travel;
     float d = abs(mapFigure(p, t));
-    aura += exp(-d * 11.0) * 0.018;
+    aura += exp(-d * 12.0) * 0.015;
     travel += 0.14;
   }
-  col += mix(glow, teal, 0.5) * aura * 0.65;
-  alpha = max(alpha, clamp(aura * 1.15, 0.0, 0.2));
+  col += glow * aura * 0.55;
+  alpha = max(alpha, clamp(aura * 1.05, 0.0, 0.18));
 
   float vig = smoothstep(1.88, 0.26, length(uv * vec2(1.0, 1.05)));
   col *= vig;

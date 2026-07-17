@@ -3,7 +3,7 @@ import { CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LAB
 import { Button, Card, Field, Input, Select, Textarea } from '../design-system';
 import { validateDraft } from '../utils/productValidation';
 import type { Core } from './types';
-import { SectionHeader, emptyDraft } from './shared';
+import { emptyDraft } from './shared';
 
 export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
@@ -16,7 +16,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
     if (next.length) return;
     if (await core.createProduct(draft)) { setToast('Лот опубликован на витрине.'); setDraft(emptyDraft); onDone(); }
   };
-  return <div className="stack narrow"><SectionHeader title="РАЗМЕСТИТЬ ЛОТ" subtitle="ОДНА ФОРМА · БЕЗ ЛИШНИХ ШАГОВ" />
+  return <div className="stack narrow">
     <Card><form className="form" onSubmit={submit}>
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
       {core.errors['product-form'] && <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>}
