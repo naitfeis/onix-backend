@@ -67,6 +67,28 @@ export function Deals({
       deals.map(deal => <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} online={sellerIsPresent(deal.counterparty, core.profile)} /><div><h2>{deal.product.title}</h2><p className="muted">@{deal.counterparty.username} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Hold', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item}>{item}</li>)}</ol>
+        {deal.dispute && (
+          <div className={`dispute-card${deal.dispute.status === 'RESOLVED' ? ' dispute-card--resolved' : ''}`} role="status">
+            <h3>Ваш спор</h3>
+            <p className="dispute-card__no">№{deal.dispute.orderId}</p>
+            <dl className="dispute-card__grid">
+              <div><dt>Статус</dt><dd>{deal.dispute.statusLabel}</dd></div>
+              <div><dt>Мой профиль</dt><dd>{deal.dispute.supportLabel}</dd></div>
+              <div>
+                <dt>Очередь</dt>
+                <dd>
+                  {deal.dispute.status === 'REVIEWING' && deal.dispute.queuePosition != null
+                    ? `${deal.dispute.queuePosition} из ${Math.max(deal.dispute.queueTotal, 1)}`
+                    : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Среднее</dt>
+                <dd>{deal.dispute.avgWaitMinutes != null ? `~${deal.dispute.avgWaitMinutes} мин` : '—'}</dd>
+              </div>
+            </dl>
+          </div>
+        )}
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
           {!deal.complaintOpen && !['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && (
@@ -83,7 +105,7 @@ export function Deals({
               else switchTo('chat');
             }}>Обратиться в поддержку</Button>
           )}
-          {deal.complaintOpen && <span className="muted">Обращение по сделке уже создано</span>}
+          {deal.complaintOpen && !deal.dispute && <span className="muted">Обращение по сделке уже создано</span>}
           {isSupport && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="danger" busy={core.actionBusy === `refund-${deal.id}`} onClick={async () => {
             if (await core.supportRefund(deal.id, 'Возврат поддержкой')) setToast('Возврат через Escrow выполнен.');
           }}>Refund</Button>}

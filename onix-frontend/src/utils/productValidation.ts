@@ -3,7 +3,7 @@ import type { ProductDraft } from '../api/contracts';
 const NO_MIN_SUB = new Set(['STANDOFF_GOLD', 'ROBLOX_ROBUX', 'STEAM_TOPUP', 'RP_VIRTS']);
 
 export function minPriceRubles(subcategory?: string): number {
-  return subcategory && NO_MIN_SUB.has(subcategory) ? 1 : 10;
+  return subcategory && NO_MIN_SUB.has(subcategory) ? 0 : 10;
 }
 
 export function validateDraft(

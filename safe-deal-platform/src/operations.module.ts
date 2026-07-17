@@ -32,6 +32,10 @@ class BanDto {
   /** Required when reason=OTHER (1–3650 days). Ignored for fixed-duration reasons. */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) durationDays?: number;
 }
+class SellBanDto {
+  @IsBoolean() banned!: boolean;
+  @IsOptional() @IsString() @MaxLength(1000) comment?: string;
+}
 class RefundDto { @IsOptional() @IsString() @MaxLength(1000) reason?: string; }
 class WithdrawalDto {
   @IsString() @Matches(/^[1-9]\d*$/) amountCents!: string;
@@ -148,6 +152,50 @@ class OperationsService {
     return { onixId: displayId, banned: false, ban: null };
   }
 
+  /** Block listing/selling without locking the whole account. */
+  async setSellBan(actor: AuthUser, onixId: string, banned: boolean, comment?: string) {
+    const resolved = await requireUserByOnixId(this.prisma, onixId);
+    const displayId = formatOnixId(resolved.onixId);
+    if (banned) {
+      const note = comment?.trim();
+      if (!note) throw new BadRequestException('Комментарий администратора обязателен.');
+      const now = new Date();
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: resolved.id },
+          data: { sellBannedAt: now },
+        });
+        await tx.product.updateMany({
+          where: { sellerId: resolved.id, status: 'ACTIVE' },
+          data: { status: 'ARCHIVED' },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: actor.id,
+            action: 'USER_SELL_BAN',
+            entity: 'User',
+            entityId: resolved.id.toString(),
+            metadata: { comment: note.slice(0, 1000) },
+          },
+        });
+      });
+      return { onixId: displayId, sellBanned: true as const };
+    }
+    await this.prisma.user.update({
+      where: { id: resolved.id },
+      data: { sellBannedAt: null },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'USER_SELL_UNBAN',
+        entity: 'User',
+        entityId: resolved.id.toString(),
+      },
+    });
+    return { onixId: displayId, sellBanned: false as const };
+  }
+
   withdraw(user: AuthUser, dto: WithdrawalDto) {
     return this.prisma.$transaction(async (tx) => {
       const amount = BigInt(dto.amountCents);
@@ -189,6 +237,10 @@ class AdminController {
   @Patch('users/:onixId/ban')
   ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {
     return this.service.ban(actor, id, dto);
+  }
+  @Patch('users/:onixId/sell-ban')
+  sellBan(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: SellBanDto) {
+    return this.service.setSellBan(actor, id, dto.banned, dto.comment);
   }
 }
 

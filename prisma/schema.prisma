@@ -45,6 +45,8 @@ model User {
   banComment             String?   @db.VarChar(1000)
   bannedAt               DateTime?
   bannedUntil            DateTime?
+  /** When set, user cannot create/update listings (account still works). */
+  sellBannedAt           DateTime?
   mergedIntoUserId       BigInt?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -279,11 +281,14 @@ model UserReport {
   reason     BanReason
   comment    String    @db.VarChar(1000)
   createdAt  DateTime  @default(now())
+  closedAt   DateTime?
+  closedById BigInt?
   reporter   User      @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: Cascade)
   target     User      @relation("ReportTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@index([targetId, createdAt])
   @@index([reporterId, createdAt])
+  @@index([closedAt, createdAt])
 }
 
 model SupportTicket {

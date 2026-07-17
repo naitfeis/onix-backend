@@ -257,12 +257,13 @@ export class SupportService {
     );
   }
 
-  /** People reports inbox for staff. */
+  /** People reports inbox for staff (open only). */
   async listReports(actor: AuthUser) {
     if (!canActAsSupport(actor)) {
       throw new ForbiddenException('Жалобы доступны только staff.');
     }
     const rows = await this.prisma.userReport.findMany({
+      where: { closedAt: null },
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: {
@@ -291,6 +292,37 @@ export class SupportService {
       },
     }));
   }
+
+  async closeReport(actor: AuthUser, reportId: string, reason?: string) {
+    if (!canActAsSupport(actor)) {
+      throw new ForbiddenException('Закрыть жалобу может только staff.');
+    }
+    if (!/^[a-z0-9]+$/i.test(reportId) || reportId.length < 8 || reportId.length > 40) {
+      throw new BadRequestException('Некорректный id жалобы.');
+    }
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Жалоба не найдена.');
+    if (report.closedAt) {
+      return { id: report.id, closed: true as const };
+    }
+    await this.prisma.userReport.update({
+      where: { id: reportId },
+      data: {
+        closedAt: new Date(),
+        closedById: actor.id,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: 'USER_REPORT_CLOSE',
+        entity: 'UserReport',
+        entityId: reportId,
+        metadata: reason?.trim() ? { reason: reason.trim().slice(0, 500) } : undefined,
+      },
+    });
+    return { id: reportId, closed: true as const };
+  }
 }
 
 @Controller()
@@ -307,6 +339,15 @@ export class SupportController {
   @Header('Cache-Control', 'private, no-store')
   reports(@CurrentUser() user: AuthUser) {
     return this.support.listReports(user);
+  }
+
+  @Post('support/reports/:id/close')
+  closeReport(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CloseSupportDto,
+  ) {
+    return this.support.closeReport(user, id, dto.reason);
   }
 
   @Post('orders/:id/support')

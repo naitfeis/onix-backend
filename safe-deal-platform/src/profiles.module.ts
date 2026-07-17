@@ -96,7 +96,7 @@ export class ProfilesService {
       select: {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
-        createdAt: true, isAdmin: true, isSupport: true, deletedAt: true,
+        createdAt: true, isAdmin: true, isSupport: true, deletedAt: true, sellBannedAt: true,
         _count: { select: { followers: true } },
         followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
         products: {
@@ -124,6 +124,7 @@ export class ProfilesService {
       }),
       bio: profile.bio,
       createdAt: profile.createdAt.toISOString(),
+      ...(viewer.isAdmin ? { sellBanned: Boolean(profile.sellBannedAt) } : {}),
       products: profile.products.map((p) => ({
         id: p.id,
         title: p.title,

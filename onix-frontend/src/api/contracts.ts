@@ -32,6 +32,16 @@ export interface Product {
   createdAt: string;
 }
 
+export interface DisputeCard {
+  orderId: string;
+  status: 'REVIEWING' | 'RESOLVED';
+  statusLabel: string;
+  supportLabel: string;
+  queuePosition: number | null;
+  queueTotal: number;
+  avgWaitMinutes: number | null;
+}
+
 export interface Deal {
   id: string;
   product: Pick<Product, 'id' | 'title' | 'category'>;
@@ -45,6 +55,8 @@ export interface Deal {
   complaintOpen?: boolean;
   /** Shared buyer↔seller pair chat (same id for all deals + direct). */
   chatId?: string;
+  /** Buyer/seller dispute card in Orders after support/dispute. */
+  dispute?: DisputeCard;
 }
 
 export interface OrderCard {
@@ -153,6 +165,8 @@ export interface TrustCard {
 export interface PublicProfile extends Seller {
   bio?: string | null;
   createdAt?: string;
+  /** Present only for ADMIN viewers. */
+  sellBanned?: boolean;
   products?: Array<{
     id: string;
     title: string;
@@ -165,6 +179,14 @@ export interface PublicProfile extends Seller {
     createdAt: string;
   }>;
   reviews?: Review[];
+}
+
+export interface ChatMemberItem {
+  onixId: string;
+  username: string;
+  avatarUrl?: string;
+  badge?: 'ADMIN' | 'SUPPORT';
+  lastOnline?: string;
 }
 
 export interface Review {
@@ -279,15 +301,18 @@ export const API_PATHS = {
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   supportQueue: '/api/support/queue',
   supportReports: '/api/support/reports',
+  supportReportClose: (id: string) => `/api/support/reports/${encodeURIComponent(id)}/close`,
   mePresence: '/api/users/me/presence',
   leaveGroupChat: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members/me`,
   adminProductRemove: (id: string) => `/api/admin/products/${encodeURIComponent(id)}`,
+  adminSellBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/sell-ban`,
   chats: '/api/chats',
   chatsSearch: (q: string) => `/api/chats?q=${encodeURIComponent(q)}`,
   chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
   directChat: '/api/chats/direct',
   createGroupChat: '/api/chats/groups',
   addChatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
+  chatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
   messageDelete: (threadId: string, messageId: string, scope?: 'self' | 'global') =>
     `/api/chats/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}${scope === 'global' ? '?scope=global' : ''}`,

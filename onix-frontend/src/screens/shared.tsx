@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, money } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
   formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
+import { Badge, Button, Card, Confirm, Field, Input, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import type { Core } from './types';
 
@@ -73,12 +73,20 @@ export function PublicProfileModal({
   const [followersCount, setFollowersCount] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
   const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
+  const [sellBanned, setSellBanned] = useState(false);
+  const [banOpen, setBanOpen] = useState(false);
+  const [banReason, setBanReason] = useState<BanReasonCode | ''>('');
+  const [banComment, setBanComment] = useState('');
+  const [banDays, setBanDays] = useState('');
+  const [sellBanConfirm, setSellBanConfirm] = useState(false);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
     setFollowersCount(profile.followersCount);
+    setSellBanned(Boolean(profile.sellBanned));
     setSection('products');
     setReportOpen(false);
+    setBanOpen(false);
     setTrustCard(null);
     let cancelled = false;
     void api.get<TrustCard>(API_PATHS.userTrustCard(profile.onixId)).then((card) => {
@@ -93,6 +101,8 @@ export function PublicProfileModal({
   const reviews = profile.reviews ?? [];
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
+  const isAdmin = Boolean(core?.profile?.roles.includes('ADMIN'));
+  const banReady = Boolean(banReason && banComment.trim() && (banReason !== 'OTHER' || Number(banDays) > 0));
 
   return <Modal open title="Профиль" onClose={onClose} size="wide">
     <div className="stack public-profile">
@@ -110,6 +120,7 @@ export function PublicProfileModal({
             {trustCard?.passportVerified && <span><b>Паспорт</b> подтверждён</span>}
             {trustCard?.phoneVerified && <span><b>Телефон</b> подтверждён</span>}
             {trustCard?.voiceVerified && <span><b>Голос</b> подтверждён</span>}
+            {isAdmin && sellBanned && <span><b>Продажа</b> запрещена</span>}
           </div>
         </div>
         {!isSelf && core && <div className="card-actions">
@@ -143,6 +154,14 @@ export function PublicProfileModal({
               else setReportOpen(true);
             }}
           >Пожаловаться</Button>
+          {isAdmin && (
+            <>
+              <Button variant="danger" onClick={() => setBanOpen(true)}>Бан</Button>
+              <Button variant="secondary" onClick={() => setSellBanConfirm(true)}>
+                {sellBanned ? 'Разрешить продажу' : 'Запрет продажи'}
+              </Button>
+            </>
+          )}
         </div>}
         <div className="balance">
           <small>ЗАЛОГ</small>
@@ -192,6 +211,67 @@ export function PublicProfileModal({
         core={core}
         onClose={() => setReportOpen(false)}
         setToast={setToast}
+      />
+    )}
+    {core && setToast && (
+      <Modal open={banOpen} title="Заблокировать пользователя" onClose={() => setBanOpen(false)}>
+        <div className="form">
+          <Field label="Причина">
+            <Select value={banReason} onChange={(e) => setBanReason(e.target.value as BanReasonCode | '')}>
+              <option value="">Выберите причину</option>
+              {BAN_REASON_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </Select>
+          </Field>
+          {banReason === 'OTHER' && (
+            <Field label="Срок, дней"><Input type="number" min={1} value={banDays} onChange={(e) => setBanDays(e.target.value)} /></Field>
+          )}
+          <Field label="Комментарий"><Textarea maxLength={500} value={banComment} onChange={(e) => setBanComment(e.target.value)} /></Field>
+          <div className="modal__actions">
+            <Button variant="secondary" onClick={() => setBanOpen(false)}>Отмена</Button>
+            <Button
+              variant="danger"
+              disabled={!banReady}
+              busy={core.actionBusy === 'admin-ban'}
+              onClick={async () => {
+                if (!banReason || !banComment.trim()) return;
+                const ok = await core.adminAction('ban', profile.onixId, {
+                  reason: banReason,
+                  comment: banComment.trim(),
+                  ...(banReason === 'OTHER' && banDays ? { durationDays: Number(banDays) } : {}),
+                });
+                if (!ok) return;
+                setBanOpen(false);
+                setToast('Пользователь заблокирован.');
+                onClose();
+              }}
+            >Заблокировать</Button>
+          </div>
+        </div>
+      </Modal>
+    )}
+    {core && setToast && (
+      <Confirm
+        open={sellBanConfirm}
+        dangerous={!sellBanned}
+        title={sellBanned ? 'Снять запрет продажи?' : 'Запретить продажу?'}
+        text={sellBanned
+          ? 'Пользователь снова сможет публиковать лоты.'
+          : 'Активные лоты будут сняты. Аккаунт останется доступен.'}
+        busy={core.actionBusy === `sell-ban-${profile.onixId}`}
+        onCancel={() => setSellBanConfirm(false)}
+        onConfirm={async () => {
+          try {
+            await api.patch(API_PATHS.adminSellBan(profile.onixId), {
+              banned: !sellBanned,
+              ...(!sellBanned ? { comment: 'Запрет продажи из профиля' } : {}),
+            });
+            setSellBanned(!sellBanned);
+            setSellBanConfirm(false);
+            setToast(sellBanned ? 'Продажа снова разрешена.' : 'Продажа запрещена.');
+          } catch (error) {
+            setToast(friendlyError(error));
+          }
+        }}
       />
     )}
   </Modal>;

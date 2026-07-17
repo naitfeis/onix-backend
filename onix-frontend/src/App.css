@@ -120,6 +120,24 @@
 .auth-notice strong { color: var(--accent); font-family: var(--font-display); }
 .ban-notice__row { display: block; }
 .deal-card--focus { outline: 2px solid var(--accent, #3d7eff); outline-offset: 2px; }
+.dispute-card {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: linear-gradient(160deg, #12141a 0%, #0a0b0e 100%);
+}
+.dispute-card--resolved { opacity: .88; border-color: var(--line); }
+.dispute-card h3 { margin: 0 0 4px; font-size: 14px; letter-spacing: .02em; }
+.dispute-card__no { margin: 0 0 10px; font-family: var(--font-mono); color: var(--muted); font-size: 12px; }
+.dispute-card__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  margin: 0;
+}
+.dispute-card__grid dt { color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.dispute-card__grid dd { margin: 2px 0 0; font-size: 12px; font-weight: 600; }
 .viewport {
   padding-top: 16px;
   /* clip only horizontal slide; never crop lots vertically */

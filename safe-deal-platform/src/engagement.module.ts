@@ -516,6 +516,41 @@ export class ChatService {
     return { added, missing, already };
   }
 
+  async listMembers(user: AuthUser, chatId: string) {
+    await this.member(user.id, chatId);
+    const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true, title: true } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    const rows = await this.prisma.chatMember.findMany({
+      where: { chatId },
+      select: {
+        user: {
+          select: {
+            onixId: true, telegramNick: true, displayName: true, avatarUrl: true,
+            isAdmin: true, isSupport: true, lastSeenAt: true, deletedAt: true,
+          },
+        },
+      },
+      take: 200,
+    });
+    return {
+      chatId,
+      kind: chat.kind,
+      title: chat.title,
+      members: rows
+        .filter((r) => !r.user.deletedAt)
+        .map((r) => {
+          const onixId = formatOnixId(r.user.onixId);
+          return {
+            onixId,
+            username: r.user.telegramNick ?? r.user.displayName ?? onixId,
+            avatarUrl: r.user.avatarUrl ?? undefined,
+            badge: r.user.isAdmin ? 'ADMIN' as const : r.user.isSupport ? 'SUPPORT' as const : undefined,
+            lastOnline: r.user.lastSeenAt.toISOString(),
+          };
+        }),
+    };
+  }
+
   /** Leave a group chat (does not delete the group for others). */
   async leaveGroup(user: AuthUser, chatId: string) {
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
@@ -704,6 +739,12 @@ export class EngagementController {
   @Delete('chats/:id/members/me')
   leaveGroup(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.chats.leaveGroup(user, id);
+  }
+
+  @Get('chats/:id/members')
+  @Header('Cache-Control', 'private, no-store')
+  listMembers(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.chats.listMembers(user, id);
   }
 
   @Get('chats/:id/messages') messages(

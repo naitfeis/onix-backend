@@ -159,10 +159,20 @@ export function dealDto(order: {
   seller: PublicUser;
   reviews: Array<{ authorId: bigint }>;
   chat?: { id: string } | null;
-  supportTickets?: Array<{ id: string }>;
+  supportTickets?: Array<{ id: string; status?: string; chatId?: string }>;
+  dispute?: {
+    orderId: string;
+    status: 'REVIEWING' | 'RESOLVED';
+    statusLabel: string;
+    supportLabel: string;
+    queuePosition: number | null;
+    queueTotal: number;
+    avgWaitMinutes: number | null;
+  } | null;
 }, viewer: AuthUser) {
   const buyer = order.buyerId === viewer.id;
-  const complaintOpen = Boolean(order.supportTickets?.length)
+  const hasTicket = Boolean(order.supportTickets?.length);
+  const complaintOpen = hasTicket
     || order.status === 'DISPUTE'
     || order.status === 'REFUNDED'
     || order.status === 'CANCELED';
@@ -179,6 +189,7 @@ export function dealDto(order: {
       && !order.reviews.some((review) => review.authorId === viewer.id),
     complaintOpen,
     ...(order.chat?.id ? { chatId: order.chat.id } : {}),
+    ...(order.dispute ? { dispute: order.dispute } : {}),
   };
 }
 

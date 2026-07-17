@@ -13,6 +13,7 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
+import { buildDisputeCard, loadArbitrationContext } from './dispute-card';
 import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
@@ -69,26 +70,43 @@ export class EscrowService {
       query.sort === 'expensive' ? { totalAmountCents: 'desc' } :
       query.sort === 'cheap' ? { totalAmountCents: 'asc' } :
       { createdAt: 'desc' };
-    const orders = await this.prisma.order.findMany({
-      where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
-      select: {
-        id: true,
-        buyerId: true,
-        sellerId: true,
-        totalAmountCents: true,
-        status: true,
-        createdAt: true,
-        product: { select: dealProductSelect },
-        buyer: { select: dealPartySelect },
-        seller: { select: dealPartySelect },
-        reviews: { select: { authorId: true } },
-        chat: { select: { id: true } },
-        supportTickets: { select: { id: true }, take: 1 },
-      },
-      orderBy,
-      take: 100,
+    const [orders, arbCtx] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
+        select: {
+          id: true,
+          buyerId: true,
+          sellerId: true,
+          totalAmountCents: true,
+          status: true,
+          createdAt: true,
+          product: { select: dealProductSelect },
+          buyer: { select: dealPartySelect },
+          seller: { select: dealPartySelect },
+          reviews: { select: { authorId: true } },
+          chat: { select: { id: true } },
+          supportTickets: {
+            select: { id: true, status: true, chatId: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy,
+        take: 100,
+      }),
+      loadArbitrationContext(this.prisma),
+    ]);
+    return orders.map((order) => {
+      const ticket = order.supportTickets[0] ?? null;
+      const dispute = buildDisputeCard({
+        orderId: order.id,
+        status: order.status,
+        chatId: order.chat?.id ?? ticket?.chatId,
+        ticket,
+        ctx: arbCtx,
+      });
+      return dealDto({ ...order, dispute }, user);
     });
-    return orders.map((order) => dealDto(order, user));
   }
 
   /**
@@ -109,7 +127,7 @@ export class EscrowService {
         throw new ConflictException('Товар недоступен.');
       }
       if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
-      if (product.priceCents <= 0n) throw new BadRequestException('Некорректная цена товара.');
+      if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
       const totalAmountCents = product.priceCents * BigInt(quantity);
       const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
       // Optimistic lock: only one buyer can reserve an ACTIVE listing.
@@ -118,10 +136,12 @@ export class EscrowService {
         data: { status: 'RESERVED' },
       });
       if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
-      await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
-        idempotencyKey: `order:${key}:hold`,
-        description: 'Оплата в Escrow',
-      });
+      if (totalAmountCents > 0n) {
+        await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
+          idempotencyKey: `order:${key}:hold`,
+          description: 'Оплата в Escrow',
+        });
+      }
       // One personal chat per buyer↔seller pair — never create a new chat per deal.
       const chat = await ensurePairChat(tx, user.id, product.sellerId);
       const chatId = chat.id;

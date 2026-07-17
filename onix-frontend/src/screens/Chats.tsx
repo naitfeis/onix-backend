@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, formatLastSeen, isOnline, type ChatUserHit, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, isOnline, type ChatMemberItem, type ChatUserHit, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -38,6 +38,8 @@ export function Chats({
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
   const [leaveGroupId, setLeaveGroupId] = useState<string | null>(null);
+  const [groupMembers, setGroupMembers] = useState<ChatMemberItem[] | null>(null);
+  const [groupMembersTitle, setGroupMembersTitle] = useState('');
   const groupPressRef = useRef<number | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -336,9 +338,19 @@ export function Chats({
       <button
         type="button"
         className="conversation__peer"
-        disabled={!thread.peerOnixId}
-        aria-label={thread.peerOnixId ? `Профиль ${thread.title}` : undefined}
+        disabled={thread.kind !== 'GROUP' && !thread.peerOnixId}
+        aria-label={thread.kind === 'GROUP' ? `Участники ${thread.title}` : (thread.peerOnixId ? `Профиль ${thread.title}` : undefined)}
         onClick={async () => {
+          if (thread.kind === 'GROUP') {
+            try {
+              const data = await api.get<{ title?: string; members: ChatMemberItem[] }>(API_PATHS.chatMembers(thread.id));
+              setGroupMembersTitle(data.title || thread.title);
+              setGroupMembers(data.members);
+            } catch {
+              setToast('Не удалось загрузить участников');
+            }
+            return;
+          }
           if (!thread.peerOnixId) return;
           if (peerProfile?.onixId === thread.peerOnixId) return;
           try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
@@ -514,6 +526,35 @@ export function Chats({
         }
       }}
     />
+    <Modal open={groupMembers != null} title={groupMembersTitle || 'Участники'} onClose={() => setGroupMembers(null)}>
+      <div className="stack compact">
+        {(groupMembers ?? []).length === 0
+          ? <StateView title="Нет участников" text="Список пуст." />
+          : (groupMembers ?? []).map((member) => (
+            <button
+              type="button"
+              key={member.onixId}
+              className="thread"
+              onClick={async () => {
+                setGroupMembers(null);
+                try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(member.onixId))); } catch { /* ignore */ }
+              }}
+            >
+              <span className="thread-peer">
+                <UserAvatar
+                  avatarUrl={member.avatarUrl}
+                  name={member.username}
+                  online={isOnline(member.lastOnline)}
+                />
+                <span>
+                  <b>@{member.username} <StaffBadge badge={member.badge} /></b>
+                  <small>{formatOnixId(member.onixId)} · {formatLastSeen(member.lastOnline)}</small>
+                </span>
+              </span>
+            </button>
+          ))}
+      </div>
+    </Modal>
   </div>;
 }
 export default Chats;

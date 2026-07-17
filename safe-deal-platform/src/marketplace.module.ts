@@ -34,7 +34,7 @@ function toBoolean(value: unknown): boolean | undefined {
 class ProductDto {
   @IsString() @Length(5, 32) title!: string;
   @IsOptional() @IsString() @MaxLength(20_000) description?: string;
-  @IsString() @Matches(/^[1-9]\d*$/) priceCents!: string;
+  @IsString() @Matches(/^\d+$/) priceCents!: string;
   @IsEnum(ProductCategory) category!: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity!: number;
@@ -49,7 +49,7 @@ class ProductDto {
 class UpdateProductDto {
   @IsOptional() @IsString() @Length(5, 32) title?: string;
   @IsOptional() @IsString() @MaxLength(20_000) description?: string;
-  @IsOptional() @IsString() @Matches(/^[1-9]\d*$/) priceCents?: string;
+  @IsOptional() @IsString() @Matches(/^\d+$/) priceCents?: string;
   @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity?: number;
@@ -181,6 +181,13 @@ export class MarketplaceService {
   }
 
   async create(user: AuthUser, dto: ProductDto) {
+    const seller = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { sellBannedAt: true },
+    });
+    if (seller?.sellBannedAt) {
+      throw new BadRequestException('Продажа товаров запрещена администратором.');
+    }
     try {
       assertSubcategoryForCategory(dto.category, dto.subcategory);
     } catch (e) {
@@ -223,6 +230,13 @@ export class MarketplaceService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateProductDto) {
+    const seller = await this.prisma.user.findUnique({
+      where: { id: user.id },
+      select: { sellBannedAt: true },
+    });
+    if (seller?.sellBannedAt) {
+      throw new BadRequestException('Продажа товаров запрещена администратором.');
+    }
     const item = await this.ownedActive(user, id);
     const category = dto.category ?? item.category;
     const subcategory = dto.subcategory !== undefined ? dto.subcategory : item.subcategory;

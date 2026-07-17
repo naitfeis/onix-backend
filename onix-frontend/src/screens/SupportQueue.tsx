@@ -115,6 +115,15 @@ export function SupportQueue({
             <Button variant="secondary" busy={core.actionBusy === `chat-${r.reporter.onixId}`} onClick={() => void openDirectChat(r.reporter.onixId)}>
               Чат с жалобщиком
             </Button>
+            <Button variant="danger" busy={core.actionBusy === `report-close-${r.id}`} onClick={async () => {
+              try {
+                await api.post(API_PATHS.supportReportClose(r.id), {});
+                setReports((prev) => prev.filter((item) => item.id !== r.id));
+                setToast('Жалоба закрыта.');
+              } catch {
+                setToast('Не удалось закрыть жалобу.');
+              }
+            }}>Закрыть жалобу</Button>
           </div>
         </Card>
       )))}
