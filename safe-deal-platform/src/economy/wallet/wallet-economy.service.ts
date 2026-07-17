@@ -7,7 +7,7 @@ import { PrismaService } from '../../prisma.service';
 import { DepositService } from './deposit.service';
 import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
-import { buildPublicTrustCard } from '../trust/trust-card';
+import { buildPublicTrustCard, assertNoTrustScore } from '../trust/trust-card';
 import { ProSubscriptionService } from '../pro/pro.service';
 import { VerificationService } from '../verification/verification.service';
 
@@ -129,7 +129,7 @@ export class WalletEconomyService {
       && user.sellerSubscription.status === 'ACTIVE'
       && (!user.sellerSubscription.endsAt || user.sellerSubscription.endsAt > new Date()),
     );
-    return buildPublicTrustCard({
+    const card = buildPublicTrustCard({
       trustLevel: user.trustLevel,
       depositAvailableCents: user.depositAvailableCents,
       depositLockedCents: user.depositLockedCents,
@@ -140,6 +140,8 @@ export class WalletEconomyService {
       verifications: user.verifications,
       proActive,
     });
+    assertNoTrustScore(card);
+    return card;
   }
 
   async getOwnerTrust(user: AuthUser) {

@@ -31,6 +31,14 @@ export interface ProfileDto {
   roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
   balanceCents: string;
   walletHistory: LedgerDto[];
+  /** Additive Stage 1 — owner deposit after lazy unlock. */
+  deposit?: {
+    availableCents: string;
+    lockedCents: string;
+    totalCents: string;
+  };
+  /** Additive Stage 1 — public trust card shape (never trustScore). */
+  trustCard?: import('./economy/trust/trust-card').PublicTrustCard;
 }
 
 export interface LedgerDto {

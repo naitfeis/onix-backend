@@ -104,11 +104,11 @@ export function PublicProfileModal({
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
             <span><b>{followersCount}</b> подписчиков</span>
-            {trustCard && <span><b>Уровень {trustCard.trustLevel}</b> доверия</span>}
-            {trustCard && <span><b>{money(trustCard.depositTotalCents)}</b> залог</span>}
-            {trustCard?.verifications.passport && <span><b>Паспорт</b> подтверждён</span>}
-            {trustCard?.verifications.phone && <span><b>Телефон</b> подтверждён</span>}
-            {trustCard?.verifications.voiceIdentity && <span><b>Голос</b> подтверждён</span>}
+            {trustCard && <span><b>Уровень {trustCard.level}</b> доверия</span>}
+            {trustCard && <span><b>{money(trustCard.depositTotal)}</b> залог</span>}
+            {trustCard?.passportVerified && <span><b>Паспорт</b> подтверждён</span>}
+            {trustCard?.phoneVerified && <span><b>Телефон</b> подтверждён</span>}
+            {trustCard?.voiceVerified && <span><b>Голос</b> подтверждён</span>}
           </div>
         </div>
         {!isSelf && core && <div className="card-actions">
@@ -143,7 +143,7 @@ export function PublicProfileModal({
             }}
           >Пожаловаться</Button>
         </div>}
-        {trustCard && <div className="balance"><small>ЗАЛОГ</small><strong>{money(trustCard.depositTotalCents)}</strong></div>}
+        {trustCard && <div className="balance"><small>ЗАЛОГ</small><strong>{money(trustCard.depositTotal)}</strong></div>}
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}

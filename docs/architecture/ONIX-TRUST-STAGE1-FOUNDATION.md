@@ -145,16 +145,19 @@ Kinds: `PHONE_SMS` | `PHONE_CALL` | `PHONE_VOICE` | `PASSPORT` | `VOICE_IDENTITY
 
 ## Stage 1 UI wiring (audit follow-up)
 
-До аудита UI frontend **не вызывал** deposit/trust API (только константы в `contracts.ts`) — Stage 1 foundation был backend-only.
+Owner profile — **один RTT**:
 
-Подключено без смены дизайна:
+`GET /api/users/me` → `balanceCents` + `deposit{available,locked,total}` + `trustCard` (без `trustScore`).
 
-| Экран | API |
-| --- | --- |
-| Owner `Profile` | `GET /api/wallet/deposit`, `GET /api/users/me/trust` |
-| `PublicProfileModal` | `GET /api/users/:onixId/trust-card` |
+Внутри `getMe` перед ответом вызывается `LockService.releaseExpiredForUser` (lazy unlock).
 
-Примечание: `GET /api/wallet/locks` **не существует**; locks — `GET /api/wallet/deposit/locks`. Для UI достаточно `/wallet/deposit` (available/locked/total).
+Публичный профиль:
+
+`GET /api/users/:onixId/trust-card` — только public card (`level`, `depositTotal`, `phoneVerified`, …). **Нет `trustScore`.**
+
+Отдельные `GET /wallet/deposit` и `GET /users/me/trust` остаются для детальных экранов; Profile их больше не дергает при открытии.
+
+Примечание: `GET /api/wallet/locks` **не существует**; locks — `GET /api/wallet/deposit/locks`.
 
 ## Риски / проверка на аудите
 

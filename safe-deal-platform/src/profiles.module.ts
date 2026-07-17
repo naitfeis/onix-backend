@@ -2,7 +2,11 @@ import {
   Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Body,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { Prisma } from '@prisma/client';
 import { AuthUser, CurrentUser } from './common';
+import { EconomyModule } from './economy/economy.module';
+import { buildPublicTrustCard } from './economy/trust/trust-card';
+import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
@@ -11,32 +15,78 @@ class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(500) bio?: string;
 }
 
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
 @Injectable()
 export class ProfilesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly locks: LockService,
+  ) {}
 
+  /**
+   * Owner profile — single RTT: balance + deposit (after lazy unlock) + public trust card.
+   * Does NOT return internal trustScore.
+   */
   async getMe(user: AuthUser) {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
     });
-    const [profile, ledger] = await this.prisma.$transaction([
-      this.prisma.user.findUniqueOrThrow({
-      where: { id: user.id },
-      select: {
-        id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
-        balanceCents: true, ratingAverage: true, ratingCount: true, completedSales: true,
-        lastSeenAt: true, isAdmin: true, isSupport: true, _count: { select: { followers: true } },
+
+    const { profile, ledger } = await this.prisma.$transaction(async (tx) => {
+      await this.locks.releaseExpiredForUser(tx, user.id);
+      const [row, entries] = await Promise.all([
+        tx.user.findUniqueOrThrow({
+          where: { id: user.id },
+          select: {
+            id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
+            balanceCents: true,
+            depositAvailableCents: true, depositLockedCents: true,
+            trustLevel: true, createdAt: true,
+            ratingAverage: true, ratingCount: true, completedSales: true,
+            lastSeenAt: true, isAdmin: true, isSupport: true,
+            _count: { select: { followers: true } },
+            verifications: { select: { kind: true, status: true } },
+            sellerSubscription: { select: { status: true, endsAt: true } },
+          },
+        }),
+        tx.ledgerEntry.findMany({
+          where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
+        }),
+      ]);
+      return { profile: row, ledger: entries };
+    }, SERIALIZABLE);
+
+    const proActive = Boolean(
+      profile.sellerSubscription
+      && profile.sellerSubscription.status === 'ACTIVE'
+      && (!profile.sellerSubscription.endsAt || profile.sellerSubscription.endsAt > new Date()),
+    );
+    const depositTotal = profile.depositAvailableCents + profile.depositLockedCents;
+    const base = profileDto(profile, ledger);
+    return {
+      ...base,
+      deposit: {
+        availableCents: profile.depositAvailableCents.toString(),
+        lockedCents: profile.depositLockedCents.toString(),
+        totalCents: depositTotal.toString(),
       },
+      trustCard: buildPublicTrustCard({
+        trustLevel: profile.trustLevel,
+        depositAvailableCents: profile.depositAvailableCents,
+        depositLockedCents: profile.depositLockedCents,
+        createdAt: profile.createdAt,
+        ratingAverage: profile.ratingAverage,
+        ratingCount: profile.ratingCount,
+        completedSales: profile.completedSales,
+        verifications: profile.verifications,
+        proActive,
       }),
-      this.prisma.ledgerEntry.findMany({
-        where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
-      }),
-    ]);
-    return profileDto(profile, ledger);
+    };
   }
 
-  /** Public profile — no balance / ledger / private deal history. */
+  /** Public profile — no balance / ledger / private deal history / trustScore. */
   async getPublic(viewer: AuthUser, onixId: string) {
     const profile = await this.prisma.user.findUnique({
       where: { onixId },
@@ -117,5 +167,9 @@ export class ProfilesController {
   @Get('wallet/ledger') ledger(@CurrentUser() user: AuthUser) { return this.profiles.ledger(user); }
 }
 
-@Module({ controllers: [ProfilesController], providers: [ProfilesService] })
+@Module({
+  imports: [EconomyModule],
+  controllers: [ProfilesController],
+  providers: [ProfilesService],
+})
 export class ProfilesModule {}

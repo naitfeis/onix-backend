@@ -100,9 +100,12 @@ export interface Profile extends Seller {
   isAdmin: boolean;
   roles: Array<'USER' | 'ADMIN' | 'SUPPORT'>;
   walletHistory: WalletOperation[];
+  /** Embedded by GET /users/me after Stage 1 — prefer over extra RTT. */
+  deposit?: DepositWallet;
+  trustCard?: TrustCard;
 }
 
-/** Owner deposit wallet snapshot — GET /api/wallet/deposit */
+/** Owner deposit wallet snapshot — also embedded on GET /api/users/me */
 export interface DepositWallet {
   availableCents: string;
   lockedCents: string;
@@ -112,11 +115,16 @@ export interface DepositWallet {
 /** Public trust card — GET /api/users/:onixId/trust-card (never includes trustScore) */
 export interface TrustCard {
   trustLevel: number;
+  level: number;
   depositTotalCents: string;
+  depositTotal: string;
   registeredAt: string;
   reviewCount: number;
   salesCount: number;
   rating: number;
+  phoneVerified: boolean;
+  passportVerified: boolean;
+  voiceVerified: boolean;
   verifications: {
     phone: boolean;
     phoneStages: { sms: boolean; call: boolean; voice: boolean };

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { depositHoldDays } from '../src/economy/wallet/deposit.service';
-import { buildPublicTrustCard } from '../src/economy/trust/trust-card';
+import { assertNoTrustScore, buildPublicTrustCard } from '../src/economy/trust/trust-card';
 
 test('depositHoldDays defaults to 10 and clamps invalid env', () => {
   const prev = process.env.DEPOSIT_HOLD_DAYS;
@@ -17,7 +17,7 @@ test('depositHoldDays defaults to 10 and clamps invalid env', () => {
   else process.env.DEPOSIT_HOLD_DAYS = prev;
 });
 
-test('buildPublicTrustCard never exposes trustScore and sums deposit', () => {
+test('public trust card never exposes trustScore and has buyer aliases', () => {
   const card = buildPublicTrustCard({
     trustLevel: 4,
     depositAvailableCents: 42000_00n,
@@ -28,18 +28,39 @@ test('buildPublicTrustCard never exposes trustScore and sums deposit', () => {
     completedSales: 200,
     verifications: [
       { kind: 'PHONE_SMS', status: 'VERIFIED' },
-      { kind: 'PASSPORT', status: 'VERIFIED' },
-      { kind: 'VOICE_IDENTITY', status: 'PENDING' },
+      { kind: 'PASSPORT', status: 'REJECTED' },
+      { kind: 'VOICE_IDENTITY', status: 'VERIFIED' },
     ],
     proActive: true,
   });
+  assert.equal(card.level, 4);
   assert.equal(card.trustLevel, 4);
+  assert.equal(card.depositTotal, '5000000');
   assert.equal(card.depositTotalCents, '5000000');
-  assert.equal(card.verifications.phone, true);
-  assert.equal(card.verifications.passport, true);
-  assert.equal(card.verifications.voiceIdentity, false);
-  assert.equal(card.proActive, true);
+  assert.equal(card.phoneVerified, true);
+  assert.equal(card.passportVerified, false);
+  assert.equal(card.voiceVerified, true);
   assert.equal('trustScore' in card, false);
+  assertNoTrustScore(card);
   const json = JSON.stringify(card);
   assert.equal(json.includes('trustScore'), false);
+  assert.match(json, /"level":4/);
+  assert.match(json, /"phoneVerified":true/);
+});
+
+test('assertNoTrustScore rejects leaked score', () => {
+  assert.throws(() => assertNoTrustScore({ trustScore: 842, level: 4 }));
+});
+
+test('lazy unlock eligibility: ACTIVE past unlockAt yes; HELD_DISPUTE no', () => {
+  const now = Date.now();
+  const candidates = [
+    { status: 'ACTIVE', unlockAt: new Date(now - 1000) },
+    { status: 'ACTIVE', unlockAt: new Date(now + 86_400_000) },
+    { status: 'HELD_DISPUTE', unlockAt: new Date(now - 1000) },
+    { status: 'RELEASED', unlockAt: new Date(now - 1000) },
+  ];
+  const due = candidates.filter((l) => l.status === 'ACTIVE' && l.unlockAt.getTime() <= now);
+  assert.equal(due.length, 1);
+  assert.equal(due[0].status, 'ACTIVE');
 });

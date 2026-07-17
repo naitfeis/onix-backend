@@ -1,6 +1,6 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, formatLastSeen, type DepositWallet, type Product, type ProductDraft, type PublicProfile, type TrustCard } from '../api/contracts';
+import { API_PATHS, formatLastSeen, type Product, type ProductDraft, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { validateDraft } from '../utils/productValidation';
@@ -63,26 +63,9 @@ export function Profile({
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [deposit, setDeposit] = useState<DepositWallet | null>(null);
-  const [ownerTrust, setOwnerTrust] = useState<TrustCard | null>(null);
   const profile = core.profile;
-  useEffect(() => {
-    if (!core.profile) return;
-    let cancelled = false;
-    void Promise.all([
-      api.get<DepositWallet>(API_PATHS.walletDeposit),
-      api.get<{ card: TrustCard }>(API_PATHS.meTrust),
-    ]).then(([wallet, trust]) => {
-      if (cancelled) return;
-      setDeposit(wallet);
-      setOwnerTrust(trust.card);
-    }).catch(() => {
-      if (cancelled) return;
-      setDeposit(null);
-      setOwnerTrust(null);
-    });
-    return () => { cancelled = true; };
-  }, [core.profile?.id]);
+  const deposit = profile?.deposit ?? null;
+  const ownerTrust = profile?.trustCard ?? null;
   useEffect(() => {
     if (section !== 'favorites' || !core.profile) return;
     let cancelled = false;
@@ -107,7 +90,7 @@ export function Profile({
     if (authorProfile?.onixId === onixId) return;
     try { setAuthorProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
   };
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.trustLevel}</b> доверия</span>}</div></div>
+  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" /><div className="profile-main"><h1>@{profile.username} <StaffBadge badge={staffBadgeFromRoles(profile.roles)} /></h1><p>{profile.onixId} · {formatLastSeen(profile.lastOnline)}</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><Button variant="secondary" onClick={() => setWithdrawOpen(true)}>Вывести</Button></div>
       {deposit && <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit.totalCents)}</strong></div>}
       {deposit && <div className="stats"><span><b>{money(deposit.totalCents)}</b> всего</span><span><b>{money(deposit.availableCents)}</b> доступно</span><span><b>{money(deposit.lockedCents)}</b> заморожено</span></div>}
