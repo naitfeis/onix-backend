@@ -102,6 +102,30 @@ export interface Profile extends Seller {
   walletHistory: WalletOperation[];
 }
 
+/** Owner deposit wallet snapshot — GET /api/wallet/deposit */
+export interface DepositWallet {
+  availableCents: string;
+  lockedCents: string;
+  totalCents: string;
+}
+
+/** Public trust card — GET /api/users/:onixId/trust-card (never includes trustScore) */
+export interface TrustCard {
+  trustLevel: number;
+  depositTotalCents: string;
+  registeredAt: string;
+  reviewCount: number;
+  salesCount: number;
+  rating: number;
+  verifications: {
+    phone: boolean;
+    phoneStages: { sms: boolean; call: boolean; voice: boolean };
+    passport: boolean;
+    voiceIdentity: boolean;
+  };
+  proActive: boolean;
+}
+
 export interface PublicProfile extends Seller {
   bio?: string | null;
   createdAt?: string;

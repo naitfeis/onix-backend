@@ -140,8 +140,21 @@ Kinds: `PHONE_SMS` | `PHONE_CALL` | `PHONE_VOICE` | `PASSPORT` | `VOICE_IDENTITY
 ## Обратная совместимость
 
 - Старые поля `balanceCents` / ledger types сохранены
-- FE contracts: additive `API_PATHS` only
-- Public seller DTO в каталоге **не** ломался (trust-card — отдельный endpoint до Stage 1 UI)
+- FE contracts: additive `API_PATHS` + types `DepositWallet` / `TrustCard`
+- Public seller DTO в каталоге **не** ломался (trust-card — отдельный endpoint)
+
+## Stage 1 UI wiring (audit follow-up)
+
+До аудита UI frontend **не вызывал** deposit/trust API (только константы в `contracts.ts`) — Stage 1 foundation был backend-only.
+
+Подключено без смены дизайна:
+
+| Экран | API |
+| --- | --- |
+| Owner `Profile` | `GET /api/wallet/deposit`, `GET /api/users/me/trust` |
+| `PublicProfileModal` | `GET /api/users/:onixId/trust-card` |
+
+Примечание: `GET /api/wallet/locks` **не существует**; locks — `GET /api/wallet/deposit/locks`. Для UI достаточно `/wallet/deposit` (available/locked/total).
 
 ## Риски / проверка на аудите
 

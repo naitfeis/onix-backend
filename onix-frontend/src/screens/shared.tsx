@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { money } from '../api/client';
+import { api, money } from '../api/client';
 import {
-  BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile,
+  API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
+  formatLastSeen, type BanReasonCode, type Deal, type OrderListStatus, type ProductDraft, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
@@ -71,12 +71,21 @@ export function PublicProfileModal({
   const [followed, setFollowed] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [reportOpen, setReportOpen] = useState(false);
+  const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
     setFollowersCount(profile.followersCount);
     setSection('products');
     setReportOpen(false);
+    setTrustCard(null);
+    let cancelled = false;
+    void api.get<TrustCard>(API_PATHS.userTrustCard(profile.onixId)).then((card) => {
+      if (!cancelled) setTrustCard(card);
+    }).catch(() => {
+      if (!cancelled) setTrustCard(null);
+    });
+    return () => { cancelled = true; };
   }, [profile?.onixId, profile?.followed, profile?.followersCount]);
   if (!profile) return null;
   const products = profile.products ?? [];
@@ -95,6 +104,11 @@ export function PublicProfileModal({
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
             <span><b>{followersCount}</b> подписчиков</span>
+            {trustCard && <span><b>Уровень {trustCard.trustLevel}</b> доверия</span>}
+            {trustCard && <span><b>{money(trustCard.depositTotalCents)}</b> залог</span>}
+            {trustCard?.verifications.passport && <span><b>Паспорт</b> подтверждён</span>}
+            {trustCard?.verifications.phone && <span><b>Телефон</b> подтверждён</span>}
+            {trustCard?.verifications.voiceIdentity && <span><b>Голос</b> подтверждён</span>}
           </div>
         </div>
         {!isSelf && core && <div className="card-actions">
@@ -129,6 +143,7 @@ export function PublicProfileModal({
             }}
           >Пожаловаться</Button>
         </div>}
+        {trustCard && <div className="balance"><small>ЗАЛОГ</small><strong>{money(trustCard.depositTotalCents)}</strong></div>}
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}

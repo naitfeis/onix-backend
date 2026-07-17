@@ -10,6 +10,10 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.messages('chat/1')).toBe('/api/chats/chat%2F1/messages');
     expect(API_PATHS.reviewCreate('42')).toBe('/api/orders/42/reviews');
     expect(API_PATHS.walletWithdraw).toBe('/api/wallet/withdrawals');
+    expect(API_PATHS.walletDeposit).toBe('/api/wallet/deposit');
+    expect(API_PATHS.walletDepositLocks).toBe('/api/wallet/deposit/locks');
+    expect(API_PATHS.meTrust).toBe('/api/users/me/trust');
+    expect(API_PATHS.userTrustCard('ONIX-000007')).toBe('/api/users/ONIX-000007/trust-card');
     expect(API_PATHS.adminBan('ONIX-000007')).toBe('/api/admin/users/ONIX-000007/ban');
     expect(API_PATHS.orderRefundRequest('42')).toBe('/api/orders/42/refund-request');
   });
