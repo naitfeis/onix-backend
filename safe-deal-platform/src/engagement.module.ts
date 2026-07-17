@@ -28,8 +28,8 @@ class ReviewDto {
 }
 class CreateGroupDto {
   @IsString() @Length(1, 80) title!: string;
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(40)
-  @IsString({ each: true }) @Length(1, 32, { each: true })
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(200)
+  @IsString({ each: true }) @Length(1, 64, { each: true })
   memberOnixIds!: string[];
 }
 class UserSearchQuery {
@@ -215,13 +215,25 @@ export class ChatService {
     const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
     if (unique.length < 1) throw new BadRequestException('Добавьте хотя бы одного участника.');
     const members: Array<{ id: bigint; onixId: string; deletedAt: Date | null }> = [];
+    const missing: string[] = [];
     for (const raw of unique) {
-      const u = await requireUserByOnixId(this.prisma, raw);
-      if (u.id === user.id) continue;
-      if (u.deletedAt) throw new BadRequestException(`Пользователь ${formatOnixId(u.onixId)} недоступен.`);
-      members.push({ id: u.id, onixId: u.onixId, deletedAt: u.deletedAt });
+      try {
+        const u = await requireUserByOnixId(this.prisma, raw);
+        if (u.id === user.id) continue;
+        if (u.deletedAt) {
+          missing.push(formatOnixId(u.onixId));
+          continue;
+        }
+        members.push({ id: u.id, onixId: u.onixId, deletedAt: u.deletedAt });
+      } catch {
+        missing.push(formatOnixId(raw) || raw);
+      }
     }
-    if (members.length < 1) throw new BadRequestException('Добавьте хотя бы одного участника.');
+    if (members.length < 1) {
+      throw new BadRequestException(
+        missing.length ? `${missing.join(', ')} не найден` : 'Добавьте хотя бы одного участника.',
+      );
+    }
 
     const chat = await this.prisma.$transaction(async (tx) => {
       const created = await tx.chat.create({
@@ -252,6 +264,7 @@ export class ChatService {
       kind: 'GROUP' as const,
       title: name.slice(0, 80),
       unreadCount: 0,
+      ...(missing.length ? { missing } : {}),
     };
   }
 

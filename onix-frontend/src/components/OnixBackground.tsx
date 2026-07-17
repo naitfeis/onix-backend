@@ -138,6 +138,8 @@ function compile(gl: WebGLRenderingContext, type: number, source: string) {
 
 export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'chat' }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     const canvas = ref.current;
@@ -193,8 +195,12 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
     let running = !document.hidden;
     const started = performance.now();
     const quality = Math.min(devicePixelRatio, innerWidth < 640 ? 1.2 : 1.6);
-    const targetIntensity = mode === 'chat' ? 0.7 : mode === 'focus' ? 0.88 : 1.0;
-    let currentIntensity = targetIntensity;
+    let currentIntensity = 1;
+
+    const targetForMode = () => {
+      const m = modeRef.current;
+      return m === 'chat' ? 0.7 : m === 'focus' ? 0.88 : 1.0;
+    };
 
     const render = (now: number) => {
       if (!running) return;
@@ -206,6 +212,7 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
         gl.viewport(0, 0, width, height);
       }
 
+      const targetIntensity = targetForMode();
       currentIntensity += (targetIntensity - currentIntensity) * 0.06;
 
       gl.enable(gl.BLEND);
@@ -246,7 +253,7 @@ export default function OnixBackground({ mode }: { mode: 'normal' | 'focus' | 'c
       gl.deleteShader(vertex);
       gl.deleteShader(fragment);
     };
-  }, [mode]);
+  }, []);
 
   return <canvas ref={ref} className="onix-background" aria-hidden="true" />;
 }

@@ -13,10 +13,12 @@ import './index.css'
 import App from './App.tsx'
 import { scheduleBundleAudit, markMainEval } from './perf/bundleAudit'
 import { captureNavigationTimingWhenReady, markAppReady } from './perf/timing'
+import { installGlobalErrorHandlers } from './utils/globalErrorHandlers'
 
 markMainEval('start')
 markAppReady('js-main')
 captureNavigationTimingWhenReady()
+installGlobalErrorHandlers()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

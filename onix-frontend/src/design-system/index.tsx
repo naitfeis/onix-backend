@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
@@ -10,16 +11,17 @@ import {
   type TextareaHTMLAttributes,
   type TouchEvent as ReactTouchEvent,
 } from 'react';
+import { popModal, pushModal } from './modalStack';
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <svg className="icon" width={size} height={size} aria-hidden="true"><use href={`/icons.svg#${name}`} /></svg>;
 }
 
-export function Button({ variant = 'primary', busy, children, className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
+export function Button({ variant = 'primary', busy, children, className = '', type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
   busy?: boolean;
 }) {
-  return <button className={`button button--${variant} ${className}`} disabled={busy || props.disabled} {...props}>
+  return <button type={type} className={`button button--${variant} ${className}`} disabled={busy || props.disabled} {...props}>
     {busy && <span className="spinner" aria-hidden="true" />}
     {children}
   </button>;
@@ -58,71 +60,29 @@ export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'succ
   return <span className={`badge badge--${tone}`}>{children}</span>;
 }
 
-let openModalCount = 0;
-
-function syncModalBodyClass() {
-  if (typeof document === 'undefined') return;
-  document.body.classList.toggle('modal-open', openModalCount > 0);
-}
-
-type TelegramBackButton = {
-  show: () => void;
-  hide: () => void;
-  onClick: (cb: () => void) => void;
-  offClick: (cb: () => void) => void;
-};
-
-function telegramBackButton(): TelegramBackButton | null {
-  try {
-    const wa = (window as unknown as { Telegram?: { WebApp?: { BackButton?: TelegramBackButton } } }).Telegram?.WebApp;
-    return wa?.BackButton ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export function Modal({ open, title, children, onClose }: { open: boolean; title: string; children: ReactNode; onClose: () => void }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [zIndex, setZIndex] = useState(2000);
+  const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2, 9)}`).current;
 
   useEffect(() => {
     if (!open) return;
-    openModalCount += 1;
-    syncModalBodyClass();
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onCloseRef.current();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    const back = telegramBackButton();
-    const onBack = () => onCloseRef.current();
-    if (back) {
-      back.show();
-      back.onClick(onBack);
-    }
-    return () => {
-      openModalCount = Math.max(0, openModalCount - 1);
-      syncModalBodyClass();
-      if (openModalCount === 0) document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
-      if (back) {
-        back.offClick(onBack);
-        if (openModalCount === 0) back.hide();
-      }
-    };
+    const { id, depth } = pushModal(() => onCloseRef.current());
+    setZIndex(2000 + depth);
+    return () => popModal(id);
   }, [open]);
 
   if (!open) return null;
+
   const closeFromBackdrop = (event: ReactMouseEvent | ReactTouchEvent) => {
     if (event.target === event.currentTarget) onClose();
   };
+
   return <div
     className="modal"
     role="presentation"
+    style={{ zIndex }}
     onMouseDown={closeFromBackdrop}
     onClick={closeFromBackdrop}
   >
@@ -130,12 +90,12 @@ export function Modal({ open, title, children, onClose }: { open: boolean; title
       className="modal__panel"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="modal-title"
+      aria-labelledby={titleId}
       onMouseDown={event => event.stopPropagation()}
       onClick={event => event.stopPropagation()}
     >
       <div className="modal__head">
-        <h2 id="modal-title">{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <Button type="button" variant="ghost" onClick={onClose} aria-label="Закрыть">×</Button>
       </div>
       {children}
@@ -147,8 +107,8 @@ export function Confirm({ open, title, text, dangerous, busy, onCancel, onConfir
   open: boolean; title: string; text: string; dangerous?: boolean; busy?: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   return <Modal open={open} title={title} onClose={onCancel}><p className="modal__text">{text}</p><div className="modal__actions">
-    <Button variant="secondary" onClick={onCancel}>Отмена</Button>
-    <Button variant={dangerous ? 'danger' : 'primary'} busy={busy} onClick={onConfirm}>Подтвердить</Button>
+    <Button type="button" variant="secondary" onClick={onCancel}>Отмена</Button>
+    <Button type="button" variant={dangerous ? 'danger' : 'primary'} busy={busy} onClick={onConfirm}>Подтвердить</Button>
   </div></Modal>;
 }
 

@@ -549,9 +549,16 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .form-grid { grid-template-columns: 1fr 1fr; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .profile-card { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .balance { grid-column: auto; grid-row: 1; border: 0; padding: 0; min-width: 160px; }
-  .stats { grid-column: 2; }
+  /* Avatar + main on row 1; wallet blocks full-width below so buttons stay clickable. */
+  .profile-card { grid-template-columns: auto minmax(0, 1fr); }
+  .profile-card > .balance {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    min-width: 0;
+  }
+  .profile-card > .stats { grid-column: 1 / -1; }
   .public-profile .profile-card { grid-template-columns: auto minmax(0, 1fr); }
   .public-profile .profile-card > .card-actions { grid-column: 1 / -1; }
 }

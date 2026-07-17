@@ -4,6 +4,7 @@ import { API_PATHS, formatLastSeen, type ChatUserHit, type PublicProfile } from 
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
+import { parseMemberTokens } from '../utils/parseMemberTokens';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
 
@@ -30,6 +31,7 @@ export function Chats({
   const [groupSearch, setGroupSearch] = useState('');
   const [groupHits, setGroupHits] = useState<ChatUserHit[]>([]);
   const [groupSelected, setGroupSelected] = useState<ChatUserHit[]>([]);
+  const [groupErrors, setGroupErrors] = useState<string[]>([]);
   const [groupBusy, setGroupBusy] = useState(false);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -89,11 +91,50 @@ export function Chats({
       setGroupHits([]);
       return;
     }
+    // Multi-token paste ("1 2 3" / "ONIX-1 ONIX-2") → resolve via search, don't treat as one query.
+    const tokens = parseMemberTokens(q);
+    if (tokens.length > 1) {
+      setGroupHits([]);
+      return;
+    }
     const timer = window.setTimeout(() => {
-      void api.get<ChatUserHit[]>(API_PATHS.chatUserSearch(q)).then(setGroupHits).catch(() => setGroupHits([]));
+      void api.get<ChatUserHit[]>(API_PATHS.chatUserSearch(tokens[0] ?? q)).then(setGroupHits).catch(() => setGroupHits([]));
     }, 250);
     return () => window.clearTimeout(timer);
   }, [groupOpen, groupSearch]);
+
+  const resolveGroupMembers = async () => {
+    const tokens = parseMemberTokens(groupSearch);
+    const selected = [...groupSelected];
+    const errors: string[] = [];
+    for (const token of tokens) {
+      if (selected.some((s) => s.onixId.toLowerCase() === formatOnixId(token).toLowerCase()
+        || s.username.toLowerCase() === token.toLowerCase()
+        || s.onixId.replace(/^ONIX-/i, '') === token.replace(/^ONIX-/i, ''))) {
+        continue;
+      }
+      try {
+        const hits = await api.get<ChatUserHit[]>(API_PATHS.chatUserSearch(token));
+        const exact = hits.find((h) => {
+          const id = formatOnixId(h.onixId).toLowerCase();
+          const bare = id.replace(/^onix-/, '');
+          const t = token.toLowerCase().replace(/^onix-/, '').replace(/^@+/, '');
+          return id === `onix-${t}` || bare === t || h.username.toLowerCase() === t;
+        }) ?? hits[0];
+        if (!exact) {
+          errors.push(`${formatOnixId(token) || token} не найден`);
+          continue;
+        }
+        if (!selected.some((s) => s.onixId === exact.onixId)) selected.push(exact);
+      } catch {
+        errors.push(`${formatOnixId(token) || token} не найден`);
+      }
+    }
+    setGroupSelected(selected);
+    setGroupErrors(errors);
+    if (errors.length) setToast(errors.join('. '));
+    return selected;
+  };
 
   const deleteMessage = async (messageId: string, scope: 'self' | 'global') => {
     try {
@@ -106,18 +147,24 @@ export function Chats({
   };
 
   const createGroup = async () => {
-    if (!groupTitle.trim() || groupSelected.length < 1) return;
+    if (!groupTitle.trim()) return;
     setGroupBusy(true);
     try {
+      const members = groupSelected.length > 0 ? groupSelected : await resolveGroupMembers();
+      if (members.length < 1) {
+        setToast('Добавьте хотя бы одного участника.');
+        return;
+      }
       const created = await api.post<{ id: string }>(API_PATHS.createGroupChat, {
         title: groupTitle.trim(),
-        memberOnixIds: groupSelected.map((u) => u.onixId),
+        memberOnixIds: members.map((u) => u.onixId),
       });
       await refreshChats();
       setGroupOpen(false);
       setGroupTitle('');
       setGroupSearch('');
       setGroupSelected([]);
+      setGroupErrors([]);
       setThreadId(created.id);
       setToast('Группа создана.');
     } catch (error) {
@@ -214,10 +261,17 @@ export function Chats({
         <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>Отправить</Button>
       </form>
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
-    <Modal open={groupOpen} title="Создать группу" onClose={() => setGroupOpen(false)}>
+    <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); setGroupErrors([]); }}>
       <div className="form">
         <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>
-        <Field label="Добавить пользователей"><Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX-1 или @ник" /></Field>
+        <Field label="Добавить участников" hint="1 2 3 · ONIX-1 ONIX-2 · @nick1 @nick2">
+          <Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX-1 ONIX-2 или @ник" />
+        </Field>
+        <div className="card-actions">
+          <Button type="button" variant="secondary" onClick={() => void resolveGroupMembers()} disabled={!groupSearch.trim()}>
+            Добавить из поля
+          </Button>
+        </div>
         {groupHits.length > 0 && <div className="chips">
           {groupHits.map((hit) => (
             <button
@@ -235,9 +289,10 @@ export function Chats({
           ))}
         </div>}
         {groupSelected.length > 0 && <p className="muted">Выбрано: {groupSelected.map((s) => formatOnixId(s.onixId)).join(', ')}</p>}
+        {groupErrors.length > 0 && <p className="muted">{groupErrors.join('. ')}</p>}
         <div className="modal__actions">
-          <Button variant="secondary" onClick={() => setGroupOpen(false)}>Отмена</Button>
-          <Button busy={groupBusy} disabled={!groupTitle.trim() || groupSelected.length < 1} onClick={() => void createGroup()}>Создать</Button>
+          <Button type="button" variant="secondary" onClick={() => setGroupOpen(false)}>Отмена</Button>
+          <Button type="button" busy={groupBusy} disabled={!groupTitle.trim()} onClick={() => void createGroup()}>Создать</Button>
         </div>
       </div>
     </Modal>
