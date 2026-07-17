@@ -65,7 +65,8 @@ function parseVerificationKind(kind: string): SellerVerificationKind {
 }
 
 class SellerAnalyticsQueryDto {
-  @IsOptional() @Type(() => Number) @IsInt() @Min(7) @Max(90) days?: number;
+  /** 0 = current Mon–Sun week, -1 = previous week, … (max -52). */
+  @IsOptional() @Type(() => Number) @IsInt() @Min(-52) @Max(0) weekOffset?: number;
 }
 
 @Controller()
@@ -148,11 +149,11 @@ export class EconomyController {
     return this.trust.recompute(user.id);
   }
 
-  /** Owner seller analytics + charts series (Stage 2). */
+  /** Owner seller analytics — weekly Mon–Sun series (Stage 2). */
   @Get('users/me/analytics')
   @Header('Cache-Control', 'private, no-store')
   myAnalytics(@CurrentUser() user: AuthUser, @Query() query: SellerAnalyticsQueryDto) {
-    return this.sellerAnalytics.getOwnerAnalytics(user, query.days);
+    return this.sellerAnalytics.getOwnerAnalytics(user, query.weekOffset);
   }
 
   /** Public trust card — never includes trustScore. */

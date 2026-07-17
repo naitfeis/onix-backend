@@ -257,8 +257,12 @@ test('AuthService miniApp response contract unchanged when dual-issue runs', asy
     alg: string;
   };
   assert.equal(header.alg, 'HS256');
-  assert.equal(result.user.id, 7n);
-  assert.equal(result.user.telegramId, 42n);
+  assert.equal(result.user.id, '7');
+  assert.equal(result.user.onixId, 'ONIX-000007');
+  assert.equal('telegramId' in result.user, false);
+  const jwtBody = JSON.parse(Buffer.from(result.accessToken.split('.')[1], 'base64url').toString()) as Record<string, unknown>;
+  assert.equal(jwtBody.sub, '7');
+  assert.equal('telegramId' in jwtBody, false);
   delete process.env.AUTH_DUAL_ISSUE_SESSION;
 });
 

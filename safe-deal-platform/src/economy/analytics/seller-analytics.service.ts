@@ -12,18 +12,34 @@ function dayKey(d: Date): string {
   return utcDay(d).toISOString().slice(0, 10);
 }
 
+/** Monday 00:00 UTC of the week containing `d` (week ends Sunday). */
+function mondayOfWeek(d: Date): Date {
+  const day = utcDay(d);
+  const dow = day.getUTCDay(); // 0=Sun … 6=Sat
+  const fromMonday = dow === 0 ? 6 : dow - 1;
+  day.setUTCDate(day.getUTCDate() - fromMonday);
+  return day;
+}
+
+const WEEKDAY_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] as const;
+
 /**
- * Seller analytics: on-demand rollup into SellerAnalyticsDaily + owner read API.
+ * Seller analytics: on-demand rollup + weekly owner read API (Mon–Sun, navigable).
  */
 @Injectable()
 export class SellerAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getOwnerAnalytics(user: AuthUser, daysRaw?: number) {
-    const days = Math.min(90, Math.max(7, Number(daysRaw) || 30));
-    const end = utcDay(new Date());
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - (days - 1));
+  /**
+   * @param weekOffset 0 = current week, -1 = previous, … (future weeks blocked)
+   */
+  async getOwnerAnalytics(user: AuthUser, weekOffsetRaw?: number) {
+    const weekOffset = Math.min(0, Math.max(-52, Number.isFinite(Number(weekOffsetRaw)) ? Number(weekOffsetRaw) : 0));
+    const thisMonday = mondayOfWeek(new Date());
+    const start = new Date(thisMonday);
+    start.setUTCDate(thisMonday.getUTCDate() + weekOffset * 7);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
 
     await this.rollupRange(user.id, start, end);
 
@@ -35,6 +51,7 @@ export class SellerAnalyticsService {
     const byDay = new Map(rows.map((r) => [dayKey(r.day), r]));
     const series: Array<{
       day: string;
+      weekday: string;
       uniqueViews: number;
       ordersCount: number;
       completedCount: number;
@@ -50,7 +67,7 @@ export class SellerAnalyticsService {
     let profitCents = 0n;
     let favoritesAdded = 0;
 
-    for (let i = 0; i < days; i += 1) {
+    for (let i = 0; i < 7; i += 1) {
       const d = new Date(start);
       d.setUTCDate(start.getUTCDate() + i);
       const key = dayKey(d);
@@ -69,6 +86,7 @@ export class SellerAnalyticsService {
       favoritesAdded += favs;
       series.push({
         day: key,
+        weekday: WEEKDAY_RU[i]!,
         uniqueViews: views,
         ordersCount: orders,
         completedCount: completed,
@@ -78,10 +96,17 @@ export class SellerAnalyticsService {
       });
     }
 
+    const from = dayKey(start);
+    const to = dayKey(end);
     return {
-      days,
-      from: dayKey(start),
-      to: dayKey(end),
+      mode: 'week' as const,
+      days: 7,
+      weekOffset,
+      from,
+      to,
+      label: `${from.slice(5)} — ${to.slice(5)}`,
+      canGoNext: weekOffset < 0,
+      canGoPrev: weekOffset > -52,
       totals: {
         uniqueViews,
         ordersCount,
@@ -170,7 +195,6 @@ export class SellerAnalyticsService {
     }
     for (const f of favorites) bump(dayKey(f.createdAt)).favoritesAdded += 1;
 
-    // Ensure empty days exist in map for upsert clarity — skip zeros (lazy).
     const ops: Prisma.PrismaPromise<unknown>[] = [];
     for (const [key, row] of acc) {
       const day = new Date(`${key}T00:00:00.000Z`);

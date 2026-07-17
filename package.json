@@ -4,6 +4,7 @@
   "description": "ONIX Secure P2P Escrow Core Engine",
   "main": "dist/main.js",
   "scripts": {
+    "postinstall": "patch-package",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
@@ -48,6 +49,7 @@
   "devDependencies": {
     "@types/node": "^26.0.1",
     "@types/pg": "^8.20.0",
+    "patch-package": "^8.0.1",
     "prisma": "^7.8.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

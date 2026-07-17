@@ -241,7 +241,7 @@ export function Profile({
       </div><p className="muted">{review.text}</p></Card>))}
     {section === 'analytics' && (
       <Suspense fallback={<Card><Skeleton lines={6} /></Card>}>
-        <SellerAnalyticsPanel days={30} />
+        <SellerAnalyticsPanel />
       </Suspense>
     )}
     {section === 'support' && isStaff && (

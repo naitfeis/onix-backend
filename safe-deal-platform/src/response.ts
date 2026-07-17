@@ -88,10 +88,12 @@ export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: b
   const status = resolveStatus(user);
   const badge = statusBadge(status);
   const onixId = formatOnixId(user.onixId);
+  // Public handle: Telegram nick only (never numeric telegramId). Fallback: displayName → ONIX id.
+  const nick = user.telegramNick?.replace(/^@+/, '').trim();
   return {
     id: user.id.toString(),
     onixId,
-    username: user.telegramNick ?? user.displayName ?? onixId,
+    username: nick || user.displayName || onixId,
     ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
     rating: Number(user.ratingAverage),
     reviewCount: user.ratingCount,

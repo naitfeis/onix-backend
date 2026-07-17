@@ -366,6 +366,20 @@
 .trust-strip b { color: var(--text); font-weight: 700; }
 
 .analytics-panel .analytics-stats { margin-top: 8px; }
+.analytics-week-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.analytics-week-nav__label {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+.analytics-week-nav__label h2 { margin: 0; font-size: 14px; }
+.analytics-week-nav__label .muted { margin: 2px 0 0; font-size: 11px; }
+.analytics-week-nav .btn { min-width: 40px; padding-inline: 10px; }
 .analytics-chart-wrap {
   position: relative;
   margin-top: 8px;

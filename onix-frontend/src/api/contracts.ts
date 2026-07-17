@@ -148,9 +148,10 @@ export interface Profile extends Seller {
   trustCard?: TrustCard;
 }
 
-/** GET /api/users/me/analytics */
+/** GET /api/users/me/analytics — Mon–Sun week */
 export interface SellerAnalyticsDay {
   day: string;
+  weekday?: string;
   uniqueViews: number;
   ordersCount: number;
   completedCount: number;
@@ -160,9 +161,14 @@ export interface SellerAnalyticsDay {
 }
 
 export interface SellerAnalytics {
+  mode?: 'week';
   days: number;
+  weekOffset?: number;
   from: string;
   to: string;
+  label?: string;
+  canGoNext?: boolean;
+  canGoPrev?: boolean;
   totals: {
     uniqueViews: number;
     ordersCount: number;
@@ -371,8 +377,10 @@ export const API_PATHS = {
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,
   meTrust: '/api/users/me/trust',
   meTrustHistory: '/api/users/me/trust/history',
-  meAnalytics: (days?: number) => (
-    days ? `/api/users/me/analytics?days=${encodeURIComponent(String(days))}` : '/api/users/me/analytics'
+  meAnalytics: (weekOffset?: number) => (
+    weekOffset != null && weekOffset !== 0
+      ? `/api/users/me/analytics?weekOffset=${encodeURIComponent(String(weekOffset))}`
+      : '/api/users/me/analytics'
   ),
   userTrustCard: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/trust-card`,
   meVerifications: '/api/users/me/verifications',

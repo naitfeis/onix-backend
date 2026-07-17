@@ -1,0 +1,23 @@
+diff --git a/node_modules/@prisma/adapter-pg/dist/index.js b/node_modules/@prisma/adapter-pg/dist/index.js
+index d595ae4..c78e220 100644
+--- a/node_modules/@prisma/adapter-pg/dist/index.js
++++ b/node_modules/@prisma/adapter-pg/dist/index.js
+@@ -651,6 +651,8 @@ var PgQueryable = class {
+     const { sql, args } = query;
+     const values = args.map((arg, i) => mapArg(arg, query.argTypes[i]));
+     try {
++      // ONIX patch: do not pass `values` twice — triggers pg DeprecationWarning / breaks pg@9.
++      // Upstream: prisma/prisma#29650
+       const result = await this.client.query(
+         {
+           name: this.pgOptions?.statementNameGenerator?.(query),
+@@ -665,8 +667,7 @@ var PgQueryable = class {
+               return types2.getTypeParser(oid, format);
+             }
+           }
+-        },
+-        values
++        }
+       );
+       return result;
+     } catch (e) {

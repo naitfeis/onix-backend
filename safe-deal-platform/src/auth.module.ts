@@ -242,8 +242,9 @@ export class AuthService {
     const now = Math.floor(Date.now() / 1000);
     const days = Number(process.env.JWT_TTL_DAYS ?? 7);
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+    // Never embed telegramId in JWT — reload from DB on verify; clients only see nick via profile.
     const body = Buffer.from(JSON.stringify({
-      sub: user.id.toString(), telegramId: user.telegramId.toString(),
+      sub: user.id.toString(),
       iss: 'onix-api', iat: now, exp: now + days * 86400,
     })).toString('base64url');
     const signature = createHmac('sha256', this.jwtSecret()).update(`${header}.${body}`).digest('base64url');
@@ -251,7 +252,12 @@ export class AuthService {
       accessToken: `${header}.${body}.${signature}`,
       tokenType: 'Bearer',
       expiresIn: `${days}d`,
-      user,
+      user: {
+        id: user.id.toString(),
+        onixId: user.onixId,
+        isAdmin: user.isAdmin,
+        isSupport: user.isSupport,
+      },
     };
   }
 
