@@ -202,6 +202,12 @@ class SupportOpsController {
   refund(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
     return this.escrow.refundByAdmin(actor, parseId(id), dto.reason);
   }
+
+  /** Confirm deal for seller — release escrow payout. */
+  @Post('orders/:id/complete')
+  complete(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
+    return this.escrow.completeByAdmin(actor, parseId(id), dto.reason);
+  }
 }
 
 /** Backward-compatible admin refund path (same Escrow service). */

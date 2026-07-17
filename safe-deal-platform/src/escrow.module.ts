@@ -247,6 +247,60 @@ export class EscrowService {
   }
 
   async complete(user: AuthUser, id: bigint, key: string) {
+    await this.finishAsCompleted(user, id, key, {
+      allowedFrom: ['DELIVERING'],
+      requireBuyer: true,
+    });
+    const seller = await this.prisma.user.findUnique({
+      where: { id: (await this.prisma.order.findUniqueOrThrow({ where: { id }, select: { sellerId: true } })).sellerId },
+      select: { telegramId: true },
+    });
+    if (seller) void pushTelegramToChatId(seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
+    return this.one(user, id);
+  }
+
+  /** Support/admin: release escrow to seller (confirm deal for seller). */
+  async completeByAdmin(actor: AuthUser, id: bigint, reason?: string) {
+    if (!canActAsSupport(actor)) {
+      throw new BadRequestException('Подтвердить сделку продавцу может только поддержка.');
+    }
+    const key = `order:${id}:admin-complete`;
+    await this.finishAsCompleted(actor, id, key, {
+      allowedFrom: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'],
+      requireBuyer: false,
+      supportReason: reason,
+    });
+    await this.prisma.supportTicket.updateMany({
+      where: { orderId: id, status: 'OPEN' },
+      data: { status: 'CLOSED', closedAt: new Date() },
+    });
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id },
+      select: {
+        id: true, buyerId: true, sellerId: true, totalAmountCents: true, status: true, createdAt: true,
+        product: { select: dealProductSelect },
+        buyer: { select: dealPartySelect },
+        seller: { select: dealPartySelect },
+        reviews: { select: { authorId: true } },
+        chat: { select: { id: true } },
+      },
+    });
+    const sellerTg = await this.prisma.user.findUnique({
+      where: { id: order.sellerId },
+      select: { telegramId: true },
+    });
+    if (sellerTg) {
+      void pushTelegramToChatId(sellerTg.telegramId, 'Поступили деньги', 'Поддержка подтвердила сделку — выплата зачислена.');
+    }
+    return dealDto(order, actor);
+  }
+
+  private async finishAsCompleted(
+    actor: AuthUser,
+    id: bigint,
+    key: string,
+    opts: { allowedFrom: OrderStatus[]; requireBuyer: boolean; supportReason?: string },
+  ) {
     await this.prisma.$transaction(async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
@@ -257,10 +311,12 @@ export class EscrowService {
       }
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
-      if (order.buyerId !== user.id) throw new BadRequestException('Только покупатель подтверждает получение.');
+      if (opts.requireBuyer && order.buyerId !== actor.id) {
+        throw new BadRequestException('Только покупатель подтверждает получение.');
+      }
       if (order.status === 'COMPLETED') return;
       const changed = await tx.order.updateMany({
-        where: { id, status: 'DELIVERING' },
+        where: { id, status: { in: opts.allowedFrom } },
         data: { status: 'COMPLETED', completedAt: new Date() },
       });
       if (!changed.count) {
@@ -271,7 +327,7 @@ export class EscrowService {
         await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', {
           idempotencyKey: `order:${id}:payout`,
           orderId: id,
-          description: 'Выплата продавцу',
+          description: opts.requireBuyer ? 'Выплата продавцу' : 'Выплата продавцу (поддержка)',
         });
         await tx.user.update({
           where: { id: order.sellerId },
@@ -287,17 +343,22 @@ export class EscrowService {
           : { quantity: 0, status: 'SOLD_OUT' },
       });
       await tx.orderTransition.create({
-        data: { orderId: id, from: 'DELIVERING', to: 'COMPLETED', actorId: user.id, idempotencyKey: key },
+        data: {
+          orderId: id,
+          from: order.status,
+          to: 'COMPLETED',
+          actorId: actor.id,
+          idempotencyKey: key,
+          reason: opts.supportReason?.trim() || null,
+        },
       });
       await this.notify(tx, order.sellerId, 'ORDER_UPDATE', 'Сделка завершена', 'Средства зачислены на баланс.', id);
-      await this.audit(tx, user.id, 'ORDER_COMPLETE', id);
+      await this.audit(tx, actor.id, 'ORDER_COMPLETE', id, {
+        ...(opts.requireBuyer ? {} : { support: true }),
+        ...(opts.supportReason ? { reason: opts.supportReason } : {}),
+        fromStatus: order.status,
+      });
     }, SERIALIZABLE);
-    const seller = await this.prisma.user.findUnique({
-      where: { id: (await this.prisma.order.findUniqueOrThrow({ where: { id }, select: { sellerId: true } })).sellerId },
-      select: { telegramId: true },
-    });
-    if (seller) void pushTelegramToChatId(seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
-    return this.one(user, id);
   }
 
   async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
@@ -447,6 +508,10 @@ export class EscrowService {
     }, SERIALIZABLE);
 
     if (canActAsSupport(actor)) {
+      await this.prisma.supportTicket.updateMany({
+        where: { orderId: id, status: 'OPEN' },
+        data: { status: 'CLOSED', closedAt: new Date() },
+      });
       const order = await this.prisma.order.findUniqueOrThrow({
         where: { id },
         select: {

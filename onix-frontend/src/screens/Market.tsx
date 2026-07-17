@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, money, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  formatLastSeen, isOnline, type Product, type PublicProfile,
+  formatLastSeen, sellerIsPresent, type Product, type PublicProfile,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
@@ -155,7 +155,7 @@ export function Market({
         <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><Badge tone={product.status === 'ACTIVE' ? 'success' : 'warning'}>{product.status}</Badge><span>{product.category}</span></div>
           <h2>{product.title}</h2><p>{product.description || 'Описание не добавлено'}</p>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={isOnline(product.seller.lastOnline)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
+          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>@{product.seller.username} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} ({product.seller.reviewCount})</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
         <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
           setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
@@ -165,7 +165,7 @@ export function Market({
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => setSelected(null)}>
       {selected && <div className="stack compact"><div className="product-detail"><Badge tone="success">{selected.status}</Badge><strong>{money(selected.priceCents)}</strong></div>
         <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={isOnline(selected.seller.lastOnline)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>@{selected.seller.username} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {
               try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }

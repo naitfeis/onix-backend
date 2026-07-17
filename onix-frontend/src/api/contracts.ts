@@ -273,7 +273,10 @@ export const API_PATHS = {
   orderRefundRequest: (id: string) => `/api/orders/${encodeURIComponent(id)}/refund-request`,
   orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
   supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
+  supportComplete: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/complete`,
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
+  supportQueue: '/api/support/queue',
+  mePresence: '/api/users/me/presence',
   chats: '/api/chats',
   chatsSearch: (q: string) => `/api/chats?q=${encodeURIComponent(q)}`,
   chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
@@ -347,14 +350,42 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 
-const ONLINE_WINDOW_MS = 2 * 60_000;
+/** Heartbeat ~45s → keep window ≥ 3 min so brief idle still shows online. */
+const ONLINE_WINDOW_MS = 3 * 60_000;
 
-/** True when lastOnline is within the online window (~2 min). */
+/** True when lastOnline is within the online window (~3 min). */
 export function isOnline(iso?: string | null): boolean {
   if (!iso) return false;
   const at = new Date(iso).getTime();
   if (!Number.isFinite(at)) return false;
   return Date.now() - at < ONLINE_WINDOW_MS;
+}
+
+/**
+ * Presence for avatars: if this seller is the signed-in user browsing the app → online.
+ * Otherwise use lastOnline freshness (kept alive by /users/me/presence heartbeat).
+ */
+export function sellerIsPresent(
+  seller: Pick<Seller, 'onixId' | 'lastOnline'>,
+  me?: Pick<Seller, 'onixId' | 'lastOnline'> | null,
+): boolean {
+  const norm = (v: string) => v.trim().toUpperCase().replace(/^ONIX-0+/, 'ONIX-');
+  if (me && norm(seller.onixId) === norm(me.onixId)) return true;
+  return isOnline(seller.lastOnline);
+}
+
+export interface SupportQueueItem {
+  orderId: string;
+  status: string;
+  productTitle: string;
+  totalAmountCents: string;
+  chatId: string | null;
+  ticketId: string | null;
+  reason: string | null;
+  buyer: { onixId: string; username: string };
+  seller: { onixId: string; username: string };
+  createdAt: string;
+  kind: 'SUPPORT' | 'DISPUTE';
 }
 
 /** lastSeen display — precise online arrives with WebSocket (5.6). */

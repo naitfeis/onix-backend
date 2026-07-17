@@ -1,11 +1,12 @@
 import {
-  BadRequestException, Body, Controller, Injectable, Module, NotFoundException,
-  Param, Post,
+  BadRequestException, Body, Controller, ForbiddenException, Get, Header, Injectable, Module,
+  NotFoundException, Param, Post,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { formatOnixId } from './onix-id';
 import { PrismaService } from './prisma.service';
 
 class OpenSupportDto {
@@ -135,11 +136,129 @@ export class SupportService {
     });
     return { ticketId: ticket.id, chatId: ticket.chatId, status: 'CLOSED' as const };
   }
+
+  /**
+   * Admin/support inbox: open support tickets + orders in DISPUTE.
+   * Resolved (refund / admin-complete) tickets leave the queue.
+   */
+  async listQueue(actor: AuthUser) {
+    if (!canActAsSupport(actor)) {
+      throw new ForbiddenException('Очередь поддержки доступна только staff.');
+    }
+    const [tickets, disputes] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where: { status: 'OPEN' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          chatId: true,
+          createdAt: true,
+          order: {
+            select: {
+              id: true,
+              status: true,
+              totalAmountCents: true,
+              disputeReason: true,
+              product: { select: { title: true } },
+              buyer: { select: { onixId: true, telegramNick: true, displayName: true } },
+              seller: { select: { onixId: true, telegramNick: true, displayName: true } },
+              chat: { select: { id: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.order.findMany({
+        where: { status: 'DISPUTE' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true,
+          status: true,
+          totalAmountCents: true,
+          disputeReason: true,
+          createdAt: true,
+          product: { select: { title: true } },
+          buyer: { select: { onixId: true, telegramNick: true, displayName: true } },
+          seller: { select: { onixId: true, telegramNick: true, displayName: true } },
+          chat: { select: { id: true } },
+          supportTickets: {
+            where: { status: 'OPEN' },
+            select: { id: true, chatId: true },
+            take: 1,
+          },
+        },
+      }),
+    ]);
+
+    const byOrder = new Map<string, {
+      orderId: string;
+      status: string;
+      productTitle: string;
+      totalAmountCents: string;
+      chatId: string | null;
+      ticketId: string | null;
+      reason: string | null;
+      buyer: { onixId: string; username: string };
+      seller: { onixId: string; username: string };
+      createdAt: string;
+      kind: 'SUPPORT' | 'DISPUTE';
+    }>();
+
+    const party = (u: { onixId: string; telegramNick: string | null; displayName: string | null }) => ({
+      onixId: formatOnixId(u.onixId),
+      username: u.telegramNick ?? u.displayName ?? formatOnixId(u.onixId),
+    });
+
+    for (const t of tickets) {
+      const id = t.order.id.toString();
+      byOrder.set(id, {
+        orderId: id,
+        status: t.order.status,
+        productTitle: t.order.product.title,
+        totalAmountCents: t.order.totalAmountCents.toString(),
+        chatId: t.chatId || t.order.chat?.id || null,
+        ticketId: t.id,
+        reason: t.order.disputeReason,
+        buyer: party(t.order.buyer),
+        seller: party(t.order.seller),
+        createdAt: t.createdAt.toISOString(),
+        kind: t.order.status === 'DISPUTE' ? 'DISPUTE' : 'SUPPORT',
+      });
+    }
+    for (const o of disputes) {
+      const id = o.id.toString();
+      if (byOrder.has(id)) continue;
+      byOrder.set(id, {
+        orderId: id,
+        status: o.status,
+        productTitle: o.product.title,
+        totalAmountCents: o.totalAmountCents.toString(),
+        chatId: o.supportTickets[0]?.chatId || o.chat?.id || null,
+        ticketId: o.supportTickets[0]?.id ?? null,
+        reason: o.disputeReason,
+        buyer: party(o.buyer),
+        seller: party(o.seller),
+        createdAt: o.createdAt.toISOString(),
+        kind: 'DISPUTE',
+      });
+    }
+
+    return [...byOrder.values()].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
 }
 
 @Controller()
 export class SupportController {
   constructor(private readonly support: SupportService) {}
+
+  @Get('support/queue')
+  @Header('Cache-Control', 'private, no-store')
+  queue(@CurrentUser() user: AuthUser) {
+    return this.support.listQueue(user);
+  }
 
   @Post('orders/:id/support')
   open(

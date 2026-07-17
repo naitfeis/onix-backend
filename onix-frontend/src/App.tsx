@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import { money } from './api/client';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
-import { isOnline, refreshBanInfo, type BanInfo } from './api/contracts';
+import { refreshBanInfo, type BanInfo } from './api/contracts';
 import UserAvatar from './components/UserAvatar';
 import { Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
@@ -138,7 +138,7 @@ export default function App() {
           <><strong>…</strong><span>// ЗАГРУЗКА</span></>
         ) : core.profile ? (
           <span className="user-summary identity-user">
-            <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online={isOnline(core.profile.lastOnline)} />
+            <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
             <strong>{money(core.profile.balanceCents)}</strong>
             <span>// @{core.profile.username} · {formatOnixId(core.profile.onixId)}</span>
           </span>
@@ -201,6 +201,10 @@ export default function App() {
             setToast={setToast}
             openDirectChat={openDirectChat}
             openProductCard={openProductCard}
+            openDealChat={(chatId) => {
+              setFocusChatId(chatId);
+              switchTo('chat');
+            }}
           />}
         </Suspense>
       </div>

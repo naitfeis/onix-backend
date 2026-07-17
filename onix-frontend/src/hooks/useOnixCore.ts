@@ -311,6 +311,39 @@ export function useOnixCore() {
     void refreshAll();
   }, [refreshAll]);
 
+  // Keep lastSeenAt fresh while the shell is visible — fixes grey "offline" on own lots.
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    const beat = async () => {
+      if (cancelled || document.hidden) return;
+      try {
+        const res = await api.post<{ lastOnline: string; online: boolean }>(API_PATHS.mePresence, {});
+        if (cancelled || !res?.lastOnline) return;
+        setProfile((prev) => (prev ? { ...prev, lastOnline: res.lastOnline } : prev));
+        setStore((prev) => ({
+          ...prev,
+          products: prev.products.map((p) => (
+            p.seller.onixId === profile.onixId
+              ? { ...p, seller: { ...p.seller, lastOnline: res.lastOnline } }
+              : p
+          )),
+        }));
+      } catch {
+        /* ignore — offline / guest */
+      }
+    };
+    void beat();
+    const id = window.setInterval(() => { void beat(); }, 45_000);
+    const onVis = () => { if (!document.hidden) void beat(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [profile?.onixId]);
+
   const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {
     if (actionBusy) return null;
     setActionBusy(key);
@@ -521,6 +554,10 @@ export function useOnixCore() {
     api.post(API_PATHS.supportRefund(dealId), { ...(reason ? { reason } : {}) }),
   () => void load('deals', API_PATHS.orders)), [load, run]);
 
+  const supportComplete = useCallback((dealId: string, reason?: string) => run(`complete-${dealId}`, () =>
+    api.post(API_PATHS.supportComplete(dealId), { ...(reason ? { reason } : {}) }),
+  () => void load('deals', API_PATHS.orders)), [load, run]);
+
   const withdraw = useCallback((amountRubles: number) => run('withdraw', () =>
     api.post(API_PATHS.walletWithdraw, { amountCents: cents(amountRubles), idempotencyKey: crypto.randomUUID() }), loadProfile), [loadProfile, run]);
 
@@ -578,7 +615,7 @@ export function useOnixCore() {
   return {
     profile, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, supportRefund, sellerRefund, startChat, sendMessage, withdraw, submitReview,
+    toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction, reportUser,
   };
 }

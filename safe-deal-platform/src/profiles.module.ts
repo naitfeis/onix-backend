@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Body,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { Prisma } from '@prisma/client';
@@ -147,6 +147,16 @@ export class ProfilesService {
     });
   }
 
+  /** Lightweight presence ping — keeps lastSeenAt fresh while the Mini App is open. */
+  async touchPresence(user: AuthUser) {
+    const now = new Date();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastSeenAt: now },
+    });
+    return { lastOnline: now.toISOString(), online: true as const };
+  }
+
   async ledger(user: AuthUser) {
     const entries = await this.prisma.ledgerEntry.findMany({
       where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
@@ -161,6 +171,9 @@ export class ProfilesController {
   @Get('users/me')
   @Header('Cache-Control', 'private, no-store')
   me(@CurrentUser() user: AuthUser) { return this.profiles.getMe(user); }
+  @Post('users/me/presence')
+  @Header('Cache-Control', 'private, no-store')
+  presence(@CurrentUser() user: AuthUser) { return this.profiles.touchPresence(user); }
   @Patch('users/me') update(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.profiles.update(user, dto);
   }
