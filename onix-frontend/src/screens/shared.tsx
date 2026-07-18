@@ -64,11 +64,11 @@ export function MessageText({
   onOpenOnix: (onixId: string) => void;
   onOpenLot?: (lotNumber: number) => void;
 }) {
-  const parts = text.split(/(ONIXLOT-\d+|ONIX-\d+)/gi);
+  const parts = text.split(/(ONIXLOT-\d+|onixlot-\d+|ONIX-\d+)/gi);
   return <>{parts.map((part, index) => {
     if (/^ONIXLOT-\d+$/i.test(part)) {
       const lotNumber = Number(part.replace(/ONIXLOT-/i, ''));
-      if (!onOpenLot || !Number.isFinite(lotNumber)) return <span key={index}>{part.toUpperCase()}</span>;
+      if (!onOpenLot || !Number.isFinite(lotNumber)) return <span key={index}>{`ONIXLOT-${lotNumber}`}</span>;
       return (
         <button
           key={`${index}-lot-${lotNumber}`}

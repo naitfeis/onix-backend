@@ -2,6 +2,7 @@ export type AiIntent =
   | 'CREATE_PRODUCT'
   | 'PUBLISH_PRODUCT'
   | 'EDIT_PRODUCT'
+  | 'CONTACT_SUPPORT'
   | 'HELP'
   | 'FUTURE'
   | 'CANCEL'
@@ -23,6 +24,8 @@ const GREETING_RE = new RegExp(
   `^(?:привет|здравствуй(?:те)?|хай|hello|hi|пока|до\\s*свидания|bye)${END}`,
   'i',
 );
+/** Explicit support contact — must win over FAQ "поддержка". */
+const CONTACT_SUPPORT_RE = /^(?:напиши|написать|обратиться|свяжись|связаться)\s+в\s+поддержк/i;
 const FAQ_RE = /как\s+дела|как\s+ты|что\s+нового|о\s+площадке|что\s+такое\s+(?:оникс|onix)|про\s+(?:оникс|onix)|(?:оникс|onix)\s+это|о\s+(?:оникс|onix)|меню|как\s+продавать|где\s+что|где\s+находится|навигац|систем[аеу]\s+гарант|гарант|escrow|сейф|вывод|сколько\s+ждать|поддержк|саппорт|support|жалоб|помощь|help|что\s+умеешь|комисс|залог|депозит/i;
 
 export class IntentRecognizer {
@@ -32,6 +35,7 @@ export class IntentRecognizer {
 
     if (FUTURE_RE.test(raw)) return 'FUTURE';
     if (CANCEL_RE.test(raw)) return 'CANCEL';
+    if (CONTACT_SUPPORT_RE.test(raw)) return 'CONTACT_SUPPORT';
 
     if (opts?.sessionReady) {
       if (PUBLISH_RE.test(raw)) return 'PUBLISH_PRODUCT';
@@ -43,3 +47,14 @@ export class IntentRecognizer {
     return 'UNKNOWN';
   }
 }
+
+/** Strip the contact-support phrase; remainder is the ticket body. */
+export function supportMessageBody(text: string): string {
+  return text
+    .trim()
+    .replace(/^(?:напиши|написать|обратиться|свяжись|связаться)\s+в\s+поддержку[:\s—-]*/i, '')
+    .trim();
+}
+
+export const SUPPORT_AWAIT_PROMPT =
+  'Опишите проблему одним сообщением — я передам в поддержку ONIX. Ответ придёт сюда.';

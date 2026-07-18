@@ -1,15 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { AuthUser } from '../common';
+import { pushTelegramToChatId } from '../domain-notify';
+import { formatOnixId } from '../onix-id';
 import { PrismaService } from '../prisma.service';
+import { assertRateLimit } from '../rate-limit';
 import { helpReply } from './help-replies';
-import { IntentRecognizer } from './intent-recognizer';
+import {
+  IntentRecognizer,
+  SUPPORT_AWAIT_PROMPT,
+  supportMessageBody,
+} from './intent-recognizer';
 import { ProductCreationService } from './product-creation.service';
 
 const WELCOME = [
   'Я ONIX AI — помощник площадки ONIX.',
   '',
-  'Нажмите «О площадке ONIX» или «Создай товар».',
-  'Также: гарант · вывод · поддержка.',
+  'Нажмите «О площадке ONIX», «Создай товар» или «Написать в поддержку».',
+  'Также: гарант · вывод · ONIXLOT-id лота в любом чате.',
 ].join('\n');
 
 @Injectable()
@@ -26,7 +33,11 @@ export class ConversationService {
   }
 
   async ensureAiChat(user: AuthUser) {
-    const pairKey = this.aiPairKey(user.id);
+    return this.ensureAiChatForUserId(user.id);
+  }
+
+  async ensureAiChatForUserId(userId: bigint) {
+    const pairKey = this.aiPairKey(userId);
     let chat = await this.prisma.chat.findUnique({ where: { pairKey } });
     if (!chat) {
       chat = await this.prisma.$transaction(async (tx) => {
@@ -35,7 +46,7 @@ export class ConversationService {
             pairKey,
             kind: 'AI',
             title: 'ONIX AI',
-            members: { create: { userId: user.id } },
+            members: { create: { userId } },
           },
         });
         await tx.message.create({
@@ -71,6 +82,16 @@ export class ConversationService {
       return 'Создание товара отменено. Напишите «Создай товар», когда будете готовы.';
     }
 
+    if (intent === 'CONTACT_SUPPORT') {
+      const remainder = supportMessageBody(body);
+      if (!remainder) return SUPPORT_AWAIT_PROMPT;
+      return this.submitAiSupport(user, remainder);
+    }
+
+    if (!session && await this.isAwaitingSupport(chatId) && intent !== 'HELP' && intent !== 'CREATE_PRODUCT') {
+      return this.submitAiSupport(user, body);
+    }
+
     // FAQ quick-replies always answer, even mid product draft.
     if (intent === 'HELP') {
       return helpReply(body);
@@ -81,7 +102,6 @@ export class ConversationService {
       if (!active || active.status === 'READY') {
         active = await this.products.start(user.id, chatId);
       }
-      // Strip create phrase and ingest remainder in one shot
       const remainder = body
         .replace(/^(создай\s+(новый\s+)?товар|новый\s+товар|создать\s+(новый\s+)?товар|добавить\s+товар)\s*/i, '')
         .trim();
@@ -133,9 +153,60 @@ export class ConversationService {
     }
 
     return [
-      'Я могу создать товар или ответить на базовые вопросы.',
-      'Нажмите кнопку ниже или напишите «Создай товар».',
+      'Я могу создать товар, ответить на вопросы или передать обращение в поддержку.',
+      'Нажмите кнопку ниже или напишите «Создай товар» / «Написать в поддержку».',
     ].join('\n');
+  }
+
+  /** Create AI_SUPPORT report in жалобы inbox + notify admin Telegram. */
+  async submitAiSupport(user: AuthUser, message: string): Promise<string> {
+    const text = message.trim().slice(0, 1000);
+    if (text.length < 3) {
+      return 'Напишите чуть подробнее — минимум несколько слов.';
+    }
+    try {
+      assertRateLimit(`ai-support:${user.id}`, 5, 60 * 60_000);
+    } catch {
+      return 'Слишком много обращений. Подождите немного и попробуйте снова.';
+    }
+
+    const report = await this.prisma.userReport.create({
+      data: {
+        reporterId: user.id,
+        targetId: user.id,
+        reason: 'OTHER',
+        comment: text,
+        kind: 'AI_SUPPORT',
+      },
+    });
+
+    const adminTg = process.env.ADMIN_TELEGRAM_ID?.trim();
+    if (adminTg && /^\d+$/.test(adminTg)) {
+      const body = [
+        `От (ONIX AI):`,
+        formatOnixId(user.onixId),
+        '',
+        `Сообщение:`,
+        text,
+        '',
+        `ID: ${report.id}`,
+      ].join('\n');
+      void pushTelegramToChatId(BigInt(adminTg), '🆘 Обращение в поддержку (AI)', body);
+    }
+
+    return [
+      '✅ Обращение отправлено в поддержку ONIX.',
+      'Ответ придёт сюда, в этот чат с ONIX AI.',
+    ].join('\n');
+  }
+
+  private async isAwaitingSupport(chatId: string): Promise<boolean> {
+    const last = await this.prisma.message.findFirst({
+      where: { chatId, kind: 'SYSTEM', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { text: true },
+    });
+    return Boolean(last?.text?.includes('Опишите проблему одним сообщением'));
   }
 
   private progressed(

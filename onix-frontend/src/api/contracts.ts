@@ -349,6 +349,7 @@ export const API_PATHS = {
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   supportQueue: '/api/support/queue',
   supportReports: '/api/support/reports',
+  supportReportReply: (id: string) => `/api/support/reports/${encodeURIComponent(id)}/reply`,
   supportReportClose: (id: string) => `/api/support/reports/${encodeURIComponent(id)}/close`,
   mePresence: '/api/users/me/presence',
   leaveGroupChat: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members/me`,
@@ -484,8 +485,12 @@ export interface SupportQueueItem {
 
 export interface UserReportItem {
   id: string;
+  /** USER = person complaint; AI_SUPPORT = from ONIX AI support widget. */
+  kind?: 'USER' | 'AI_SUPPORT';
   reason: string;
   comment: string;
+  adminReply?: string;
+  repliedAt?: string;
   createdAt: string;
   reporter: { onixId: string; username: string; avatarUrl?: string };
   target: { onixId: string; username: string; avatarUrl?: string };

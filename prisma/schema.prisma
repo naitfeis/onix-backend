@@ -314,6 +314,10 @@ model UserReport {
   targetId   BigInt
   reason     BanReason
   comment    String    @db.VarChar(1000)
+  /** USER = complaint about a person; AI_SUPPORT = message from ONIX AI support widget. */
+  kind       String    @default("USER") @db.VarChar(20)
+  adminReply String?   @db.VarChar(2000)
+  repliedAt  DateTime?
   createdAt  DateTime  @default(now())
   closedAt   DateTime?
   closedById BigInt?
@@ -323,6 +327,7 @@ model UserReport {
   @@index([targetId, createdAt])
   @@index([reporterId, createdAt])
   @@index([closedAt, createdAt])
+  @@index([kind, closedAt, createdAt])
 }
 
 model SupportTicket {

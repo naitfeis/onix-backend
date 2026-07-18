@@ -26,6 +26,11 @@ describe('ONIX AI IntentRecognizer', () => {
     assert.equal(ir.recognize('Как работает поддержка'), 'HELP');
   });
 
+  it('contact support phrase', () => {
+    assert.equal(ir.recognize('Написать в поддержку'), 'CONTACT_SUPPORT');
+    assert.equal(ir.recognize('напиши в поддержку: не пришёл товар'), 'CONTACT_SUPPORT');
+  });
+
   it('publish/edit only when session ready', () => {
     assert.equal(ir.recognize('Опубликовать'), 'UNKNOWN');
     assert.equal(ir.recognize('Опубликовать', { sessionReady: true }), 'PUBLISH_PRODUCT');

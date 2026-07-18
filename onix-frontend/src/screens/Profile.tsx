@@ -268,6 +268,7 @@ export function Profile({
       <div className="product-grid">{favoriteProducts.map(item => (
         <Card key={item.id} interactive className="product-card">
           <button type="button" className="product-main" onClick={() => openProductCard(item.id)} aria-label={`Открыть ${item.title}`}>
+            {item.lotNumber != null && <div className="product-card__top"><span className="onixlot-id">ONIXLOT-{item.lotNumber}</span></div>}
             <h2>{item.title}</h2>
             <div className="seller-row">
               <span className="user-summary">
@@ -285,6 +286,7 @@ export function Profile({
       <div className="product-grid">{ownProducts.map(item => (
         <Card key={item.id}>
           <h2>{item.title}</h2>
+          {item.lotNumber != null && <p className="onixlot-id">ONIXLOT-{item.lotNumber}</p>}
           <div className="listing-meta">
             <ListingViews count={item.viewCount ?? 0} />
             <span><b>{money(item.priceCents)}</b></span>

@@ -37,6 +37,7 @@ export function Market({
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
+  const [detailReady, setDetailReady] = useState(false);
   const PAGE = 10;
   const isAdmin = Boolean(
     core.profile?.isAdmin
@@ -44,9 +45,14 @@ export function Market({
     || core.profile?.roles.includes('ADMIN'),
   );
 
+  const lotLabel = (product: Product) => (
+    product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null
+  );
+
   /** List cards are lean — load full product (description + seller stats) on open. */
   const openProduct = async (product: Product) => {
     setSelected(product);
+    setDetailReady(false);
     setSellerProfile(null);
     setSellerTrust(null);
     try {
@@ -55,6 +61,7 @@ export function Market({
         api.get<TrustCard>(API_PATHS.userTrustCard(product.seller.onixId)).catch(() => null),
       ]);
       setSelected(full);
+      setDetailReady(true);
       if (trust) setSellerTrust(trust);
       if (core.profile) {
         void api.post(API_PATHS.productView(full.id), {
@@ -62,7 +69,8 @@ export function Market({
         }).catch(() => { /* ignore view errors */ });
       }
     } catch {
-      /* keep lean card snapshot */
+      setDetailReady(true);
+      setToast('Не удалось загрузить карточку товара.');
     }
   };
 
@@ -185,7 +193,10 @@ export function Market({
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid product-grid--compact">{items.map(product => <Card key={product.id} interactive className="product-card product-card--compact">
         <button className="product-main" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
-          <div className="product-card__top"><span>{product.category}</span></div>
+          <div className="product-card__top">
+            <span>{product.category}</span>
+            {lotLabel(product) && <span className="onixlot-id">{lotLabel(product)}</span>}
+          </div>
           <h2>{product.title.length > 32 ? `${product.title.slice(0, 32)}…` : product.title}</h2>
           <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>{publicAt(product.seller.username)} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} · {product.seller.reviewCount} отз.</span></span><strong>{money(product.priceCents)}</strong></div>
         </button>
@@ -197,9 +208,17 @@ export function Market({
     {marketState === 'success' && hasMore && (
       <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Загрузить ещё</Button>
     )}
-    <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); }}>
-      {selected && <div className="stack compact"><div className="product-detail"><strong>{money(selected.priceCents)}</strong></div>
-        <p className="muted">{selected.description || 'Продавец не добавил описание.'}</p>
+    <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); setDetailReady(false); }}>
+      {selected && <div className="stack compact">
+        <div className="product-detail">
+          <strong>{money(selected.priceCents)}</strong>
+          {lotLabel(selected) && <span className="onixlot-id">{lotLabel(selected)}</span>}
+        </div>
+        <p className="muted">
+          {!detailReady
+            ? 'Загрузка описания…'
+            : (selected.description?.trim() || 'Продавец не добавил описание.')}
+        </p>
         {sellerTrust && (
           <div className="trust-strip">
             <span><b>Уровень {sellerTrust.level}</b></span>

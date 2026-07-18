@@ -2,7 +2,9 @@ import {
   BadRequestException, Body, Controller, ForbiddenException, Get, Header, Injectable, Module,
   NotFoundException, Param, Post,
 } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { AiModule } from './ai/ai.module';
+import { ConversationService } from './ai/conversation.service';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
@@ -19,6 +21,10 @@ class CloseSupportDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
 }
 
+class ReplyReportDto {
+  @IsString() @MinLength(1) @MaxLength(2000) text!: string;
+}
+
 /**
  * Order support tickets: open from any order status (incl. COMPLETED).
  * Adds isAdmin||isSupport users as ChatMembers (SUPPORT role, not Escrow bypass).
@@ -26,7 +32,10 @@ class CloseSupportDto {
  */
 @Injectable()
 export class SupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly conversation: ConversationService,
+  ) {}
 
   async open(user: AuthUser, orderId: bigint, reason?: string) {
     const order = await this.prisma.order.findUnique({
@@ -261,7 +270,7 @@ export class SupportService {
     );
   }
 
-  /** People reports inbox for staff (open only). */
+  /** People reports + AI support inbox for staff (open only). */
   async listReports(actor: AuthUser) {
     if (!canActAsSupport(actor)) {
       throw new ForbiddenException('Жалобы доступны только staff.');
@@ -272,8 +281,11 @@ export class SupportService {
       take: 100,
       select: {
         id: true,
+        kind: true,
         reason: true,
         comment: true,
+        adminReply: true,
+        repliedAt: true,
         createdAt: true,
         reporter: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
         target: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
@@ -281,8 +293,11 @@ export class SupportService {
     });
     return rows.map((r) => ({
       id: r.id,
+      kind: r.kind === 'AI_SUPPORT' ? 'AI_SUPPORT' as const : 'USER' as const,
       reason: r.reason,
       comment: r.comment,
+      adminReply: r.adminReply ?? undefined,
+      repliedAt: r.repliedAt?.toISOString(),
       createdAt: r.createdAt.toISOString(),
       reporter: {
         onixId: formatOnixId(r.reporter.onixId),
@@ -295,6 +310,67 @@ export class SupportService {
         avatarUrl: r.target.avatarUrl ?? undefined,
       },
     }));
+  }
+
+  /**
+   * Reply to AI_SUPPORT report → SYSTEM message in user's ONIX AI chat, then close.
+   */
+  async replyReport(actor: AuthUser, reportId: string, text: string) {
+    if (!canActAsSupport(actor)) {
+      throw new ForbiddenException('Ответ доступен только staff.');
+    }
+    if (!/^[a-z0-9]+$/i.test(reportId) || reportId.length < 8 || reportId.length > 40) {
+      throw new BadRequestException('Некорректный id жалобы.');
+    }
+    const reply = text.trim().slice(0, 2000);
+    if (!reply) throw new BadRequestException('Введите текст ответа.');
+
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Жалоба не найдена.');
+    if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
+    if (report.kind !== 'AI_SUPPORT') {
+      throw new BadRequestException('Ответ в ONIX AI доступен только для обращений из AI.');
+    }
+
+    const chat = await this.conversation.ensureAiChatForUserId(report.reporterId);
+    const now = new Date();
+    const replyText = [
+      '💬 Ответ поддержки ONIX',
+      '',
+      reply,
+    ].join('\n');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.message.create({
+        data: {
+          chatId: chat.id,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: replyText,
+        },
+      });
+      await tx.chat.update({ where: { id: chat.id }, data: { updatedAt: now } });
+      await tx.userReport.update({
+        where: { id: reportId },
+        data: {
+          adminReply: reply,
+          repliedAt: now,
+          closedAt: now,
+          closedById: actor.id,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id,
+          action: 'AI_SUPPORT_REPLY',
+          entity: 'UserReport',
+          entityId: reportId,
+          metadata: { reporterId: report.reporterId.toString() },
+        },
+      });
+    });
+
+    return { id: reportId, replied: true as const, closed: true as const };
   }
 
   async closeReport(actor: AuthUser, reportId: string, reason?: string) {
@@ -345,6 +421,15 @@ export class SupportController {
     return this.support.listReports(user);
   }
 
+  @Post('support/reports/:id/reply')
+  replyReport(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ReplyReportDto,
+  ) {
+    return this.support.replyReport(user, id, dto.text);
+  }
+
   @Post('support/reports/:id/close')
   closeReport(
     @CurrentUser() user: AuthUser,
@@ -376,5 +461,9 @@ export class SupportController {
   }
 }
 
-@Module({ controllers: [SupportController], providers: [SupportService] })
+@Module({
+  imports: [AiModule],
+  controllers: [SupportController],
+  providers: [SupportService],
+})
 export class SupportModule {}

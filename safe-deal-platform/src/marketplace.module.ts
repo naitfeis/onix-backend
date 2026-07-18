@@ -166,7 +166,7 @@ export class MarketplaceService {
     return products.map((product) => productDto(
       {
         ...product,
-        description: null,
+        // Omit description on lean list (undefined → not in DTO). Detail GET always includes it.
         seller: {
           ...product.seller,
           telegramNick: null,
@@ -473,18 +473,12 @@ export class MarketplaceController {
 
   @Public()
   @Get(':id')
+  @Header('Cache-Control', 'private, no-store')
   async get(
     @Req() req: { headers?: Record<string, string | string[] | undefined> },
-    @Res({ passthrough: true }) res: Response,
     @Param('id') id: string,
   ) {
     const user = await this.optionalViewer(req);
-    res.setHeader(
-      'Cache-Control',
-      user
-        ? 'private, no-store'
-        : 'public, max-age=30, stale-while-revalidate=120',
-    );
     return this.service.get(user, id);
   }
 

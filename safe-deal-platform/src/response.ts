@@ -161,7 +161,10 @@ export function productDto(product: {
     id: product.id,
     ...(product.lotNumber != null ? { lotNumber: product.lotNumber } : {}),
     title: product.title,
-    ...(product.description ? { description: product.description } : {}),
+    // Always emit when present (incl. empty) so detail load ≠ lean list omit.
+    ...(product.description !== undefined && product.description !== null
+      ? { description: product.description }
+      : {}),
     priceCents: product.priceCents.toString(),
     quantity: product.quantity,
     category: product.category,
