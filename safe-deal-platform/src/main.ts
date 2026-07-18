@@ -1,14 +1,18 @@
 import 'reflect-metadata';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import compression from 'compression';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { authSessionPathMiddleware } from './auth-v2/auth-session-path.middleware';
-import { ApiEnvelopeInterceptor, ApiExceptionFilter } from './common';
+import { ApiEnvelopeInterceptor } from './common';
 import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
 import { registerHealthEndpoint } from './health';
+import { createMetricsMiddleware } from './observability/metrics.middleware';
+import { MetricsService } from './observability/metrics.service';
+import { registerGracefulShutdown } from './observability/graceful-shutdown';
+import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { validationExceptionFactory } from './validation-errors';
 
@@ -22,10 +26,13 @@ async function bootstrap(): Promise<void> {
   bootstrapStarted = true;
 
   loadEnvFiles();
+  process.env.OTEL_SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? 'onix-api';
 
-  const bootLog = new Logger('Bootstrap');
-  logProductDeliveryKeyStatus(bootLog);
-  bootLog.log('NestFactory starting');
+  logProductDeliveryKeyStatus({
+    log: (m) => structuredLog.info(m),
+    warn: (m) => structuredLog.warn(m),
+  });
+  structuredLog.info('NestFactory starting');
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Single Nest logger — avoid duplicate framework noise on Render.
@@ -37,6 +44,7 @@ async function bootstrap(): Promise<void> {
     app.use(compression());
   }
   app.use(requestTimingMiddleware);
+  app.use(createMetricsMiddleware(app.get(MetricsService)));
 
   registerHealthEndpoint(app);
 
@@ -52,7 +60,6 @@ async function bootstrap(): Promise<void> {
     exceptionFactory: validationExceptionFactory,
   }));
   app.useGlobalInterceptors(new ApiEnvelopeInterceptor());
-  app.useGlobalFilters(new ApiExceptionFilter());
   const origins = (process.env.CORS_ORIGINS
     ?? 'http://localhost:5173,https://www.onixtg.shop,https://onixtg.shop')
     .split(',').map((value) => value.trim()).filter(Boolean);
@@ -64,6 +71,7 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
   app.enableShutdownHooks();
+  registerGracefulShutdown(app, { role: 'api' });
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);
@@ -74,13 +82,16 @@ async function bootstrap(): Promise<void> {
   server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS ?? 66_000);
   server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS ?? 120_000);
 
-  bootLog.log(`Listening on ${port} (single Node process, keepAlive=${server.keepAliveTimeout}ms)`);
+  structuredLog.info('Listening', {
+    port,
+    keepAliveTimeout: server.keepAliveTimeout,
+  });
 
   process.on('unhandledRejection', (reason) => {
-    bootLog.error(`unhandledRejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`);
+    structuredLog.error('unhandledRejection', {}, reason);
   });
   process.on('uncaughtException', (err) => {
-    bootLog.error(`uncaughtException: ${err.stack ?? err.message}`);
+    structuredLog.error('uncaughtException', {}, err);
   });
 }
 

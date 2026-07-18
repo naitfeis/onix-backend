@@ -1,0 +1,42 @@
+[
+  {
+    "id": "http-5xx-burst",
+    "metric": "onix_http_errors_total",
+    "threshold": 20,
+    "windowSec": 60,
+    "severity": "critical",
+    "description": "HTTP 5xx burst"
+  },
+  {
+    "id": "money-ops-errors",
+    "metric": "onix_money_ops_total",
+    "threshold": 10,
+    "windowSec": 120,
+    "severity": "critical",
+    "description": "Money operation failures"
+  },
+  {
+    "id": "worker-job-failures",
+    "metric": "onix_worker_jobs_total",
+    "threshold": 5,
+    "windowSec": 300,
+    "severity": "warning",
+    "description": "Worker job failures"
+  },
+  {
+    "id": "errors-captured",
+    "metric": "onix_errors_captured_total",
+    "threshold": 30,
+    "windowSec": 60,
+    "severity": "critical",
+    "description": "Captured application errors"
+  },
+  {
+    "id": "idempotency-conflicts",
+    "metric": "onix_idempotency_total",
+    "threshold": 50,
+    "windowSec": 60,
+    "severity": "warning",
+    "description": "Idempotency conflicts / in-progress collisions"
+  }
+]

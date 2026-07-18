@@ -15,6 +15,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
+import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import {
@@ -77,6 +78,7 @@ class OperationsService {
     private readonly prisma: PrismaService,
     private readonly risk: RiskScoreService,
     private readonly balance: BalanceService,
+    private readonly idempotency: IdempotencyService,
   ) {}
 
   async adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
@@ -369,7 +371,7 @@ class OperationsService {
     return { onixId: displayId, sellBanned: false as const };
   }
 
-  withdraw(user: AuthUser, dto: WithdrawalDto) {
+  async withdraw(user: AuthUser, dto: WithdrawalDto) {
     // Stage 1: no external payout rail — keep debit disabled until WITHDRAWALS_ENABLED=true.
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
     if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') {
@@ -377,23 +379,35 @@ class OperationsService {
         'Вывод средств временно недоступен. Обратитесь в поддержку ONIX.',
       );
     }
-    return this.prisma.$transaction(async (tx) => {
-      const amount = BigInt(dto.amountCents);
-      const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
-        idempotencyKey: dto.idempotencyKey,
-        description: 'Заявка пользователя на вывод средств',
-      });
-      await tx.auditLog.create({
-        data: {
-          actorId: user.id,
-          action: 'WALLET_WITHDRAWAL_REQUEST',
-          entity: 'LedgerEntry',
-          entityId: entry.id.toString(),
-          metadata: { amountCents: dto.amountCents, idempotencyKey: dto.idempotencyKey },
-        },
-      });
-      return entry;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    // External withdrawal is double-gated: ledger idempotencyKey + IdempotencyRecord scope.
+    const result = await this.idempotency.run(
+      'wallet.withdraw',
+      dto.idempotencyKey,
+      { userId: user.id.toString(), amountCents: dto.amountCents },
+      () => this.prisma.$transaction(async (tx) => {
+        const amount = BigInt(dto.amountCents);
+        const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
+          idempotencyKey: dto.idempotencyKey,
+          description: 'Заявка пользователя на вывод средств',
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: user.id,
+            action: 'WALLET_WITHDRAWAL_REQUEST',
+            entity: 'LedgerEntry',
+            entityId: entry.id.toString(),
+            metadata: { amountCents: dto.amountCents, idempotencyKey: dto.idempotencyKey },
+          },
+        });
+        return {
+          id: entry.id.toString(),
+          amountCents: entry.amountCents.toString(),
+          balanceAfterCents: entry.balanceAfterCents.toString(),
+          type: entry.type,
+        };
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+    );
+    return result.value;
   }
 }
 

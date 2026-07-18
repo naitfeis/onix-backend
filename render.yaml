@@ -21,3 +21,29 @@ services:
       # Exposed by GET /api/health/network (ops probe).
       - key: RENDER_REGION
         value: frankfurt
+      - key: OTEL_SERVICE_NAME
+        value: onix-api
+      - key: LOG_LEVEL
+        value: info
+      - key: ALERTING_ENABLED
+        value: "true"
+
+  # Background jobs — separate process from HTTP (deposit unlock, trust, idempotency TTL, payment expire).
+  - type: worker
+    name: onix-worker
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: node dist/worker.main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OTEL_SERVICE_NAME
+        value: onix-worker
+      - key: LOG_LEVEL
+        value: info
+      - key: ALERTING_ENABLED
+        value: "true"
+      - key: RENDER_REGION
+        value: frankfurt

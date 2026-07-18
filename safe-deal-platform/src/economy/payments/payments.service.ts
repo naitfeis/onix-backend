@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { PaymentProviderCode, PaymentWallet, Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
+import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
 import type { PaymentProvider } from './payment-provider';
@@ -21,6 +22,7 @@ export class PaymentsService {
     private readonly balance: BalanceService,
     private readonly deposit: DepositService,
     private readonly trust: TrustService,
+    private readonly idempotency: IdempotencyService,
     manual: ManualPaymentProvider,
   ) {
     this.providers = new Map();
@@ -102,6 +104,43 @@ export class PaymentsService {
     if (!isManualPaymentsEnabled()) {
       throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
     }
+    // External confirm is idempotent at scope+intent level (safe under retries / double-click).
+    const result = await this.idempotency.run(
+      'payment.confirm',
+      intentId,
+      { intentId, actorId: user.id.toString(), provider: 'MANUAL' },
+      () => this.confirmManualOnce(intentId),
+    );
+    return result.value;
+  }
+
+  /**
+   * Provider webhook / callback entry — always go through IdempotencyService.
+   * Future PSP adapters call this with provider event id as key.
+   */
+  async applyProviderEvent(
+    provider: PaymentProviderCode,
+    eventId: string,
+    payload: { intentId: string; status: 'SUCCEEDED' | 'FAILED' | 'CANCELED' },
+  ) {
+    const result = await this.idempotency.run(
+      `payment.webhook.${provider}`,
+      eventId,
+      payload,
+      async () => {
+        if (payload.status === 'SUCCEEDED') {
+          return this.confirmManualOnce(payload.intentId);
+        }
+        return this.prisma.paymentIntent.update({
+          where: { id: payload.intentId },
+          data: { status: payload.status },
+        });
+      },
+    );
+    return result.value;
+  }
+
+  private async confirmManualOnce(intentId: string) {
     return this.prisma.$transaction(async (tx) => {
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');

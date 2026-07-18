@@ -1,10 +1,12 @@
 import {
   ArgumentsHost, BadRequestException, CallHandler, Catch, createParamDecorator,
   ExecutionContext, ExceptionFilter, HttpException, HttpStatus, Injectable,
-  NestInterceptor, SetMetadata,
+  NestInterceptor, Optional, SetMetadata,
 } from '@nestjs/common';
 import { Observable, map } from 'rxjs';
 import { AuthPlatformError, authErrorBody } from './auth-v2/auth-errors';
+import { ErrorTrackingService } from './observability/error-tracking.service';
+import { structuredLog } from './observability/structured-logger';
 import { formatErrorForLog } from './safe-error-log';
 
 export interface AuthUser {
@@ -55,18 +57,35 @@ export class ApiEnvelopeInterceptor implements NestInterceptor {
 }
 
 @Catch()
+@Injectable()
 export class ApiExceptionFilter implements ExceptionFilter {
+  constructor(@Optional() private readonly errors?: ErrorTrackingService) {}
+
   catch(error: unknown, host: ArgumentsHost): void {
-    // Never log raw Authorization / tokens / cookies / PEM — redact first.
-    console.error(formatErrorForLog(error));
-    const response = host.switchToHttp().getResponse();
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest<{ method?: string; originalUrl?: string; url?: string; headers?: Record<string, string | undefined> }>();
+    const requestId = request?.headers?.['x-request-id'];
+    const route = `${request?.method ?? '?'} ${request?.originalUrl ?? request?.url ?? '?'}`;
 
     if (error instanceof AuthPlatformError) {
+      structuredLog.warn('auth platform error', {
+        requestId,
+        route,
+        code: error.code,
+      });
       response.status(error.httpStatus).json(authErrorBody(error));
       return;
     }
 
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    if (status >= 500) {
+      this.errors?.capture(error, { requestId, route, level: 'error' });
+    } else {
+      // Client errors: structured warn only (no error-tracking noise).
+      structuredLog.warn(formatErrorForLog(error), { requestId, route, status });
+    }
+
     const raw = error instanceof HttpException ? error.getResponse() : null;
     const details = typeof raw === 'object' && raw ? (raw as Record<string, unknown>) : undefined;
     const message = typeof raw === 'string'

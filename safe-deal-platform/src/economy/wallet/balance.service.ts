@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import { MetricsService } from '../../observability/metrics.service';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -9,6 +10,8 @@ export type Tx = Prisma.TransactionClient;
  */
 @Injectable()
 export class BalanceService {
+  constructor(@Optional() private readonly metrics?: MetricsService) {}
+
   async getAvailable(tx: Tx, userId: bigint): Promise<bigint> {
     const user = await tx.user.findUniqueOrThrow({
       where: { id: userId },
@@ -30,29 +33,39 @@ export class BalanceService {
     },
   ) {
     if (amountCents <= 0n) throw new BadRequestException('Сумма зачисления должна быть положительной.');
-    const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
-    if (existing) {
-      if (existing.userId !== userId || existing.type !== type || existing.amountCents !== amountCents) {
-        throw new BadRequestException('Ключ идемпотентности уже использован для другой операции.');
+    try {
+      const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
+      if (existing) {
+        if (existing.userId !== userId || existing.type !== type || existing.amountCents !== amountCents) {
+          throw new BadRequestException('Ключ идемпотентности уже использован для другой операции.');
+        }
+        this.metrics?.recordMoneyOp(`credit:${type}`, true);
+        return existing;
       }
-      return existing;
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { balanceCents: { increment: amountCents } },
+        select: { balanceCents: true },
+      });
+      const entry = await tx.ledgerEntry.create({
+        data: {
+          userId,
+          orderId: opts.orderId,
+          type,
+          amountCents,
+          balanceAfterCents: user.balanceCents,
+          idempotencyKey: opts.idempotencyKey,
+          description: opts.description,
+        },
+      });
+      this.metrics?.recordMoneyOp(`credit:${type}`, true);
+      return entry;
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) {
+        this.metrics?.recordMoneyOp(`credit:${type}`, false);
+      }
+      throw err;
     }
-    const user = await tx.user.update({
-      where: { id: userId },
-      data: { balanceCents: { increment: amountCents } },
-      select: { balanceCents: true },
-    });
-    return tx.ledgerEntry.create({
-      data: {
-        userId,
-        orderId: opts.orderId,
-        type,
-        amountCents,
-        balanceAfterCents: user.balanceCents,
-        idempotencyKey: opts.idempotencyKey,
-        description: opts.description,
-      },
-    });
   }
 
   async debit(
@@ -69,21 +82,43 @@ export class BalanceService {
     },
   ) {
     if (amountCents <= 0n) throw new BadRequestException('Сумма списания должна быть положительной.');
-    const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
-    if (existing) {
-      if (existing.userId !== userId || existing.type !== type || existing.amountCents !== -amountCents) {
-        throw new BadRequestException('Ключ идемпотентности уже использован для другой операции.');
+    try {
+      const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
+      if (existing) {
+        if (existing.userId !== userId || existing.type !== type || existing.amountCents !== -amountCents) {
+          throw new BadRequestException('Ключ идемпотентности уже использован для другой операции.');
+        }
+        this.metrics?.recordMoneyOp(`debit:${type}`, true);
+        return existing;
       }
-      return existing;
-    }
-    if (opts.allowNegative && type === 'ADMIN_ADJUSTMENT') {
-      const user = await tx.user.update({
-        where: { id: userId },
+      if (opts.allowNegative && type === 'ADMIN_ADJUSTMENT') {
+        const user = await tx.user.update({
+          where: { id: userId },
+          data: { balanceCents: { decrement: amountCents } },
+          select: { balanceCents: true },
+        });
+        if (user.balanceCents < 0n) throw new BadRequestException('Корректировка создаёт отрицательный баланс.');
+        const entry = await tx.ledgerEntry.create({
+          data: {
+            userId,
+            orderId: opts.orderId,
+            type,
+            amountCents: -amountCents,
+            balanceAfterCents: user.balanceCents,
+            idempotencyKey: opts.idempotencyKey,
+            description: opts.description,
+          },
+        });
+        this.metrics?.recordMoneyOp(`debit:${type}`, true);
+        return entry;
+      }
+      const debited = await tx.user.updateMany({
+        where: { id: userId, deletedAt: null, balanceCents: { gte: amountCents } },
         data: { balanceCents: { decrement: amountCents } },
-        select: { balanceCents: true },
       });
-      if (user.balanceCents < 0n) throw new BadRequestException('Корректировка создаёт отрицательный баланс.');
-      return tx.ledgerEntry.create({
+      if (!debited.count) throw new BadRequestException('Недостаточно средств.');
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { balanceCents: true } });
+      const entry = await tx.ledgerEntry.create({
         data: {
           userId,
           orderId: opts.orderId,
@@ -94,23 +129,13 @@ export class BalanceService {
           description: opts.description,
         },
       });
+      this.metrics?.recordMoneyOp(`debit:${type}`, true);
+      return entry;
+    } catch (err) {
+      if (!(err instanceof BadRequestException)) {
+        this.metrics?.recordMoneyOp(`debit:${type}`, false);
+      }
+      throw err;
     }
-    const debited = await tx.user.updateMany({
-      where: { id: userId, deletedAt: null, balanceCents: { gte: amountCents } },
-      data: { balanceCents: { decrement: amountCents } },
-    });
-    if (!debited.count) throw new BadRequestException('Недостаточно средств.');
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { balanceCents: true } });
-    return tx.ledgerEntry.create({
-      data: {
-        userId,
-        orderId: opts.orderId,
-        type,
-        amountCents: -amountCents,
-        balanceAfterCents: user.balanceCents,
-        idempotencyKey: opts.idempotencyKey,
-        description: opts.description,
-      },
-    });
   }
 }

@@ -46,6 +46,23 @@ See also: [docs/architecture/ONIX-TRUST-STAGE1-FOUNDATION.md](docs/architecture/
 
 All responses use `{ "success": true, "data": ... }` or `{ "success": false, "error": { "code", "message" } }`.
 
+## Ops / production readiness
+
+| Concern | How |
+| --- | --- |
+| Structured logs | JSON to stdout (`LOG_LEVEL`, secrets redacted) |
+| Metrics | `GET /api/metrics` (Prometheus), `GET /api/metrics/json` |
+| Error tracking | `ERROR_WEBHOOK_URL` / optional `SENTRY_DSN` |
+| Alerting | in-process rules → `ALERT_WEBHOOK_URL` (see `ops/alerting-rules.json`) |
+| Workers | `npm run start:worker` (Render worker `onix-worker`) |
+| Graceful shutdown | SIGTERM/SIGINT drain (`SHUTDOWN_TIMEOUT_MS`) |
+| Idempotency | ledger keys + `IdempotencyRecord` for external ops |
+| Monetary tests | `npm run test:monetary` |
+| Load test | `npm run test:load` (`LOAD_BASE_URL`, …) |
+| Backup drill | `npm run ops:backup-drill -- check\|backup\|restore-dry-run` |
+
+Optional env: `OPS_METRICS_TOKEN`, `ALERTING_ENABLED`, `ALERT_RULES_JSON`.
+
 ## Development
 
 ```bash
@@ -54,7 +71,10 @@ npm run prisma:validate
 npm run prisma:generate
 npm run typecheck
 npm test
+npm run test:monetary
 npm run build
+npm run start:dev
+npm run start:dev:worker
 ```
 
 The SQL migration is provided in `prisma/migrations/20260712140000_onix_backend/migration.sql` but must be reviewed and applied separately. It deliberately stops if legacy users lack a Telegram identity; no production database migration is run automatically.

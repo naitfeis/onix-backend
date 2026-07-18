@@ -400,6 +400,20 @@ model AuditLog {
   @@index([entity, entityId])
 }
 
+/// Worker job run journal (ops / drills / alerting).
+model WorkerJobRun {
+  id         String    @id @default(cuid())
+  jobName    String    @db.VarChar(64)
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean?
+  processed  Int       @default(0)
+  error      String?   @db.VarChar(1000)
+  metadata   Json?
+
+  @@index([jobName, startedAt])
+}
+
 // ─── Seller Trust & Economy foundation (Stage 1) ─────────────────────────────
 
 enum PaymentWallet {

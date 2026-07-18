@@ -13,11 +13,16 @@
     "typecheck": "tsc --noEmit --incremental false",
     "lint": "tsc --noEmit --incremental false",
     "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",
+    "test:monetary": "tsx --test \"safe-deal-platform/test/monetary-invariants.e2e.test.ts\" \"safe-deal-platform/test/ledger-property.test.ts\" \"safe-deal-platform/test/deposit-transfer.test.ts\" \"safe-deal-platform/test/economy-foundation.test.ts\"",
+    "test:load": "tsx safe-deal-platform/scripts/load-test-monetary.ts",
+    "ops:backup-drill": "tsx safe-deal-platform/scripts/backup-restore-drill.ts",
     "build": "prisma generate && tsc --incremental false",
     "migrate:deploy": "prisma migrate deploy",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts"
+    "start:worker": "node dist/worker.main.js",
+    "start:dev": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/main.ts",
+    "start:dev:worker": "ts-node-dev --respawn --transpile-only safe-deal-platform/src/worker.main.ts"
   },
   "keywords": [
     "nestjs",
@@ -50,6 +55,7 @@
   "devDependencies": {
     "@types/node": "^26.0.1",
     "@types/pg": "^8.20.0",
+    "fast-check": "^4.5.3",
     "prisma": "^7.8.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
