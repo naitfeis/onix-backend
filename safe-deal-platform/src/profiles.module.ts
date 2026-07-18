@@ -35,29 +35,35 @@ export class ProfilesService {
       data: { lastSeenAt: new Date() },
     });
 
-    const { profile, ledger } = await this.prisma.$transaction(async (tx) => {
-      await this.locks.releaseExpiredForUser(tx, user.id);
-      const [row, entries] = await Promise.all([
-        tx.user.findUniqueOrThrow({
-          where: { id: user.id },
-          select: {
-            id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
-            balanceCents: true,
-            depositAvailableCents: true, depositLockedCents: true,
-            trustLevel: true, createdAt: true,
-            ratingAverage: true, ratingCount: true, completedSales: true,
-            lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
-            _count: { select: { followers: true } },
-            verifications: { select: { kind: true, status: true } },
-            sellerSubscription: { select: { status: true, endsAt: true } },
-          },
-        }),
-        tx.ledgerEntry.findMany({
-          where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
-        }),
-      ]);
-      return { profile: row, ledger: entries };
-    }, SERIALIZABLE);
+    const dueLock = await this.prisma.depositLock.findFirst({
+      where: { userId: user.id, status: 'ACTIVE', unlockAt: { lte: new Date() } },
+      select: { id: true },
+    });
+    if (dueLock) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.locks.releaseExpiredForUser(tx, user.id);
+      }, SERIALIZABLE);
+    }
+
+    const [profile, ledger] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+        select: {
+          id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
+          balanceCents: true,
+          depositAvailableCents: true, depositLockedCents: true,
+          trustLevel: true, createdAt: true,
+          ratingAverage: true, ratingCount: true, completedSales: true,
+          lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
+          _count: { select: { followers: true } },
+          verifications: { select: { kind: true, status: true } },
+          sellerSubscription: { select: { status: true, endsAt: true } },
+        },
+      }),
+      this.prisma.ledgerEntry.findMany({
+        where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
+      }),
+    ]);
 
     const proActive = Boolean(
       profile.sellerSubscription

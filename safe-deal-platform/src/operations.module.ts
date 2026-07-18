@@ -95,11 +95,41 @@ class OperationsService {
       await tx.auditLog.create({
         data: {
           actorId: actor.id, action: 'BALANCE_ADJUST', entity: 'User', entityId: target.id.toString(),
-          metadata: { amountCents: dto.amountCents, idempotencyKey: dto.idempotencyKey, ...(dto.reason ? { reason: dto.reason } : {}) },
+          metadata: {
+            onixId: formatOnixId(target.onixId),
+            amountCents: dto.amountCents,
+            idempotencyKey: dto.idempotencyKey,
+            previousBalanceCents: target.balanceCents.toString(),
+            actorOnixId: formatOnixId(actor.onixId),
+            ...(dto.reason ? { reason: dto.reason } : {}),
+          },
         },
       });
       return entry;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  private async countOtherPrivilegedAdmins(excludeUserId: bigint): Promise<number> {
+    return this.prisma.user.count({
+      where: {
+        deletedAt: null,
+        id: { not: excludeUserId },
+        OR: [{ isAdmin: true }, { platformStatus: 'ADMIN' }],
+      },
+    });
+  }
+
+  private async assertNotLastPrivilegedAdmin(target: {
+    id: bigint;
+    isAdmin: boolean;
+    platformStatus: PlatformStatus;
+  }, actionLabel: string) {
+    const isPrivileged = target.isAdmin || target.platformStatus === 'ADMIN';
+    if (!isPrivileged) return;
+    const others = await this.countOtherPrivilegedAdmins(target.id);
+    if (others < 1) {
+      throw new BadRequestException(`Нельзя ${actionLabel} последнего администратора платформы.`);
+    }
   }
 
   async ban(actor: AuthUser, onixId: string, dto: BanDto) {
@@ -109,6 +139,7 @@ class OperationsService {
       if (!dto.reason) throw new BadRequestException('Укажите причину блокировки.');
       const comment = dto.comment?.trim();
       if (!comment) throw new BadRequestException('Комментарий администратора обязателен.');
+      await this.assertNotLastPrivilegedAdmin(resolved, 'заблокировать');
       let days: number | null;
       try {
         days = banDurationDays(dto.reason, dto.durationDays);
@@ -117,6 +148,12 @@ class OperationsService {
       }
       const now = new Date();
       const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86400_000);
+      const previous = {
+        platformStatus: resolved.platformStatus,
+        isAdmin: resolved.isAdmin,
+        isSupport: resolved.isSupport,
+        deletedAt: resolved.deletedAt?.toISOString() ?? null,
+      };
       const user = await this.prisma.user.update({
         where: { id: resolved.id },
         data: {
@@ -135,24 +172,44 @@ class OperationsService {
           entity: 'User',
           entityId: user.id.toString(),
           metadata: {
+            onixId: displayId,
             reason: dto.reason,
             reasonLabel: BAN_REASON_LABELS[dto.reason],
             comment,
             bannedUntil: bannedUntil?.toISOString() ?? null,
             permanent: bannedUntil == null,
+            previous,
+            actorOnixId: formatOnixId(actor.onixId),
           },
         },
       });
       return { onixId: displayId, banned: true, ban: banPublicInfo(user) };
     }
 
+    const previous = {
+      platformStatus: resolved.platformStatus,
+      isAdmin: resolved.isAdmin,
+      isSupport: resolved.isSupport,
+      banReason: resolved.banReason,
+      bannedUntil: resolved.bannedUntil?.toISOString() ?? null,
+    };
     const user = await this.prisma.user.update({
       where: { id: resolved.id },
       data: { ...BAN_CLEAR_DATA },
     });
     await this.risk.revokeBanMarkers(this.prisma, user.id);
     await this.prisma.auditLog.create({
-      data: { actorId: actor.id, action: 'USER_UNBAN', entity: 'User', entityId: user.id.toString() },
+      data: {
+        actorId: actor.id,
+        action: 'USER_UNBAN',
+        entity: 'User',
+        entityId: user.id.toString(),
+        metadata: {
+          onixId: displayId,
+          previous,
+          actorOnixId: formatOnixId(actor.onixId),
+        },
+      },
     });
     return { onixId: displayId, banned: false, ban: null };
   }
@@ -168,6 +225,15 @@ class OperationsService {
       throw new BadRequestException('Нельзя снять статус ADMIN с собственного аккаунта.');
     }
     const flags = flagsFromPlatformStatus(status);
+    const demotingAdmin = (resolved.isAdmin || resolved.platformStatus === 'ADMIN') && !flags.isAdmin;
+    if (demotingAdmin) {
+      await this.assertNotLastPrivilegedAdmin(resolved, 'снять статус ADMIN у');
+    }
+    const previous = {
+      platformStatus: resolved.platformStatus,
+      isAdmin: resolved.isAdmin,
+      isSupport: resolved.isSupport,
+    };
     const user = await this.prisma.user.update({
       where: { id: resolved.id },
       data: {
@@ -186,7 +252,17 @@ class OperationsService {
         action: 'USER_STATUS_SET',
         entity: 'User',
         entityId: resolved.id.toString(),
-        metadata: { status, onixId: displayId },
+        metadata: {
+          onixId: displayId,
+          status,
+          previous,
+          next: {
+            platformStatus: user.platformStatus,
+            isAdmin: user.isAdmin,
+            isSupport: user.isSupport,
+          },
+          actorOnixId: formatOnixId(actor.onixId),
+        },
       },
     });
     return {

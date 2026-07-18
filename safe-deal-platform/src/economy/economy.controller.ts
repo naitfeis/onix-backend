@@ -10,6 +10,7 @@ import type { PaymentProviderCode, PaymentWallet, SellerVerificationKind } from 
 import { AuthRequest, AuthUser, CurrentUser, parseId } from '../common';
 import { PrismaService } from '../prisma.service';
 import { requireUserByOnixId } from '../onix-id-lookup';
+import { assertRateLimit } from '../rate-limit';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { PaymentsService } from './payments/payments.service';
@@ -153,6 +154,7 @@ export class EconomyController {
   @Get('users/me/analytics')
   @Header('Cache-Control', 'private, no-store')
   myAnalytics(@CurrentUser() user: AuthUser, @Query() query: SellerAnalyticsQueryDto) {
+    assertRateLimit(`analytics:${user.id}`, 20, 60_000);
     return this.sellerAnalytics.getOwnerAnalytics(user, query.weekOffset);
   }
 
@@ -199,6 +201,8 @@ export class EconomyController {
     @Param('id') productId: string,
     @Body() dto: ProductViewDto,
   ) {
+    assertRateLimit(`view:${user.id}`, 60, 60_000);
+    assertRateLimit(`view:${user.id}:${productId}`, 1, 10_000);
     return this.analytics.recordUniqueProductView({
       productId,
       viewerUserId: user.id,

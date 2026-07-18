@@ -13,7 +13,7 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
-import { buildDisputeCard, loadArbitrationContext } from './dispute-card';
+import { buildLightDisputeCard, invalidateArbitrationContextCache } from './dispute-card';
 import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
@@ -93,29 +93,13 @@ export class EscrowService {
       orderBy,
       take: 100,
     });
-    const needsArbitration = orders.some(
-      (o) => o.status === 'DISPUTE' || o.supportTickets.length > 0,
-    );
-    const arbCtx = needsArbitration
-      ? await loadArbitrationContext(this.prisma)
-      : {
-          queue: [],
-          queueTotal: 0,
-          positionByOrderId: new Map<string, number>(),
-          avgWaitMinutes: null as number | null,
-          supportByChatId: new Map<string, string>(),
-        };
     return orders.map((order) => {
       const ticket = order.supportTickets[0] ?? null;
-      const dispute = needsArbitration
-        ? buildDisputeCard({
-          orderId: order.id,
-          status: order.status,
-          chatId: order.chat?.id ?? ticket?.chatId,
-          ticket,
-          ctx: arbCtx,
-        })
-        : null;
+      const dispute = buildLightDisputeCard({
+        orderId: order.id,
+        status: order.status,
+        ticket,
+      });
       return dealDto({ ...order, dispute }, user);
     });
   }
@@ -454,6 +438,7 @@ export class EscrowService {
       await this.locks.holdForDispute(tx, id);
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
     }, SERIALIZABLE);
+    invalidateArbitrationContextCache();
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id },
       select: { buyerId: true, sellerId: true },

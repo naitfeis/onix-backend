@@ -6,6 +6,7 @@ import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { invalidateArbitrationContextCache } from './dispute-card';
 import { formatOnixId } from './onix-id';
 import { PrismaService } from './prisma.service';
 import { publicDisplayName } from './public-username';
@@ -114,6 +115,7 @@ export class SupportService {
       );
     }
 
+    invalidateArbitrationContextCache();
     return { ticketId: ticket.id, chatId: ticket.chatId, status: 'OPEN' as const };
   }
 
@@ -143,6 +145,7 @@ export class SupportService {
       });
       await tx.chat.update({ where: { id: ticket.chatId }, data: { updatedAt: new Date() } });
     });
+    invalidateArbitrationContextCache();
     return { ticketId: ticket.id, chatId: ticket.chatId, status: 'CLOSED' as const };
   }
 

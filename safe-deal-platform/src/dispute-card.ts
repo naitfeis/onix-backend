@@ -13,20 +13,53 @@ export type DisputeCardDto = {
 
 type QueueRow = { orderId: bigint; at: Date; chatId: string | null };
 
+type ArbitrationContext = {
+  queue: QueueRow[];
+  queueTotal: number;
+  positionByOrderId: Map<string, number>;
+  avgWaitMinutes: number | null;
+  supportByChatId: Map<string, string>;
+};
+
+const EMPTY_CTX: ArbitrationContext = {
+  queue: [],
+  queueTotal: 0,
+  positionByOrderId: new Map(),
+  avgWaitMinutes: null,
+  supportByChatId: new Map(),
+};
+
+const ARB_CACHE_TTL_MS = 30_000;
+let arbCache: { at: number; value: ArbitrationContext } | null = null;
+
 function supportLabelFromOnix(onixId: string | null | undefined): string {
   if (!onixId) return 'ONIX Support';
   const digits = onixId.replace(/\D/g, '').replace(/^0+/, '') || '0';
   return `ONIX Support #${digits}`;
 }
 
+function disputePhase(opts: {
+  status: string;
+  ticket?: { id: string; status: string; chatId: string } | null;
+}): { reviewing: boolean; resolved: boolean } | null {
+  const { status, ticket } = opts;
+  const hasTicket = Boolean(ticket);
+  const inDispute = status === 'DISPUTE';
+  if (!hasTicket && !inDispute) return null;
+
+  const open = (ticket?.status === 'OPEN') || (inDispute && (!ticket || ticket.status === 'OPEN'));
+  const resolved = !open && (
+    ticket?.status === 'CLOSED'
+    || status === 'COMPLETED'
+    || status === 'REFUNDED'
+    || status === 'CANCELED'
+  );
+  if (!open && !resolved && !hasTicket) return null;
+  return { reviewing: open && !resolved, resolved };
+}
+
 /** Open arbitration queue + average resolution time for buyer/seller dispute cards. */
-export async function loadArbitrationContext(prisma: PrismaClient): Promise<{
-  queue: QueueRow[];
-  queueTotal: number;
-  positionByOrderId: Map<string, number>;
-  avgWaitMinutes: number | null;
-  supportByChatId: Map<string, string>;
-}> {
+export async function loadArbitrationContext(prisma: PrismaClient): Promise<ArbitrationContext> {
   const [openTickets, bareDisputes, closedSample] = await Promise.all([
     prisma.supportTicket.findMany({
       where: { status: 'OPEN' },
@@ -107,37 +140,63 @@ export async function loadArbitrationContext(prisma: PrismaClient): Promise<{
   };
 }
 
+/** Cached queue/context — for single-order / admin paths, not for GET /orders list. */
+export async function loadArbitrationContextCached(prisma: PrismaClient): Promise<ArbitrationContext> {
+  const now = Date.now();
+  if (arbCache && now - arbCache.at < ARB_CACHE_TTL_MS) {
+    return arbCache.value;
+  }
+  const value = await loadArbitrationContext(prisma);
+  arbCache = { at: now, value };
+  return value;
+}
+
+export function invalidateArbitrationContextCache(): void {
+  arbCache = null;
+}
+
+/**
+ * List-safe dispute card — no global queue scan.
+ * Queue position / avg wait stay null until a detail path loads cached context.
+ */
+export function buildLightDisputeCard(opts: {
+  orderId: bigint;
+  status: string;
+  ticket?: { id: string; status: string; chatId: string } | null;
+}): DisputeCardDto | null {
+  const phase = disputePhase(opts);
+  if (!phase) return null;
+  return {
+    orderId: opts.orderId.toString(),
+    status: phase.reviewing ? 'REVIEWING' : 'RESOLVED',
+    statusLabel: phase.reviewing ? 'Изучение доказательств' : 'Решено',
+    supportLabel: 'ONIX Support',
+    queuePosition: null,
+    queueTotal: 0,
+    avgWaitMinutes: null,
+  };
+}
+
 export function buildDisputeCard(opts: {
   orderId: bigint;
   status: string;
   chatId?: string | null;
   ticket?: { id: string; status: string; chatId: string } | null;
-  ctx: Awaited<ReturnType<typeof loadArbitrationContext>>;
+  ctx?: ArbitrationContext;
 }): DisputeCardDto | null {
-  const { orderId, status, chatId, ticket, ctx } = opts;
-  const hasTicket = Boolean(ticket);
-  const inDispute = status === 'DISPUTE';
-  if (!hasTicket && !inDispute) return null;
+  const phase = disputePhase(opts);
+  if (!phase) return null;
 
-  const open = (ticket?.status === 'OPEN') || (inDispute && (!ticket || ticket.status === 'OPEN'));
-  const resolved = !open && (
-    ticket?.status === 'CLOSED'
-    || status === 'COMPLETED'
-    || status === 'REFUNDED'
-    || status === 'CANCELED'
-  );
-  if (!open && !resolved && !hasTicket) return null;
-
-  const id = orderId.toString();
-  const reviewing = open && !resolved;
-  const chat = ticket?.chatId || chatId || null;
+  const ctx = opts.ctx ?? EMPTY_CTX;
+  const id = opts.orderId.toString();
+  const chat = opts.ticket?.chatId || opts.chatId || null;
 
   return {
     orderId: id,
-    status: reviewing ? 'REVIEWING' : 'RESOLVED',
-    statusLabel: reviewing ? 'Изучение доказательств' : 'Решено',
+    status: phase.reviewing ? 'REVIEWING' : 'RESOLVED',
+    statusLabel: phase.reviewing ? 'Изучение доказательств' : 'Решено',
     supportLabel: (chat && ctx.supportByChatId.get(chat)) || 'ONIX Support',
-    queuePosition: reviewing ? (ctx.positionByOrderId.get(id) ?? null) : null,
+    queuePosition: phase.reviewing ? (ctx.positionByOrderId.get(id) ?? null) : null,
     queueTotal: ctx.queueTotal,
     avgWaitMinutes: ctx.avgWaitMinutes,
   };

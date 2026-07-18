@@ -48,9 +48,19 @@ export function Market({
   const openProduct = async (product: Product) => {
     setSelected(product);
     setSellerProfile(null);
+    setSellerTrust(null);
     try {
-      const full = await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(product.id)}`);
+      const [full, trust] = await Promise.all([
+        api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(product.id)}`),
+        api.get<TrustCard>(API_PATHS.userTrustCard(product.seller.onixId)).catch(() => null),
+      ]);
       setSelected(full);
+      if (trust) setSellerTrust(trust);
+      if (core.profile) {
+        void api.post(API_PATHS.productView(full.id), {
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+        }).catch(() => { /* ignore view errors */ });
+      }
     } catch {
       /* keep lean card snapshot */
     }
@@ -130,42 +140,27 @@ export function Market({
   }, [core.products, items, selected]);
 
   useEffect(() => {
-    if (!selected) {
-      setSellerTrust(null);
-      return;
-    }
-    let cancelled = false;
-    setSellerTrust(null);
-    void api.get<TrustCard>(API_PATHS.userTrustCard(selected.seller.onixId))
-      .then((card) => { if (!cancelled) setSellerTrust(card); })
-      .catch(() => { if (!cancelled) setSellerTrust(null); });
-    if (core.profile) {
-      void api.post(API_PATHS.productView(selected.id), {
-        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-      }).catch(() => { /* ignore view errors */ });
-    }
-    return () => { cancelled = true; };
-  }, [selected?.id, selected?.seller.onixId, core.profile?.id]);
-
-  useEffect(() => {
     if (!focusProductId) return;
     let cancelled = false;
     void (async () => {
       try {
         const fromList = items.find((item) => item.id === focusProductId)
           ?? core.products.find((item) => item.id === focusProductId);
-        const product = fromList
-          ?? await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(focusProductId)}`);
-        if (cancelled) return;
-        setSellerProfile(null);
-        setSelected(product);
+        if (fromList) {
+          if (cancelled) return;
+          await openProduct(fromList);
+        } else {
+          const product = await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(focusProductId)}`);
+          if (cancelled) return;
+          await openProduct(product);
+        }
       } catch { /* ignore */ }
       finally {
         if (!cancelled) onFocusProductHandled();
       }
     })();
     return () => { cancelled = true; };
-  }, [core.products, focusProductId, items, onFocusProductHandled]);
+  }, [focusProductId]);
 
   return <div className="stack">
     <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />

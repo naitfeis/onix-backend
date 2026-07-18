@@ -707,6 +707,9 @@ export class ReviewService {
         if (order.buyerId !== user.id) {
           throw new BadRequestException('Отзыв может оставить только покупатель продавцу.');
         }
+        if (order.totalAmountCents <= 0n) {
+          throw new BadRequestException('Отзыв недоступен для сделок на 0 ₽.');
+        }
         const subjectId = order.sellerId;
         if (subjectId === user.id) {
           throw new BadRequestException('Нельзя оставить отзыв самому себе.');

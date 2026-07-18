@@ -216,6 +216,7 @@ export function dealDto(order: {
     createdAt: order.createdAt.toISOString(),
     canReview: order.status === 'COMPLETED'
       && buyer
+      && order.totalAmountCents > 0n
       && !order.reviews.some((review) => review.authorId === viewer.id),
     complaintOpen,
     ...(order.chat?.id ? { chatId: order.chat.id } : {}),

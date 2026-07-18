@@ -30,6 +30,8 @@ const WEEKDAY_RU = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'] as c
 export class SellerAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private static readonly ROLLUP_STALE_MS = 5 * 60_000;
+
   /**
    * @param weekOffset 0 = current week, -1 = previous, … (future weeks blocked)
    */
@@ -41,7 +43,9 @@ export class SellerAnalyticsService {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    await this.rollupRange(user.id, start, end);
+    if (await this.needsRollup(user.id, start, end, weekOffset)) {
+      await this.rollupRange(user.id, start, end);
+    }
 
     const rows = await this.prisma.sellerAnalyticsDaily.findMany({
       where: { sellerId: user.id, day: { gte: start, lte: end } },
@@ -117,6 +121,37 @@ export class SellerAnalyticsService {
       },
       series,
     };
+  }
+
+  /**
+   * Skip expensive rollup when data is fresh enough.
+   * Past weeks: only if empty. Current week: missing days or stale > 5 min.
+   */
+  private async needsRollup(
+    sellerId: bigint,
+    start: Date,
+    end: Date,
+    weekOffset: number,
+  ): Promise<boolean> {
+    const rows = await this.prisma.sellerAnalyticsDaily.findMany({
+      where: { sellerId, day: { gte: start, lte: end } },
+      select: { day: true, updatedAt: true },
+    });
+    if (weekOffset < 0) {
+      return rows.length === 0;
+    }
+    const today = utcDay(new Date());
+    const lastNeeded = today < end ? today : end;
+    let daysNeeded = 0;
+    for (let d = new Date(start); d <= lastNeeded; d.setUTCDate(d.getUTCDate() + 1)) {
+      daysNeeded += 1;
+    }
+    if (rows.length < daysNeeded) return true;
+    const maxUpdated = rows.reduce(
+      (max, r) => (r.updatedAt > max ? r.updatedAt : max),
+      rows[0]!.updatedAt,
+    );
+    return Date.now() - maxUpdated.getTime() > SellerAnalyticsService.ROLLUP_STALE_MS;
   }
 
   /** Recompute daily rollups for [fromDay, toDay] inclusive (UTC dates). */

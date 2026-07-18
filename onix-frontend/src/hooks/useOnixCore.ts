@@ -311,7 +311,7 @@ export function useOnixCore() {
     void refreshAll();
   }, [refreshAll]);
 
-  // Keep lastSeenAt fresh while the shell is visible — fixes grey "offline" on own lots.
+  // Keep lastSeenAt fresh while the shell is visible — profile only (no full catalog rewrite).
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
@@ -321,20 +321,12 @@ export function useOnixCore() {
         const res = await api.post<{ lastOnline: string; online: boolean }>(API_PATHS.mePresence, {});
         if (cancelled || !res?.lastOnline) return;
         setProfile((prev) => (prev ? { ...prev, lastOnline: res.lastOnline } : prev));
-        setStore((prev) => ({
-          ...prev,
-          products: prev.products.map((p) => (
-            p.seller.onixId === profile.onixId
-              ? { ...p, seller: { ...p.seller, lastOnline: res.lastOnline } }
-              : p
-          )),
-        }));
       } catch {
         /* ignore — offline / guest */
       }
     };
     void beat();
-    const id = window.setInterval(() => { void beat(); }, 45_000);
+    const id = window.setInterval(() => { void beat(); }, 90_000);
     const onVis = () => { if (!document.hidden) void beat(); };
     document.addEventListener('visibilitychange', onVis);
     return () => {
