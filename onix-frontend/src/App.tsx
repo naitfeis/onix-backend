@@ -6,7 +6,6 @@ import UserAvatar from './components/UserAvatar';
 import { Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import type { Screen } from './screens/types';
-import { publicAt } from './utils/publicAt';
 import './App.css';
 
 const OnixBackground = lazy(() => import('./components/OnixBackground'));
@@ -135,15 +134,14 @@ export default function App() {
       <div className="brand" aria-label="ONIX">O N I X</div>
       <div className="identity">
         {core.states.profile === 'loading' && !core.profile ? (
-          <><strong>…</strong><span>загрузка</span></>
+          <strong>…</strong>
         ) : core.profile ? (
-          <span className="user-summary identity-user">
+          <span className="user-summary identity-user" aria-label="Баланс">
             <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
             <strong>{money(core.profile.balanceCents)}</strong>
-            <span>{publicAt(core.profile.username)}</span>
           </span>
         ) : (
-          <><strong>—</strong><span>Гость</span></>
+          <strong>—</strong>
         )}
       </div>
     </header>

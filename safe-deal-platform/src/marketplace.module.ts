@@ -206,11 +206,11 @@ export class MarketplaceService {
     );
   }
 
-  /** Owner listings — includes description + unique view counts. */
+  /** Owner listings — ACTIVE only (archived / sold-out / reserved hidden after «Снять»). */
   async listMine(user: AuthUser) {
     const products = await this.prisma.product.findMany({
       relationLoadStrategy: 'join',
-      where: { sellerId: user.id, status: { in: [ProductStatus.ACTIVE, ProductStatus.ARCHIVED] } },
+      where: { sellerId: user.id, status: ProductStatus.ACTIVE },
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: {
