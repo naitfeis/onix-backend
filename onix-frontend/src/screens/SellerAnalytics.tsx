@@ -116,12 +116,17 @@ function GuidedBarChart({
           );
         })}
       </svg>
-      {hover != null && values[hover] != null && (
-        <div className="analytics-chart__tooltip" role="status">
-          <b>{labels[hover]}</b>
-          <span>{formatGuide(values[hover]!, unit)}</span>
-        </div>
-      )}
+      {/* Reserved slot — always present so chart cards do not jump on hover */}
+      <div className="analytics-chart__tooltip" role="status" aria-live="polite">
+        {hover != null && values[hover] != null ? (
+          <>
+            <b>{labels[hover]}</b>
+            <span>{formatGuide(values[hover]!, unit)}</span>
+          </>
+        ) : (
+          <span className="analytics-chart__tooltip-idle">Наведите на стол</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -150,7 +155,7 @@ export function SellerAnalyticsPanel() {
   const revenueValues = data.series.map((d) => Number(d.revenueCents) / 100);
   const labels = data.series.map((d) => d.weekday ?? d.day.slice(5));
   const title = data.label
-    ? `НЕДЕЛЯ · ${data.label}`
+    ? data.label
     : `${data.from.slice(5)} — ${data.to.slice(5)}`;
 
   return (
@@ -163,7 +168,7 @@ export function SellerAnalyticsPanel() {
             onClick={() => setWeekOffset((w) => w - 1)}
           >←</Button>
           <div className="analytics-week-nav__label">
-            <h2>// АНАЛИТИКА · {title}</h2>
+            <h2>{title}</h2>
             <p className="muted">{weekOffset === 0 ? 'Текущая неделя (пн–вс)' : 'Архив недели'}</p>
           </div>
           <Button

@@ -6,7 +6,6 @@ import UserAvatar from './components/UserAvatar';
 import { Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import type { Screen } from './screens/types';
-import { formatOnixId } from './utils/onixId';
 import { publicAt } from './utils/publicAt';
 import './App.css';
 
@@ -136,15 +135,15 @@ export default function App() {
       <div className="brand" aria-label="ONIX">O N I X</div>
       <div className="identity">
         {core.states.profile === 'loading' && !core.profile ? (
-          <><strong>…</strong><span>// ЗАГРУЗКА</span></>
+          <><strong>…</strong><span>загрузка</span></>
         ) : core.profile ? (
           <span className="user-summary identity-user">
             <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
             <strong>{money(core.profile.balanceCents)}</strong>
-            <span>// {publicAt(core.profile.username)} · {formatOnixId(core.profile.onixId)}</span>
+            <span>{publicAt(core.profile.username)}</span>
           </span>
         ) : (
-          <><strong>ГОСТЬ</strong><span>// БЕЗ СЕССИИ</span></>
+          <><strong>—</strong><span>Гость</span></>
         )}
       </div>
     </header>

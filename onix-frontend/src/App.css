@@ -407,24 +407,41 @@
 .analytics-chart__tooltip {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   margin-top: 6px;
+  min-height: 34px;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font-size: 12px;
   color: var(--muted);
+  box-sizing: border-box;
 }
 .analytics-chart__tooltip b { color: var(--text); }
+.analytics-chart__tooltip-idle { opacity: 0.55; }
 .listing-meta {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
   font-size: 12px;
   color: var(--muted);
   margin: 4px 0 8px;
 }
 .listing-meta b { color: var(--text); }
+.listing-views {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.listing-views__icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.75;
+  flex: 0 0 auto;
+}
 .onix-id-link { color: var(--accent, #7dd3c0); text-decoration: underline; }
 
 .control {

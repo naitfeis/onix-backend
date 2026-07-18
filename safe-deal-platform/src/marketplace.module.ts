@@ -206,6 +206,30 @@ export class MarketplaceService {
     );
   }
 
+  /** Owner listings — includes description + unique view counts. */
+  async listMine(user: AuthUser) {
+    const products = await this.prisma.product.findMany({
+      relationLoadStrategy: 'join',
+      where: { sellerId: user.id, status: { in: [ProductStatus.ACTIVE, ProductStatus.ARCHIVED] } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        ...productDetailSelect,
+        seller: { select: sellerPublicSelect(user.id) },
+      },
+    });
+    const viewCounts = await this.ownerViewCounts(user.id, products);
+    return products.map((product) => productDto(
+      {
+        ...product,
+        ...(viewCounts.has(product.id)
+          ? { _count: { viewUniques: viewCounts.get(product.id)! } }
+          : { _count: { viewUniques: 0 } }),
+      },
+      user.id,
+    ));
+  }
+
   /** Unique view counts only for products owned by the viewer (never for market peers). */
   private async ownerViewCounts(
     viewerId: bigint | null,
@@ -438,6 +462,13 @@ export class MarketplaceController {
     const n = Number(lotNumber);
     if (!Number.isInteger(n) || n < 1) throw new BadRequestException('Некорректный ONIXLOT.');
     return this.service.getByLot(user, n);
+  }
+
+  /** Must be before :id — owner listings with views + description. */
+  @Get('mine')
+  @Header('Cache-Control', 'private, no-store')
+  listMine(@CurrentUser() user: AuthUser) {
+    return this.service.listMine(user);
   }
 
   @Public()

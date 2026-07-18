@@ -21,40 +21,80 @@ function rublesToCents(rubles: number): number {
 
 export function EditProduct({ product, core, onClose, setToast }: { product: Product | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
+  const [full, setFull] = useState<Product | null>(null);
+  const [loadingDesc, setLoadingDesc] = useState(false);
   useEffect(() => {
-    if (product) {
-      setDraft({
-        title: product.title,
-        description: product.description || '',
-        priceRubles: String(Number(product.priceCents) / 100),
-        quantity: product.quantity,
-        category: product.category,
-        subcategory: product.subcategory || '',
-        autoDeliver: Boolean(product.autoDeliver),
-        deliveryText: '',
-      });
+    if (!product) {
+      setFull(null);
+      setDraft(emptyDraft);
+      return;
     }
+    let cancelled = false;
+    setLoadingDesc(true);
+    setDraft({
+      title: product.title,
+      description: product.description || '',
+      priceRubles: String(Number(product.priceCents) / 100),
+      quantity: product.quantity,
+      category: product.category,
+      subcategory: product.subcategory || '',
+      autoDeliver: Boolean(product.autoDeliver),
+      deliveryText: '',
+    });
+    // Catalog/mine cards may omit description — always reload detail for edit form.
+    void api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(product.id)}`)
+      .then((row) => {
+        if (cancelled) return;
+        setFull(row);
+        setDraft({
+          title: row.title,
+          description: row.description || '',
+          priceRubles: String(Number(row.priceCents) / 100),
+          quantity: row.quantity,
+          category: row.category,
+          subcategory: row.subcategory || '',
+          autoDeliver: Boolean(row.autoDeliver),
+          deliveryText: '',
+        });
+      })
+      .catch(() => { if (!cancelled) setFull(product); })
+      .finally(() => { if (!cancelled) setLoadingDesc(false); });
+    return () => { cancelled = true; };
   }, [product]);
+  const editing = full ?? product;
   return <Modal open={Boolean(product)} title="Редактировать товар" onClose={onClose}><form className="form" onSubmit={async event => {
     event.preventDefault();
-    if (!product) return;
-    const keepSecret = Boolean(product.autoDeliver && draft.autoDeliver && !draft.deliveryText?.trim());
-    if (validateDraft(draft, { keepDeliverySecret: keepSecret }).length === 0 && await core.updateProduct(product.id, draft)) {
+    if (!editing) return;
+    const keepSecret = Boolean(editing.autoDeliver && draft.autoDeliver && !draft.deliveryText?.trim());
+    if (validateDraft(draft, { keepDeliverySecret: keepSecret }).length === 0 && await core.updateProduct(editing.id, draft)) {
       setToast('Изменения сохранены.');
       onClose();
     }
   }}>
     <Field label="Название" hint="До 32 символов"><Input maxLength={32} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field>
-    <Field label="Описание"><Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
+    <Field label="Описание" hint={loadingDesc ? 'Загрузка описания…' : undefined}>
+      <Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} disabled={loadingDesc} />
+    </Field>
     <div className="form-grid"><Field label="Цена, ₽"><Input value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field><Field label="Количество"><Input type="number" min={1} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
     <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
-    {draft.autoDeliver && <Field label="Текст товара" hint={product?.autoDeliver ? 'Оставьте пустым, чтобы сохранить текущий секрет. Новый текст заменит старый.' : 'login / password / код — выдаётся один раз после оплаты'}>
+    {draft.autoDeliver && <Field label="Текст товара" hint={editing?.autoDeliver ? 'Оставьте пустым, чтобы сохранить текущий секрет. Новый текст заменит старый.' : 'login / password / код — выдаётся один раз после оплаты'}>
       <Textarea maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} />
     </Field>}
-    <div className="modal__actions"><Button type="button" variant="danger" busy={core.actionBusy === `archive-${product?.id}`} onClick={async () => {
-      if (product && await core.archiveProduct(product.id)) { setToast('Лот снят с публикации.'); onClose(); }
+    <div className="modal__actions"><Button type="button" variant="danger" busy={core.actionBusy === `archive-${editing?.id}`} onClick={async () => {
+      if (editing && await core.archiveProduct(editing.id)) { setToast('Лот снят с публикации.'); onClose(); }
     }}>Снять</Button><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.actionBusy === 'product-form'}>Сохранить</Button></div>
   </form></Modal>;
+}
+
+function ListingViews({ count }: { count: number }) {
+  return (
+    <span className="listing-views" title="Уникальные просмотры">
+      <svg className="listing-views__icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M12 5c-5.5 0-9.5 4.2-10.7 6.2a1.4 1.4 0 0 0 0 1.6C2.5 14.8 6.5 19 12 19s9.5-4.2 10.7-6.2a1.4 1.4 0 0 0 0-1.6C21.5 9.2 17.5 5 12 5Zm0 12c-3.9 0-7.1-2.9-8.4-5C4.9 9.9 8.1 7 12 7s7.1 2.9 8.4 5c-1.3 2.1-4.5 5-8.4 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z" />
+      </svg>
+      <b>{count}</b>
+    </span>
+  );
 }
 
 export function Profile({
@@ -76,6 +116,8 @@ export function Profile({
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [ownProducts, setOwnProducts] = useState<Product[]>([]);
+  const [listingsState, setListingsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [historyVisible, setHistoryVisible] = useState(10);
   const profile = core.profile;
   const deposit = profile?.deposit ?? null;
@@ -83,6 +125,24 @@ export function Profile({
   useEffect(() => {
     if (section === 'overview') setHistoryVisible(10);
   }, [section]);
+
+  useEffect(() => {
+    if (section !== 'listings' || !core.profile) return;
+    let cancelled = false;
+    setListingsState('loading');
+    void api.get<Product[]>(API_PATHS.productsMine)
+      .then((rows) => {
+        if (cancelled) return;
+        setOwnProducts(rows);
+        setListingsState('success');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOwnProducts([]);
+        setListingsState('error');
+      });
+    return () => { cancelled = true; };
+  }, [core.profile, section, editing]);
 
   useEffect(() => {
     if (section !== 'favorites' || !core.profile) return;
@@ -150,7 +210,6 @@ export function Profile({
 
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
-  const ownProducts = core.products.filter(product => product.seller.id === profile.id);
   const status = profile.status ?? (profile.roles[0] ?? 'USER');
   const isStaff = status === 'ADMIN' || status === 'MODERATOR' || profile.isAdmin;
   const isAdmin = status === 'ADMIN' || profile.isAdmin || profile.roles.includes('ADMIN');
@@ -220,12 +279,14 @@ export function Profile({
           </button>
         </Card>
       ))}</div>)}
-    {section === 'listings' && (ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
+    {section === 'listings' && (listingsState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
+      listingsState === 'error' ? <StateView title="Не удалось загрузить товары" text="Обновите вкладку или войдите снова." /> :
+      ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
       <div className="product-grid">{ownProducts.map(item => (
         <Card key={item.id}>
           <h2>{item.title}</h2>
           <div className="listing-meta">
-            {item.viewCount != null && <span><b>{item.viewCount}</b> просмотров</span>}
+            <ListingViews count={item.viewCount ?? 0} />
             <span><b>{money(item.priceCents)}</b></span>
           </div>
           <div className="seller-row">

@@ -328,6 +328,7 @@ export const API_PATHS = {
   ledger: '/api/wallet/ledger',
   products: '/api/products',
   productsList: productsListPath,
+  productsMine: '/api/products/mine',
   productCreate: '/api/products',
   productUpdate: (id: string) => `/api/products/${encodeURIComponent(id)}`,
   productDelete: (id: string) => `/api/products/${encodeURIComponent(id)}`,
