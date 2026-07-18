@@ -47,8 +47,13 @@ export class IdempotencyService {
     const requestHash = hashPayload(requestPayload);
     const ttlMs = opts?.ttlMs ?? Number(process.env.IDEMPOTENCY_TTL_MS ?? 24 * 60 * 60 * 1000);
     const expiresAt = new Date(Date.now() + (Number.isFinite(ttlMs) ? ttlMs : 24 * 60 * 60 * 1000));
+    // PostgreSQL truth: UNIQUE(key, route). When userId is set, namespace key so the
+    // effective uniqueness is userId + operation_type(route) + idempotency_key.
     const route = scope.slice(0, 191);
-    const idKey = key.slice(0, 128);
+    const rawKey = key.slice(0, 128);
+    const idKey = opts?.userId
+      ? `${opts.userId.toString()}:${rawKey}`.slice(0, 128)
+      : rawKey;
 
     try {
       await this.prisma.idempotencyRecord.create({

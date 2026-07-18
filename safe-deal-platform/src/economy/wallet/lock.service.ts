@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { logMoneyEvent } from '../../observability/money-event';
 import { createId } from './cuid';
 import { DepositService, depositHoldDays, type Tx } from './deposit.service';
 
@@ -50,6 +51,13 @@ export class LockService {
         },
       },
     });
+    logMoneyEvent('escrow_lock', {
+      status: 'success',
+      operationId: `deposit-lock:order:${orderId}`,
+      dealId: orderId.toString(),
+      userId: sellerId.toString(),
+      amount: amount.toString(),
+    });
     return lock;
   }
 
@@ -89,6 +97,13 @@ export class LockService {
     const updated = await tx.depositLock.update({
       where: { id: lockId },
       data: { status: 'RELEASED', releasedAt: new Date() },
+    });
+    logMoneyEvent('escrow_release', {
+      status: 'success',
+      operationId: `deposit-unlock:${lockId}`,
+      dealId: lock.orderId.toString(),
+      userId: lock.userId.toString(),
+      amount: lock.amountCents.toString(),
     });
     await tx.trustHistoryEvent.create({
       data: {

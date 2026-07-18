@@ -19,9 +19,9 @@ const DEFAULT_RULES: AlertRule[] = [
     id: 'http-5xx-burst',
     metric: 'onix_http_errors_total',
     threshold: 20,
-    windowSec: 60,
+    windowSec: 300,
     severity: 'critical',
-    description: 'HTTP 5xx burst',
+    description: 'HTTP 5xx burst (~5% of traffic at modest load)',
   },
   {
     id: 'money-ops-errors',
@@ -46,6 +46,22 @@ const DEFAULT_RULES: AlertRule[] = [
     windowSec: 60,
     severity: 'critical',
     description: 'Captured application errors',
+  },
+  {
+    id: 'reconciliation-mismatch',
+    metric: 'onix_reconciliation_mismatch_events_total',
+    threshold: 1,
+    windowSec: 900,
+    severity: 'critical',
+    description: 'Ledger/deposit reconciliation mismatch',
+  },
+  {
+    id: 'idempotency-conflicts',
+    metric: 'onix_idempotency_total',
+    threshold: 50,
+    windowSec: 60,
+    severity: 'warning',
+    description: 'Idempotency conflicts / failures',
   },
 ];
 

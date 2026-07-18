@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { MetricsService } from '../../observability/metrics.service';
+import { logMoneyEvent } from '../../observability/money-event';
 
 export type Tx = Prisma.TransactionClient;
 
@@ -59,6 +60,14 @@ export class BalanceService {
         },
       });
       this.metrics?.recordMoneyOp(`credit:${type}`, true);
+      logMoneyEvent(type === 'SALE_PAYOUT' ? 'seller_payout' : type === 'REFUND' ? 'refund' : 'deposit', {
+        status: 'success',
+        operationId: opts.idempotencyKey,
+        dealId: opts.orderId?.toString(),
+        userId: userId.toString(),
+        amount: amountCents.toString(),
+        ledgerType: type,
+      });
       return entry;
     } catch (err) {
       if (!(err instanceof BadRequestException)) {
@@ -110,6 +119,14 @@ export class BalanceService {
           },
         });
         this.metrics?.recordMoneyOp(`debit:${type}`, true);
+        logMoneyEvent('admin_adjust', {
+          status: 'success',
+          operationId: opts.idempotencyKey,
+          dealId: opts.orderId?.toString(),
+          userId: userId.toString(),
+          amount: amountCents.toString(),
+          ledgerType: type,
+        });
         return entry;
       }
       const debited = await tx.user.updateMany({
@@ -130,6 +147,17 @@ export class BalanceService {
         },
       });
       this.metrics?.recordMoneyOp(`debit:${type}`, true);
+      logMoneyEvent(
+        type === 'PURCHASE_HOLD' ? 'purchase_hold' : type === 'WITHDRAWAL' ? 'withdrawal' : 'admin_adjust',
+        {
+          status: 'success',
+          operationId: opts.idempotencyKey,
+          dealId: opts.orderId?.toString(),
+          userId: userId.toString(),
+          amount: amountCents.toString(),
+          ledgerType: type,
+        },
+      );
       return entry;
     } catch (err) {
       if (!(err instanceof BadRequestException)) {

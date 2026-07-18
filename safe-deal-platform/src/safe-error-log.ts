@@ -12,6 +12,12 @@ const SECRET_PATTERNS: RegExp[] = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
   /AUTH_ED25519_CURRENT_PRIVATE_PEM\s*[:=]\s*["']?[^"'\s]+/gi,
   /(?:authorization|refresh[_-]?token|access[_-]?token)\s*[:=]\s*["']?[^"'\s,;]+/gi,
+  // Telegram / bot / webhook / payment secrets
+  /(?:bot[_-]?token|telegram[_-]?bot[_-]?token|TELEGRAM_BOT_TOKEN)\s*[:=]\s*["']?\d+:[A-Za-z0-9_-]+/gi,
+  /\d{8,12}:[A-Za-z0-9_-]{30,}/g,
+  /(?:initData|init_data|telegram[_-]?init[_-]?data)\s*[:=]\s*["']?[^"'\s]+/gi,
+  /(?:webhook[_-]?secret|WEBHOOK_SECRET|payment[_-]?secret|YOOKASSA[_-]?(?:SECRET|SHOP_ID)|SENTRY_DSN)\s*[:=]\s*["']?[^"'\s]+/gi,
+  /(?:PRODUCT_DELIVERY_KEY|OPS_METRICS_TOKEN|ALERT_WEBHOOK_URL|ERROR_WEBHOOK_URL)\s*[:=]\s*["']?[^"'\s]+/gi,
 ];
 
 export function redactSecrets(value: string): string {

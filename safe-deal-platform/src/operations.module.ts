@@ -406,6 +406,7 @@ class OperationsService {
           type: entry.type,
         };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+      { userId: user.id },
     );
     return result.value;
   }

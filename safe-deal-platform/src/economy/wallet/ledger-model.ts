@@ -52,13 +52,27 @@ export class LedgerModel {
   private readonly users = new Map<string, UserWallet>();
   private readonly ledger = new Map<string, LedgerRow>();
   private readonly depositLedger = new Map<string, DepositRow>();
+  private readonly products = new Map<string, {
+    sellerId: string;
+    priceCents: bigint;
+    payoutCents: bigint;
+    quantity: number;
+  }>();
   private readonly orders = new Map<string, {
     buyerId: string;
     sellerId: string;
+    productId?: string;
     totalAmountCents: bigint;
     payoutCents: bigint;
     status: 'PAYMENT_HOLD' | 'COMPLETED' | 'REFUNDED' | 'CANCELED';
   }>();
+
+  ensureProduct(
+    productId: string,
+    opts: { sellerId: string; priceCents: bigint; payoutCents: bigint; quantity: number },
+  ): void {
+    this.products.set(productId, { ...opts });
+  }
 
   ensureUser(userId: string, initial: Partial<UserWallet> = {}): UserWallet {
     let u = this.users.get(userId);
@@ -208,6 +222,29 @@ export class LedgerModel {
     this.orders.set(orderId, {
       buyerId, sellerId, totalAmountCents: total, payoutCents: payout, status: 'PAYMENT_HOLD',
     });
+  }
+
+  /**
+   * Contended listing purchase — mirrors optimistic reserve in EscrowService.purchase.
+   * Exactly `quantity` buyers succeed; others throw.
+   */
+  purchaseProduct(productId: string, buyerId: string, key: string): string {
+    const holdKey = `order:${key}:hold`;
+    if (this.ledger.has(holdKey)) {
+      for (const [orderId, order] of this.orders) {
+        if (order.buyerId === buyerId && order.productId === productId) return orderId;
+      }
+      throw new MonetaryInvariantError('idempotency conflict on purchase');
+    }
+    const product = this.products.get(productId);
+    if (!product || product.quantity < 1) {
+      throw new MonetaryInvariantError('product unavailable');
+    }
+    product.quantity -= 1;
+    const orderId = `ord-${key}`;
+    this.purchase(orderId, buyerId, product.sellerId, product.priceCents, product.payoutCents, key);
+    this.orders.get(orderId)!.productId = productId;
+    return orderId;
   }
 
   complete(orderId: string): void {

@@ -27,8 +27,15 @@ services:
         value: info
       - key: ALERTING_ENABLED
         value: "true"
+      # Set in Render dashboard (sync: false): OPS_METRICS_TOKEN, ALERT_WEBHOOK_URL, ERROR_WEBHOOK_URL, SENTRY_DSN
+      - key: OPS_METRICS_TOKEN
+        sync: false
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ERROR_WEBHOOK_URL
+        sync: false
 
-  # Background jobs — separate process from HTTP (deposit unlock, trust, idempotency TTL, payment expire).
+  # Background jobs — separate process from HTTP (deposit unlock, trust, idempotency TTL, payment expire, ledger reconcile).
   - type: worker
     name: onix-worker
     runtime: node
@@ -47,3 +54,7 @@ services:
         value: "true"
       - key: RENDER_REGION
         value: frankfurt
+      - key: ALERT_WEBHOOK_URL
+        sync: false
+      - key: ERROR_WEBHOOK_URL
+        sync: false

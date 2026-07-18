@@ -107,3 +107,90 @@ test('e2e: balanceAfterCents chain is contiguous for a user', () => {
   assert.equal(m.getUser('u').balanceCents, running);
   m.assertInvariants();
 });
+
+test('e2e: 100 buyers / 1 unit — exactly one purchase, 99 rejections', () => {
+  const m = new LedgerModel();
+  m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 10_000_00n });
+  m.ensureProduct('sku-1', {
+    sellerId: 'seller',
+    priceCents: 1_000_00n,
+    payoutCents: 950_00n,
+    quantity: 1,
+  });
+  let ok = 0;
+  let fail = 0;
+  for (let i = 0; i < 100; i++) {
+    const buyer = `buyer-${i}`;
+    m.ensureUser(buyer, { balanceCents: 5_000_00n });
+    try {
+      m.purchaseProduct('sku-1', buyer, `idem-buyer-${i}`);
+      ok += 1;
+    } catch {
+      fail += 1;
+    }
+  }
+  assert.equal(ok, 1);
+  assert.equal(fail, 99);
+  m.assertInvariants();
+});
+
+test('e2e: parallel deposit lock same key is idempotent (single lock)', () => {
+  const m = new LedgerModel();
+  m.ensureUser('s', { depositAvailableCents: 5_000_00n });
+  m.lockDeposit('s', 2_000_00n, 'lock-same');
+  m.lockDeposit('s', 2_000_00n, 'lock-same');
+  assert.equal(m.getUser('s').depositLockedCents, 2_000_00n);
+  assert.equal(m.getUser('s').depositAvailableCents, 3_000_00n);
+  m.assertInvariants();
+});
+
+test('e2e: parallel unlock same key is idempotent', () => {
+  const m = new LedgerModel();
+  m.ensureUser('s', { depositAvailableCents: 0n, depositLockedCents: 3_000_00n });
+  m.unlockDeposit('s', 3_000_00n, 'unlock-same');
+  m.unlockDeposit('s', 3_000_00n, 'unlock-same');
+  assert.equal(m.getUser('s').depositLockedCents, 0n);
+  assert.equal(m.getUser('s').depositAvailableCents, 3_000_00n);
+  m.assertInvariants();
+});
+
+test('e2e: cancel vs complete — cancel wins when status still PAYMENT_HOLD', () => {
+  const m = new LedgerModel();
+  m.ensureUser('buyer', { balanceCents: 5_000_00n });
+  m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 5_000_00n });
+  m.purchase('o-race', 'buyer', 'seller', 2_000_00n, 1_900_00n, 'race-key');
+  m.refund('o-race'); // cancel path
+  assert.throws(() => m.complete('o-race'));
+  assert.equal(m.getUser('buyer').balanceCents, 5_000_00n);
+  assert.equal(m.getUser('seller').balanceCents, 0n);
+  m.assertInvariants();
+});
+
+test('e2e: refund vs payout — post-complete refund clawbacks seller', () => {
+  const m = new LedgerModel();
+  m.ensureUser('buyer', { balanceCents: 5_000_00n });
+  m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 5_000_00n });
+  m.purchase('o-rpay', 'buyer', 'seller', 2_000_00n, 1_900_00n, 'rpay');
+  m.complete('o-rpay');
+  assert.equal(m.getUser('seller').balanceCents, 1_900_00n);
+  m.refund('o-rpay');
+  assert.equal(m.getUser('buyer').balanceCents, 5_000_00n);
+  assert.equal(m.getUser('seller').balanceCents, 0n);
+  m.assertInvariants();
+});
+
+test('e2e: full deposit→lock→purchase→complete→payout conserves money+fees', () => {
+  const total = 4_000_00n;
+  const fee = 200_00n;
+  const payout = total - fee;
+  const m = new LedgerModel();
+  m.ensureUser('buyer', { balanceCents: 10_000_00n });
+  m.ensureUser('seller', { balanceCents: 5_000_00n, depositAvailableCents: 0n });
+  m.fundDeposit('seller', 5_000_00n, 'fd-1');
+  const before = m.getUser('buyer').balanceCents + m.getUser('seller').balanceCents;
+  m.purchase('deal-1', 'buyer', 'seller', total, payout, 'deal-idem');
+  m.complete('deal-1');
+  const after = m.getUser('buyer').balanceCents + m.getUser('seller').balanceCents;
+  assert.equal(after + fee, before);
+  m.assertInvariants();
+});

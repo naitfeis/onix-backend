@@ -43,13 +43,14 @@ async function bootstrap(): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
     app.use(compression());
   }
+  // requestId first so timing/metrics/logs can correlate every request.
+  app.use(requestIdMiddleware);
   app.use(requestTimingMiddleware);
   app.use(createMetricsMiddleware(app.get(MetricsService)));
 
   registerHealthEndpoint(app);
 
   app.setGlobalPrefix('api');
-  app.use(requestIdMiddleware);
   // Before Nest AuthGuard / controllers — must log even if handler never runs.
   app.use(authSessionPathMiddleware);
   app.useGlobalPipes(new ValidationPipe({

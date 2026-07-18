@@ -6,7 +6,12 @@ import { ErrorTrackingService } from './error-tracking.service';
 
 function assertOpsToken(req: Request, queryToken?: string): void {
   const expected = (process.env.OPS_METRICS_TOKEN ?? '').trim();
-  if (!expected) return; // open in local/dev when unset
+  const isProd = (process.env.NODE_ENV ?? '').toLowerCase() === 'production';
+  // Production must set OPS_METRICS_TOKEN — open scrape is a data leak + DoS vector.
+  if (!expected) {
+    if (isProd) throw new ForbiddenException('OPS_METRICS_TOKEN is required in production.');
+    return;
+  }
   const header = req.headers['x-ops-token'];
   const provided = (typeof header === 'string' ? header : queryToken ?? '').trim();
   if (provided !== expected) throw new ForbiddenException('Invalid ops token.');

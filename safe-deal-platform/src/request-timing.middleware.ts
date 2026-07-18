@@ -1,11 +1,13 @@
-import { Logger } from '@nestjs/common';
 import type { NextFunction, Request, Response } from 'express';
+import { structuredLog } from './observability/structured-logger';
 
-const logger = new Logger('RequestTiming');
+type AuthedRequest = Request & {
+  user?: { id?: bigint | string };
+};
 
 /**
- * Sets Server-Timing / X-Response-Time and warns on slow handlers (≥1000ms).
- * Appends `app` metric — does not wipe controller-provided Server-Timing phases.
+ * Access log + Server-Timing / X-Response-Time.
+ * Emits: requestId, userId, route, status, duration — never secrets.
  */
 export function requestTimingMiddleware(req: Request, res: Response, next: NextFunction): void {
   const started = process.hrtime.bigint();
@@ -29,9 +31,23 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
         res.setHeader('X-Response-Time', `${durationMs.toFixed(1)}ms`);
       }
     }
-    if (durationMs >= 1000) {
-      logger.warn(`${req.method} ${req.originalUrl} ${res.statusCode} ${durationMs.toFixed(0)}ms`);
+
+    const requestId = (req.headers['x-request-id'] as string | undefined) ?? undefined;
+    const userId = (req as AuthedRequest).user?.id?.toString();
+    const route = `${req.method} ${(req.originalUrl ?? req.url ?? '').split('?')[0]}`;
+    const fields = {
+      requestId,
+      userId,
+      route,
+      status: res.statusCode,
+      durationMs: Number(durationMs.toFixed(1)),
+    };
+    if (durationMs >= 1000 || res.statusCode >= 500) {
+      structuredLog.warn('http_request', fields);
+    } else {
+      structuredLog.info('http_request', fields);
     }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (originalEnd as any)(...args);
   };

@@ -4,6 +4,7 @@ import {
 import { PaymentProviderCode, PaymentWallet, Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
 import { IdempotencyService } from '../../idempotency/idempotency.service';
+import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
 import type { PaymentProvider } from './payment-provider';
@@ -137,6 +138,13 @@ export class PaymentsService {
         });
       },
     );
+    logMoneyEvent('payment_webhook', {
+      status: result.kind === 'replay' ? 'replay' : 'success',
+      operationId: eventId,
+      paymentId: payload.intentId,
+      provider,
+      intentStatus: payload.status,
+    });
     return result.value;
   }
 

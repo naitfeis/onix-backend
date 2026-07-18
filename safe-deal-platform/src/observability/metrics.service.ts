@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
 
 type Labels = Record<string, string>;
 
@@ -73,15 +74,22 @@ export class MetricsService {
   snapshot(): {
     counters: Record<string, number>;
     gauges: Record<string, number>;
-    histograms: Record<string, { count: number; sum: number; p95: number }>;
+    histograms: Record<string, { count: number; sum: number; p50: number; p95: number; p99: number }>;
     uptimeSec: number;
   } {
-    const histograms: Record<string, { count: number; sum: number; p95: number }> = {};
+    const histograms: Record<string, { count: number; sum: number; p50: number; p95: number; p99: number }> = {};
+    const pct = (sorted: number[], p: number) =>
+      sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]! : 0;
     for (const [key, samples] of this.histograms) {
       const sorted = [...samples].sort((a, b) => a - b);
       const sum = sorted.reduce((a, b) => a + b, 0);
-      const p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]! : 0;
-      histograms[key] = { count: sorted.length, sum, p95 };
+      histograms[key] = {
+        count: sorted.length,
+        sum,
+        p50: pct(sorted, 0.5),
+        p95: pct(sorted, 0.95),
+        p99: pct(sorted, 0.99),
+      };
     }
     return {
       counters: Object.fromEntries(this.counters),
@@ -94,6 +102,14 @@ export class MetricsService {
   /** Prometheus text exposition format. */
   toPrometheus(): string {
     this.gauge('onix_process_uptime_seconds', Math.floor((Date.now() - this.startedAt) / 1000));
+    const pool = PrismaService.getPoolStats();
+    if (pool) {
+      this.gauge('onix_db_pool_total', pool.total);
+      this.gauge('onix_db_pool_idle', pool.idle);
+      this.gauge('onix_db_pool_waiting', pool.waiting);
+      // Publish cumulative connection errors as a gauge snapshot of the counter.
+      this.gauge('onix_db_connection_errors', pool.connectionErrors);
+    }
     const lines: string[] = [];
     const emit = (name: string, labels: string, value: number, help?: string, type?: string) => {
       if (help) lines.push(`# HELP ${name} ${help}`);

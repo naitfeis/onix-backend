@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit --incremental false",
     "lint": "tsc --noEmit --incremental false",
     "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",
-    "test:monetary": "tsx --test \"safe-deal-platform/test/monetary-invariants.e2e.test.ts\" \"safe-deal-platform/test/ledger-property.test.ts\" \"safe-deal-platform/test/deposit-transfer.test.ts\" \"safe-deal-platform/test/economy-foundation.test.ts\"",
+    "test:monetary": "tsx --test \"safe-deal-platform/test/monetary-invariants.e2e.test.ts\" \"safe-deal-platform/test/ledger-property.test.ts\" \"safe-deal-platform/test/idempotency-memory.test.ts\" \"safe-deal-platform/test/deposit-transfer.test.ts\" \"safe-deal-platform/test/economy-foundation.test.ts\"",
     "test:load": "tsx safe-deal-platform/scripts/load-test-monetary.ts",
     "ops:backup-drill": "tsx safe-deal-platform/scripts/backup-restore-drill.ts",
     "build": "prisma generate && tsc --incremental false",

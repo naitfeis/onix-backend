@@ -11,6 +11,7 @@ import { Pool } from 'pg';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private static pool: Pool | undefined;
   private static connectPromise: Promise<void> | undefined;
+  private static connectionErrors = 0;
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
@@ -29,9 +30,24 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         keepAlive: true,
         keepAliveInitialDelayMillis: 10_000,
       });
+      PrismaService.pool.on('error', () => {
+        PrismaService.connectionErrors += 1;
+      });
     }
 
     super({ adapter: new PrismaPg(PrismaService.pool) });
+  }
+
+  /** For metrics scrape — no Nest DI coupling. */
+  static getPoolStats(): { total: number; idle: number; waiting: number; connectionErrors: number } | null {
+    const pool = PrismaService.pool;
+    if (!pool) return null;
+    return {
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+      connectionErrors: PrismaService.connectionErrors,
+    };
   }
 
   async onModuleInit(): Promise<void> {

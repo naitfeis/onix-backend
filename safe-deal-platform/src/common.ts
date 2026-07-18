@@ -64,13 +64,21 @@ export class ApiExceptionFilter implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse();
-    const request = ctx.getRequest<{ method?: string; originalUrl?: string; url?: string; headers?: Record<string, string | undefined> }>();
+    const request = ctx.getRequest<{
+      method?: string;
+      originalUrl?: string;
+      url?: string;
+      headers?: Record<string, string | undefined>;
+      user?: { id?: bigint | string };
+    }>();
     const requestId = request?.headers?.['x-request-id'];
+    const userId = request?.user?.id?.toString();
     const route = `${request?.method ?? '?'} ${request?.originalUrl ?? request?.url ?? '?'}`;
 
     if (error instanceof AuthPlatformError) {
       structuredLog.warn('auth platform error', {
         requestId,
+        userId,
         route,
         code: error.code,
       });
@@ -80,10 +88,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     if (status >= 500) {
-      this.errors?.capture(error, { requestId, route, level: 'error' });
+      this.errors?.capture(error, { requestId, route, userId, level: 'error' });
     } else {
       // Client errors: structured warn only (no error-tracking noise).
-      structuredLog.warn(formatErrorForLog(error), { requestId, route, status });
+      structuredLog.warn(formatErrorForLog(error), { requestId, userId, route, status });
     }
 
     const raw = error instanceof HttpException ? error.getResponse() : null;
