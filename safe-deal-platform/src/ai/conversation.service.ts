@@ -1,13 +1,19 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { AuthUser } from '../common';
 import { pushTelegramToChatId } from '../domain-notify';
+import { BalanceService } from '../economy/wallet/balance.service';
 import { formatOnixId } from '../onix-id';
+import { createId } from '../economy/wallet/cuid';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
 import { helpReply } from './help-replies';
 import {
   IntentRecognizer,
   SUPPORT_AWAIT_PROMPT,
+  WITHDRAW_AMOUNT_PROMPT,
+  WITHDRAW_CARD_PROMPT,
+  WITHDRAW_METHOD_PROMPT,
   supportMessageBody,
 } from './intent-recognizer';
 import { ProductCreationService } from './product-creation.service';
@@ -15,9 +21,13 @@ import { ProductCreationService } from './product-creation.service';
 const WELCOME = [
   'Я ONIX AI — помощник площадки ONIX.',
   '',
-  'Нажмите «О площадке ONIX», «Создай товар» или «Написать в поддержку».',
-  'Также: гарант · вывод · ONIXLOT-id лота в любом чате.',
+  'Могу создать товар, вывести деньги или передать обращение в поддержку.',
+  'Пример: «создай товар PUBG за 500 ₽, 10 штук»',
 ].join('\n');
+
+const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+type WithdrawStep = 'AMOUNT' | 'METHOD' | 'CARD';
 
 @Injectable()
 export class ConversationService {
@@ -26,6 +36,7 @@ export class ConversationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductCreationService,
+    private readonly balance: BalanceService,
   ) {}
 
   aiPairKey(userId: bigint) {
@@ -72,14 +83,29 @@ export class ConversationService {
     const body = text.trim();
     const session = await this.products.getActive(user.id, chatId);
     const intent = this.intents.recognize(body, { sessionReady: session?.status === 'READY' });
+    const withdrawStep = await this.detectWithdrawStep(chatId);
 
     if (intent === 'FUTURE') {
       return 'Эта функция появится позже.';
     }
 
-    if (intent === 'CANCEL' && session) {
-      await this.products.cancel(session.id);
-      return 'Создание товара отменено. Напишите «Создай товар», когда будете готовы.';
+    if (intent === 'CANCEL') {
+      if (session) {
+        await this.products.cancel(session.id);
+        return 'Создание товара отменено. Напишите «Создай товар», когда будете готовы.';
+      }
+      if (withdrawStep) {
+        return 'Вывод отменён. Напишите «Вывести деньги», чтобы начать снова.';
+      }
+      return 'Нечего отменять. Чем помочь?';
+    }
+
+    if (intent === 'WITHDRAW') {
+      return WITHDRAW_AMOUNT_PROMPT;
+    }
+
+    if (withdrawStep && !session && intent !== 'CREATE_PRODUCT' && intent !== 'CONTACT_SUPPORT' && intent !== 'HELP') {
+      return this.continueWithdraw(user, chatId, body, withdrawStep);
     }
 
     if (intent === 'CONTACT_SUPPORT') {
@@ -92,7 +118,6 @@ export class ConversationService {
       return this.submitAiSupport(user, body);
     }
 
-    // FAQ quick-replies always answer, even mid product draft.
     if (intent === 'HELP') {
       return helpReply(body);
     }
@@ -109,10 +134,13 @@ export class ConversationService {
         active = await this.products.ingestMessage(active, remainder);
       }
       if (active.status === 'READY') {
-        return this.products.formatCard(active);
+        return this.publishOrCard(user, active);
       }
       if (remainder && active.status !== 'WAIT_TITLE') {
-        return this.products.promptFor(active.status, active);
+        return [
+          'Принял данные. Нужно уточнить ещё:',
+          this.products.promptFor(active.status, active),
+        ].join('\n\n');
       }
       return [
         'Хорошо, создаём товар.',
@@ -122,16 +150,15 @@ export class ConversationService {
 
     if (session?.status === 'READY') {
       if (intent === 'PUBLISH_PRODUCT') {
-        try {
-          const published = await this.products.publish(user, session);
-          return published.message;
-        } catch (error) {
-          return error instanceof Error ? error.message : 'Не удалось опубликовать товар.';
-        }
+        return this.publishOrCard(user, session);
       }
       if (intent === 'EDIT_PRODUCT') {
         await this.products.resetForEdit(session);
         return 'Хорошо, заполним заново.\n\nКак называется товар? (от 5 до 32 символов)';
+      }
+      // Auto-publish if user confirms with anything short positive
+      if (/^(да|ок|окей|публикуй|публиковать)$/i.test(body)) {
+        return this.publishOrCard(user, session);
       }
       return 'Напишите «Опубликовать» или «Изменить».';
     }
@@ -148,13 +175,234 @@ export class ConversationService {
       if (updated.status === session.status && !this.progressed(session, updated)) {
         return `Не удалось распознать. ${this.products.promptFor(session.status, session)}`;
       }
-      if (updated.status === 'READY') return this.products.formatCard(updated);
+      if (updated.status === 'READY') {
+        return this.publishOrCard(user, updated);
+      }
       return this.products.promptFor(updated.status, updated);
     }
 
     return [
-      'Я могу создать товар, ответить на вопросы или передать обращение в поддержку.',
-      'Нажмите кнопку ниже или напишите «Создай товар» / «Написать в поддержку».',
+      'Я могу создать товар, вывести деньги или передать обращение в поддержку.',
+      'Пример: «создай товар PUBG за 500 ₽, 10 штук»',
+      'Или нажмите кнопку ниже.',
+    ].join('\n');
+  }
+
+  private async publishOrCard(user: AuthUser, session: {
+    id: string;
+    title: string | null;
+    category: import('@prisma/client').ProductCategory | null;
+    subcategory: import('@prisma/client').ProductSubcategory | null;
+    priceCents: bigint | null;
+    quantity: number | null;
+    description: string | null;
+    status: import('@prisma/client').ProductCreationStatus;
+    productId: string | null;
+  }): Promise<string> {
+    try {
+      const published = await this.products.publish(user, session);
+      return published.message;
+    } catch (error) {
+      const hint = error instanceof Error ? error.message : 'Не удалось опубликовать товар.';
+      return `${hint}\n\n${this.products.formatCard(session)}`;
+    }
+  }
+
+  private async detectWithdrawStep(chatId: string): Promise<WithdrawStep | null> {
+    const last = await this.prisma.message.findFirst({
+      where: { chatId, kind: 'SYSTEM', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { text: true },
+    });
+    const t = last?.text ?? '';
+    if (t.includes('Введите реквизиты')) return 'CARD';
+    if (t.includes('Укажите способ вывода')) return 'METHOD';
+    if (t.includes('Введите сумму вывода')) return 'AMOUNT';
+    return null;
+  }
+
+  private async continueWithdraw(
+    user: AuthUser,
+    chatId: string,
+    body: string,
+    step: WithdrawStep,
+  ): Promise<string> {
+    if (step === 'AMOUNT') {
+      const rubles = this.parseWithdrawAmount(body);
+      if (rubles == null) {
+        return `Не распознал сумму.\n\n${WITHDRAW_AMOUNT_PROMPT}`;
+      }
+      return [
+        `Сумма вывода: ${rubles} ₽`,
+        '',
+        WITHDRAW_METHOD_PROMPT,
+      ].join('\n');
+    }
+
+    if (step === 'METHOD') {
+      const method = this.parseWithdrawMethod(body);
+      if (!method) {
+        return `Укажите один из способов.\n\n${WITHDRAW_METHOD_PROMPT}`;
+      }
+      const amount = await this.readWithdrawAmountFromChat(chatId);
+      if (amount == null) return WITHDRAW_AMOUNT_PROMPT;
+      return [
+        `Сумма вывода: ${amount} ₽`,
+        `Способ: ${method}`,
+        '',
+        WITHDRAW_CARD_PROMPT,
+      ].join('\n');
+    }
+
+    // CARD
+    const destination = body.trim().slice(0, 120);
+    if (destination.length < 4) {
+      return `Реквизиты слишком короткие.\n\n${WITHDRAW_CARD_PROMPT}`;
+    }
+    const amount = await this.readWithdrawAmountFromChat(chatId);
+    const method = await this.readWithdrawMethodFromChat(chatId);
+    if (amount == null) return WITHDRAW_AMOUNT_PROMPT;
+    if (!method) return WITHDRAW_METHOD_PROMPT;
+    return this.submitWithdrawal(user, amount, method, destination);
+  }
+
+  private parseWithdrawAmount(text: string): number | null {
+    const m = text.replace(/\s/g, '').match(/(\d+(?:[.,]\d{1,2})?)/);
+    if (!m) return null;
+    const n = Number(m[1].replace(',', '.'));
+    if (!Number.isFinite(n) || n < 1 || n > 50_000_000) return null;
+    return Math.round(n * 100) / 100;
+  }
+
+  private parseWithdrawMethod(text: string): string | null {
+    const t = text.trim().toLowerCase();
+    if (/карт|card|visa|mir|мир/.test(t)) return 'карта';
+    if (/сбп|sbp|телефон|phone/.test(t)) return 'СБП';
+    if (/крипт|crypto|usdt|btc|eth/.test(t)) return 'крипто';
+    return null;
+  }
+
+  private async readWithdrawAmountFromChat(chatId: string): Promise<number | null> {
+    const rows = await this.prisma.message.findMany({
+      where: { chatId, kind: 'SYSTEM', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { text: true },
+    });
+    for (const row of rows) {
+      const m = row.text.match(/Сумма вывода:\s*(\d+(?:[.,]\d{1,2})?)/i);
+      if (m) return this.parseWithdrawAmount(m[1]!);
+    }
+    return null;
+  }
+
+  private async readWithdrawMethodFromChat(chatId: string): Promise<string | null> {
+    const rows = await this.prisma.message.findMany({
+      where: { chatId, kind: 'SYSTEM', deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 12,
+      select: { text: true },
+    });
+    for (const row of rows) {
+      const m = row.text.match(/Способ:\s*(карта|СБП|крипто)/i);
+      if (m) return m[1]!.toLowerCase() === 'сбп' ? 'СБП' : m[1]!.toLowerCase() === 'крипто' ? 'крипто' : 'карта';
+    }
+    return null;
+  }
+
+  private async submitWithdrawal(
+    user: AuthUser,
+    amountRubles: number,
+    method: string,
+    destination: string,
+  ): Promise<string> {
+    try {
+      assertRateLimit(`ai-withdraw:${user.id}`, 5, 60 * 60_000);
+    } catch {
+      return 'Слишком много заявок на вывод. Подождите немного.';
+    }
+
+    const amountCents = BigInt(Math.round(amountRubles * 100));
+    if (amountCents < 100n) return 'Минимальная сумма вывода — 1 ₽.';
+
+    const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
+    const railOn = enabled === '1' || enabled === 'true' || enabled === 'yes';
+    const idempotencyKey = `ai-wd-${user.id}-${createId()}`.slice(0, 100);
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (railOn) {
+          const entry = await this.balance.debit(tx, user.id, amountCents, 'WITHDRAWAL', {
+            idempotencyKey,
+            description: `Вывод через ONIX AI (${method})`,
+          });
+          await tx.auditLog.create({
+            data: {
+              actorId: user.id,
+              action: 'WALLET_WITHDRAWAL_REQUEST',
+              entity: 'LedgerEntry',
+              entityId: entry.id.toString(),
+              metadata: {
+                amountCents: amountCents.toString(),
+                method,
+                destination: destination.slice(0, 120),
+                source: 'ONIX_AI',
+                idempotencyKey,
+              },
+            },
+          });
+        } else {
+          await tx.auditLog.create({
+            data: {
+              actorId: user.id,
+              action: 'WALLET_WITHDRAWAL_REQUEST',
+              entity: 'User',
+              entityId: user.id.toString(),
+              metadata: {
+                amountCents: amountCents.toString(),
+                method,
+                destination: destination.slice(0, 120),
+                source: 'ONIX_AI',
+                pendingManual: true,
+                idempotencyKey,
+              },
+            },
+          });
+        }
+      }, SERIALIZABLE);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Не удалось создать заявку на вывод.';
+      if (/insufficient|недостаточ|balance/i.test(msg)) {
+        return 'Недостаточно средств на балансе для вывода.';
+      }
+      return msg.length < 200 ? msg : 'Не удалось создать заявку на вывод. Проверьте баланс.';
+    }
+
+    const adminTg = process.env.ADMIN_TELEGRAM_ID?.trim();
+    if (adminTg && /^\d+$/.test(adminTg)) {
+      void pushTelegramToChatId(
+        BigInt(adminTg),
+        '💸 Заявка на вывод (ONIX AI)',
+        [
+          `От: ${formatOnixId(user.onixId)}`,
+          `Сумма: ${amountRubles} ₽`,
+          `Способ: ${method}`,
+          `Реквизиты: ${destination}`,
+          railOn ? 'Статус: списано с баланса' : 'Статус: ожидает ручной обработки',
+        ].join('\n'),
+      );
+    }
+
+    return [
+      '✅ Заявка на вывод оформлена.',
+      '',
+      `Сумма: ${amountRubles} ₽`,
+      `Способ: ${method}`,
+      `Реквизиты: ${destination}`,
+      '',
+      railOn
+        ? 'Сумма списана с баланса. Обычно зачисление занимает до 24 часов.'
+        : 'Заявка передана в обработку. Обычно до 24 часов в рабочие дни.',
     ].join('\n');
   }
 

@@ -31,6 +31,11 @@ describe('ONIX AI IntentRecognizer', () => {
     assert.equal(ir.recognize('напиши в поддержку: не пришёл товар'), 'CONTACT_SUPPORT');
   });
 
+  it('withdraw intent', () => {
+    assert.equal(ir.recognize('Вывести деньги'), 'WITHDRAW');
+    assert.equal(ir.recognize('Сколько ждать вывод'), 'HELP');
+  });
+
   it('publish/edit only when session ready', () => {
     assert.equal(ir.recognize('Опубликовать'), 'UNKNOWN');
     assert.equal(ir.recognize('Опубликовать', { sessionReady: true }), 'PUBLISH_PRODUCT');
@@ -61,6 +66,15 @@ describe('ONIX AI EntityExtractor', () => {
     assert.equal(got.description, 'Передача обменом');
     assert.equal(got.category, 'STEAM');
     assert.equal(got.subcategory, 'STEAM_TOPUP');
+  });
+
+  it('extracts free-form create phrase', () => {
+    const got = ex.extract('создай товар PUBG за 500 ₽, 10 штук');
+    assert.equal(got.title, 'PUBG лот');
+    assert.equal(got.priceRubles, 500);
+    assert.equal(got.quantity, 10);
+    assert.equal(got.category, 'OTHER');
+    assert.ok(got.subcategory);
   });
 });
 

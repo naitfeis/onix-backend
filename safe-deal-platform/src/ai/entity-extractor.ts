@@ -17,6 +17,7 @@ const CATEGORY_ALIASES: Array<{ re: RegExp; value: ProductCategory }> = [
   { re: /\b(roblox|роблокс)\b/i, value: 'ROBLOX' },
   { re: /\b(rp\s*проект|рп\s*проект|rp_projects)\b/i, value: 'RP_PROJECTS' },
   { re: /\b(brawl\s*stars|бравл)\b/i, value: 'BRAWL_STARS' },
+  { re: /\b(pubg|пубг|mobile\s*legends|млбб|cs:?\s*go|ксго|valorant|валорант)\b/i, value: 'OTHER' },
   { re: /\b(другое|other)\b/i, value: 'OTHER' },
 ];
 
@@ -33,6 +34,8 @@ const SUB_ALIASES: Array<{ re: RegExp; value: ProductSubcategory; prefer?: Produ
   { re: /\b(буст|boost)\b/i, value: 'BRAWL_BOOST', prefer: 'BRAWL_STARS' },
 ];
 
+const CREATE_PREFIX = /^(?:создай\s+(?:новый\s+)?товар|новый\s+товар|создать\s+(?:новый\s+)?товар|добавить\s+товар)\s*/i;
+
 function labeled(text: string, labels: string[]): string | undefined {
   for (const label of labels) {
     const re = new RegExp(`${label}\\s*[:\\-–]?\\s*(.+)`, 'i');
@@ -45,13 +48,20 @@ function labeled(text: string, labels: string[]): string | undefined {
   return undefined;
 }
 
+function defaultSubcategory(category: ProductCategory): ProductSubcategory {
+  const allowed = SUBCATEGORIES_BY_CATEGORY[category];
+  const preferred = allowed.find((s) => s.endsWith('_OTHER') || s.endsWith('_MISC') || s.endsWith('_ITEMS'));
+  return preferred ?? allowed[0]!;
+}
+
 export class EntityExtractor {
   extract(text: string, opts?: { category?: ProductCategory | null }): ExtractedProductFields {
     const raw = text.trim();
     const out: ExtractedProductFields = {};
     if (!raw) return out;
 
-    const titleLabeled = labeled(raw, ['название', 'title', 'товар']);
+    // Do not use bare «товар» — it matches «создай товар PUBG…»
+    const titleLabeled = labeled(raw, ['название', 'title', 'название товара']);
     if (titleLabeled) out.title = titleLabeled.slice(0, 32);
 
     const catLabeled = labeled(raw, ['категория', 'category']);
@@ -83,6 +93,7 @@ export class EntityExtractor {
       if (/^(нет|пропустить|-|—)$/i.test(descLabeled)) out.descriptionSkipped = true;
       else out.description = descLabeled.slice(0, 20_000);
     }
+    if (/без\s+описания|без\s+опис/i.test(raw)) out.descriptionSkipped = true;
 
     // Free-form category/subcategory words anywhere
     if (!out.category) {
@@ -102,37 +113,64 @@ export class EntityExtractor {
       }
     }
 
-    // Bare price / quantity when short message
+    // «за 500 ₽» / bare «500 ₽»
+    if (out.priceRubles == null) {
+      const za = raw.match(/за\s+(\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:лей|ля|ль)?\.?)?/i);
+      if (za) out.priceRubles = this.parsePrice(za[1]!);
+    }
     if (out.priceRubles == null) {
       const onlyPrice = raw.match(/^(?:цена\s*)?(\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:лей|ля|ль)?\.?)?$/i);
       if (onlyPrice) out.priceRubles = this.parsePrice(onlyPrice[1]);
       else {
         const inline = raw.match(/(?:^|\s)(\d+(?:[.,]\d{1,2})?)\s*(?:₽|руб(?:лей|ля|ль)?\.?)/i);
-        if (inline && !titleLabeled) out.priceRubles = this.parsePrice(inline[1]);
+        if (inline) out.priceRubles = this.parsePrice(inline[1]);
       }
+    }
+
+    // «10 штук» / «10 шт»
+    if (out.quantity == null) {
+      const shtuk = raw.match(/(\d{1,5})\s*(?:шт(?:\.|ук[аиеу]?)?)/i);
+      if (shtuk) out.quantity = this.parseQuantity(shtuk[1]!);
     }
     if (out.quantity == null) {
       const onlyQty = raw.match(/^(?:количество\s*)?(\d{1,5})$/i);
       if (onlyQty && out.priceRubles == null) out.quantity = this.parseQuantity(onlyQty[1]);
     }
 
-    // Whole message as title when it looks like a short name and nothing else extracted
+    // Title from free-form remainder: «PUBG за 500 ₽, 10 штук»
+    if (!out.title) {
+      let candidate = raw
+        .replace(CREATE_PREFIX, '')
+        .replace(/за\s+\d+(?:[.,]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль)?\.?)?/gi, ' ')
+        .replace(/\d+(?:[.,]\d{1,2})?\s*(?:₽|руб(?:лей|ля|ль)?\.?)/gi, ' ')
+        .replace(/\d{1,5}\s*(?:шт(?:\.|ук[аиеу]?)?)/gi, ' ')
+        .replace(/\b(?:цена|количество|кол-во|без\s+описания)\b/gi, ' ')
+        .replace(/[,:;]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (
+        candidate
+        && candidate.length >= 2
+        && candidate.length <= 32
+        && !/\n/.test(candidate)
+        && !/^(опубликовать|изменить|отмена)/i.test(candidate)
+      ) {
+        out.title = candidate.slice(0, 32);
+      }
+    }
+
+    // Whole message as title when nothing else
     const hasStructured = Boolean(
       out.category || out.subcategory || out.priceRubles != null || out.quantity != null
       || out.description || out.descriptionSkipped || titleLabeled,
     );
     if (!out.title && !hasStructured) {
-      const cleaned = raw
-        .replace(/^(создай\s+(новый\s+)?товар|новый\s+товар)\s*/i, '')
-        .trim();
+      const cleaned = raw.replace(CREATE_PREFIX, '').trim();
       if (cleaned && cleaned.length <= 32 && !/\n/.test(cleaned) && !/^(опубликовать|изменить|отмена)/i.test(cleaned)) {
         out.title = cleaned;
       }
-    } else if (!out.title && titleLabeled) {
-      // already set
     }
 
-    // Infer subcategory when category known and only one match from text
     if (out.category && !out.subcategory) {
       const allowed = SUBCATEGORIES_BY_CATEGORY[out.category];
       for (const a of SUB_ALIASES) {
@@ -141,6 +179,15 @@ export class EntityExtractor {
           break;
         }
       }
+      // Dense one-shot create: pick a sensible default subcategory
+      if (!out.subcategory && (out.title || out.priceRubles != null)) {
+        out.subcategory = defaultSubcategory(out.category);
+      }
+    }
+
+    // Platform min title length is 5 — pad short game names (PUBG → PUBG лот)
+    if (out.title && out.title.trim().length >= 2 && out.title.trim().length < 5) {
+      out.title = `${out.title.trim()} лот`.slice(0, 32);
     }
 
     return out;
@@ -173,7 +220,6 @@ export class EntityExtractor {
         return a.value;
       }
     }
-    // Label match against Russian UI names
     const labelMap: Record<string, ProductSubcategory> = {
       'пополнение': 'STEAM_TOPUP',
       'валюта': 'STEAM_TOPUP',
@@ -193,7 +239,6 @@ export class EntityExtractor {
     const mapped = labelMap[key];
     if (mapped) {
       if (category && !SUBCATEGORIES_BY_CATEGORY[category].includes(mapped)) {
-        // pick category-compatible "other"
         const others = SUBCATEGORIES_BY_CATEGORY[category].filter((s) => s.endsWith('_OTHER') || s.endsWith('_MISC'));
         return others[0];
       }

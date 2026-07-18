@@ -38,6 +38,7 @@ export function Chats({
   const [groupBusy, setGroupBusy] = useState(false);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
+  const [aiActionsOpen, setAiActionsOpen] = useState(false);
   const [leaveGroupId, setLeaveGroupId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<ChatMemberItem[] | null>(null);
   const [groupMembersTitle, setGroupMembersTitle] = useState('');
@@ -499,36 +500,38 @@ export function Chats({
       )}
       </div>
       {thread.kind === 'AI' && (
-        <>
-          <div className="ai-support-widget" role="region" aria-label="Поддержка ONIX">
-            <p className="ai-support-widget__title">Поддержка</p>
-            <p className="ai-support-widget__text">
-              Напишите проблему — обращение попадёт в жалобы админу, ответ придёт сюда в ONIX AI.
-            </p>
-            <Button
-              variant="secondary"
-              busy={core.actionBusy === `message-${thread.id}`}
-              onClick={() => void sendMessage(thread.id, 'Написать в поддержку').then((ok) => { if (ok) void loadMessages(thread.id); })}
-            >Написать в поддержку</Button>
-          </div>
-          <div className="ai-quick-replies" role="group" aria-label="Быстрые вопросы">
-            {[
-              { label: 'О площадке ONIX', send: 'О площадке ONIX' },
-              { label: 'Добавить товар', send: 'Добавить товар' },
-              { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
-              { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },
-              { label: 'Как работает поддержка', send: 'Как работает поддержка' },
-            ].map((item) => (
-              <button
-                key={item.send}
-                type="button"
-                className="ai-quick-replies__btn"
-                disabled={Boolean(core.actionBusy === `message-${thread.id}`)}
-                onClick={() => void sendMessage(thread.id, item.send).then((ok) => { if (ok) void loadMessages(thread.id); })}
-              >{item.label}</button>
-            ))}
-          </div>
-        </>
+        <div className={`ai-actions ${aiActionsOpen ? 'is-open' : ''}`}>
+          <button
+            type="button"
+            className="ai-actions__toggle"
+            aria-expanded={aiActionsOpen}
+            aria-controls={`ai-actions-${thread.id}`}
+            onClick={() => setAiActionsOpen((open) => !open)}
+          >
+            <span>Действия ONIX AI</span>
+            <span className="ai-actions__chevron" aria-hidden="true">{aiActionsOpen ? '▼' : '▲'}</span>
+          </button>
+          {aiActionsOpen && (
+            <div className="ai-quick-replies" id={`ai-actions-${thread.id}`} role="group" aria-label="Быстрые действия">
+              {[
+                { label: 'О площадке ONIX', send: 'О площадке ONIX' },
+                { label: 'Добавить товар', send: 'Добавить товар' },
+                { label: 'Вывести деньги', send: 'Вывести деньги' },
+                { label: 'Написать в поддержку', send: 'Написать в поддержку' },
+                { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
+                { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },
+              ].map((item) => (
+                <button
+                  key={item.send}
+                  type="button"
+                  className="ai-quick-replies__btn"
+                  disabled={Boolean(core.actionBusy === `message-${thread.id}`)}
+                  onClick={() => void sendMessage(thread.id, item.send).then((ok) => { if (ok) void loadMessages(thread.id); })}
+                >{item.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       <form className="composer" onSubmit={async event => {
         event.preventDefault();

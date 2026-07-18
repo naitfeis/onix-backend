@@ -251,26 +251,6 @@
   white-space: nowrap;
 }
 .product-card__top .onixlot-id { font-size: 10px; color: var(--dim); }
-.ai-support-widget {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--line);
-  background: #101014;
-}
-.ai-support-widget__title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: .04em;
-}
-.ai-support-widget__text {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.35;
-}
 .product-card--compact { padding: 10px 12px; }
 .product-card--compact h2 { font-size: 12px; margin: 4px 0 6px; }
 .product-card--compact .seller-row { font-size: 9px; }
@@ -553,7 +533,7 @@ select.control:focus {
 .deal-card h2 { font-size: 12px; }.deal-status { margin: 13px 0; }.timeline { list-style: none; display: grid; grid-template-columns: repeat(4,1fr); gap: 3px; color: #39393f; font-size: 8px; }
 .timeline li { border-top: 2px solid #232328; padding-top: 6px; }.timeline li.done { color: #aaa; border-color: var(--success); }.card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }.card-actions .button { flex: 1; }
 
-.chat-layout { min-height: calc(100dvh - 166px); display: grid; grid-template-columns: 1fr; gap: 10px; }
+.chat-layout { min-height: calc(100dvh - 120px); display: grid; grid-template-columns: 1fr; gap: 10px; }
 .thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .chat-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .thread { width: 100%; padding: 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; border: 1px solid var(--line); border-radius: 15px; background: #060607; color: var(--text); font: 10px inherit; cursor: pointer; }
@@ -599,8 +579,8 @@ select.control:focus {
 .linkish { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left; }
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .conversation {
-  min-height: min(520px, calc(100dvh - 166px));
-  max-height: calc(100dvh - 166px);
+  min-height: min(640px, calc(100dvh - 120px));
+  max-height: calc(100dvh - 120px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: rgba(2,2,3,.95);
@@ -608,6 +588,7 @@ select.control:focus {
   display: flex;
   flex-direction: column;
 }
+.conversation .messages { flex: 1 1 auto; min-height: 220px; }
 .conversation__head { padding: 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .conversation__head > div { display: grid; gap: 3px; font-size: 10px; }
 .messages-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -621,13 +602,39 @@ select.control:focus {
 .message .receipt { display: inline-block; margin-top: 2px; opacity: .7; letter-spacing: -1px; }
 .message .receipt-admin { color: var(--muted); margin-top: 4px; }
 .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.ai-actions {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  background: rgba(2,2,3,.98);
+}
+.ai-actions__toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.ai-actions__toggle:hover { color: var(--text); }
+.ai-actions__chevron {
+  font-size: 10px;
+  opacity: .8;
+  transition: transform 160ms ease;
+}
+.ai-actions.is-open .ai-actions__chevron { color: var(--text); }
 .ai-quick-replies {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 8px 9px 0;
+  padding: 0 9px 10px;
   flex-shrink: 0;
-  border-top: 1px solid var(--line);
   background: rgba(2,2,3,.98);
 }
 .ai-quick-replies__btn {
@@ -652,7 +659,7 @@ select.control:focus {
   flex-shrink: 0;
   background: rgba(2,2,3,.98);
 }
-.conversation .ai-quick-replies + .composer { border-top: 0; padding-top: 8px; }
+.conversation .ai-actions + .composer { border-top: 1px solid var(--line); }
 
 .profile-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; min-width: 0; }
 .profile-main { min-width: 0; }
