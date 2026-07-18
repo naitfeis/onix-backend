@@ -125,18 +125,15 @@ export function Market({
     }
   };
 
+  // Lean list stubs followersCount/followed and omits description — sync favorite only.
   useEffect(() => {
     if (!selected) return;
     const fresh = items.find((item) => item.id === selected.id)
       ?? core.products.find((item) => item.id === selected.id);
-    if (!fresh) return;
-    if (
-      fresh.seller.followed !== selected.seller.followed
-      || fresh.seller.followersCount !== selected.seller.followersCount
-      || fresh.favorite !== selected.favorite
-    ) {
-      setSelected(fresh);
-    }
+    if (!fresh || fresh.favorite === selected.favorite) return;
+    setSelected((prev) => (
+      prev && prev.id === fresh.id ? { ...prev, favorite: fresh.favorite } : prev
+    ));
   }, [core.products, items, selected]);
 
   useEffect(() => {
@@ -221,19 +218,29 @@ export function Market({
               variant="secondary"
               busy={core.actionBusy === `follow-${selected.seller.onixId}`}
               onClick={() => {
+                const wasFollowed = Boolean(selected.seller.followed);
+                const delta = wasFollowed ? -1 : 1;
+                setSelected((prev) => (prev ? {
+                  ...prev,
+                  seller: {
+                    ...prev.seller,
+                    followed: !wasFollowed,
+                    followersCount: Math.max(0, prev.seller.followersCount + delta),
+                  },
+                } : prev));
                 setItems((previous) => previous.map((item) => (
                   item.seller.onixId === selected.seller.onixId
                     ? {
                       ...item,
                       seller: {
                         ...item.seller,
-                        followed: !selected.seller.followed,
-                        followersCount: Math.max(0, item.seller.followersCount + (selected.seller.followed ? -1 : 1)),
+                        followed: !wasFollowed,
+                        followersCount: Math.max(0, item.seller.followersCount + delta),
                       },
                     }
                     : item
                 )));
-                void core.toggleFollow(selected.seller.onixId, Boolean(selected.seller.followed));
+                void core.toggleFollow(selected.seller.onixId, wasFollowed);
               }}
             >{selected.seller.followed ? 'Отписаться' : '+ Подписаться'}</Button>
           </div></Card>
