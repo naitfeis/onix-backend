@@ -7,7 +7,7 @@ import { publicDisplayName } from './public-username';
 type PublicUser = {
   id: bigint;
   onixId: string;
-  telegramNick: string | null;
+  telegramNick?: string | null;
   displayName: string | null;
   avatarUrl: string | null;
   ratingAverage: Prisma.Decimal;

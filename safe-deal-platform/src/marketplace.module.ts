@@ -20,7 +20,9 @@ import { pushNewProductToFollowers } from './domain-notify';
 import { onixIdLookupCandidates } from './onix-id';
 import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
-import { productDetailSelect, productListSelect, sellerPublicSelect } from './query-selects';
+import {
+  productDetailSelect, productListSelect, sellerCatalogSelect, sellerPublicSelect,
+} from './query-selects';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
 
@@ -148,24 +150,28 @@ export class MarketplaceService {
       query.sort === 'price_desc' ? { priceCents: 'desc' } :
       query.sort === 'rating' ? { seller: { ratingAverage: 'desc' } } :
       { createdAt: 'desc' };
+    // Lean catalog: no description, no view counts, no followers COUNT / Follow probe.
+    // Single round-trip via relationLoadStrategy join (avoids parallel client.query on adapter-pg).
     const products = await this.prisma.product.findMany({
+      relationLoadStrategy: 'join',
       where, orderBy, take: query.limit, skip: query.offset,
       select: {
         ...productListSelect,
-        seller: { select: sellerPublicSelect(viewerId) },
+        seller: { select: sellerCatalogSelect },
         ...(viewerId != null
           ? { favorites: { where: { userId: viewerId }, select: { userId: true } } }
           : {}),
       },
     });
-    const viewCounts = await this.ownerViewCounts(viewerId, products);
     return products.map((product) => productDto(
       {
         ...product,
         description: null,
-        ...(viewCounts.has(product.id)
-          ? { _count: { viewUniques: viewCounts.get(product.id)! } }
-          : {}),
+        seller: {
+          ...product.seller,
+          telegramNick: null,
+          _count: { followers: 0 },
+        },
       },
       viewerId ?? undefined,
     ));
@@ -174,6 +180,7 @@ export class MarketplaceService {
   async get(user: AuthUser | null, id: string) {
     const viewerId = user?.id ?? null;
     const product = await this.prisma.product.findUnique({
+      relationLoadStrategy: 'join',
       where: { id },
       select: {
         ...productDetailSelect,
@@ -416,7 +423,7 @@ export class MarketplaceController {
       'Cache-Control',
       user
         ? 'private, no-store'
-        : 'public, max-age=30, stale-while-revalidate=120',
+        : 'public, max-age=60, stale-while-revalidate=300',
     );
     return this.service.list(user, query);
   }

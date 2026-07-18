@@ -3,6 +3,7 @@
  * Avoids loading User.balanceCents / Product.deliveryCiphertext on hot paths.
  */
 
+/** Full seller card (product detail, deals, profiles). */
 export function sellerPublicSelect(viewerId?: bigint | null) {
   return {
     id: true,
@@ -32,6 +33,24 @@ export function sellerPublicSelect(viewerId?: bigint | null) {
   } as const;
 }
 
+/**
+ * Hot GET /api/products catalog — minimal seller fields for cards.
+ * No followers COUNT, no Follow probe, no telegramNick.
+ */
+export const sellerCatalogSelect = {
+  id: true,
+  onixId: true,
+  displayName: true,
+  avatarUrl: true,
+  ratingAverage: true,
+  ratingCount: true,
+  completedSales: true,
+  lastSeenAt: true,
+  isAdmin: true,
+  isSupport: true,
+  platformStatus: true,
+} as const;
+
 /** Counterparty on deals — no viewer Follow probe (dealDto never used followed). */
 export const dealPartySelect = {
   id: true,
@@ -49,7 +68,7 @@ export const dealPartySelect = {
   _count: { select: { followers: true as const } },
 } as const;
 
-/** Hot catalog path — no description / view counts (owner views attached in service). */
+/** Hot catalog path — no description / view counts (owner views on detail / my listings). */
 export const productListSelect = {
   id: true,
   lotNumber: true,

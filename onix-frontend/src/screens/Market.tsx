@@ -44,6 +44,18 @@ export function Market({
     || core.profile?.roles.includes('ADMIN'),
   );
 
+  /** List cards are lean — load full product (description + seller stats) on open. */
+  const openProduct = async (product: Product) => {
+    setSelected(product);
+    setSellerProfile(null);
+    try {
+      const full = await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(product.id)}`);
+      setSelected(full);
+    } catch {
+      /* keep lean card snapshot */
+    }
+  };
+
   const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
   const marketSubs = category !== 'Все'
     ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
@@ -180,7 +192,7 @@ export function Market({
       marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid product-grid--compact">{items.map(product => <Card key={product.id} interactive className="product-card product-card--compact">
-        <button className="product-main" onClick={() => setSelected(product)} aria-label={`Открыть ${product.title}`}>
+        <button className="product-main" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
           <div className="product-card__top"><span>{product.category}</span></div>
           <h2>{product.title.length > 32 ? `${product.title.slice(0, 32)}…` : product.title}</h2>
           <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>{publicAt(product.seller.username)} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} · {product.seller.reviewCount} отз.</span></span><strong>{money(product.priceCents)}</strong></div>
