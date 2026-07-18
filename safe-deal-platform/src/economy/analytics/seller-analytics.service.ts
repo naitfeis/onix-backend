@@ -161,6 +161,8 @@ export class SellerAnalyticsService {
     const toExclusive = new Date(to);
     toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
 
+    // Cap raw rows — rollup is weekly; unbounded findMany was a DB DoS vector.
+    const ROLLUP_ROW_CAP = 20_000;
     const [views, orders, favorites] = await Promise.all([
       this.prisma.productViewUnique.findMany({
         where: {
@@ -168,6 +170,7 @@ export class SellerAnalyticsService {
           firstSeenAt: { gte: from, lt: toExclusive },
         },
         select: { firstSeenAt: true },
+        take: ROLLUP_ROW_CAP,
       }),
       this.prisma.order.findMany({
         where: {
@@ -181,6 +184,7 @@ export class SellerAnalyticsService {
           createdAt: true,
           completedAt: true,
         },
+        take: ROLLUP_ROW_CAP,
       }),
       this.prisma.favorite.findMany({
         where: {
@@ -188,6 +192,7 @@ export class SellerAnalyticsService {
           product: { sellerId },
         },
         select: { createdAt: true },
+        take: ROLLUP_ROW_CAP,
       }),
     ]);
 

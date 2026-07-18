@@ -1,14 +1,15 @@
 import {
-  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body, Req,
 } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { Prisma } from '@prisma/client';
-import { AuthUser, CurrentUser } from './common';
+import { AuthRequest, AuthUser, CurrentUser } from './common';
 import { EconomyModule } from './economy/economy.module';
 import { buildPublicTrustCard } from './economy/trust/trust-card';
 import { LockService } from './economy/wallet/lock.service';
 import { findUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
+import { assertRateLimit } from './rate-limit';
 import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
 class UpdateProfileDto {
@@ -184,7 +185,14 @@ export class ProfilesController {
   @Patch('users/me') update(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
     return this.profiles.update(user, dto);
   }
-  @Get('users/:onixId') profile(@CurrentUser() user: AuthUser, @Param('onixId') onixId: string) {
+  @Get('users/:onixId') profile(
+    @Req() req: AuthRequest,
+    @CurrentUser() user: AuthUser,
+    @Param('onixId') onixId: string,
+  ) {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';
+    assertRateLimit(`profile:${user.id}`, 60, 60_000);
+    assertRateLimit(`profile-ip:${ip}`, 120, 60_000);
     return this.profiles.getPublic(user, onixId);
   }
   @Get('wallet/ledger') ledger(@CurrentUser() user: AuthUser) { return this.profiles.ledger(user); }

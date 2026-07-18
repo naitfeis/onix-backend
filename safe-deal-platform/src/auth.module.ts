@@ -138,9 +138,19 @@ export class AuthService {
     const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || undefined;
     let user;
     if (existing) {
+      const bootstrapAdmin = process.env.ADMIN_TELEGRAM_ID === identity.id.toString();
+      const promoteSuper = bootstrapAdmin && existing.platformStatus !== 'SUPER_ADMIN';
       user = await this.prisma.user.update({
         where: { id: existing.id },
-        data: this.profileChanges(existing, identity, loggedInAt),
+        data: {
+          ...this.profileChanges(existing, identity, loggedInAt),
+          ...(promoteSuper ? {
+            isAdmin: true,
+            isSupport: true,
+            platformStatus: 'SUPER_ADMIN',
+            permissionVersion: { increment: 1 },
+          } : {}),
+        },
       });
     } else {
       try {
@@ -159,6 +169,9 @@ export class AuthService {
                 identity.id,
                 process.env.ADMIN_TELEGRAM_ID === identity.id.toString(),
               ),
+              platformStatus: process.env.ADMIN_TELEGRAM_ID === identity.id.toString()
+                ? 'SUPER_ADMIN'
+                : 'USER',
             },
           });
           const withOnixId = await tx.user.update({

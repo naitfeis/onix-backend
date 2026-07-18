@@ -161,7 +161,8 @@ export class EconomyController {
   /** Public trust card — never includes trustScore. */
   @Get('users/:onixId/trust-card')
   @Header('Cache-Control', 'private, no-store')
-  trustCard(@Param('onixId') onixId: string) {
+  trustCard(@CurrentUser() user: AuthUser, @Param('onixId') onixId: string) {
+    assertRateLimit(`trust-card:${user.id}`, 60, 60_000);
     return this.wallet.getPublicTrustCard(onixId);
   }
 

@@ -17,7 +17,9 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
-import { flagsFromPlatformStatus, isPlatformStatus } from './platform-status';
+import {
+  flagsFromPlatformStatus, isPlatformStatus, isPrivilegedAdmin, isSuperAdminStatus,
+} from './platform-status';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
 import { debugEndpointsEnabled } from './debug-endpoints';
@@ -114,7 +116,21 @@ class OperationsService {
       where: {
         deletedAt: null,
         id: { not: excludeUserId },
-        OR: [{ isAdmin: true }, { platformStatus: 'ADMIN' }],
+        OR: [
+          { isAdmin: true },
+          { platformStatus: 'ADMIN' },
+          { platformStatus: 'SUPER_ADMIN' },
+        ],
+      },
+    });
+  }
+
+  private async countOtherSuperAdmins(excludeUserId: bigint): Promise<number> {
+    return this.prisma.user.count({
+      where: {
+        deletedAt: null,
+        id: { not: excludeUserId },
+        platformStatus: 'SUPER_ADMIN',
       },
     });
   }
@@ -124,11 +140,20 @@ class OperationsService {
     isAdmin: boolean;
     platformStatus: PlatformStatus;
   }, actionLabel: string) {
-    const isPrivileged = target.isAdmin || target.platformStatus === 'ADMIN';
-    if (!isPrivileged) return;
+    if (!isPrivilegedAdmin(target)) return;
     const others = await this.countOtherPrivilegedAdmins(target.id);
     if (others < 1) {
       throw new BadRequestException(`Нельзя ${actionLabel} последнего администратора платформы.`);
+    }
+  }
+
+  private async assertActorIsSuperAdmin(actorId: bigint): Promise<void> {
+    const actorRow = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { platformStatus: true, isAdmin: true },
+    });
+    if (!actorRow || !isSuperAdminStatus(actorRow.platformStatus)) {
+      throw new ForbiddenException('Назначение и снятие ADMIN доступно только SUPER_ADMIN.');
     }
   }
 
@@ -214,21 +239,47 @@ class OperationsService {
     return { onixId: displayId, banned: false, ban: null };
   }
 
-  /** Assign public platform status (USER / VERIFIED_SELLER / MODERATOR / ADMIN / VIP). */
+  /**
+   * Assign public platform status.
+   * Hierarchy: SUPER_ADMIN → may grant/revoke ADMIN|SUPER_ADMIN;
+   * ADMIN → moderation statuses only (USER / VERIFIED_SELLER / MODERATOR / VIP).
+   */
   async setPlatformStatus(actor: AuthUser, onixId: string, status: PlatformStatus) {
     if (!isPlatformStatus(status)) {
       throw new BadRequestException('Некорректный статус.');
     }
     const resolved = await requireUserByOnixId(this.prisma, onixId);
     const displayId = formatOnixId(resolved.onixId);
-    if (resolved.id === actor.id && status !== 'ADMIN' && actor.isAdmin) {
-      throw new BadRequestException('Нельзя снять статус ADMIN с собственного аккаунта.');
-    }
     const flags = flagsFromPlatformStatus(status);
-    const demotingAdmin = (resolved.isAdmin || resolved.platformStatus === 'ADMIN') && !flags.isAdmin;
-    if (demotingAdmin) {
+    const targetPrivileged = isPrivilegedAdmin(resolved);
+    const nextPrivileged = flags.isAdmin;
+    const touchesAdminLadder = targetPrivileged || nextPrivileged
+      || status === 'ADMIN' || status === 'SUPER_ADMIN'
+      || resolved.platformStatus === 'ADMIN' || resolved.platformStatus === 'SUPER_ADMIN';
+
+    if (touchesAdminLadder) {
+      await this.assertActorIsSuperAdmin(actor.id);
+    }
+
+    if (resolved.id === actor.id && isPrivilegedAdmin(resolved) && !nextPrivileged) {
+      throw new BadRequestException('Нельзя снять ADMIN/SUPER_ADMIN с собственного аккаунта.');
+    }
+    if (resolved.id === actor.id && isSuperAdminStatus(resolved.platformStatus) && status !== 'SUPER_ADMIN') {
+      const others = await this.countOtherSuperAdmins(resolved.id);
+      if (others < 1) {
+        throw new BadRequestException('Нельзя снять статус SUPER_ADMIN с единственного root-админа.');
+      }
+    }
+    if (targetPrivileged && !nextPrivileged) {
       await this.assertNotLastPrivilegedAdmin(resolved, 'снять статус ADMIN у');
     }
+    if (isSuperAdminStatus(resolved.platformStatus) && status !== 'SUPER_ADMIN') {
+      const others = await this.countOtherSuperAdmins(resolved.id);
+      if (others < 1) {
+        throw new BadRequestException('Нельзя снять статус SUPER_ADMIN с единственного root-админа.');
+      }
+    }
+
     const previous = {
       platformStatus: resolved.platformStatus,
       isAdmin: resolved.isAdmin,
@@ -262,6 +313,7 @@ class OperationsService {
             isSupport: user.isSupport,
           },
           actorOnixId: formatOnixId(actor.onixId),
+          at: new Date().toISOString(),
         },
       },
     });

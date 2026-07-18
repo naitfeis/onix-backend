@@ -16,8 +16,9 @@ export async function findUserByOnixId(prisma: Db, raw: string) {
   });
 }
 
+/** Same 404 body for missing and banned — reduces ONIX ID enumeration signal. */
 export async function requireUserByOnixId(prisma: Db, raw: string) {
   const user = await findUserByOnixId(prisma, raw);
-  if (!user) throw new NotFoundException('Пользователь не найден.');
+  if (!user) throw new NotFoundException('Профиль не найден.');
   return user;
 }

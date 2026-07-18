@@ -1085,6 +1085,8 @@ enum PlatformStatus {
   VERIFIED_SELLER
   MODERATOR
   ADMIN
+  /** Bootstrap / root admin — only this role may grant or revoke ADMIN. */
+  SUPER_ADMIN
   VIP
 }
 

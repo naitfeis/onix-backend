@@ -34,14 +34,22 @@ export class IdentityService {
 
     let user: User;
     if (existing) {
-      const isAdmin = existing.isAdmin;
+      const bootstrapAdmin = process.env.ADMIN_TELEGRAM_ID === identity.telegramId.toString();
+      const isAdmin = existing.isAdmin || bootstrapAdmin;
       const isSupport = resolveIsSupport(existing.telegramId, isAdmin);
+      const promoteSuper = bootstrapAdmin && existing.platformStatus !== 'SUPER_ADMIN';
       user = await tx.user.update({
         where: { id: existing.id },
         data: {
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
-          ...(existing.isSupport !== isSupport ? { isSupport } : {}),
+          ...(promoteSuper ? {
+            isAdmin: true,
+            isSupport: true,
+            platformStatus: 'SUPER_ADMIN',
+            permissionVersion: { increment: 1 },
+          } : {}),
+          ...(existing.isSupport !== isSupport && !promoteSuper ? { isSupport } : {}),
           ...(identity.username !== undefined && identity.username !== existing.telegramNick
             ? { telegramNick: identity.username } : {}),
           ...(identity.firstName !== undefined && identity.firstName !== existing.firstName
@@ -73,7 +81,7 @@ export class IdentityService {
           lastLoginAt: loggedInAt,
           isAdmin,
           isSupport,
-          platformStatus: isAdmin ? 'ADMIN' : isSupport ? 'MODERATOR' : 'USER',
+          platformStatus: isAdmin ? 'SUPER_ADMIN' : isSupport ? 'MODERATOR' : 'USER',
         },
       });
       user = await tx.user.update({

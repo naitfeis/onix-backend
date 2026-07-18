@@ -23,6 +23,7 @@ import { PrismaService } from './prisma.service';
 import {
   productDetailSelect, productListSelect, sellerCatalogSelect, sellerPublicSelect,
 } from './query-selects';
+import { assertRateLimit } from './rate-limit';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
 
@@ -483,6 +484,7 @@ export class MarketplaceController {
   }
 
   @Post() create(@CurrentUser() user: AuthUser, @Body() dto: ProductDto) {
+    assertRateLimit(`product-create:${user.id}`, 20, 60_000);
     return this.service.create(user, dto);
   }
   @Patch(':id') update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdateProductDto) {

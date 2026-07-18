@@ -8,6 +8,7 @@ export type PlatformStatus =
   | 'VERIFIED_SELLER'
   | 'MODERATOR'
   | 'ADMIN'
+  | 'SUPER_ADMIN'
   | 'VIP';
 
 export interface Seller {
@@ -402,8 +403,14 @@ export const PLATFORM_STATUS_OPTIONS: Array<{ value: PlatformStatus; label: stri
   { value: 'VERIFIED_SELLER', label: 'Проверенный продавец' },
   { value: 'MODERATOR', label: 'Модератор' },
   { value: 'ADMIN', label: 'Админ' },
+  { value: 'SUPER_ADMIN', label: 'Super Admin' },
   { value: 'VIP', label: 'VIP' },
 ];
+
+/** Statuses a regular ADMIN may assign (not ADMIN / SUPER_ADMIN). */
+export const ADMIN_ASSIGNABLE_STATUS_OPTIONS = PLATFORM_STATUS_OPTIONS.filter(
+  (item) => item.value !== 'ADMIN' && item.value !== 'SUPER_ADMIN',
+);
 
 export type BanReasonCode =
   | 'MISCONDUCT'

@@ -211,8 +211,9 @@ export function Profile({
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
   const status = profile.status ?? (profile.roles[0] ?? 'USER');
-  const isStaff = status === 'ADMIN' || status === 'MODERATOR' || profile.isAdmin;
-  const isAdmin = status === 'ADMIN' || profile.isAdmin || profile.roles.includes('ADMIN');
+  const isStaff = status === 'ADMIN' || status === 'SUPER_ADMIN' || status === 'MODERATOR' || profile.isAdmin;
+  const isAdmin = status === 'ADMIN' || status === 'SUPER_ADMIN' || profile.isAdmin
+    || profile.roles.includes('ADMIN') || profile.roles.includes('SUPER_ADMIN');
   const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'> = [
     'overview', 'listings', 'favorites', 'reviews', 'analytics',
     ...(isStaff ? (['support'] as const) : []),

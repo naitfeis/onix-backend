@@ -10,6 +10,7 @@ import { pushTelegramToChatId } from './domain-notify';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { productListSelect, sellerPublicSelect } from './query-selects';
+import { assertRateLimit } from './rate-limit';
 import { productDto } from './response';
 
 class ReportUserDto {
@@ -175,6 +176,7 @@ export class SocialController {
     @Param('onixId') id: string,
     @Body() dto: ReportUserDto,
   ) {
+    assertRateLimit(`report:${user.id}`, 5, 60 * 60_000);
     return this.social.report(user, id, dto);
   }
 }

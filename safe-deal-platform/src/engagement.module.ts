@@ -795,6 +795,7 @@ export class EngagementController {
   @Get('chats/users/search')
   @Header('Cache-Control', 'private, no-store')
   searchUsers(@CurrentUser() user: AuthUser, @Query() query: UserSearchQuery) {
+    assertRateLimit(`chat-search:${user.id}`, 30, 60_000);
     return this.chats.searchUsers(user, query.q, query.limit);
   }
 
@@ -861,12 +862,19 @@ export class EngagementController {
     return this.notifications.read(user, parseId(id));
   }
 
-  @Get('users/:onixId/reviews') listReviews(@Param('onixId') id: string) { return this.reviews.list(id); }
+  @Get('users/:onixId/reviews') listReviews(
+    @CurrentUser() user: AuthUser,
+    @Param('onixId') id: string,
+  ) {
+    assertRateLimit(`reviews:${user.id}`, 60, 60_000);
+    return this.reviews.list(id);
+  }
   @Post('orders/:id/reviews') createReview(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: ReviewDto,
   ) {
+    assertRateLimit(`review-create:${user.id}`, 10, 60_000);
     return this.reviews.create(user, parseId(id), dto);
   }
 }

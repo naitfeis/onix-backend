@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
-  BAN_REASON_OPTIONS, PLATFORM_STATUS_OPTIONS, type BanReasonCode, type PlatformStatus,
+  ADMIN_ASSIGNABLE_STATUS_OPTIONS, BAN_REASON_OPTIONS, PLATFORM_STATUS_OPTIONS,
+  type BanReasonCode, type PlatformStatus,
 } from '../api/contracts';
 import { Button, Card, Confirm, Field, Input, Select, Textarea } from '../design-system';
 import type { Core } from './types';
@@ -16,17 +17,23 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
   const [confirmStatus, setConfirmStatus] = useState(false);
   const reasonOption = BAN_REASON_OPTIONS.find(item => item.value === reason);
   const banReady = Boolean(userId.trim() && reason && comment.trim() && (reason !== 'OTHER' || Number(durationDays) > 0));
+  const isSuperAdmin = core.profile?.status === 'SUPER_ADMIN';
+  const statusOptions = isSuperAdmin ? PLATFORM_STATUS_OPTIONS : ADMIN_ASSIGNABLE_STATUS_OPTIONS;
   return (
     <div className="stack compact">
       <Card className="admin-card">
         <h2>// ADMIN · СТАТУСЫ</h2>
-        <p className="muted">По умолчанию у всех статус «Пользователь». Вы можете выдать другие.</p>
+        <p className="muted">
+          {isSuperAdmin
+            ? 'SUPER_ADMIN может назначать ADMIN и остальные статусы. Действие пишется в audit log.'
+            : 'ADMIN может выдавать USER / VERIFIED_SELLER / MODERATOR / VIP. Назначение ADMIN — только у SUPER_ADMIN.'}
+        </p>
         <Field label="ONIX ID пользователя">
           <Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-7 или 7" />
         </Field>
         <Field label="Статус">
           <Select value={status} onChange={event => setStatus(event.target.value as PlatformStatus)}>
-            {PLATFORM_STATUS_OPTIONS.map(item => (
+            {statusOptions.map(item => (
               <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </Select>
@@ -36,8 +43,9 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
         </div>
         <Confirm
           open={confirmStatus}
+          dangerous={status === 'ADMIN' || status === 'SUPER_ADMIN'}
           title="Изменить статус?"
-          text={`Пользователю будет назначен статус: ${PLATFORM_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}.`}
+          text={`Пользователю будет назначен статус: ${PLATFORM_STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}. Операция запишется в журнал.`}
           busy={core.actionBusy === 'admin-status'}
           onCancel={() => setConfirmStatus(false)}
           onConfirm={async () => {

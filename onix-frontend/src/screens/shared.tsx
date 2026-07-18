@@ -32,11 +32,13 @@ const STATUS_LABEL: Record<PlatformStatus, string> = {
   VERIFIED_SELLER: 'ПРОВЕРЕН',
   MODERATOR: 'МОДЕРАТОР',
   ADMIN: 'ADMIN',
+  SUPER_ADMIN: 'SUPER',
   VIP: 'VIP',
 };
 
 /** @deprecated use status from profile — kept for call sites during Stage 2. */
 export function staffBadgeFromRoles(roles: PlatformStatus[]): PlatformStatus | undefined {
+  if (roles.includes('SUPER_ADMIN')) return 'SUPER_ADMIN';
   if (roles.includes('ADMIN')) return 'ADMIN';
   if (roles.includes('MODERATOR')) return 'MODERATOR';
   if (roles.includes('VIP')) return 'VIP';
@@ -47,7 +49,7 @@ export function staffBadgeFromRoles(roles: PlatformStatus[]): PlatformStatus | u
 export function StaffBadge({ badge }: { badge?: PlatformStatus | 'SUPPORT' }) {
   if (!badge || badge === 'USER') return null;
   const status: PlatformStatus = badge === 'SUPPORT' ? 'MODERATOR' : badge;
-  const tone = status === 'ADMIN' || status === 'MODERATOR'
+  const tone = status === 'ADMIN' || status === 'SUPER_ADMIN' || status === 'MODERATOR'
     ? 'staff'
     : status === 'VIP'
       ? 'vip'

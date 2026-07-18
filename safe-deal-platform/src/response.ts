@@ -85,6 +85,10 @@ function resolveStatus(user: Pick<PublicUser, 'platformStatus' | 'isAdmin' | 'is
   return 'USER';
 }
 
+function statusIsAdmin(status: PlatformStatus, isAdminFlag: boolean): boolean {
+  return status === 'ADMIN' || status === 'SUPER_ADMIN' || isAdminFlag;
+}
+
 export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: bigint }> }) {
   const status = resolveStatus(user);
   const badge = statusBadge(status);
@@ -121,7 +125,7 @@ export function profileDto(
     ...sellerDto(user),
     ...(user.bio ? { bio: user.bio } : {}),
     balanceCents: user.balanceCents.toString(),
-    isAdmin: status === 'ADMIN' || user.isAdmin,
+    isAdmin: statusIsAdmin(status, user.isAdmin),
     status,
     roles: [status],
     walletHistory: ledger.map(ledgerDto),
