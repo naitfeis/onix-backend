@@ -535,6 +535,70 @@ select.control:focus {
 
 .chat-layout { min-height: calc(100dvh - 120px); display: grid; grid-template-columns: 1fr; gap: 10px; }
 .thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* Chat immersive: hide brand/balance, give messages almost full height */
+.app-shell--chat {
+  padding-top: 0;
+  padding-inline: 0;
+  padding-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+.app-shell--chat .viewport {
+  margin: 0;
+  min-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+}
+.app-shell--chat .screen-transition,
+.app-shell--chat .chat-layout {
+  min-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  gap: 0;
+}
+.app-shell--chat .conversation {
+  min-height: 100%;
+  max-height: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: rgba(2, 2, 3, .88);
+}
+.app-shell--chat .conversation__head {
+  padding: 8px 10px;
+  border-bottom-color: #141418;
+}
+.app-shell--chat .order-card-inline {
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid #141418;
+  border-radius: 0;
+  background: #08080a;
+}
+.app-shell--chat .messages {
+  gap: 6px;
+  padding: 8px 10px;
+}
+.app-shell--chat .message {
+  border: 0;
+  padding: 7px 9px;
+  box-shadow: none;
+}
+.app-shell--chat .message.system {
+  border: 0;
+  border-top: 1px dashed #2a2a2e;
+  border-bottom: 1px dashed #2a2a2e;
+  border-radius: 0;
+  background: transparent;
+  padding: 6px 4px;
+}
+.app-shell--chat .thread-list {
+  padding: 8px 10px 0;
+}
+.app-shell--chat .composer {
+  padding: 8px 10px;
+  border-top-color: #141418;
+}
+.app-shell--chat .ai-actions {
+  border-top-color: #141418;
+}
 .chat-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .thread { width: 100%; padding: 13px; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; border: 1px solid var(--line); border-radius: 15px; background: #060607; color: var(--text); font: 10px inherit; cursor: pointer; }
 .thread-peer { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
@@ -568,9 +632,9 @@ select.control:focus {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 8px 12px;
-  padding: 10px 12px;
-  border: 1px solid #2a2a2e;
+  margin: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid #222226;
   background: #0c0c0e;
 }
 .order-card-inline div { display: grid; gap: 2px; font-size: 11px; }
@@ -896,6 +960,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 @media (max-width: 699px) { .chat-layout .mobile-hidden { display: none; } }
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
+  .app-shell--chat { padding-inline: 0; }
   .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px); }
   .search-row select.control {
     border-radius: 999px !important;
@@ -919,6 +984,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 @media (min-width: 820px) {
   :root { --shell-max: 760px; }
   .app-shell { padding-top: 20px; padding-bottom: calc(120px + env(safe-area-inset-bottom)); }
+  .app-shell--chat {
+    padding-top: 0;
+    padding-inline: 0;
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
   .brand { font-size: 15px; padding: 6px 9px; letter-spacing: 0; }
   /* Website chat = same fullscreen list→conversation flow as Mini App (no split / floating pane). */
   .chat-layout { grid-template-columns: 1fr; }

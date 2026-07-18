@@ -123,28 +123,32 @@ export default function App() {
     || Boolean(core.profile)
     || core.states.profile === 'error';
 
-  return <div className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}`}>
+  const chatImmersive = screen === 'chat';
+
+  return <div className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}`}>
     {bgReady && (
       <Suspense fallback={null}>
         <OnixBackground mode={mode} />
       </Suspense>
     )}
     <a className="skip-link" href="#content">К содержимому</a>
-    <header className="topbar">
-      <div className="brand" aria-label="ONIX">O N I X</div>
-      <div className="identity">
-        {core.states.profile === 'loading' && !core.profile ? (
-          <strong>…</strong>
-        ) : core.profile ? (
-          <span className="user-summary identity-user" aria-label="Баланс">
-            <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
-            <strong>{money(core.profile.balanceCents)}</strong>
-          </span>
-        ) : (
-          <strong>—</strong>
-        )}
-      </div>
-    </header>
+    {!chatImmersive && (
+      <header className="topbar">
+        <div className="brand" aria-label="ONIX">O N I X</div>
+        <div className="identity">
+          {core.states.profile === 'loading' && !core.profile ? (
+            <strong>…</strong>
+          ) : core.profile ? (
+            <span className="user-summary identity-user" aria-label="Баланс">
+              <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
+              <strong>{money(core.profile.balanceCents)}</strong>
+            </span>
+          ) : (
+            <strong>—</strong>
+          )}
+        </div>
+      </header>
+    )}
     {showAuth && (
       <Suspense fallback={null}>
         <AuthNotice
