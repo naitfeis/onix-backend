@@ -1,8 +1,9 @@
--- HOTFIX 5.5.5 / 5.5.5.1: one personal chat per user pair (merge deal + direct duplicates)
--- Fix P3018 / SQLSTATE 21000: ChatMember INSERT ... ON CONFLICT must see each (chatId, userId) once.
+-- HOTFIX 5.5.5 / 5.5.5.2: one personal chat per user pair (merge deal + direct duplicates)
+-- Avoid INSERT ... ON CONFLICT DO UPDATE (SQLSTATE 21000 when SELECT emits duplicate keys).
 
 DROP TABLE IF EXISTS canonical_pair_chat;
 DROP TABLE IF EXISTS chat_pair_map;
+DROP TABLE IF EXISTS merge_members;
 
 -- 1) Order → Chat (many orders share one pair chat). Idempotent if Chat.orderId already dropped.
 ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "chatId" TEXT;
@@ -31,7 +32,6 @@ SELECT
   c."createdAt" AS created_at,
   COALESCE(
     c."pairKey",
-    -- Order.chatId is backfilled in step 1 from legacy Chat.orderId when present.
     (
       SELECT 'd:' || LEAST(o."buyerId", o."sellerId")::text || ':' || GREATEST(o."buyerId", o."sellerId")::text
       FROM "Order" o
@@ -81,27 +81,44 @@ INNER JOIN canonical_pair_chat can ON can.pair_key = map.pair_key
 WHERE m."chatId" = map.chat_id
   AND map.chat_id <> can.keep_id;
 
--- 5) Merge members — ONE row per (keep_id, userId).
--- Root cause of 21000: several duplicate chats contribute the same userId into one INSERT,
--- so ON CONFLICT DO UPDATE tried to touch the same PK twice in a single command.
-INSERT INTO "ChatMember" ("chatId", "userId", "lastReadAt", "createdAt")
+-- 5) Merge members without ON CONFLICT DO UPDATE.
+-- Aggregate first so each (keep_id, userId) appears once, then UPDATE existing + INSERT missing.
+CREATE TEMP TABLE merge_members AS
 SELECT
-  can.keep_id,
-  cm."userId",
-  MAX(cm."lastReadAt") AS "lastReadAt",
-  MIN(cm."createdAt") AS "createdAt"
+  can.keep_id AS chat_id,
+  cm."userId" AS user_id,
+  MAX(cm."lastReadAt") AS last_read_at,
+  MIN(cm."createdAt") AS created_at
 FROM "ChatMember" cm
 INNER JOIN chat_pair_map map ON map.chat_id = cm."chatId"
 INNER JOIN canonical_pair_chat can ON can.pair_key = map.pair_key
 WHERE map.chat_id <> can.keep_id
-GROUP BY can.keep_id, cm."userId"
-ON CONFLICT ("chatId", "userId") DO UPDATE
+GROUP BY can.keep_id, cm."userId";
+
+UPDATE "ChatMember" tgt
 SET "lastReadAt" = CASE
-  WHEN "ChatMember"."lastReadAt" IS NULL THEN EXCLUDED."lastReadAt"
-  WHEN EXCLUDED."lastReadAt" IS NULL THEN "ChatMember"."lastReadAt"
-  WHEN EXCLUDED."lastReadAt" > "ChatMember"."lastReadAt" THEN EXCLUDED."lastReadAt"
-  ELSE "ChatMember"."lastReadAt"
-END;
+  WHEN tgt."lastReadAt" IS NULL THEN src.last_read_at
+  WHEN src.last_read_at IS NULL THEN tgt."lastReadAt"
+  WHEN src.last_read_at > tgt."lastReadAt" THEN src.last_read_at
+  ELSE tgt."lastReadAt"
+END
+FROM merge_members src
+WHERE tgt."chatId" = src.chat_id
+  AND tgt."userId" = src.user_id;
+
+INSERT INTO "ChatMember" ("chatId", "userId", "lastReadAt", "createdAt")
+SELECT
+  src.chat_id,
+  src.user_id,
+  src.last_read_at,
+  src.created_at
+FROM merge_members src
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM "ChatMember" x
+  WHERE x."chatId" = src.chat_id
+    AND x."userId" = src.user_id
+);
 
 -- Remove membership rows from non-canonical chats (data already merged above)
 DELETE FROM "ChatMember" cm
@@ -158,5 +175,6 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "Chat_pairKey_key" ON "Chat"("pairKey");
 
+DROP TABLE IF EXISTS merge_members;
 DROP TABLE IF EXISTS canonical_pair_chat;
 DROP TABLE IF EXISTS chat_pair_map;
