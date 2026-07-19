@@ -508,6 +508,7 @@ model PaymentIntent {
   currency       String               @default("RUB") @db.VarChar(8)
   status         PaymentIntentStatus  @default(CREATED)
   idempotencyKey String               @unique @db.VarChar(120)
+  /** PSP payment id — unique per provider when set (webhook correlation). */
   providerRef    String?              @db.VarChar(191)
   metadata       Json?
   createdAt      DateTime             @default(now())
@@ -515,6 +516,7 @@ model PaymentIntent {
   succeededAt    DateTime?
   user           User                 @relation(fields: [userId], references: [id])
 
+  @@unique([provider, providerRef])
   @@index([userId, status, createdAt])
   @@index([provider, status])
 }

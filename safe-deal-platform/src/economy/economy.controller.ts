@@ -84,11 +84,13 @@ export class EconomyController {
 
   @Post('payments/intents')
   createIntent(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentIntentDto) {
+    assertRateLimit(`payment:create:${user.id}`, 30, 60_000);
     return this.payments.createTopUp(user, dto);
   }
 
   @Post('payments/intents/:id/confirm')
   confirmIntent(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    assertRateLimit(`payment:confirm:${user.id}`, 30, 60_000);
     return this.payments.confirmManual(user, id);
   }
 

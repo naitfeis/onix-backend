@@ -9,6 +9,7 @@ import { TrustRecomputeJob } from './jobs/trust-recompute.job';
 import { IdempotencyCleanupJob } from './jobs/idempotency-cleanup.job';
 import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
+import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 
 type JobDef = {
   name: string;
@@ -30,6 +31,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly idempotencyCleanup: IdempotencyCleanupJob,
     private readonly paymentExpire: PaymentIntentExpireJob,
     private readonly ledgerReconciliation: LedgerReconciliationJob,
+    private readonly paymentReconciliation: PaymentReconciliationJob,
   ) {}
 
   onModuleInit(): void {
@@ -58,6 +60,11 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         name: 'ledger-reconciliation',
         intervalMs: Number(process.env.WORKER_LEDGER_RECONCILE_MS ?? 900_000),
         run: () => this.ledgerReconciliation.run(),
+      },
+      {
+        name: 'payment-reconciliation',
+        intervalMs: Number(process.env.WORKER_PAYMENT_RECONCILE_MS ?? 300_000),
+        run: () => this.paymentReconciliation.run(),
       },
     ];
 

@@ -56,6 +56,14 @@ const DEFAULT_RULES: AlertRule[] = [
     description: 'Ledger/deposit reconciliation mismatch',
   },
   {
+    id: 'payment-reconciliation-gap',
+    metric: 'onix_payment_reconciliation_gap_events_total',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Provider vs local PaymentIntent/Ledger gap (no auto-credit)',
+  },
+  {
     id: 'idempotency-conflicts',
     metric: 'onix_idempotency_total',
     threshold: 50,

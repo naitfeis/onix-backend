@@ -8,6 +8,7 @@ import { TrustRecomputeJob } from './jobs/trust-recompute.job';
 import { IdempotencyCleanupJob } from './jobs/idempotency-cleanup.job';
 import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
+import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { WorkerRunnerService } from './worker-runner.service';
 
 /**
@@ -22,6 +23,7 @@ import { WorkerRunnerService } from './worker-runner.service';
     IdempotencyCleanupJob,
     PaymentIntentExpireJob,
     LedgerReconciliationJob,
+    PaymentReconciliationJob,
     WorkerRunnerService,
   ],
 })

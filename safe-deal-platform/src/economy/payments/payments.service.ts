@@ -1,5 +1,6 @@
 import {
   BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { PaymentProviderCode, PaymentWallet, Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
@@ -7,12 +8,22 @@ import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
-import type { PaymentProvider } from './payment-provider';
+import type { PaymentProvider, ProviderWebhookVerification } from './payment-provider';
 import { BalanceService } from '../wallet/balance.service';
 import { DepositService } from '../wallet/deposit.service';
 import { TrustService } from '../trust/trust.service';
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+
+export type ProviderEventInput = {
+  eventId: string;
+  providerPaymentId: string;
+  intentId: string;
+  status: 'SUCCEEDED' | 'FAILED' | 'CANCELED';
+  /** Optional claims from PSP — verified against DB, never credited from. */
+  claimedAmountCents?: bigint;
+  claimedCurrency?: string;
+};
 
 @Injectable()
 export class PaymentsService {
@@ -27,10 +38,7 @@ export class PaymentsService {
     manual: ManualPaymentProvider,
   ) {
     this.providers = new Map();
-    for (const p of [
-      manual,
-      // Stubs registered by code lookup — real adapters replace these later.
-    ]) {
+    for (const p of [manual]) {
       this.providers.set(p.code, p);
     }
   }
@@ -57,7 +65,6 @@ export class PaymentsService {
   ) {
     if (dto.amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения — 1 ₽.');
     if (dto.provider === 'MANUAL') {
-      // Never allow non-admin self-credit, even when MANUAL_PAYMENTS_ENABLED=true.
       if (!user.isAdmin) {
         throw new ForbiddenException('Manual-пополнение доступно только администратору.');
       }
@@ -88,6 +95,7 @@ export class PaymentsService {
           wallet: dto.wallet,
           provider: dto.provider,
           amountCents,
+          currency: 'RUB',
           status: created.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
           idempotencyKey: dto.idempotencyKey,
           providerRef: created.providerRef,
@@ -105,74 +113,146 @@ export class PaymentsService {
     if (!isManualPaymentsEnabled()) {
       throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
     }
-    // External confirm is idempotent at scope+intent level (safe under retries / double-click).
     const result = await this.idempotency.run(
       'payment.confirm',
       intentId,
       { intentId, actorId: user.id.toString(), provider: 'MANUAL' },
-      () => this.confirmManualOnce(intentId),
+      () => this.settleIntentOnce(intentId, { expectProvider: 'MANUAL' }),
     );
     return result.value;
   }
 
   /**
-   * Provider webhook / callback entry — always go through IdempotencyService.
-   * Future PSP adapters call this with provider event id as key.
+   * HTTP webhook entry for real PSPs.
+   * 1) provider.verifyWebhook (signature)
+   * 2) idempotency by eventId
+   * 3) settle from DB intent amount/currency only
    */
-  async applyProviderEvent(
+  async handleProviderWebhook(
     provider: PaymentProviderCode,
-    eventId: string,
-    payload: { intentId: string; status: 'SUCCEEDED' | 'FAILED' | 'CANCELED' },
+    headers: Record<string, string | string[] | undefined>,
+    rawBody: string,
   ) {
+    const adapter = this.providers.get(provider);
+    if (!adapter?.verifyWebhook) {
+      throw new ForbiddenException(`Webhook для ${provider} не настроен.`);
+    }
+    const verified: ProviderWebhookVerification = await adapter.verifyWebhook(headers, rawBody);
+    if (!verified.ok || !verified.eventId || !verified.intentId || !verified.status || !verified.providerPaymentId) {
+      throw new UnauthorizedException('Неверная подпись или payload провайдера.');
+    }
+    return this.applyProviderEvent(provider, {
+      eventId: verified.eventId,
+      providerPaymentId: verified.providerPaymentId,
+      intentId: verified.intentId,
+      status: verified.status,
+      claimedAmountCents: verified.claimedAmountCents,
+      claimedCurrency: verified.claimedCurrency,
+    });
+  }
+
+  /**
+   * Provider webhook / callback — IdempotencyService + ledger money-path.
+   * Never trusts amount/userId from payload for credit.
+   */
+  async applyProviderEvent(provider: PaymentProviderCode, event: ProviderEventInput) {
     const result = await this.idempotency.run(
       `payment.webhook.${provider}`,
-      eventId,
-      payload,
+      event.eventId,
+      {
+        providerPaymentId: event.providerPaymentId,
+        intentId: event.intentId,
+        status: event.status,
+        claimedAmountCents: event.claimedAmountCents?.toString() ?? null,
+        claimedCurrency: event.claimedCurrency ?? null,
+      },
       async () => {
-        if (payload.status === 'SUCCEEDED') {
-          return this.confirmManualOnce(payload.intentId);
+        if (event.status === 'SUCCEEDED') {
+          return this.settleIntentOnce(event.intentId, {
+            expectProvider: provider,
+            providerPaymentId: event.providerPaymentId,
+            claimedAmountCents: event.claimedAmountCents,
+            claimedCurrency: event.claimedCurrency,
+          });
         }
-        return this.prisma.paymentIntent.update({
-          where: { id: payload.intentId },
-          data: { status: payload.status },
+        return this.markTerminal(event.intentId, event.status, {
+          expectProvider: provider,
+          providerPaymentId: event.providerPaymentId,
         });
       },
     );
     logMoneyEvent('payment_webhook', {
       status: result.kind === 'replay' ? 'replay' : 'success',
-      operationId: eventId,
-      paymentId: payload.intentId,
+      operationId: event.eventId,
+      paymentId: event.intentId,
       provider,
-      intentStatus: payload.status,
+      intentStatus: event.status,
     });
     return result.value;
   }
 
-  private async confirmManualOnce(intentId: string) {
+  private async settleIntentOnce(
+    intentId: string,
+    opts: {
+      expectProvider: PaymentProviderCode;
+      providerPaymentId?: string;
+      claimedAmountCents?: bigint;
+      claimedCurrency?: string;
+    },
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');
-      if (intent.provider !== 'MANUAL') {
-        throw new BadRequestException('Подтверждение доступно только для MANUAL.');
+      if (intent.provider !== opts.expectProvider) {
+        throw new BadRequestException('Провайдер не совпадает с PaymentIntent.');
       }
+
+      // Idempotent success (webhook before/after API timeout, retries).
       if (intent.status === 'SUCCEEDED') return intent;
+
+      if (intent.status === 'CANCELED' || intent.status === 'FAILED' || intent.status === 'EXPIRED') {
+        throw new ConflictException(`Нельзя зачислить платёж в статусе ${intent.status}.`);
+      }
       if (intent.status !== 'CREATED' && intent.status !== 'PENDING') {
         throw new ConflictException('Платёж нельзя подтвердить в текущем статусе.');
       }
 
-      const provider = this.provider('MANUAL');
-      await provider.confirmIntent(intent.id, intent.providerRef);
+      // Optional claims — must match DB; never used as credit source.
+      if (opts.claimedAmountCents !== undefined && opts.claimedAmountCents !== intent.amountCents) {
+        throw new ConflictException('Сумма в webhook не совпадает с PaymentIntent.');
+      }
+      if (opts.claimedCurrency && opts.claimedCurrency !== intent.currency) {
+        throw new ConflictException('Валюта в webhook не совпадает с PaymentIntent.');
+      }
 
+      if (opts.providerPaymentId) {
+        if (intent.providerRef && intent.providerRef !== opts.providerPaymentId) {
+          throw new ConflictException('providerPaymentId не совпадает с PaymentIntent.');
+        }
+        if (!intent.providerRef) {
+          await tx.paymentIntent.update({
+            where: { id: intent.id },
+            data: { providerRef: opts.providerPaymentId },
+          });
+        }
+      }
+
+      if (intent.provider === 'MANUAL') {
+        const provider = this.provider('MANUAL');
+        await provider.confirmIntent(intent.id, intent.providerRef);
+      }
+
+      // Credit ONLY intent.amountCents from DB via ledger idempotency key.
       if (intent.wallet === 'MAIN') {
         await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', {
           idempotencyKey: `payment:${intent.id}:main`,
-          description: 'Пополнение основного баланса (Manual)',
+          description: `Пополнение основного баланса (${intent.provider})`,
         });
       } else {
         await this.deposit.creditAvailable(tx, intent.userId, intent.amountCents, 'TOPUP', {
           idempotencyKey: `payment:${intent.id}:deposit`,
           paymentIntentId: intent.id,
-          description: 'Пополнение залога (Manual)',
+          description: `Пополнение залога (${intent.provider})`,
         });
         await this.trust.appendHistory(tx, intent.userId, 'DEPOSIT_CHANGED', {
           deltaCents: intent.amountCents.toString(),
@@ -184,6 +264,36 @@ export class PaymentsService {
       return tx.paymentIntent.update({
         where: { id: intent.id },
         data: { status: 'SUCCEEDED', succeededAt: new Date() },
+      });
+    }, SERIALIZABLE);
+  }
+
+  private async markTerminal(
+    intentId: string,
+    status: 'FAILED' | 'CANCELED',
+    opts: { expectProvider: PaymentProviderCode; providerPaymentId?: string },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
+      if (!intent) throw new NotFoundException('Платёж не найден.');
+      if (intent.provider !== opts.expectProvider) {
+        throw new BadRequestException('Провайдер не совпадает с PaymentIntent.');
+      }
+      if (intent.status === 'SUCCEEDED') {
+        throw new ConflictException('success → failed/canceled невозможен.');
+      }
+      if (intent.status === status || intent.status === 'FAILED' || intent.status === 'CANCELED' || intent.status === 'EXPIRED') {
+        return intent;
+      }
+      if (opts.providerPaymentId && !intent.providerRef) {
+        await tx.paymentIntent.update({
+          where: { id: intent.id },
+          data: { providerRef: opts.providerPaymentId },
+        });
+      }
+      return tx.paymentIntent.update({
+        where: { id: intent.id },
+        data: { status },
       });
     }, SERIALIZABLE);
   }
