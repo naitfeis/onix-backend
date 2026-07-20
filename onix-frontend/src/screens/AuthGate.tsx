@@ -91,7 +91,7 @@ export function AuthNotice({
           <span className="ban-notice__row">{formatBanRemaining(live)}</span>
         </>}
       {expired && <span className="ban-notice__row">Повторите вход — блокировка будет снята автоматически.</span>}
-    </> : <span>{message || 'Авторизация нужна для сделок и сообщений.'}</span>}
+    </> : <span>{message || 'Войдите через Telegram, чтобы продолжить.'}</span>}
   </div>
     {miniApp ? <Button variant="secondary" onClick={() => location.reload()}>Повторить</Button> :
       <WebsiteLoginEntry onAuthenticated={onAuthenticated} onBan={onBan} />}

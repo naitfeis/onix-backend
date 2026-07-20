@@ -8,13 +8,11 @@ import {
   IconBell,
   IconChat,
   IconDeals,
-  IconHelp,
   IconLot,
   IconMarket,
   IconMoon,
   IconProfile,
   IconSearch,
-  IconSettings,
   IconSun,
   IconWallet,
 } from './components/NavIcons';
@@ -55,6 +53,12 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
+
+function formatLotCount(n: number): string {
+  if (n <= 0) return '·';
+  if (n > 99) return '99+';
+  return String(n);
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -221,32 +225,42 @@ export default function App() {
 
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
-  const showAuth = core.states.profile === 'error' || Boolean(banNotice);
+  const showAuth = Boolean(banNotice)
+    || core.states.profile === 'error'
+    || (core.states.profile !== 'loading' && !core.profile);
   const shellReady = core.states.products === 'success'
     || core.states.products === 'error'
     || Boolean(core.profile)
     || core.states.profile === 'error';
   const chatImmersive = screen === 'chat';
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
+  const showMarketRail = screen === 'market' && !chatImmersive;
+  const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
+    acc[cat] = core.products.filter((p) => p.category === cat).length;
+    return acc;
+  }, {});
 
   return <>
     <Suspense fallback={null}>
       <OnixBackground mode={mode} />
     </Suspense>
-    <button
-      type="button"
-      className="theme-toggle"
-      onClick={toggleTheme}
-      aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
-      title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
-    >
-      {theme === 'dark' ? <IconSun /> : <IconMoon />}
-    </button>
     <div
-      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}`}
+      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}`}
       style={{ '--header-blur': headerBlur } as CSSProperties}
     >
     <a className="skip-link" href="#content">К содержимому</a>
+
+    {showAuth && (
+      <Suspense fallback={null}>
+        <AuthNotice
+          miniApp={isTelegramMiniApp()}
+          message={core.errors.profile}
+          ban={banNotice}
+          onAuthenticated={onAuthenticated}
+          onBan={setBanNotice}
+        />
+      </Suspense>
+    )}
 
     {/* Desktop left sidebar */}
     <aside className="sidebar-left desktop-only" aria-label="Навигация">
@@ -268,6 +282,7 @@ export default function App() {
       <div className="sidebar-cats">
         {CATEGORIES.map((cat) => {
           const style = CAT_STYLE[cat];
+          const count = sidebarCatCounts[cat] ?? 0;
           return (
             <button
               key={cat}
@@ -281,24 +296,37 @@ export default function App() {
                 className="cat-card__emblem"
                 style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
               >{style.letter}</span>
-              {CATEGORY_LABELS[cat]}
-              <em className="sidebar-cats__count">·</em>
+              <span className="sidebar-cats__label">{CATEGORY_LABELS[cat]}</span>
+              <em className="sidebar-cats__count" title={`${count} лотов`}>{formatLotCount(count)}</em>
             </button>
           );
         })}
       </div>
       <div className="sidebar-spacer" />
-      <nav className="sidebar-nav">
-        <button type="button" onClick={() => switchTo('profile')}><IconSettings /><span>Settings</span></button>
-        <button type="button"><IconHelp /><span>Help</span></button>
-      </nav>
-      <button type="button" className="sidebar-cta" onClick={() => switchTo('create')}>Become a Seller</button>
+      <button
+        type="button"
+        className="sidebar-theme"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+      >
+        {theme === 'dark' ? <IconSun /> : <IconMoon />}
+        <span>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
+      </button>
     </aside>
 
+    {/* keep theme on mobile topbar */}
     {!chatImmersive && (
       <header className="topbar mobile-only">
         <BrandMark />
         <div className="topbar__actions">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          >
+            {theme === 'dark' ? <IconSun /> : <IconMoon />}
+          </button>
           <button type="button" className="icon-btn" aria-label="Поиск" onClick={() => {
             const el = document.querySelector<HTMLInputElement>('input[type="search"]');
             el?.focus();
@@ -323,18 +351,6 @@ export default function App() {
           </div>
         </div>
       </header>
-    )}
-
-    {showAuth && (
-      <Suspense fallback={null}>
-        <AuthNotice
-          miniApp={isTelegramMiniApp()}
-          message={core.errors.profile}
-          ban={banNotice}
-          onAuthenticated={onAuthenticated}
-          onBan={setBanNotice}
-        />
-      </Suspense>
     )}
 
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
@@ -393,8 +409,8 @@ export default function App() {
       </div>
     </main>
 
-    {/* Desktop right widgets */}
-    {!chatImmersive && (
+    {/* Market-only right rail */}
+    {showMarketRail && (
       <aside className="sidebar-right desktop-only" aria-label="Виджеты">
         <div className="widget widget--glass">
           <p className="wallet-hero__label">Wallet</p>

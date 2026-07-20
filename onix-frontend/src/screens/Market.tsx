@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, money, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
@@ -20,6 +20,12 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
+
+function formatCatCount(n: number): string {
+  if (n <= 0) return '·';
+  if (n > 99) return '99+';
+  return String(n);
+}
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
@@ -51,12 +57,38 @@ export function Market({
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
+  const [heroSlide, setHeroSlide] = useState(0);
+  const heroTrackRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
   const isAdmin = Boolean(
     core.profile?.isAdmin
     || core.profile?.status === 'ADMIN'
     || core.profile?.roles.includes('ADMIN'),
   );
+  const greetName = core.profile ? publicAt(core.profile.username) : 'гость';
+  const heroSlides = [
+    {
+      id: 'hello',
+      title: `Привет - ${greetName}`,
+      text: 'Добро пожаловать в ONIX. Безопасные сделки и свежие лоты уже ждут.',
+      cta: 'Смотреть лоты' as const,
+      action: 'browse' as const,
+    },
+    {
+      id: 'safe',
+      title: 'Безопасный маркет аккаунтов',
+      text: 'Сейф-сделки, рейтинг продавцов и мгновенная доставка — стекло поверх живой сцены.',
+      cta: 'Разместить лот' as const,
+      action: 'create' as const,
+    },
+    {
+      id: 'sell',
+      title: 'Продай аккаунт без риска',
+      text: 'Размести лот за минуту — деньги на сделке держатся в сейфе до подтверждения.',
+      cta: 'Разместить лот' as const,
+      action: 'create' as const,
+    },
+  ];
 
   const lotLabel = (product: Product) => (
     product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null
@@ -186,13 +218,89 @@ export function Market({
   }, [focusProductId]);
 
   const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat] = items.filter((p) => p.category === cat).length
-      || core.products.filter((p) => p.category === cat).length
-      || 0;
+    const fromCore = core.products.filter((p) => p.category === cat).length;
+    const fromPage = items.filter((p) => p.category === cat).length;
+    acc[cat] = Math.max(fromCore, fromPage);
     return acc;
   }, {});
+  const totalVisible = Math.max(items.length, core.products.length);
+
+  const goHeroSlide = (index: number) => {
+    const next = ((index % heroSlides.length) + heroSlides.length) % heroSlides.length;
+    setHeroSlide(next);
+    const track = heroTrackRef.current;
+    if (!track) return;
+    const slide = track.children[next] as HTMLElement | undefined;
+    slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+  };
+
+  useEffect(() => {
+    const track = heroTrackRef.current;
+    if (!track) return;
+    const onScroll = () => {
+      const width = track.clientWidth || 1;
+      const index = Math.round(track.scrollLeft / width);
+      setHeroSlide(Math.min(Math.max(index, 0), heroSlides.length - 1));
+    };
+    track.addEventListener('scroll', onScroll, { passive: true });
+    return () => track.removeEventListener('scroll', onScroll);
+  }, [heroSlides.length]);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const timer = window.setInterval(() => {
+      setHeroSlide((current) => {
+        const next = (current + 1) % heroSlides.length;
+        const track = heroTrackRef.current;
+        if (track) {
+          const slide = track.children[next] as HTMLElement | undefined;
+          slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+        }
+        return next;
+      });
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, [heroSlides.length]);
 
   return <div className="stack">
+    <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
+      <div className="market-hero__track" ref={heroTrackRef}>
+        {heroSlides.map((slide, index) => (
+          <article
+            key={slide.id}
+            className="market-hero__slide"
+            aria-hidden={heroSlide !== index}
+            aria-label={`${index + 1} из ${heroSlides.length}`}
+          >
+            <h2>{slide.title}</h2>
+            <p>{slide.text}</p>
+            <Button
+              variant="violet"
+              onClick={() => {
+                if (slide.action === 'create') switchTo('create');
+                else heroTrackRef.current?.closest('.stack')?.querySelector('.cat-row')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              {slide.cta}
+            </Button>
+          </article>
+        ))}
+      </div>
+      <div className="desktop-hero__dots" role="tablist" aria-label="Слайды">
+        {heroSlides.map((slide, index) => (
+          <button
+            key={slide.id}
+            type="button"
+            role="tab"
+            aria-selected={heroSlide === index}
+            className={heroSlide === index ? 'active' : undefined}
+            onClick={() => goHeroSlide(index)}
+            aria-label={`Слайд ${index + 1}`}
+          />
+        ))}
+      </div>
+    </section>
+
     <div className="cat-row" role="list" aria-label="Категории">
       <button
         type="button"
@@ -202,7 +310,7 @@ export function Market({
       >
         <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
         <span className="cat-card__name">Все</span>
-        <span className="cat-card__count">{items.length || '·'}</span>
+        <span className="cat-card__count">{formatCatCount(totalVisible)}</span>
       </button>
       {CATEGORIES.map((cat) => {
         const style = CAT_STYLE[cat];
@@ -219,33 +327,11 @@ export function Market({
               style={{ background: style.bg, ['--_glow' as string]: style.glow }}
             >{style.letter}</span>
             <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
-            <span className="cat-card__count">{categoryCounts[cat] || '·'}</span>
+            <span className="cat-card__count">{formatCatCount(categoryCounts[cat] ?? 0)}</span>
           </button>
         );
       })}
     </div>
-
-    <div className="search-row desktop-search">
-      <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
-      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка">
-        <option value="new">Сначала новые</option>
-        <option value="price">Сначала дешевле</option>
-        <option value="rating">По рейтингу</option>
-      </Select>
-    </div>
-
-    <div className="desktop-hero desktop-only">
-      <h2>Безопасный маркет аккаунтов</h2>
-      <p>Сейф-сделки, рейтинг продавцов и мгновенная доставка — стекло поверх живой сцены.</p>
-      <Button variant="violet" onClick={() => switchTo('create')}>Разместить лот</Button>
-      <div className="desktop-hero__dots" aria-hidden="true" style={{ marginTop: 18 }}>
-        <i className="active" /><i /><i />
-      </div>
-    </div>
-
-    {onixQuery && <Button variant="secondary" onClick={async () => {
-      try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery))); } catch { /* ignore */ }
-    }}>Открыть профиль</Button>}
 
     {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
       {marketSubs.map(item => (
@@ -258,6 +344,19 @@ export function Market({
       ))}
     </div>}
 
+    <div className="search-row desktop-search">
+      <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
+      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка">
+        <option value="new">Сначала новые</option>
+        <option value="price">Сначала дешевле</option>
+        <option value="rating">По рейтингу</option>
+      </Select>
+    </div>
+
+    {onixQuery && <Button variant="secondary" onClick={async () => {
+      try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery))); } catch { /* ignore */ }
+    }}>Открыть профиль</Button>}
+
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
       marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
@@ -266,13 +365,36 @@ export function Market({
         const isSuper = product.seller.rating >= 4.8 || product.seller.badge === 'VIP' || product.seller.badge === 'VERIFIED_SELLER';
         return (
           <Card key={product.id} interactive className="product-card product-card--compact">
-            <button className="product-main" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
-              <div className="product-card__media" aria-hidden="true">
-                <div className="product-card__badges">
-                  <span className="pill-rating"><IconStar /> {rating}</span>
-                  {isSuper && <span className="pill-super">Super</span>}
-                </div>
+            <div className="product-card__media">
+              <button
+                type="button"
+                className="product-card__media-hit"
+                onClick={() => void openProduct(product)}
+                aria-label={`Открыть ${product.title}`}
+              />
+              <div className="product-card__badges">
+                <span className="pill-rating"><IconStar /> {rating}</span>
+                {isSuper && <span className="pill-super">Super</span>}
               </div>
+              <div className="product-card__avatar">
+                <UserAvatar
+                  avatarUrl={product.seller.avatarUrl}
+                  name={product.seller.username}
+                  size="medium"
+                  online={sellerIsPresent(product.seller, core.profile)}
+                />
+              </div>
+              <button
+                type="button"
+                className={`favorite ${product.favorite ? 'active' : ''}`}
+                onClick={() => {
+                  setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
+                  void core.toggleFavorite(product);
+                }}
+                aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}
+              >♥</button>
+            </div>
+            <button type="button" className="product-main product-main--body" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
               <div className="product-card__body">
                 <h2>{product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title}</h2>
                 <p className="product-card__meta">
@@ -285,10 +407,6 @@ export function Market({
               <strong className="product-card__price">{money(product.priceCents)}</strong>
               <button type="button" className="button button--buy product-card__buy" onClick={() => setConfirm(product)}>Купить</button>
             </div>
-            <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
-              setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
-              void core.toggleFavorite(product);
-            }} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
           </Card>
         );
       })}</div>}
