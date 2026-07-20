@@ -37,14 +37,14 @@ body {
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
-:focus-visible {
-  outline: 2px solid var(--accent-coral) !important;
-  outline-offset: 3px;
-}
-
 ::selection {
   color: #fff;
-  background: rgba(240, 86, 74, 0.55);
+  background: rgba(91, 141, 239, 0.55);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }

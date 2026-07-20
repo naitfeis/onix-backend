@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { money } from './api/client';
-import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo } from './api/contracts';
+import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import UserAvatar from './components/UserAvatar';
 import {
@@ -8,9 +8,7 @@ import {
   IconBell,
   IconChat,
   IconDeals,
-  IconHeart,
   IconHelp,
-  IconHome,
   IconLot,
   IconMarket,
   IconMoon,
@@ -42,10 +40,9 @@ const TABS: Array<{ id: Screen; label: string; icon: ReactNode }> = [
 ];
 
 const SIDEBAR_NAV: Array<{ id: Screen; label: string; icon: ReactNode }> = [
-  { id: 'market', label: 'Home', icon: <IconHome /> },
   { id: 'market', label: 'Market', icon: <IconMarket /> },
   { id: 'deals', label: 'My Orders', icon: <IconDeals /> },
-  { id: 'profile', label: 'Favorites', icon: <IconHeart /> },
+  { id: 'profile', label: 'Profile', icon: <IconProfile /> },
   { id: 'chat', label: 'Messages', icon: <IconChat /> },
   { id: 'create', label: 'Sell Account', icon: <IconLot /> },
 ];
@@ -53,11 +50,22 @@ const SIDEBAR_NAV: Array<{ id: Screen; label: string; icon: ReactNode }> = [
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
   STEAM: { bg: 'linear-gradient(145deg,#4A8FE0,#346FB8)', glow: 'rgba(74,143,224,.32)', letter: 'ST' },
-  ROBLOX: { bg: 'linear-gradient(145deg,#E14B5A,#B83846)', glow: 'rgba(225,75,90,.32)', letter: 'RB' },
+  ROBLOX: { bg: 'linear-gradient(145deg,#5B8DEF,#3D6FD4)', glow: 'rgba(91,141,239,.32)', letter: 'RB' },
   RP_PROJECTS: { bg: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)', glow: 'rgba(139,127,245,.32)', letter: 'RP' },
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diff) || diff < 0) return '';
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return 'сейчас';
+  if (minutes < 60) return `${minutes}м`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}ч`;
+  return `${Math.floor(hours / 24)}д`;
+}
 
 function ScreenFallback() {
   return <div className="stack"><div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div></div>;
@@ -127,6 +135,7 @@ export default function App() {
   const [headerBlur, setHeaderBlur] = useState(0);
   const [marketCategory, setMarketCategory] = useState<string>('Все');
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
+  const [openWalletTopup, setOpenWalletTopup] = useState(false);
 
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
@@ -243,18 +252,12 @@ export default function App() {
     <aside className="sidebar-left desktop-only" aria-label="Навигация">
       <div className="sidebar-left__brand"><BrandMark /></div>
       <nav className="sidebar-nav">
-        {SIDEBAR_NAV.map((item, index) => (
+        {SIDEBAR_NAV.map((item) => (
           <button
-            key={`${item.label}-${index}`}
+            key={item.label}
             type="button"
-            className={screen === item.id && (item.label !== 'Favorites') ? 'active' : ''}
-            onClick={() => {
-              if (item.label === 'Favorites') {
-                switchTo('profile');
-                return;
-              }
-              switchTo(item.id);
-            }}
+            className={screen === item.id ? 'active' : ''}
+            onClick={() => switchTo(item.id)}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -379,6 +382,8 @@ export default function App() {
             setToast={setToast}
             openDirectChat={openDirectChat}
             openProductCard={openProductCard}
+            openTopup={openWalletTopup}
+            onTopupConsumed={() => setOpenWalletTopup(false)}
             openDealChat={(chatId) => {
               setFocusChatId(chatId);
               switchTo('chat');
@@ -391,61 +396,83 @@ export default function App() {
     {/* Desktop right widgets */}
     {!chatImmersive && (
       <aside className="sidebar-right desktop-only" aria-label="Виджеты">
-        <div className="widget">
+        <div className="widget widget--glass">
           <p className="wallet-hero__label">Wallet</p>
           <div className="wallet-hero__amount">
             {core.profile ? money(core.profile.balanceCents) : '—'}
             <small>RUB</small>
           </div>
           <div style={{ marginTop: 14 }}>
-            <Button variant="violet" style={{ width: '100%' }} onClick={() => switchTo('profile')}>
+            <Button
+              variant="violet"
+              style={{ width: '100%' }}
+              onClick={() => {
+                setOpenWalletTopup(true);
+                switchTo('profile');
+              }}
+            >
               <IconWallet size={18} /> Add Funds
             </Button>
           </div>
         </div>
-        <div className="widget">
+        <div className="widget widget--glass">
           <h3>Live Notifications</h3>
           <div className="widget-notify">
-            <div className="widget-notify__row">
-              <UserAvatar name="ONIX" size="small" />
-              <p><b>Система</b> <span>безопасная сделка активирована</span></p>
-              <time>2м</time>
-            </div>
-            <div className="widget-notify__row">
-              <UserAvatar name="Seller" size="small" />
-              <p><b>Продавец</b> <span>подтвердил передачу товара</span></p>
-              <time>18м</time>
-            </div>
-            <div className="widget-notify__row">
-              <UserAvatar name="Buyer" size="small" />
-              <p><b>Покупатель</b> <span>оставил отзыв ★ 5.0</span></p>
-              <time>1ч</time>
-            </div>
-            <div className="widget-notify__row">
-              <UserAvatar name="ONIX" size="small" />
-              <p><b>Маркет</b> <span>новый лот в Standoff 2</span></p>
-              <time>3ч</time>
-            </div>
+            {!core.profile ? (
+              <p className="widget-empty">Войдите, чтобы видеть личные уведомления.</p>
+            ) : core.states.notifications === 'loading' && core.notifications.length === 0 ? (
+              <p className="widget-empty">Загрузка…</p>
+            ) : core.notifications.length === 0 ? (
+              <p className="widget-empty">Пока нет уведомлений — здесь появятся оплаты, сделки и системные события.</p>
+            ) : (
+              core.notifications.slice(0, 6).map((item: Notification) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`widget-notify__row${item.read ? '' : ' is-unread'}`}
+                  onClick={() => {
+                    if (!item.read) void core.markNotificationRead(item.id);
+                  }}
+                >
+                  <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />
+                  <p>
+                    <b>{item.title}</b>
+                    {item.body ? <span> {item.body}</span> : null}
+                  </p>
+                  <time>{relativeTime(item.createdAt)}</time>
+                </button>
+              ))
+            )}
           </div>
-          <button type="button" className="widget-link" onClick={() => switchTo('chat')}>View All →</button>
+          <button type="button" className="widget-link" onClick={() => switchTo('deals')}>Мои сделки →</button>
         </div>
-        <div className="widget">
-          <h3>Trending Now</h3>
+        <div className="widget widget--glass">
+          <h3>Новые лоты</h3>
           <div className="widget-trend">
-            {CATEGORIES.slice(0, 4).map((cat) => {
-              const style = CAT_STYLE[cat];
-              return (
-                <div className="widget-trend__row" key={cat}>
-                  <span
-                    className="cat-card__emblem"
-                    style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
-                  >{style.letter}</span>
-                  {CATEGORY_LABELS[cat]}
-                  <strong>★ 4.{8 - CATEGORIES.indexOf(cat) % 3}</strong>
-                </div>
-              );
-            })}
+            {core.products.length === 0 ? (
+              <p className="widget-empty">Лотов пока нет.</p>
+            ) : (
+              core.products.slice(0, 5).map((product: Product) => {
+                const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
+                return (
+                  <button
+                    type="button"
+                    className="widget-trend__row widget-trend__row--btn"
+                    key={product.id}
+                    onClick={() => openProductCard(product.id)}
+                  >
+                    <span
+                      className="cat-card__emblem"
+                      style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
+                    >{style.letter}</span>
+                    <span className="widget-trend__title">{product.title}</span>
+                    <strong>{money(product.priceCents)}</strong>
+                  </button>
+                );
+              })
+            )}
           </div>
+          <button type="button" className="widget-link" onClick={() => switchTo('market')}>Все лоты →</button>
         </div>
       </aside>
     )}

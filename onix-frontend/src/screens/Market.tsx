@@ -5,7 +5,7 @@ import {
   formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { IconBell, IconCheck, IconPlus, IconStar, IconWallet } from '../components/NavIcons';
+import { IconStar } from '../components/NavIcons';
 import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
@@ -15,7 +15,7 @@ import { PublicProfileModal, StaffBadge } from './shared';
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
   STEAM: { bg: 'linear-gradient(145deg,#4A8FE0,#346FB8)', glow: 'rgba(74,143,224,.32)', letter: 'ST' },
-  ROBLOX: { bg: 'linear-gradient(145deg,#E14B5A,#B83846)', glow: 'rgba(225,75,90,.32)', letter: 'RB' },
+  ROBLOX: { bg: 'linear-gradient(145deg,#5B8DEF,#3D6FD4)', glow: 'rgba(91,141,239,.32)', letter: 'RB' },
   RP_PROJECTS: { bg: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)', glow: 'rgba(139,127,245,.32)', letter: 'RP' },
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
@@ -193,37 +193,6 @@ export function Market({
   }, {});
 
   return <div className="stack">
-    <button
-      type="button"
-      className="wallet-hero"
-      onClick={() => switchTo('profile')}
-      aria-label="Открыть кошелёк"
-    >
-      <div>
-        <span className="wallet-hero__label">Wallet</span>
-        <div className="wallet-hero__amount">
-          {core.profile ? money(core.profile.balanceCents) : '—'}
-          <small>RUB</small>
-        </div>
-      </div>
-      <span className="wallet-hero__action" aria-hidden="true">
-        {core.profile ? <IconPlus /> : <IconWallet />}
-      </span>
-    </button>
-
-    <div className="live-feed" aria-label="Живые уведомления">
-      <div className="live-pill">
-        <span className="live-pill__icon live-pill__icon--violet"><IconBell size={16} /></span>
-        <span className="live-pill__text">Новый лот в Standoff 2 — Gold аккаунт</span>
-        <span className="live-pill__time">2м</span>
-      </div>
-      <div className="live-pill">
-        <span className="live-pill__icon live-pill__icon--mint"><IconCheck size={16} /></span>
-        <span className="live-pill__text">Сделка завершена · деньги переведены</span>
-        <span className="live-pill__time">18м</span>
-      </div>
-    </div>
-
     <div className="cat-row" role="list" aria-label="Категории">
       <button
         type="button"
@@ -268,7 +237,7 @@ export function Market({
     <div className="desktop-hero desktop-only">
       <h2>Безопасный маркет аккаунтов</h2>
       <p>Сейф-сделки, рейтинг продавцов и мгновенная доставка — стекло поверх живой сцены.</p>
-      <Button variant="primary" onClick={() => switchTo('create')}>Разместить лот</Button>
+      <Button variant="violet" onClick={() => switchTo('create')}>Разместить лот</Button>
       <div className="desktop-hero__dots" aria-hidden="true" style={{ marginTop: 18 }}>
         <i className="active" /><i /><i />
       </div>

@@ -102,6 +102,7 @@ function ListingViews({ count }: { count: number }) {
 
 export function Profile({
   core, switchTo, setToast, openDirectChat, openProductCard, openDealChat,
+  openTopup, onTopupConsumed,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -109,6 +110,8 @@ export function Profile({
   openDirectChat: (onixId: string) => Promise<boolean>;
   openProductCard: (productId: string) => void;
   openDealChat: (chatId: string) => void;
+  openTopup?: boolean;
+  onTopupConsumed?: () => void;
 }) {
   const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'>('overview');
   const [moneyOpen, setMoneyOpen] = useState(false);
@@ -116,6 +119,7 @@ export function Profile({
   const [moneyBusy, setMoneyBusy] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
+  const [payMethod, setPayMethod] = useState<'MANUAL' | 'TELEGRAM' | 'YOOKASSA'>('MANUAL');
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -216,8 +220,16 @@ export function Profile({
 
   const openMoney = (kind: Exclude<MoneyModal, null>) => {
     setAmount('');
+    setPayMethod('MANUAL');
+    setMoneyOpen(true);
     setMoneyModal(kind);
   };
+
+  useEffect(() => {
+    if (!openTopup || !core.profile) return;
+    openMoney('MAIN_TOPUP');
+    onTopupConsumed?.();
+  }, [openTopup, core.profile, onTopupConsumed]);
 
   const submitMoney = async () => {
     const rubles = Number(amount);
@@ -233,7 +245,7 @@ export function Profile({
         const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
           wallet: 'MAIN',
           amountCents,
-          provider: 'MANUAL',
+          provider: payMethod,
           idempotencyKey: key,
         });
         await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
@@ -402,12 +414,43 @@ export function Profile({
     />
     <EditProduct product={editing} core={core} onClose={() => setEditing(null)} setToast={setToast} />
     <Modal open={Boolean(moneyModal)} title={moneyTitle} onClose={() => setMoneyModal(null)}>
-      <div className="form">
+      <div className="form money-form">
         <p className="modal__text">{moneyHint}</p>
-        <Field label="Сумма, ₽"><Input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} /></Field>
-        <div className="modal__actions">
+        <Field label="Сумма, ₽">
+          <Input
+            inputMode="decimal"
+            value={amount}
+            onChange={event => setAmount(event.target.value)}
+            placeholder="Например, 1000"
+            aria-label="Сумма пополнения"
+          />
+        </Field>
+        {moneyModal === 'MAIN_TOPUP' && (
+          <Field label="Способ оплаты">
+            <div className="pay-methods" role="radiogroup" aria-label="Способ оплаты">
+              {([
+                { id: 'MANUAL' as const, label: 'Вручную (тест)' },
+                { id: 'TELEGRAM' as const, label: 'Telegram Wallet' },
+                { id: 'YOOKASSA' as const, label: 'ЮKassa' },
+              ]).map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={payMethod === method.id}
+                  className={`pay-methods__btn${payMethod === method.id ? ' is-active' : ''}`}
+                  onClick={() => setPayMethod(method.id)}
+                >
+                  {method.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
+        <div className="modal__actions money-form__actions">
           <Button variant="secondary" onClick={() => setMoneyModal(null)}>Отмена</Button>
           <Button
+            variant="violet"
             busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.actionBusy === 'withdraw')}
             disabled={Number(amount) < 1}
             onClick={() => void submitMoney()}

@@ -300,9 +300,9 @@
 }
 .button--buy {
   color: #fff;
-  background: color-mix(in srgb, var(--accent-mint) 88%, #000);
-  border-color: rgba(63, 191, 143, 0.45);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 8px 28px -8px rgba(63, 191, 143, 0.45);
+  background: linear-gradient(180deg, var(--accent), var(--accent-coral-deep));
+  border-color: transparent;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), var(--accent-coral-glow);
 }
 .button--secondary {
   color: var(--text);
@@ -606,7 +606,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 6px;
+  padding: 10px 6px 8px;
   color: var(--text);
   cursor: pointer;
   transition: transform 120ms var(--ease), border-color 180ms, background 180ms, box-shadow 180ms;
@@ -625,9 +625,12 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
   color: #fff;
+  flex-shrink: 0;
   box-shadow: 0 0 14px var(--_glow, rgba(139, 127, 245, 0.28));
   background: var(--_bg, linear-gradient(145deg, var(--accent-violet), var(--accent-violet-deep)));
 }
@@ -660,11 +663,11 @@
   grid-column: 1 / -1;
   border: var(--glass-border);
   border-radius: var(--radius-md);
-  background: var(--glass-thin-bg);
+  background: var(--glass-bg);
   overflow: hidden;
-  box-shadow: var(--glass-highlight);
-  -webkit-backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .wallet-strip__row {
   width: 100%;
@@ -689,6 +692,101 @@
 .wallet-strip__chevron { opacity: .7; transition: transform 160ms ease; }
 .wallet-strip__chevron.open { transform: rotate(180deg); }
 .wallet-strip__panel { padding: 0 12px 12px; display: grid; gap: 10px; }
+.wallet-strip__panel .balance {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.wallet-strip__panel .balance strong {
+  grid-row: auto;
+  font-size: 16px;
+}
+.wallet-strip__panel .balance-actions {
+  grid-column: auto;
+  grid-row: auto;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.wallet-strip__panel .balance-actions .button {
+  flex: 1 1 auto;
+  min-width: 120px;
+}
+
+.money-form {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.money-form .field,
+.money-form .modal__text {
+  min-width: 0;
+}
+.money-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.pay-methods {
+  display: grid;
+  gap: 8px;
+}
+.pay-methods__btn {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: var(--glass-border);
+  background: var(--glass-thin-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--glass-highlight);
+}
+.pay-methods__btn.is-active {
+  border-color: rgba(91, 141, 239, 0.55);
+  background: color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.08));
+  box-shadow: var(--glass-shadow), 0 0 0 1px rgba(91, 141, 239, 0.25);
+}
+
+.widget-empty {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 4px 0 8px;
+  margin: 0;
+}
+.widget-notify__row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+.widget-notify__row.is-unread p b { color: var(--accent); }
+.widget-trend__row--btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.widget-trend__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .product-card h2 {
   font-family: var(--font-display), sans-serif;
   font-size: 17px;
@@ -786,7 +884,7 @@
   cursor: pointer;
   z-index: 2;
 }
-.favorite.active { color: var(--accent-coral); border-color: rgba(240, 86, 74, 0.45); }
+.favorite.active { color: var(--accent-violet); border-color: rgba(139, 127, 245, 0.45); }
 .badge {
   display: inline-flex;
   width: fit-content;
@@ -1680,7 +1778,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .widget {
     padding: 16px;
     border-radius: var(--radius-xl);
-    /* glass: tokens.css — blur via --glass-blur */
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .widget--glass {
+    background: var(--glass-bg);
   }
   .widget h3 {
     font-family: var(--font-display), sans-serif;
@@ -1733,14 +1838,16 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     color: var(--text-primary);
   }
   .widget-trend__row:last-child { border-bottom: 0; }
-  .widget-trend__row strong { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent-star); }
+  .widget-trend__row strong { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent); }
   .desktop-search { margin-bottom: 16px; gap: 12px; }
   .desktop-hero {
-    min-height: 220px;
+    min-height: 180px;
     margin-bottom: 20px;
     padding: 28px;
     border-radius: var(--radius-sheet);
-    /* glass material from tokens — do not override with flat fill */
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    box-shadow: var(--glass-shadow);
   }
   .desktop-hero h2 {
     font-family: var(--font-display), sans-serif;
@@ -1789,6 +1896,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     height: 96px;
   }
   .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .product-grid--compact { margin-top: 4px; }
   .product-card__buy { width: 100%; border-radius: var(--radius-md); min-height: 40px; }
   .product-card__footer { flex-direction: column; align-items: stretch; gap: 10px; margin-top: 10px; }
   .chat-layout { grid-template-columns: 1fr; }

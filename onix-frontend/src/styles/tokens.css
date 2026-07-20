@@ -55,11 +55,12 @@ html[data-theme="dark"] {
   --surface: var(--glass-card-bg);
   --surface-2: var(--glass-subtle-bg);
 
-  --accent: #F0564A;
-  --accent-coral: #F0564A;
-  --accent-coral-deep: #D8453B;
-  --accent-coral-glow: 0 0 40px 6px rgba(240, 86, 74, 0.45);
-  --accent-soft: #F0564A;
+  /* Primary accent → blue (was coral red) */
+  --accent: #5B8DEF;
+  --accent-coral: #5B8DEF;
+  --accent-coral-deep: #3D6FD4;
+  --accent-coral-glow: 0 0 40px 6px rgba(91, 141, 239, 0.4);
+  --accent-soft: #5B8DEF;
   --accent-mint: #3FBF8F;
   --accent-violet: #8B7FF5;
   --accent-violet-deep: #6B5FE0;
@@ -69,7 +70,7 @@ html[data-theme="dark"] {
   --success: #3FBF8F;
   --success-green: #3FBF8F;
   --warning: #E8B93E;
-  --danger: #F0564A;
+  --danger: #C45B5B;
   --steel: rgba(255, 255, 255, 0.72);
   --cyan: var(--accent-violet);
 
@@ -163,11 +164,11 @@ html[data-theme="light"] {
   --surface: var(--glass-card-bg);
   --surface-2: var(--glass-subtle-bg);
 
-  --accent: #F0564A;
-  --accent-coral: #F0564A;
-  --accent-coral-deep: #D8453B;
-  --accent-coral-glow: 0 0 36px 4px rgba(240, 86, 74, 0.35);
-  --accent-soft: #F0564A;
+  --accent: #5B8DEF;
+  --accent-coral: #5B8DEF;
+  --accent-coral-deep: #3D6FD4;
+  --accent-coral-glow: 0 0 36px 4px rgba(91, 141, 239, 0.32);
+  --accent-soft: #5B8DEF;
   --accent-mint: #2FA87A;
   --accent-violet: #6B5FE0;
   --accent-violet-deep: #5548C8;
@@ -177,7 +178,7 @@ html[data-theme="light"] {
   --success: #2FA87A;
   --success-green: #2FA87A;
   --warning: #C99620;
-  --danger: #F0564A;
+  --danger: #C45B5B;
   --steel: rgba(40, 36, 55, 0.72);
   --cyan: var(--accent-violet);
 
@@ -253,7 +254,7 @@ html[data-theme="light"] .topbar::before {
   );
 }
 
-/* Hide left-edge specular — can look like a color bleed strip */
+/* Hide left-edge specular — was causing vertical seam through widgets */
 html[data-theme="light"] .glass-card::after,
 html[data-theme="light"] .card::after,
 html[data-theme="light"] .widget::after,
@@ -263,7 +264,7 @@ html[data-theme="light"] .sidebar-left::after,
 html[data-theme="light"] .section-head::after,
 html[data-theme="light"] .auth-notice::after,
 html[data-theme="light"] .topbar::after {
-  display: none;
+  display: none !important;
 }
 
 .glass-thin,
@@ -347,22 +348,8 @@ html[data-theme="light"] .topbar::after {
 .section-head::after,
 .auth-notice::after,
 .topbar::after {
-  content: "";
-  position: absolute;
-  top: 10%;
-  left: 0;
-  bottom: 30%;
-  width: 1px;
-  pointer-events: none;
-  z-index: 3;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.35),
-    transparent
-  );
+  display: none !important;
 }
-
-.modal__panel::before { display: none; }
 
 /* Tiny controls only — panels use the same glass as .desktop-hero above */
 .toast,

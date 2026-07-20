@@ -122,6 +122,7 @@ function warmSecondaryCollections(
   void bootstrapPhase('chats', () => load('chats', API_PATHS.chats));
   if (profile) {
     void load('reviews', API_PATHS.reviews(profile.onixId));
+    void load('notifications', API_PATHS.notifications);
   }
 }
 
@@ -203,7 +204,6 @@ export function useOnixCore() {
         printBootstrapSummary('bootstrap-settled');
         markAppReady('bootstrap-settled');
         warmSecondaryCollections(current, load);
-        setStates((previous) => ({ ...previous, notifications: 'idle' }));
         return;
       }
 
@@ -281,7 +281,6 @@ export function useOnixCore() {
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
       warmSecondaryCollections(current, load);
-      setStates((previous) => ({ ...previous, notifications: 'idle' }));
     } catch (error) {
       setProfile(null);
       setStates(previous => ({ ...previous, profile: 'error' }));
