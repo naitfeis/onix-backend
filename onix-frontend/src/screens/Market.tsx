@@ -5,14 +5,25 @@ import {
   formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
+import { IconBell, IconCheck, IconPlus, IconStar, IconWallet } from '../components/NavIcons';
 import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 
+const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
+  STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
+  STEAM: { bg: 'linear-gradient(145deg,#4A8FE0,#346FB8)', glow: 'rgba(74,143,224,.32)', letter: 'ST' },
+  ROBLOX: { bg: 'linear-gradient(145deg,#E14B5A,#B83846)', glow: 'rgba(225,75,90,.32)', letter: 'RB' },
+  RP_PROJECTS: { bg: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)', glow: 'rgba(139,127,245,.32)', letter: 'RP' },
+  BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
+  OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
+};
+
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
+  externalCategory, onExternalCategoryConsumed,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -22,6 +33,8 @@ export function Market({
   openDirectChat: (onixId: string) => Promise<boolean>;
   openProductCard: (productId: string) => void;
   openDealChat: (chatId: string) => void;
+  externalCategory?: string;
+  onExternalCategoryConsumed?: () => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [confirm, setConfirm] = useState<Product | null>(null);
@@ -38,7 +51,7 @@ export function Market({
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
-  const PAGE = 10;
+  const PAGE = 15;
   const isAdmin = Boolean(
     core.profile?.isAdmin
     || core.profile?.status === 'ADMIN'
@@ -49,7 +62,6 @@ export function Market({
     product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null
   );
 
-  /** List cards are lean — load full product (description + seller stats) on open. */
   const openProduct = async (product: Product) => {
     setSelected(product);
     setDetailReady(false);
@@ -78,6 +90,13 @@ export function Market({
   const marketSubs = category !== 'Все'
     ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
+
+  useEffect(() => {
+    if (!externalCategory || externalCategory === 'Все') return;
+    setCategory(externalCategory);
+    setSubcategory('');
+    onExternalCategoryConsumed?.();
+  }, [externalCategory, onExternalCategoryConsumed]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -133,7 +152,6 @@ export function Market({
     }
   };
 
-  // Lean list stubs followersCount/followed and omits description — sync favorite only.
   useEffect(() => {
     if (!selected) return;
     const fresh = items.find((item) => item.id === selected.id)
@@ -167,17 +185,99 @@ export function Market({
     return () => { cancelled = true; };
   }, [focusProductId]);
 
+  const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
+    acc[cat] = items.filter((p) => p.category === cat).length
+      || core.products.filter((p) => p.category === cat).length
+      || 0;
+    return acc;
+  }, {});
+
   return <div className="stack">
-    <div className="search-row"><Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
-      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка"><option value="new">Сначала новые</option><option value="price">Сначала дешевле</option><option value="rating">По рейтингу</option></Select></div>
+    <button
+      type="button"
+      className="wallet-hero"
+      onClick={() => switchTo('profile')}
+      aria-label="Открыть кошелёк"
+    >
+      <div>
+        <span className="wallet-hero__label">Wallet</span>
+        <div className="wallet-hero__amount">
+          {core.profile ? money(core.profile.balanceCents) : '—'}
+          <small>RUB</small>
+        </div>
+      </div>
+      <span className="wallet-hero__action" aria-hidden="true">
+        {core.profile ? <IconPlus /> : <IconWallet />}
+      </span>
+    </button>
+
+    <div className="live-feed" aria-label="Живые уведомления">
+      <div className="live-pill">
+        <span className="live-pill__icon live-pill__icon--violet"><IconBell size={16} /></span>
+        <span className="live-pill__text">Новый лот в Standoff 2 — Gold аккаунт</span>
+        <span className="live-pill__time">2м</span>
+      </div>
+      <div className="live-pill">
+        <span className="live-pill__icon live-pill__icon--mint"><IconCheck size={16} /></span>
+        <span className="live-pill__text">Сделка завершена · деньги переведены</span>
+        <span className="live-pill__time">18м</span>
+      </div>
+    </div>
+
+    <div className="cat-row" role="list" aria-label="Категории">
+      <button
+        type="button"
+        role="listitem"
+        className={`cat-card${category === 'Все' ? ' active' : ''}`}
+        onClick={() => { setCategory('Все'); setSubcategory(''); }}
+      >
+        <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
+        <span className="cat-card__name">Все</span>
+        <span className="cat-card__count">{items.length || '·'}</span>
+      </button>
+      {CATEGORIES.map((cat) => {
+        const style = CAT_STYLE[cat];
+        return (
+          <button
+            type="button"
+            role="listitem"
+            key={cat}
+            className={`cat-card${category === cat ? ' active' : ''}`}
+            onClick={() => { setCategory(cat); setSubcategory(''); }}
+          >
+            <span
+              className="cat-card__emblem"
+              style={{ background: style.bg, ['--_glow' as string]: style.glow }}
+            >{style.letter}</span>
+            <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
+            <span className="cat-card__count">{categoryCounts[cat] || '·'}</span>
+          </button>
+        );
+      })}
+    </div>
+
+    <div className="search-row desktop-search">
+      <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
+      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка">
+        <option value="new">Сначала новые</option>
+        <option value="price">Сначала дешевле</option>
+        <option value="rating">По рейтингу</option>
+      </Select>
+    </div>
+
+    <div className="desktop-hero desktop-only">
+      <h2>Безопасный маркет аккаунтов</h2>
+      <p>Сейф-сделки, рейтинг продавцов и мгновенная доставка — стекло поверх живой сцены.</p>
+      <Button variant="primary" onClick={() => switchTo('create')}>Разместить лот</Button>
+      <div className="desktop-hero__dots" aria-hidden="true" style={{ marginTop: 18 }}>
+        <i className="active" /><i /><i />
+      </div>
+    </div>
+
     {onixQuery && <Button variant="secondary" onClick={async () => {
       try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery))); } catch { /* ignore */ }
     }}>Открыть профиль</Button>}
-    <div className="chips" role="list" aria-label="Категории">{['Все', ...CATEGORIES].map(item =>
-      <button role="listitem" className={category === item ? 'active' : ''} key={item} onClick={() => {
-        setCategory(item);
-        setSubcategory('');
-      }}>{item === 'Все' ? item.toUpperCase() : CATEGORY_LABELS[item as keyof typeof CATEGORY_LABELS].toUpperCase()}</button>)}</div>
+
     {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
       {marketSubs.map(item => (
         <button
@@ -188,25 +288,43 @@ export function Market({
         >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
       ))}
     </div>}
+
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
       marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
-      <div className="product-grid product-grid--compact">{items.map(product => <Card key={product.id} interactive className="product-card product-card--compact">
-        <button className="product-main" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
-          <div className="product-card__top">
-            <span>{product.category}</span>
-            {lotLabel(product) && <span className="onixlot-id">{lotLabel(product)}</span>}
-          </div>
-          <h2>{product.title.length > 32 ? `${product.title.slice(0, 32)}…` : product.title}</h2>
-          <div className="seller-row"><span className="user-summary"><UserAvatar avatarUrl={product.seller.avatarUrl} name={product.seller.username} online={sellerIsPresent(product.seller, core.profile)} /><span>{publicAt(product.seller.username)} <StaffBadge badge={product.seller.badge} /> · ★ {product.seller.rating.toFixed(1)} · {product.seller.reviewCount} отз.</span></span><strong>{money(product.priceCents)}</strong></div>
-        </button>
-        <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
-          setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
-          void core.toggleFavorite(product);
-        }} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
-      </Card>)}</div>}
+      <div className="product-grid product-grid--compact">{items.map(product => {
+        const rating = product.seller.rating.toFixed(1);
+        const isSuper = product.seller.rating >= 4.8 || product.seller.badge === 'VIP' || product.seller.badge === 'VERIFIED_SELLER';
+        return (
+          <Card key={product.id} interactive className="product-card product-card--compact">
+            <button className="product-main" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
+              <div className="product-card__media" aria-hidden="true">
+                <div className="product-card__badges">
+                  <span className="pill-rating"><IconStar /> {rating}</span>
+                  {isSuper && <span className="pill-super">Super</span>}
+                </div>
+              </div>
+              <div className="product-card__body">
+                <h2>{product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title}</h2>
+                <p className="product-card__meta">
+                  {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category}
+                  {lotLabel(product) ? ` · ${lotLabel(product)}` : ''}
+                </p>
+              </div>
+            </button>
+            <div className="product-card__footer product-card__footer--bar">
+              <strong className="product-card__price">{money(product.priceCents)}</strong>
+              <button type="button" className="button button--buy product-card__buy" onClick={() => setConfirm(product)}>Купить</button>
+            </div>
+            <button className={`favorite ${product.favorite ? 'active' : ''}`} onClick={() => {
+              setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
+              void core.toggleFavorite(product);
+            }} aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}>♥</button>
+          </Card>
+        );
+      })}</div>}
     {marketState === 'success' && hasMore && (
-      <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Загрузить ещё</Button>
+      <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Показать ещё</Button>
     )}
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); setDetailReady(false); }}>
       {selected && <div className="stack compact">

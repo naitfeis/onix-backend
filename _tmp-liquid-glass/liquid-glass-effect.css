@@ -1,0 +1,85 @@
+/* Liquid Glass Effect CSS
+ * Generated from Liquid Glass Generator
+ * Include this CSS file in your project and add the displacement map HTML to your page
+ */
+
+:root {
+    /* Glass Effect Variables - Customize these values */
+    --shadow-offset: 0;
+    --shadow-blur: 0px;
+    --shadow-spread: -20px;
+    --shadow-color: rgba(255, 255, 255, 0.7);
+    --tint-color: 255, 255, 255;
+    --tint-opacity: 0;
+    --frost-blur: 0px;
+    --noise-frequency: 0.001;
+    --distortion-strength: 0;
+    --outer-shadow-blur: 0px;
+}
+
+/* Glass Effect - Apply this class to your glass elements */
+.glass-effect {
+    position: relative;
+    width: fit-content;
+    min-width: 300px;
+    height: fit-content;
+    border-radius: 28px;
+    isolation: isolate;
+    box-shadow: 0px 6px var(--outer-shadow-blur) rgba(0, 0, 0, 0.2);
+    padding: 2rem;
+}
+
+.glass-effect::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: 28px;
+    box-shadow:
+        inset var(--shadow-offset) var(--shadow-offset) var(--shadow-blur) var(--shadow-spread) var(--shadow-color);
+    background-color: rgba(var(--tint-color), var(--tint-opacity));
+}
+
+.glass-effect::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 28px;
+    backdrop-filter: blur(var(--frost-blur));
+    -webkit-backdrop-filter: blur(var(--frost-blur));
+    filter: url(#glass-distortion);
+    -webkit-filter: url("#glass-distortion");
+    isolation: isolate;
+}
+
+/* Content inside glass effect */
+.glass-effect > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Optional: Draggable glass effect */
+.glass-effect.draggable {
+    cursor: move;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.glass-effect.draggable:active {
+    transform: scale(0.98);
+}
+
+/* Example styling for text inside glass */
+.glass-text {
+    margin: 0 auto;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    color: #333333;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    font-family: 'Arial', sans-serif;
+    width: fit-content;
+    pointer-events: none;
+}

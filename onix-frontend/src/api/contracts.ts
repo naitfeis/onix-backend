@@ -316,6 +316,22 @@ export function productsListPath(query: ProductListQuery = {}): string {
   return qs ? `/api/products?${qs}` : '/api/products';
 }
 
+export function productsMinePath(query: { limit?: number; offset?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (query.limit != null) params.set('limit', String(query.limit));
+  if (query.offset != null) params.set('offset', String(query.offset));
+  const qs = params.toString();
+  return qs ? `/api/products/mine?${qs}` : '/api/products/mine';
+}
+
+export function walletLedgerPath(query: { limit?: number; offset?: number } = {}): string {
+  const params = new URLSearchParams();
+  if (query.limit != null) params.set('limit', String(query.limit));
+  if (query.offset != null) params.set('offset', String(query.offset));
+  const qs = params.toString();
+  return qs ? `/api/wallet/ledger?${qs}` : '/api/wallet/ledger';
+}
+
 export function ordersListPath(query: OrderListQuery = {}): string {
   const params = new URLSearchParams();
   if (query.sort) params.set('sort', query.sort);
@@ -327,9 +343,11 @@ export function ordersListPath(query: OrderListQuery = {}): string {
 export const API_PATHS = {
   me: '/api/users/me',
   ledger: '/api/wallet/ledger',
+  walletLedger: walletLedgerPath,
   products: '/api/products',
   productsList: productsListPath,
   productsMine: '/api/products/mine',
+  productsMineList: productsMinePath,
   productCreate: '/api/products',
   productUpdate: (id: string) => `/api/products/${encodeURIComponent(id)}`,
   productDelete: (id: string) => `/api/products/${encodeURIComponent(id)}`,
@@ -403,7 +421,7 @@ export const PLATFORM_STATUS_OPTIONS: Array<{ value: PlatformStatus; label: stri
   { value: 'VERIFIED_SELLER', label: 'Проверенный продавец' },
   { value: 'MODERATOR', label: 'Модератор' },
   { value: 'ADMIN', label: 'Админ' },
-  { value: 'SUPER_ADMIN', label: 'Super Admin' },
+  { value: 'SUPER_ADMIN', label: 'Основатель' },
   { value: 'VIP', label: 'VIP' },
 ];
 

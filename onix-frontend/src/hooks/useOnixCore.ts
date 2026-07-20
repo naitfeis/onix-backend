@@ -107,7 +107,7 @@ async function bootstrapMarketplace(
 ): Promise<Profile | null> {
   const [profileResult] = await Promise.all([
     bootstrapPhase('me', () => loadProfile()),
-    bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 10 }))),
+    bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 15 }))),
   ]);
   markBootstrapPhase('profile', 0);
   markBootstrapPhase('marketplace', 0);
@@ -219,7 +219,7 @@ export function useOnixCore() {
       }));
 
       const productsPromise = bootstrapPhase('products-public', () =>
-        load('products', API_PATHS.productsList({ limit: 10 })),
+        load('products', API_PATHS.productsList({ limit: 15 })),
       );
       const sessionPromise = restoreWebsiteSession();
 
@@ -276,8 +276,8 @@ export function useOnixCore() {
       void catalogReady;
       const current = await bootstrapPhase('profile-load', () => loadProfile());
       markBootstrapPhase('profile', 0);
-      // Re-fetch catalog with Bearer so favorites/followed personalize (same public endpoint).
-      void load('products', API_PATHS.productsList({ limit: 100 }));
+      // Re-fetch first page with Bearer so favorites/followed personalize — no preload of 100.
+      void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
       warmSecondaryCollections(current, load);
@@ -377,7 +377,7 @@ export function useOnixCore() {
       ...(draft.autoDeliver && draft.deliveryText?.trim()
         ? { deliveryText: draft.deliveryText.trim() }
         : {}),
-    }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
+    }), () => void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }))), [load, run]);
 
   const updateProduct = useCallback((id: string, draft: ProductDraft) => run('product-form', () =>
     api.patch<Product>(API_PATHS.productUpdate(id), {
@@ -387,11 +387,11 @@ export function useOnixCore() {
       ...(draft.autoDeliver && draft.deliveryText?.trim()
         ? { deliveryText: draft.deliveryText.trim() }
         : {}),
-    }), () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
+    }), () => void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }))), [load, run]);
 
   const archiveProduct = useCallback((id: string) => run(`archive-${id}`, () =>
     api.delete<Product>(API_PATHS.productDelete(id)),
-  () => void load('products', API_PATHS.productsList({ limit: 100 }))), [load, run]);
+  () => void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }))), [load, run]);
 
   const toggleFavorite = useCallback((product: Product) => {
     setStore(previous => ({ ...previous, products: previous.products.map(item =>
@@ -477,7 +477,7 @@ export function useOnixCore() {
   const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
     api.post<Deal>(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
       // Sold-out listing: refresh market; deals/chats needed for Escrow + SYSTEM message.
-      void load('products', API_PATHS.productsList({ limit: 100 }));
+      void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
       void load('deals', API_PATHS.orders);
       void load('chats', API_PATHS.chats);
     }), [load, run]);

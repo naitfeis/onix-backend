@@ -25,8 +25,8 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
         <h2>// ADMIN · СТАТУСЫ</h2>
         <p className="muted">
           {isSuperAdmin
-            ? 'SUPER_ADMIN может назначать ADMIN и остальные статусы. Действие пишется в audit log.'
-            : 'ADMIN может выдавать USER / VERIFIED_SELLER / MODERATOR / VIP. Назначение ADMIN — только у SUPER_ADMIN.'}
+            ? 'Основатель может назначать ADMIN и остальные статусы. Действие пишется в audit log.'
+            : 'ADMIN может выдавать USER / VERIFIED_SELLER / MODERATOR / VIP. Назначение ADMIN — только у Основателя.'}
         </p>
         <Field label="ONIX ID пользователя">
           <Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-7 или 7" />

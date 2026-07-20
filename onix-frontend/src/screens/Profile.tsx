@@ -1,6 +1,9 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, sellerIsPresent, type Product, type ProductDraft, type PublicProfile } from '../api/contracts';
+import {
+  API_PATHS, sellerIsPresent,
+  type Product, type ProductDraft, type PublicProfile, type WalletOperation,
+} from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -118,31 +121,82 @@ export function Profile({
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [ownProducts, setOwnProducts] = useState<Product[]>([]);
   const [listingsState, setListingsState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [historyVisible, setHistoryVisible] = useState(10);
+  const [listingsHasMore, setListingsHasMore] = useState(false);
+  const [listingsLoadingMore, setListingsLoadingMore] = useState(false);
+  const [walletHistory, setWalletHistory] = useState<WalletOperation[]>([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const PAGE = 15;
   const profile = core.profile;
   const deposit = profile?.deposit ?? null;
   const ownerTrust = profile?.trustCard ?? null;
+
   useEffect(() => {
-    if (section === 'overview') setHistoryVisible(10);
-  }, [section]);
+    if (section !== 'overview' || !profile) return;
+    const first = profile.walletHistory ?? [];
+    setWalletHistory(first);
+    setHistoryHasMore(first.length >= PAGE);
+  }, [section, profile]);
 
   useEffect(() => {
     if (section !== 'listings' || !core.profile) return;
     let cancelled = false;
     setListingsState('loading');
-    void api.get<Product[]>(API_PATHS.productsMine)
+    setOwnProducts([]);
+    setListingsHasMore(false);
+    void api.get<Product[]>(API_PATHS.productsMineList({ limit: PAGE, offset: 0 }))
       .then((rows) => {
         if (cancelled) return;
         setOwnProducts(rows);
+        setListingsHasMore(rows.length >= PAGE);
         setListingsState('success');
       })
       .catch(() => {
         if (cancelled) return;
         setOwnProducts([]);
+        setListingsHasMore(false);
         setListingsState('error');
       });
     return () => { cancelled = true; };
   }, [core.profile, section, editing]);
+
+  const loadMoreHistory = async () => {
+    if (historyLoadingMore || !historyHasMore) return;
+    setHistoryLoadingMore(true);
+    try {
+      const rows = await api.get<WalletOperation[]>(
+        API_PATHS.walletLedger({ limit: PAGE, offset: walletHistory.length }),
+      );
+      setWalletHistory((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...rows.filter((item) => !seen.has(item.id))];
+      });
+      setHistoryHasMore(rows.length >= PAGE);
+    } catch {
+      setToast('Не удалось загрузить историю баланса.');
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  };
+
+  const loadMoreListings = async () => {
+    if (listingsLoadingMore || !listingsHasMore) return;
+    setListingsLoadingMore(true);
+    try {
+      const rows = await api.get<Product[]>(
+        API_PATHS.productsMineList({ limit: PAGE, offset: ownProducts.length }),
+      );
+      setOwnProducts((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...rows.filter((item) => !seen.has(item.id))];
+      });
+      setListingsHasMore(rows.length >= PAGE);
+    } catch {
+      setToast('Не удалось загрузить товары.');
+    } finally {
+      setListingsLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     if (section !== 'favorites' || !core.profile) return;
@@ -255,11 +309,11 @@ export function Profile({
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
-    {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{profile.walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
-      <div className="operations">{profile.walletHistory.slice(0, historyVisible).map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
-      {historyVisible < profile.walletHistory.length && (
+    {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
+      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
+      {historyHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
-          <Button variant="secondary" onClick={() => setHistoryVisible((n) => n + 10)}>Показать ещё</Button>
+          <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>Показать ещё</Button>
         </div>
       )}
     </>}</Card>}
@@ -284,7 +338,7 @@ export function Profile({
     {section === 'listings' && (listingsState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       listingsState === 'error' ? <StateView title="Не удалось загрузить товары" text="Обновите вкладку или войдите снова." /> :
       ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
-      <div className="product-grid">{ownProducts.map(item => (
+      <><div className="product-grid">{ownProducts.map(item => (
         <Card key={item.id}>
           <h2>{item.title}</h2>
           {item.lotNumber != null && <p className="onixlot-id">ONIXLOT-{item.lotNumber}</p>}
@@ -296,7 +350,13 @@ export function Profile({
             <Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button>
           </div>
         </Card>
-      ))}</div>)}
+      ))}</div>
+      {listingsHasMore && (
+        <div className="card-actions" style={{ marginTop: 12 }}>
+          <Button variant="secondary" busy={listingsLoadingMore} onClick={() => void loadMoreListings()}>Показать ещё</Button>
+        </div>
+      )}
+      </>)}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
       core.reviews.map(review => <Card key={review.id}><div className="seller-row">
         {review.author.onixId

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { API_PATHS, CATEGORIES, productsListPath, ordersListPath } from './contracts';
+import {
+  API_PATHS, CATEGORIES, productsListPath, productsMinePath, ordersListPath, walletLedgerPath,
+} from './contracts';
 
 describe('ONIX API paths', () => {
   it('matches backend resource routes', () => {
@@ -37,6 +39,12 @@ describe('ONIX API paths', () => {
       .toBe('/api/products?category=STEAM&sort=rating&limit=30&offset=0');
     expect(productsListPath({ search: 'Knife', minPriceCents: '1000', maxPriceCents: '50000' }))
       .toBe('/api/products?search=Knife&minPriceCents=1000&maxPriceCents=50000');
+  });
+
+  it('builds lazy wallet ledger and mine listings pages', () => {
+    expect(walletLedgerPath({ limit: 15, offset: 15 })).toBe('/api/wallet/ledger?limit=15&offset=15');
+    expect(productsMinePath({ limit: 15, offset: 0 })).toBe('/api/products/mine?limit=15&offset=0');
+    expect(API_PATHS.walletLedger({ limit: 15, offset: 30 })).toBe('/api/wallet/ledger?limit=15&offset=30');
   });
 
   it('uses canonical backend category enum values', () => {

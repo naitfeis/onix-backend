@@ -208,12 +208,15 @@ export class MarketplaceService {
   }
 
   /** Owner listings — ACTIVE only (archived / sold-out / reserved hidden after «Снять»). */
-  async listMine(user: AuthUser) {
+  async listMine(user: AuthUser, limit = 15, offset = 0) {
+    const take = Math.min(Math.max(limit, 1), 50);
+    const skip = Math.min(Math.max(offset, 0), 10_000);
     const products = await this.prisma.product.findMany({
       relationLoadStrategy: 'join',
       where: { sellerId: user.id, status: ProductStatus.ACTIVE },
       orderBy: { createdAt: 'desc' },
-      take: 100,
+      take,
+      skip,
       select: {
         ...productDetailSelect,
         seller: { select: sellerPublicSelect(user.id) },
@@ -468,8 +471,18 @@ export class MarketplaceController {
   /** Must be before :id — owner listings with views + description. */
   @Get('mine')
   @Header('Cache-Control', 'private, no-store')
-  listMine(@CurrentUser() user: AuthUser) {
-    return this.service.listMine(user);
+  listMine(
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limitRaw?: string,
+    @Query('offset') offsetRaw?: string,
+  ) {
+    const limit = Number(limitRaw);
+    const offset = Number(offsetRaw);
+    return this.service.listMine(
+      user,
+      Number.isFinite(limit) ? limit : 15,
+      Number.isFinite(offset) ? offset : 0,
+    );
   }
 
   @Public()

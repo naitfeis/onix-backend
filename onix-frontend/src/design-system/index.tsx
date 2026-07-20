@@ -19,7 +19,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 
 export function Button({ variant = 'primary', busy, children, className = '', type = 'button', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'buy' | 'violet';
   busy?: boolean;
 }) {
   return <button type={type} className={`button button--${variant} ${className}`} disabled={busy || props.disabled} {...props}>

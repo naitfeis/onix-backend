@@ -1,19 +1,59 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { min-width: 320px; min-height: 100%; color-scheme: dark; background: #000; scroll-behavior: smooth; }
-body, #root { min-height: 100dvh; }
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+  color-scheme: dark;
+  background: var(--page-bg, #0A090E);
+  scroll-behavior: smooth;
+}
+
+html[data-theme="light"] { color-scheme: light; }
+
+html,
+body {
+  min-height: 100%;
+  background: var(--page-bg, #0A090E);
+}
+
+#root {
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  background: transparent;
+}
+
 body {
   overflow-x: hidden;
-  color: #f2f1ef;
-  background: #000;
-  font-family: "DM Sans", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--page-bg, #0A090E);
+  font-family: var(--font-body);
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background 280ms ease, color 280ms ease;
 }
+
 button, input, textarea, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 2px solid #eee !important; outline-offset: 3px; }
-::selection { color: #000; background: #eee; }
+
+:focus-visible {
+  outline: 2px solid var(--accent-coral) !important;
+  outline-offset: 3px;
+}
+
+::selection {
+  color: #fff;
+  background: rgba(240, 86, 74, 0.55);
+}
+
 ::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: #000; }
-::-webkit-scrollbar-thumb { background: #2a2a2c; border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(28, 26, 34, 0.18);
+}

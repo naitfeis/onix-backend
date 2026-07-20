@@ -1,7 +1,8 @@
 import {
-  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body, Req,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body, Query, Req,
 } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { Prisma } from '@prisma/client';
 import { AuthRequest, AuthUser, CurrentUser } from './common';
 import { EconomyModule } from './economy/economy.module';
@@ -12,9 +13,17 @@ import { PrismaService } from './prisma.service';
 import { assertRateLimit } from './rate-limit';
 import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
+/** First page embedded in GET /users/me — further pages via GET /wallet/ledger. */
+const WALLET_HISTORY_PAGE = 15;
+
 class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(120) displayName?: string;
   @IsOptional() @IsString() @MaxLength(500) bio?: string;
+}
+
+class LedgerQueryDto {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = WALLET_HISTORY_PAGE;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
@@ -62,7 +71,9 @@ export class ProfilesService {
         },
       }),
       this.prisma.ledgerEntry.findMany({
-        where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        take: WALLET_HISTORY_PAGE,
       }),
     ]);
 
@@ -165,9 +176,14 @@ export class ProfilesService {
     return { lastOnline: now.toISOString(), online: true as const };
   }
 
-  async ledger(user: AuthUser) {
+  async ledger(user: AuthUser, query: LedgerQueryDto) {
+    const limit = query.limit ?? WALLET_HISTORY_PAGE;
+    const offset = query.offset ?? 0;
     const entries = await this.prisma.ledgerEntry.findMany({
-      where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 100,
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
     });
     return entries.map(ledgerDto);
   }
@@ -195,7 +211,11 @@ export class ProfilesController {
     assertRateLimit(`profile-ip:${ip}`, 120, 60_000);
     return this.profiles.getPublic(user, onixId);
   }
-  @Get('wallet/ledger') ledger(@CurrentUser() user: AuthUser) { return this.profiles.ledger(user); }
+  @Get('wallet/ledger')
+  @Header('Cache-Control', 'private, no-store')
+  ledger(@CurrentUser() user: AuthUser, @Query() query: LedgerQueryDto) {
+    return this.profiles.ledger(user, query);
+  }
 }
 
 @Module({

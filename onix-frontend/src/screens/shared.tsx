@@ -32,7 +32,7 @@ const STATUS_LABEL: Record<PlatformStatus, string> = {
   VERIFIED_SELLER: 'ПРОВЕРЕН',
   MODERATOR: 'МОДЕРАТОР',
   ADMIN: 'ADMIN',
-  SUPER_ADMIN: 'SUPER',
+  SUPER_ADMIN: 'Основатель',
   VIP: 'VIP',
 };
 
@@ -89,7 +89,7 @@ export function MessageText({
 }
 
 export function SectionHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) {
-  return <div className="section-head"><div><h1>// {title}</h1><p>{subtitle}</p></div>{action}</div>;
+  return <div className="section-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>;
 }
 
 export function dealProgress(status: Deal['status']) {

@@ -1,0 +1,10 @@
+<!-- Glass Effect Displacement Map -->
+<!-- Include this SVG element somewhere in your HTML page (preferably near the top of the body) -->
+<svg style="position: absolute; width: 0; height: 0;" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <filter id="glass-distortion">
+            <feTurbulence baseFrequency="0.001" numOctaves="2" result="turbulence"/>
+            <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="0"/>
+        </filter>
+    </defs>
+</svg>

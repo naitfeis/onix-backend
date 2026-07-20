@@ -1,0 +1,203 @@
+/* ONIX Market background — sharp orbs (one blur layer) + stars */
+
+.onix-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* No blur on scene wrapper — blur lives only on .orb */
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* —— Base —— */
+.onix-bg__base {
+  position: absolute;
+  inset: 0;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: radial-gradient(ellipse at 50% 0%, #14101f 0%, #0a0812 60%, #05040a 100%);
+}
+
+html[data-theme="light"] .onix-bg__base {
+  /* Lavender sky — not white; corners read as soft violet */
+  background: radial-gradient(ellipse at 50% 0%, #ebe6f6 0%, #e0d9ef 45%, #d4cce6 100%);
+}
+
+html[data-theme="dark"] {
+  --page-bg: #05040a;
+  --bg-scene-deep: #05040a;
+}
+html[data-theme="light"] {
+  --page-bg: #d4cce6;
+  --bg-scene-deep: #d4cce6;
+}
+
+/* —— Orbs —— */
+.onix-bg__orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+.onix-bg__orbs--light { display: none; }
+html[data-theme="light"] .onix-bg__orbs--dark { display: none; }
+html[data-theme="light"] .onix-bg__orbs--light { display: block; }
+
+/*
+ * One blur only: fixed 14px on the orb itself.
+ * Solid color holds until ~62%, then a short fade — keeps a readable circle.
+ */
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  will-change: transform;
+  mix-blend-mode: normal;
+  filter: blur(14px);
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.45) 0%,
+    var(--orb-color) 28%,
+    var(--orb-color) 62%,
+    transparent 78%
+  );
+  animation: orb-float var(--orb-dur, 18s) ease-in-out var(--orb-delay, 0s) infinite alternate;
+}
+
+.onix-bg__orbs--dark .orb {
+  /* normal — screen turns disks into formless glow */
+  mix-blend-mode: normal;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.4) 0%,
+    var(--orb-color) 26%,
+    var(--orb-color) 60%,
+    transparent 76%
+  );
+}
+
+.onix-bg__orbs--light .orb {
+  mix-blend-mode: normal;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.7) 0%,
+    var(--orb-color) 26%,
+    var(--orb-color) 60%,
+    transparent 76%
+  );
+}
+
+@keyframes orb-float {
+  0% { transform: translate(-50%, -50%) translate(0, 0); }
+  50% { transform: translate(-50%, -50%) translate(12px, -8px); }
+  100% { transform: translate(-50%, -50%) translate(-8px, 6px); }
+}
+
+/* —— Stars —— */
+.onix-bg__stars {
+  position: absolute;
+  inset: 0;
+  filter: none !important;
+}
+
+.onix-bg__stars--light { display: none; }
+html[data-theme="light"] .onix-bg__stars--dark { display: none; }
+html[data-theme="light"] .onix-bg__stars--light { display: block; }
+
+.onix-bg__star {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  background: #ffffff;
+  filter: none;
+  transform: translate(-50%, -50%);
+  animation: star-twinkle var(--dur, 3s) ease-in-out var(--delay, 0s) infinite;
+}
+
+.onix-bg__star--bright {
+  box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.8);
+}
+
+/* Light: white sparks need glow on lavender — otherwise invisible */
+.onix-bg__star--light {
+  width: 2px;
+  height: 2px;
+  background: #ffffff;
+  box-shadow:
+    0 0 5px 1.5px rgba(255, 255, 255, 0.85),
+    0 0 10px 3px rgba(255, 255, 255, 0.4);
+}
+
+@keyframes star-twinkle {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+html[data-theme="light"] .onix-bg__star--light {
+  animation-name: star-twinkle-light;
+}
+
+@keyframes star-twinkle-light {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* —— Soft vignette (shadow only — not a blur filter) —— */
+.onix-bg__vignette {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 180px 60px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  filter: none !important;
+}
+
+html[data-theme="light"] .onix-bg__vignette {
+  /* Soft lavender edge darken — reinforces non-white base */
+  box-shadow: inset 0 0 180px 70px rgba(140, 120, 180, 0.18);
+}
+
+.onix-bg[data-mode="chat"] .onix-bg__orbs { opacity: 0.9; }
+.onix-bg[data-mode="focus"] .onix-bg__orbs { opacity: 0.85; }
+
+.onix-bg[data-reduced="true"] .orb,
+.onix-bg[data-reduced="true"] .onix-bg__star {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb,
+  .onix-bg__star {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .onix-bg__orbs--dark .orb:nth-child(n+6),
+  .onix-bg__orbs--light .orb:nth-child(n+8) {
+    display: none;
+  }
+
+  /* Do NOT scale orbs down — that raises blur:size ratio and destroys the circle */
+  .orb {
+    animation-name: orb-float-mobile;
+  }
+
+  @keyframes orb-float-mobile {
+    0% { transform: translate(-50%, -50%) translate(0, 0); }
+    50% { transform: translate(-50%, -50%) translate(10px, -8px); }
+    100% { transform: translate(-50%, -50%) translate(-6px, 6px); }
+  }
+
+  .onix-bg__stars--dark .onix-bg__star:nth-child(n+36),
+  .onix-bg__stars--light .onix-bg__star:nth-child(n+28) {
+    display: none;
+  }
+}
