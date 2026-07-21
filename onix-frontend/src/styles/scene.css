@@ -44,12 +44,12 @@ html[data-theme="light"] .onix-bg__base {
 html[data-theme="dark"] {
   --page-bg: #05040a;
   --bg-scene-deep: #05040a;
-  --orb-blur: 22px;
+  --orb-blur: 17px;
 }
 html[data-theme="light"] {
   --page-bg: #e4ecf5;
   --bg-scene-deep: #e4ecf5;
-  --orb-blur: 20px;
+  --orb-blur: 15px;
 }
 
 /* —— Orbs —— */
