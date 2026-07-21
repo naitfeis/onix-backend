@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { money } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
@@ -29,6 +29,14 @@ const ProductForm = lazy(() => import('./screens/ProductForm'));
 const Chats = lazy(() => import('./screens/Chats'));
 const Profile = lazy(() => import('./screens/Profile'));
 
+const LEFT_W_KEY = 'onix-sidebar-left-w';
+const RIGHT_W_KEY = 'onix-sidebar-right-w';
+const LEFT_MIN = 72;
+const LEFT_DEFAULT = 272;
+const RIGHT_MIN = 64;
+const RIGHT_DEFAULT = 320;
+const RIGHT_ICONS_AT = 88;
+const LEFT_ICONS_AT = 96;
 const TABS: Array<{ id: Screen; label: string; icon: ReactNode }> = [
   { id: 'market', label: 'Market', icon: <IconMarket /> },
   { id: 'deals', label: 'Deals', icon: <IconDeals /> },
@@ -75,8 +83,20 @@ function ScreenFallback() {
   return <div className="stack"><div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div></div>;
 }
 
-const THEME_KEY = 'onix-theme';
+function readStoredWidth(key: string, fallback: number): number {
+  try {
+    const raw = localStorage.getItem(key);
+    const n = raw ? Number(raw) : NaN;
+    if (Number.isFinite(n) && n > 0) return n;
+  } catch { /* ignore */ }
+  return fallback;
+}
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+const THEME_KEY = 'onix-theme';
 type ThemeMode = 'dark' | 'light';
 
 function readStoredTheme(): ThemeMode | null {
@@ -140,6 +160,52 @@ export default function App() {
   const [marketCategory, setMarketCategory] = useState<string>('Все');
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
+  const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT));
+  const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT));
+
+  const leftIcons = leftW <= LEFT_ICONS_AT;
+  const rightIcons = rightW <= RIGHT_ICONS_AT;
+
+  const startResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = side === 'left' ? leftW : rightW;
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-sidebar');
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (side === 'left') {
+        const max = Math.floor(window.innerWidth * 0.8);
+        const next = clamp(startW + dx, LEFT_MIN, max);
+        setLeftW(next);
+      } else {
+        const max = Math.floor(window.innerWidth * 0.45);
+        const next = clamp(startW - dx, RIGHT_MIN, max);
+        setRightW(next);
+      }
+    };
+    const onUp = (ev: PointerEvent) => {
+      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      document.body.classList.remove('is-resizing-sidebar');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (side === 'left') {
+        setLeftW((w) => {
+          try { localStorage.setItem(LEFT_W_KEY, String(Math.round(w))); } catch { /* ignore */ }
+          return w;
+        });
+      } else {
+        setRightW((w) => {
+          try { localStorage.setItem(RIGHT_W_KEY, String(Math.round(w))); } catch { /* ignore */ }
+          return w;
+        });
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [leftW, rightW]);
 
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
@@ -245,8 +311,12 @@ export default function App() {
       <OnixBackground mode={mode} />
     </Suspense>
     <div
-      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}`}
-      style={{ '--header-blur': headerBlur } as CSSProperties}
+      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
+      style={{
+        '--header-blur': headerBlur,
+        '--sidebar-left-w': `${leftW}px`,
+        '--sidebar-right-w': `${rightW}px`,
+      } as CSSProperties}
     >
     <a className="skip-link" href="#content">К содержимому</a>
 
@@ -263,7 +333,7 @@ export default function App() {
     )}
 
     {/* Desktop left sidebar */}
-    <aside className="sidebar-left desktop-only" aria-label="Навигация">
+    <aside className={`sidebar-left desktop-only${leftIcons ? ' sidebar-left--icons' : ''}`} aria-label="Навигация">
       <div className="sidebar-left__brand"><BrandMark /></div>
       <nav className="sidebar-nav">
         {SIDEBAR_NAV.map((item) => (
@@ -272,6 +342,8 @@ export default function App() {
             type="button"
             className={screen === item.id ? 'active' : ''}
             onClick={() => switchTo(item.id)}
+            title={item.label}
+            aria-label={item.label}
           >
             {item.icon}
             <span>{item.label}</span>
@@ -287,6 +359,8 @@ export default function App() {
             <button
               key={cat}
               type="button"
+              title={CATEGORY_LABELS[cat]}
+              aria-label={CATEGORY_LABELS[cat]}
               onClick={() => {
                 setMarketCategory(cat);
                 switchTo('market');
@@ -308,10 +382,17 @@ export default function App() {
         className="sidebar-theme"
         onClick={toggleTheme}
         aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+        title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
       >
         {theme === 'dark' ? <IconSun /> : <IconMoon />}
         <span>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
       </button>
+      <button
+        type="button"
+        className="sidebar-resizer sidebar-resizer--left"
+        aria-label="Изменить ширину левой панели"
+        onPointerDown={(e) => startResize('left', e)}
+      />
     </aside>
 
     {/* keep theme on mobile topbar */}
@@ -411,85 +492,110 @@ export default function App() {
 
     {/* Market-only right rail */}
     {showMarketRail && (
-      <aside className="sidebar-right desktop-only" aria-label="Виджеты">
-        <div className="widget widget--glass">
-          <p className="wallet-hero__label">Wallet</p>
-          <div className="wallet-hero__amount">
-            {core.profile ? money(core.profile.balanceCents) : '—'}
-            <small>RUB</small>
+      <aside
+        className={`sidebar-right desktop-only${rightIcons ? ' sidebar-right--icons' : ''}`}
+        aria-label="Виджеты"
+      >
+        <button
+          type="button"
+          className="sidebar-resizer sidebar-resizer--right"
+          aria-label="Изменить ширину правой панели"
+          onPointerDown={(e) => startResize('right', e)}
+        />
+        {rightIcons ? (
+          <div className="sidebar-right__icons">
+            <button type="button" title="Wallet" aria-label="Wallet" onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
+              <IconWallet size={20} />
+            </button>
+            <button type="button" title="Уведомления" aria-label="Уведомления" onClick={() => switchTo('deals')}>
+              <IconBell />
+            </button>
+            <button type="button" title="Новые лоты" aria-label="Новые лоты" onClick={() => switchTo('market')}>
+              <IconLot />
+            </button>
           </div>
-          <div style={{ marginTop: 14 }}>
-            <Button
-              variant="violet"
-              style={{ width: '100%' }}
-              onClick={() => {
-                setOpenWalletTopup(true);
-                switchTo('profile');
-              }}
-            >
-              <IconWallet size={18} /> Add Funds
-            </Button>
-          </div>
-        </div>
-        <div className="widget widget--glass">
-          <h3>Live Notifications</h3>
-          <div className="widget-notify">
-            {!core.profile ? (
-              <p className="widget-empty">Войдите, чтобы видеть личные уведомления.</p>
-            ) : core.states.notifications === 'loading' && core.notifications.length === 0 ? (
-              <p className="widget-empty">Загрузка…</p>
-            ) : core.notifications.length === 0 ? (
-              <p className="widget-empty">Пока нет уведомлений — здесь появятся оплаты, сделки и системные события.</p>
-            ) : (
-              core.notifications.slice(0, 6).map((item: Notification) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`widget-notify__row${item.read ? '' : ' is-unread'}`}
+        ) : (
+          <>
+            <div className="widget widget--glass">
+              <p className="wallet-hero__label">Wallet</p>
+              <div className="wallet-hero__amount">
+                {core.profile ? money(core.profile.balanceCents) : '—'}
+                <small>RUB</small>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <Button
+                  variant="violet"
+                  style={{ width: '100%' }}
                   onClick={() => {
-                    if (!item.read) void core.markNotificationRead(item.id);
+                    setOpenWalletTopup(true);
+                    switchTo('profile');
                   }}
                 >
-                  <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />
-                  <p>
-                    <b>{item.title}</b>
-                    {item.body ? <span> {item.body}</span> : null}
-                  </p>
-                  <time>{relativeTime(item.createdAt)}</time>
-                </button>
-              ))
-            )}
-          </div>
-          <button type="button" className="widget-link" onClick={() => switchTo('deals')}>Мои сделки →</button>
-        </div>
-        <div className="widget widget--glass">
-          <h3>Новые лоты</h3>
-          <div className="widget-trend">
-            {core.products.length === 0 ? (
-              <p className="widget-empty">Лотов пока нет.</p>
-            ) : (
-              core.products.slice(0, 5).map((product: Product) => {
-                const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
-                return (
-                  <button
-                    type="button"
-                    className="widget-trend__row widget-trend__row--btn"
-                    key={product.id}
-                    onClick={() => openProductCard(product.id)}
-                  >
-                    <span
-                      className="cat-card__emblem"
-                      style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
-                    >{style.letter}</span>
-                    <span className="widget-trend__title">{product.title}</span>
-                    <strong>{money(product.priceCents)}</strong>
-                  </button>
-                );
-              })
-            )}
-          </div>
-          <button type="button" className="widget-link" onClick={() => switchTo('market')}>Все лоты →</button>
-        </div>
+                  <IconWallet size={18} /> Add Funds
+                </Button>
+              </div>
+            </div>
+            <div className="widget widget--glass">
+              <h3>Live Notifications</h3>
+              <div className="widget-notify">
+                {!core.profile ? (
+                  <p className="widget-empty">Войдите, чтобы видеть личные уведомления.</p>
+                ) : core.states.notifications === 'loading' && core.notifications.length === 0 ? (
+                  <p className="widget-empty">Загрузка…</p>
+                ) : core.notifications.length === 0 ? (
+                  <p className="widget-empty">Пока нет уведомлений — здесь появятся оплаты, сделки и системные события.</p>
+                ) : (
+                  core.notifications.slice(0, 6).map((item: Notification) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`widget-notify__row${item.read ? '' : ' is-unread'}`}
+                      onClick={() => {
+                        if (!item.read) void core.markNotificationRead(item.id);
+                      }}
+                    >
+                      <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />
+                      <p>
+                        <b>{item.title}</b>
+                        {item.body ? <span> {item.body}</span> : null}
+                      </p>
+                      <time>{relativeTime(item.createdAt)}</time>
+                    </button>
+                  ))
+                )}
+              </div>
+              <button type="button" className="widget-link" onClick={() => switchTo('deals')}>Мои сделки →</button>
+            </div>
+            <div className="widget widget--glass">
+              <h3>Новые лоты</h3>
+              <div className="widget-trend">
+                {core.products.length === 0 ? (
+                  <p className="widget-empty">Лотов пока нет.</p>
+                ) : (
+                  core.products.slice(0, 5).map((product: Product) => {
+                    const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
+                    return (
+                      <button
+                        type="button"
+                        className="widget-trend__row widget-trend__row--btn"
+                        key={product.id}
+                        onClick={() => openProductCard(product.id)}
+                      >
+                        <span
+                          className="cat-card__emblem"
+                          style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
+                        >{style.letter}</span>
+                        <span className="widget-trend__title">{product.title}</span>
+                        <strong>{money(product.priceCents)}</strong>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              <button type="button" className="widget-link" onClick={() => switchTo('market')}>Все лоты →</button>
+            </div>
+          </>
+        )}
       </aside>
     )}
 

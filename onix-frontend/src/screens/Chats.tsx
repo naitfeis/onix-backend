@@ -51,6 +51,14 @@ export function Chats({
   const isStaff = Boolean(
     core.profile?.isAdmin
     || core.profile?.status === 'ADMIN'
+    || core.profile?.status === 'SUPER_ADMIN'
+    || core.profile?.status === 'MODERATOR'
+    || core.profile?.roles.includes('ADMIN')
+    || core.profile?.roles.includes('SUPER_ADMIN')
+    || core.profile?.roles.includes('MODERATOR'),
+  );
+  const canSeeReadReceipts = Boolean(
+    core.profile?.status === 'ADMIN'
     || core.profile?.status === 'MODERATOR'
     || core.profile?.roles.includes('ADMIN')
     || core.profile?.roles.includes('MODERATOR'),
@@ -455,7 +463,7 @@ export function Chats({
                 {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
               </small>
             )}
-            {isStaff && message.readBy && message.readBy.length > 0 && (
+            {canSeeReadReceipts && message.readBy && message.readBy.length > 0 && (
               <small className="receipt-admin">
                 прочитали: {message.readBy.map((r) => `${r.username} ${new Date(r.readAt).toLocaleString('ru-RU')}`).join('; ')}
               </small>
