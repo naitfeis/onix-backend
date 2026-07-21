@@ -16,13 +16,13 @@ type OrbSpec = {
  * No per-orb blur values — stacking with card backdrop-filter is forbidden.
  */
 const ORBS_DARK: OrbSpec[] = [
-  { color: '#8b6bff', size: 160, opacity: 0.58, top: '5%', left: '10%', duration: '22s', delay: '0s' },
-  { color: '#ff6fb8', size: 120, opacity: 0.52, top: '4%', left: '88%', duration: '26s', delay: '-5s' },
-  { color: '#4fc3f7', size: 140, opacity: 0.55, top: '14%', left: '70%', duration: '20s', delay: '-10s' },
-  { color: '#7c5cff', size: 180, opacity: 0.55, top: '28%', left: '16%', duration: '28s', delay: '-3s' },
-  { color: '#5ac8fa', size: 110, opacity: 0.5, top: '52%', left: '86%', duration: '18s', delay: '-8s' },
-  { color: '#e94fb0', size: 150, opacity: 0.52, top: '68%', left: '8%', duration: '24s', delay: '-12s' },
-  { color: '#7c5cff', size: 130, opacity: 0.5, top: '84%', left: '58%', duration: '30s', delay: '-6s' },
+  { color: '#8b6bff', size: 180, opacity: 0.72, top: '5%', left: '10%', duration: '22s', delay: '0s' },
+  { color: '#ff6fb8', size: 140, opacity: 0.65, top: '4%', left: '88%', duration: '26s', delay: '-5s' },
+  { color: '#4fc3f7', size: 160, opacity: 0.68, top: '14%', left: '70%', duration: '20s', delay: '-10s' },
+  { color: '#7c5cff', size: 200, opacity: 0.7, top: '28%', left: '16%', duration: '28s', delay: '-3s' },
+  { color: '#5ac8fa', size: 130, opacity: 0.62, top: '52%', left: '86%', duration: '18s', delay: '-8s' },
+  { color: '#e94fb0', size: 170, opacity: 0.65, top: '68%', left: '8%', duration: '24s', delay: '-12s' },
+  { color: '#7c5cff', size: 150, opacity: 0.62, top: '84%', left: '58%', duration: '30s', delay: '-6s' },
 ];
 
 /**

@@ -15,32 +15,32 @@ html[data-theme="dark"] {
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Vision Pro–style acrylic — soft fill + deep backdrop blur */
-  --glass-blur: 28px;
-  --glass-blur-thin: 18px;
-  --glass-blur-regular: 28px;
-  --glass-blur-thick: 40px;
-  --glass-saturate: 160%;
+  /* Vision Pro acrylic — same translucency recipe as light (frost + blur) */
+  --glass-blur: 32px;
+  --glass-blur-thin: 20px;
+  --glass-blur-regular: 32px;
+  --glass-blur-thick: 44px;
+  --glass-saturate: 150%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(145%);
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
 
-  --glass-bg: rgba(22, 18, 36, 0.42);
+  --glass-bg: rgba(255, 255, 255, 0.1);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(22, 18, 36, 0.28);
-  --glass-regular-bg: rgba(22, 18, 36, 0.42);
-  --glass-thick-bg: rgba(22, 18, 36, 0.55);
-  --glass-card-bg: rgba(22, 18, 36, 0.45);
+  --glass-thin-bg: rgba(255, 255, 255, 0.06);
+  --glass-regular-bg: rgba(255, 255, 255, 0.1);
+  --glass-thick-bg: rgba(255, 255, 255, 0.14);
+  --glass-card-bg: rgba(255, 255, 255, 0.12);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.16);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  --glass-inner-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.08);
-  --glass-drop-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --glass-inner-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  --glass-drop-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
   --glass-shadow: var(--glass-drop-shadow), var(--glass-highlight), var(--glass-inner-shadow);
 
-  --glass-subtle-bg: rgba(255, 255, 255, 0.06);
-  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.12);
-  --glass-recessed-bg: rgba(0, 0, 0, 0.22);
-  --glass-recessed-border: 1px solid rgba(255, 255, 255, 0.10);
+  --glass-subtle-bg: rgba(255, 255, 255, 0.08);
+  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.14);
+  --glass-recessed-bg: rgba(0, 0, 0, 0.2);
+  --glass-recessed-border: 1px solid rgba(255, 255, 255, 0.1);
   --glass-recessed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 
   --line: rgba(255, 255, 255, 0.12);
@@ -63,10 +63,10 @@ html[data-theme="dark"] {
   /* Icon glass — no blur, soft strokes (not black silhouettes) */
   --icon-color: rgba(255, 255, 255, 0.88);
   --icon-color-hover: #ffffff;
-  --icon-glass-bg: rgba(255, 255, 255, 0.12);
-  --icon-glass-border: rgba(255, 255, 255, 0.22);
-  --icon-hover-bg: rgba(255, 255, 255, 0.2);
-  --icon-active-bg: color-mix(in srgb, #8B7FF5 28%, rgba(255, 255, 255, 0.12));
+  --icon-glass-bg: rgba(255, 255, 255, 0.1);
+  --icon-glass-border: rgba(255, 255, 255, 0.2);
+  --icon-hover-bg: rgba(255, 255, 255, 0.16);
+  --icon-active-bg: color-mix(in srgb, #8B7FF5 28%, rgba(255, 255, 255, 0.1));
 
   --success: #3FBF8F;
   --success-green: #3FBF8F;
@@ -226,7 +226,7 @@ html[data-theme="light"] {
   --nav-indicator: var(--accent-violet);
 }
 
-/* Light glass surfaces — translucent + blur (Vision Pro) */
+/* Glass surfaces — same acrylic recipe for light + dark */
 html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
 html[data-theme="light"] .wallet-hero,
@@ -236,7 +236,17 @@ html[data-theme="light"] .section-head,
 html[data-theme="light"] .topbar,
 html[data-theme="light"] .modal__panel,
 html[data-theme="light"] .product-card,
-html[data-theme="light"] .market-hero {
+html[data-theme="light"] .market-hero,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .widget,
+html[data-theme="dark"] .wallet-hero,
+html[data-theme="dark"] .desktop-hero,
+html[data-theme="dark"] .sidebar-left,
+html[data-theme="dark"] .section-head,
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .modal__panel,
+html[data-theme="dark"] .product-card,
+html[data-theme="dark"] .market-hero {
   color: var(--text);
   text-shadow: none;
   background: var(--glass-card-bg);
@@ -246,9 +256,7 @@ html[data-theme="light"] .market-hero {
   backdrop-filter: var(--glass-filter);
 }
 
-html[data-theme="light"] .sidebar-left {
-  background: var(--glass-bg);
-}
+html[data-theme="light"] .sidebar-left,
 html[data-theme="dark"] .sidebar-left {
   background: var(--glass-bg);
 }
@@ -256,7 +264,11 @@ html[data-theme="dark"] .sidebar-left {
 html[data-theme="light"] .modal__panel .card,
 html[data-theme="light"] .modal__panel .product-card,
 html[data-theme="light"] .public-profile .card,
-html[data-theme="light"] .public-profile .product-card {
+html[data-theme="light"] .public-profile .product-card,
+html[data-theme="dark"] .modal__panel .card,
+html[data-theme="dark"] .modal__panel .product-card,
+html[data-theme="dark"] .public-profile .card,
+html[data-theme="dark"] .public-profile .product-card {
   background: var(--glass-thick-bg);
   border: var(--glass-border);
 }

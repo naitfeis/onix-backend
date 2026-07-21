@@ -1,5 +1,19 @@
 /* ONIX Market background — sharp orbs (one blur layer) + stars */
 
+/*
+ * Scene CSS vars (set per-orb/star via inline style from OnixBackground.tsx).
+ * Defaults silence IDE "cannot resolve" warnings; runtime always overrides.
+ */
+:root {
+  --orb-color: #8b6bff;
+  --orb-dur: 18s;
+  --orb-delay: 0s;
+  /* ★ Background orb blur — change this (dark default). Light overrides below. */
+  --orb-blur: 22px;
+  --dur: 3s;
+  --delay: 0s;
+}
+
 .onix-bg {
   position: fixed;
   inset: 0;
@@ -30,10 +44,12 @@ html[data-theme="light"] .onix-bg__base {
 html[data-theme="dark"] {
   --page-bg: #05040a;
   --bg-scene-deep: #05040a;
+  --orb-blur: 22px;
 }
 html[data-theme="light"] {
   --page-bg: #e4ecf5;
   --bg-scene-deep: #e4ecf5;
+  --orb-blur: 20px;
 }
 
 /* —— Orbs —— */
@@ -51,8 +67,8 @@ html[data-theme="light"] .onix-bg__orbs--dark { display: none; }
 html[data-theme="light"] .onix-bg__orbs--light { display: block; }
 
 /*
- * One blur only: fixed 22px on the orb itself — softer scene for glass sampling.
- * Solid color holds until ~58%, then fade — keeps readable disks behind acrylic.
+ * Background blur lives HERE — filter: blur(var(--orb-blur)).
+ * Change --orb-blur above (dark/light), not backdrop-filter on cards.
  */
 .orb {
   position: absolute;
@@ -61,38 +77,35 @@ html[data-theme="light"] .onix-bg__orbs--light { display: block; }
   transform: translate(-50%, -50%);
   will-change: transform;
   mix-blend-mode: normal;
-  filter: blur(22px);
+  filter: blur(var(--orb-blur, 22px));
   background: radial-gradient(
     circle at 35% 30%,
     rgba(255, 255, 255, 0.45) 0%,
-    var(--orb-color) 28%,
-    var(--orb-color) 58%,
+    var(--orb-color, #8b6bff) 28%,
+    var(--orb-color, #8b6bff) 58%,
     transparent 78%
   );
   animation: orb-float var(--orb-dur, 18s) ease-in-out var(--orb-delay, 0s) infinite alternate;
 }
 
 .onix-bg__orbs--dark .orb {
-  /* normal — screen turns disks into formless glow */
   mix-blend-mode: normal;
   background: radial-gradient(
     circle at 35% 30%,
     rgba(255, 255, 255, 0.4) 0%,
-    var(--orb-color) 26%,
-    var(--orb-color) 60%,
+    var(--orb-color, #8b6bff) 26%,
+    var(--orb-color, #8b6bff) 60%,
     transparent 76%
   );
 }
 
 .onix-bg__orbs--light .orb {
   mix-blend-mode: normal;
-  /* Light: soft blur like dark scene (~same softness) */
-  filter: blur(20px);
   background: radial-gradient(
     circle at 35% 30%,
     rgba(255, 255, 255, 0.7) 0%,
-    var(--orb-color) 26%,
-    var(--orb-color) 60%,
+    var(--orb-color, #7eb8e8) 26%,
+    var(--orb-color, #7eb8e8) 60%,
     transparent 78%
   );
 }
@@ -128,13 +141,13 @@ html[data-theme="light"] .onix-bg__stars--light { display: block; }
   box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.8);
 }
 
-/* Light: white sparks need glow on lavender — otherwise invisible */
+/* Light: white sparks need glow on soft sky */
 .onix-bg__star--light {
   width: 2px;
   height: 2px;
   background: #ffffff;
   box-shadow:
-    0 0 5px 1.5px rgba(255, 255, 255, 0.85),
+    0 0 5px 2px rgba(255, 255, 255, 0.85),
     0 0 10px 3px rgba(255, 255, 255, 0.4);
 }
 
