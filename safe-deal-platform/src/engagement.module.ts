@@ -10,7 +10,7 @@ import {
 import { AIService } from './ai/ai.service';
 import { AiModule } from './ai/ai.module';
 import { ensurePairChat, pairChatKey } from './chat-pair';
-import { AuthUser, CurrentUser, parseId } from './common';
+import { AuthUser, CurrentUser, isStaffViewer, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -155,7 +155,7 @@ export class ChatService {
       )) ?? chat.members.find((member) => member.userId !== user.id);
       const latestOrder = chat.orders[0];
       const subtitleRaw = chat.messages[0];
-      const subtitle = subtitleRaw?.deletedAt && !(user.isAdmin || user.isSupport)
+      const subtitle = subtitleRaw?.deletedAt && !isStaffViewer(user)
         ? 'Сообщение удалено'
         : subtitleRaw?.text;
       const peerOnix = other?.user.onixId ? formatOnixId(other.user.onixId) : undefined;
@@ -351,7 +351,7 @@ export class ChatService {
     await this.member(user.id, chatId);
     const take = Math.min(Math.max(limit, 1), 100);
     const beforeId = before ? parseId(before) : undefined;
-    const staffViewer = user.isAdmin || user.isSupport;
+    const staffViewer = isStaffViewer(user);
 
     const memberRows = await this.prisma.chatMember.findMany({
       where: { chatId },
@@ -420,7 +420,7 @@ export class ChatService {
       });
       await this.ai.reply(user, chatId, body);
       return messageDto(message, user.id, {
-        staffViewer: user.isAdmin || user.isSupport,
+        staffViewer: isStaffViewer(user),
       });
     }
 
@@ -471,7 +471,7 @@ export class ChatService {
     }
 
     return messageDto(message, user.id, {
-      staffViewer: user.isAdmin || user.isSupport,
+      staffViewer: isStaffViewer(user),
       memberReads,
     });
   }

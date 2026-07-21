@@ -26,28 +26,28 @@ const ORBS_DARK: OrbSpec[] = [
 ];
 
 /**
- * Light — full-canvas coverage, 4+ distinct hues (incl. yellow accent).
- * Positions: all four corners + top band + mid-right (TZ vs reference).
+ * Light — daylight canvas: cool mist + soft coral/cyan (not lavender-dominant).
+ * Positions: all four corners + top band + mid-right.
  */
 const ORBS_LIGHT: OrbSpec[] = [
-  /* 1 large lavender — top left */
-  { color: '#a78bfa', size: 170, opacity: 0.65, top: '8%', left: '12%', duration: '22s', delay: '0s' },
-  /* 2 violet — top center */
-  { color: '#9b6bff', size: 145, opacity: 0.62, top: '5%', left: '48%', duration: '24s', delay: '-4s' },
-  /* 3 pink — top right */
-  { color: '#ff8fc4', size: 120, opacity: 0.6, top: '6%', left: '80%', duration: '26s', delay: '-8s' },
-  /* 4 yellow-orange accent — beside pink, top right */
-  { color: '#ffd88a', size: 72, opacity: 0.68, top: '10%', left: '92%', duration: '18s', delay: '-2s' },
+  /* 1 soft sky — top left */
+  { color: '#9ec5e8', size: 170, opacity: 0.55, top: '8%', left: '12%', duration: '22s', delay: '0s' },
+  /* 2 mist blue — top center */
+  { color: '#b8c9e0', size: 145, opacity: 0.5, top: '5%', left: '48%', duration: '24s', delay: '-4s' },
+  /* 3 soft coral — top right */
+  { color: '#f0a8b8', size: 120, opacity: 0.52, top: '6%', left: '80%', duration: '26s', delay: '-8s' },
+  /* 4 warm sand accent — beside coral */
+  { color: '#f0d4a8', size: 72, opacity: 0.58, top: '10%', left: '92%', duration: '18s', delay: '-2s' },
   /* 5 cyan — mid left edge */
-  { color: '#7fd4ec', size: 125, opacity: 0.58, top: '42%', left: '8%', duration: '28s', delay: '-10s' },
-  /* 6 small pink — center, toward right */
-  { color: '#f5a8d0', size: 95, opacity: 0.55, top: '40%', left: '76%', duration: '20s', delay: '-6s' },
-  /* 7 large lavender — bottom left (under sidebar) */
-  { color: '#9b6bff', size: 180, opacity: 0.62, top: '88%', left: '14%', duration: '30s', delay: '-12s' },
-  /* 8 cyan/violet — bottom right (under right column) */
-  { color: '#7fd4ec', size: 155, opacity: 0.58, top: '86%', left: '82%', duration: '25s', delay: '-5s' },
-  /* 9 soft violet — lower mid for density */
-  { color: '#a78bfa', size: 110, opacity: 0.52, top: '70%', left: '52%', duration: '21s', delay: '-9s' },
+  { color: '#7ec8d8', size: 125, opacity: 0.5, top: '42%', left: '8%', duration: '28s', delay: '-10s' },
+  /* 6 soft peach — center right */
+  { color: '#e8b8c8', size: 95, opacity: 0.48, top: '40%', left: '76%', duration: '20s', delay: '-6s' },
+  /* 7 cool slate — bottom left */
+  { color: '#a8bdd4', size: 180, opacity: 0.52, top: '88%', left: '14%', duration: '30s', delay: '-12s' },
+  /* 8 aqua — bottom right */
+  { color: '#8ecad8', size: 155, opacity: 0.5, top: '86%', left: '82%', duration: '25s', delay: '-5s' },
+  /* 9 soft rose — lower mid */
+  { color: '#d8b0c0', size: 110, opacity: 0.45, top: '70%', left: '52%', duration: '21s', delay: '-9s' },
 ];
 
 function buildStars(count: number, seedStart: number) {

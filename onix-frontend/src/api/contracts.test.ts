@@ -25,6 +25,8 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.adminBan('ONIX-000007')).toBe('/api/admin/users/ONIX-000007/ban');
     expect(API_PATHS.adminStatus('ONIX-7')).toBe('/api/admin/users/ONIX-7/status');
     expect(API_PATHS.orderRefundRequest('42')).toBe('/api/orders/42/refund-request');
+    expect(API_PATHS.dealCancel('42')).toBe('/api/orders/42/cancel');
+    expect(API_PATHS.subcategories).toBe('/api/products/catalog/subcategories');
   });
 
   it('builds orders list query', () => {

@@ -106,13 +106,7 @@ export class AuthService {
       if (payload.exp <= Math.floor(Date.now() / 1000)) throw new Error('expired');
       const user = await this.prisma.user.findUnique({ where: { id: BigInt(payload.sub) } });
       if (!user || user.deletedAt) throw new Error('inactive');
-      return {
-        id: user.id,
-        telegramId: user.telegramId,
-        onixId: user.onixId,
-        isAdmin: user.isAdmin,
-        isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
-      };
+      return this.toAuthUser(user);
     } catch (error) {
       console.error(formatErrorForLog(error));
       throw new UnauthorizedException('Сессия недействительна или истекла. Войдите снова.');
@@ -218,13 +212,21 @@ export class AuthService {
     return this.toAuthUser(user);
   }
 
-  private toAuthUser(user: { id: bigint; telegramId: bigint; onixId: string; isAdmin: boolean; isSupport: boolean }): AuthUser {
+  private toAuthUser(user: {
+    id: bigint;
+    telegramId: bigint;
+    onixId: string;
+    isAdmin: boolean;
+    isSupport: boolean;
+    platformStatus?: import('@prisma/client').PlatformStatus;
+  }): AuthUser {
     return {
       id: user.id,
       telegramId: user.telegramId,
       onixId: user.onixId,
       isAdmin: user.isAdmin,
       isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
+      platformStatus: user.platformStatus,
     };
   }
 

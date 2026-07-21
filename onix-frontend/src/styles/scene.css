@@ -23,8 +23,8 @@
 }
 
 html[data-theme="light"] .onix-bg__base {
-  /* Lavender sky — not white; corners read as soft violet */
-  background: radial-gradient(ellipse at 50% 0%, #ebe6f6 0%, #e0d9ef 45%, #d4cce6 100%);
+  /* Soft daylight — cool mist, not lavender fog */
+  background: radial-gradient(ellipse at 50% 0%, #f4f6fa 0%, #e8edf4 48%, #dde5ef 100%);
 }
 
 html[data-theme="dark"] {
@@ -32,8 +32,8 @@ html[data-theme="dark"] {
   --bg-scene-deep: #05040a;
 }
 html[data-theme="light"] {
-  --page-bg: #d4cce6;
-  --bg-scene-deep: #d4cce6;
+  --page-bg: #dde5ef;
+  --bg-scene-deep: #dde5ef;
 }
 
 /* —— Orbs —— */

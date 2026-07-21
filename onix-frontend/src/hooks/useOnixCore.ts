@@ -9,7 +9,7 @@ import {
   logTelegramDetect,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
-import { API_PATHS, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review } from '../api/contracts';
+import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
 import {
   bootstrapPhase,
   bootstrapPhaseSync,
@@ -104,10 +104,12 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
 async function bootstrapMarketplace(
   loadProfile: () => Promise<Profile | null>,
   load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
+  loadCatalog: () => Promise<void>,
 ): Promise<Profile | null> {
   const [profileResult] = await Promise.all([
     bootstrapPhase('me', () => loadProfile()),
     bootstrapPhase('products', () => load('products', API_PATHS.productsList({ limit: 15 }))),
+    bootstrapPhase('catalog', () => loadCatalog()),
   ]);
   markBootstrapPhase('profile', 0);
   markBootstrapPhase('marketplace', 0);
@@ -128,6 +130,7 @@ function warmSecondaryCollections(
 
 export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [catalogSubcategories, setCatalogSubcategories] = useState<SubcategoryCatalog>(SUBCATEGORIES_BY_CATEGORY);
   const [store, setStore] = useState<Store>(emptyStore);
   const [states, setStates] = useState<Record<CollectionKey | 'profile', AsyncState>>({
     profile: 'loading', products: 'idle', deals: 'idle', chats: 'idle', notifications: 'idle', reviews: 'idle',
@@ -149,6 +152,15 @@ export function useOnixCore() {
     } catch (error) {
       setErrors(previous => ({ ...previous, [key]: friendlyError(error) }));
       setStates(previous => ({ ...previous, [key]: 'error' }));
+    }
+  }, []);
+
+  const loadCatalog = useCallback(async () => {
+    try {
+      const data = await api.get<SubcategoryCatalog>(API_PATHS.subcategories);
+      if (data && typeof data === 'object') setCatalogSubcategories(data);
+    } catch {
+      // Keep bootstrap fallback — form still works offline / on API blip.
     }
   }, []);
 
@@ -199,7 +211,7 @@ export function useOnixCore() {
           ...previous,
           products: previous.products === 'success' ? previous.products : 'loading',
         }));
-        const current = await bootstrapMarketplace(loadProfile, load);
+        const current = await bootstrapMarketplace(loadProfile, load, loadCatalog);
         markAppReady('marketplace-ready');
         printBootstrapSummary('bootstrap-settled');
         markAppReady('bootstrap-settled');
@@ -221,6 +233,7 @@ export function useOnixCore() {
       const productsPromise = bootstrapPhase('products-public', () =>
         load('products', API_PATHS.productsList({ limit: 15 })),
       );
+      void bootstrapPhase('catalog', () => loadCatalog());
       const sessionPromise = restoreWebsiteSession();
 
       // Catalog readiness is independent of session (guest or user).
@@ -292,7 +305,7 @@ export function useOnixCore() {
       printBootstrapSummary('bootstrap-error');
       markAppReady('bootstrap-settled');
     }
-  }, [load, loadProfile]);
+  }, [load, loadCatalog, loadProfile]);
 
   useEffect(() => {
     // Ordinary www: zero Telegram SDK / ready / expand (required for RU cookie path).
@@ -481,11 +494,18 @@ export function useOnixCore() {
       void load('chats', API_PATHS.chats);
     }), [load, run]);
 
-  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'dispute') => {
-    const path = action === 'deliver' ? API_PATHS.dealDeliver(deal.id) : action === 'complete' ? API_PATHS.dealComplete(deal.id) : API_PATHS.dealDispute(deal.id);
+  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
+    const path = action === 'deliver'
+      ? API_PATHS.dealDeliver(deal.id)
+      : action === 'complete'
+        ? API_PATHS.dealComplete(deal.id)
+        : action === 'cancel'
+          ? API_PATHS.dealCancel(deal.id)
+          : API_PATHS.dealDispute(deal.id);
     return run(`deal-${deal.id}`, () => api.post(path, {
       idempotencyKey: crypto.randomUUID(),
       ...(action === 'dispute' ? { reason: 'Открыто пользователем' } : {}),
+      ...(action === 'cancel' ? { reason: 'Отменено пользователем' } : {}),
     }), () => void load('deals', API_PATHS.orders));
   }, [load, run]);
 
@@ -607,7 +627,7 @@ export function useOnixCore() {
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
-    profile, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction, setUserStatus, reportUser,

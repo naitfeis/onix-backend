@@ -36,6 +36,11 @@ export function isPrivilegedAdmin(
   );
 }
 
+/** Staff roles that may view support surfaces (MODERATOR / ADMIN / SUPER_ADMIN). */
+export function isStaffPlatformStatus(status: PlatformStatus | null | undefined): boolean {
+  return status === 'MODERATOR' || status === 'ADMIN' || status === 'SUPER_ADMIN';
+}
+
 /** Public badge — omit USER to keep UI quiet for default accounts. */
 export function statusBadge(status: PlatformStatus | null | undefined): PlatformStatusCode | undefined {
   if (!status || status === 'USER') return undefined;

@@ -42,6 +42,7 @@ export class DualAccessService {
       onixId: user.onixId,
       isAdmin: user.isAdmin,
       isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
+      platformStatus: user.platformStatus,
     };
   }
 }

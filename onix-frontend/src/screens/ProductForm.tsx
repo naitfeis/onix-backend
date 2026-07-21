@@ -8,7 +8,8 @@ import { emptyDraft } from './shared';
 export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   const [errors, setErrors] = useState<string[]>([]);
-  const subs = SUBCATEGORIES_BY_CATEGORY[draft.category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
+  const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
+  const subs = catalog[draft.category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
   const minRub = minPriceRubles(draft.subcategory);
   const priceNum = Number(draft.priceRubles);
   const payout = Number.isFinite(priceNum) ? (priceNum * 0.95).toFixed(2) : null;
@@ -27,7 +28,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       <Field label="Описание" hint="Без ограничения по минимуму. Пароли — только в автовыдаче"><Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
       <Field label="Категория"><Select value={draft.category} onChange={event => {
         const category = event.target.value;
-        const nextSubs = SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
+        const nextSubs = catalog[category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
         setDraft({ ...draft, category, subcategory: nextSubs[0] });
       }}>{CATEGORIES.map(item => <option key={item} value={item}>{CATEGORY_LABELS[item]}</option>)}</Select></Field>
       <Field label="Подкатегория">

@@ -3,9 +3,11 @@ import {
   ExecutionContext, ExceptionFilter, HttpException, HttpStatus, Injectable,
   NestInterceptor, Optional, SetMetadata,
 } from '@nestjs/common';
+import type { PlatformStatus } from '@prisma/client';
 import { Observable, map } from 'rxjs';
 import { AuthPlatformError, authErrorBody } from './auth-v2/auth-errors';
 import { ErrorTrackingService } from './observability/error-tracking.service';
+import { isStaffPlatformStatus } from './platform-status';
 import { structuredLog } from './observability/structured-logger';
 import { formatErrorForLog } from './safe-error-log';
 
@@ -16,11 +18,21 @@ export interface AuthUser {
   isAdmin: boolean;
   /** SUPPORT staff (or admin). Used for tickets/refunds — not a bypass of Escrow. */
   isSupport: boolean;
+  /** Canonical RBAC source when present — prefer over boolean flags for staff UI. */
+  platformStatus?: PlatformStatus;
 }
 
 /** Admin or dedicated SUPPORT agent. */
-export function canActAsSupport(user: Pick<AuthUser, 'isAdmin' | 'isSupport'>): boolean {
-  return user.isAdmin || user.isSupport;
+export function canActAsSupport(user: Pick<AuthUser, 'isAdmin' | 'isSupport' | 'platformStatus'>): boolean {
+  return user.isAdmin || user.isSupport || isStaffPlatformStatus(user.platformStatus);
+}
+
+/**
+ * Staff message viewer (read receipts, deleted originals).
+ * Uses platformStatus when available; falls back to legacy isAdmin/isSupport flags.
+ */
+export function isStaffViewer(user: Pick<AuthUser, 'isAdmin' | 'isSupport' | 'platformStatus'>): boolean {
+  return canActAsSupport(user);
 }
 
 /** Resolve SUPPORT flag from env (comma-separated Telegram IDs) + admin. */

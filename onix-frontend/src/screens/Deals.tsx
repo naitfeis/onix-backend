@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { money } from '../api/client';
-import { sellerIsPresent, type Deal, type OrderListQuery } from '../api/contracts';
+import { isStaffPlatformStatus, sellerIsPresent, type Deal, type OrderListQuery } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import { publicAt } from '../utils/publicAt';
@@ -29,7 +29,7 @@ export function Deals({
 }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [dealFilter, setDealFilter] = useState('all');
-  const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'dispute' } | null>(null);
+  const [confirm, setConfirm] = useState<{ deal: Deal; action: 'deliver' | 'complete' | 'cancel' | 'dispute' } | null>(null);
   const [reviewDeal, setReviewDeal] = useState<Deal | null>(null);
   const [refundDeal, setRefundDeal] = useState<Deal | null>(null);
   const [refundReason, setRefundReason] = useState('');
@@ -60,8 +60,8 @@ export function Deals({
   const deals = core.deals.filter(deal => deal.role === role);
   const isSupport = Boolean(
     core.profile?.isAdmin
-    || core.profile?.status === 'ADMIN'
-    || core.profile?.status === 'MODERATOR'
+    || core.profile?.isSupport
+    || isStaffPlatformStatus(core.profile?.status)
     || core.profile?.roles.includes('ADMIN')
     || core.profile?.roles.includes('MODERATOR'),
   );
@@ -98,6 +98,9 @@ export function Deals({
         )}
         <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
+          {deal.status === 'PAYMENT_HOLD' && (
+            <Button variant="danger" onClick={() => setConfirm({ deal, action: 'cancel' })}>Отменить сделку</Button>
+          )}
           {!deal.complaintOpen && !['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && (
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>
           )}
@@ -119,9 +122,9 @@ export function Deals({
         </div>
         {deal.status === 'COMPLETED' && deal.canReview && <Button variant="secondary" onClick={() => setReviewDeal(deal)}>Оставить отзыв</Button>}
       </Card>)}
-    <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : 'Подтвердить передачу?'}
-      text={confirm?.action === 'complete' ? 'Это действие необратимо. Подтверждайте только после проверки товара.' : confirm?.action === 'dispute' ? 'Сделка будет остановлена и передана администратору.' : 'Покупатель получит уведомление о передаче.'}
-      onCancel={() => setConfirm(null)} onConfirm={async () => { if (confirm && await core.dealAction(confirm.deal, confirm.action)) { setToast('Статус сделки обновлён.'); setConfirm(null); } }} />
+    <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute' || confirm?.action === 'cancel'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : confirm?.action === 'cancel' ? 'Отменить сделку?' : 'Подтвердить передачу?'}
+      text={confirm?.action === 'complete' ? 'Это действие необратимо. Подтверждайте только после проверки товара.' : confirm?.action === 'dispute' ? 'Сделка будет остановлена и передана администратору.' : confirm?.action === 'cancel' ? 'Доступно только до передачи товара (PAYMENT_HOLD). Средства вернутся покупателю из Escrow; продавец выплату не получит.' : 'Покупатель получит уведомление о передаче.'}
+      onCancel={() => setConfirm(null)} onConfirm={async () => { if (confirm && await core.dealAction(confirm.deal, confirm.action)) { setToast(confirm.action === 'cancel' ? 'Сделка отменена, средства возвращены.' : 'Статус сделки обновлён.'); setConfirm(null); } }} />
     <Modal open={Boolean(refundDeal)} title="Запрос возврата" onClose={() => setRefundDeal(null)}><div className="form">
       <Field label="Причина возврата"><Textarea required maxLength={500} value={refundReason} onChange={event => setRefundReason(event.target.value)} /></Field>
       <div className="modal__actions"><Button variant="secondary" onClick={() => setRefundDeal(null)}>Отмена</Button><Button busy={core.actionBusy === `seller-refund-${refundDeal?.id}`} disabled={!refundReason.trim()} onClick={async () => {

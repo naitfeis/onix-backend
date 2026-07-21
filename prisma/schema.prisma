@@ -291,7 +291,8 @@ model Message {
   visibleTo       User?       @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
   hides           MessageHide[]
 
-  @@index([chatId, createdAt])
+  @@index([chatId, createdAt]) // history: WHERE chatId ORDER BY createdAt
+  // Partial USER+senderId index: migration 20260716050000. Add more only after EXPLAIN ANALYZE.
   @@index([visibleToUserId])
   @@index([deletedAt])
 }

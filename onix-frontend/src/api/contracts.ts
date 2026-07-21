@@ -11,6 +11,14 @@ export type PlatformStatus =
   | 'SUPER_ADMIN'
   | 'VIP';
 
+/** Staff roles for support surfaces — mirrors BE isStaffPlatformStatus. */
+export function isStaffPlatformStatus(status?: PlatformStatus | null): boolean {
+  return status === 'MODERATOR' || status === 'ADMIN' || status === 'SUPER_ADMIN';
+}
+
+/** BE catalog map: category → subcategory enum codes. */
+export type SubcategoryCatalog = Record<string, string[]>;
+
 export interface Seller {
   id: string;
   onixId: string;
@@ -141,6 +149,7 @@ export interface Profile extends Seller {
   bio?: string;
   balanceCents: string;
   isAdmin: boolean;
+  isSupport?: boolean;
   status: PlatformStatus;
   roles: PlatformStatus[];
   walletHistory: WalletOperation[];
@@ -360,11 +369,13 @@ export const API_PATHS = {
   ordersList: ordersListPath,
   dealDeliver: (id: string) => `/api/orders/${encodeURIComponent(id)}/deliver`,
   dealComplete: (id: string) => `/api/orders/${encodeURIComponent(id)}/complete`,
+  dealCancel: (id: string) => `/api/orders/${encodeURIComponent(id)}/cancel`,
   dealDispute: (id: string) => `/api/orders/${encodeURIComponent(id)}/dispute`,
   orderRefundRequest: (id: string) => `/api/orders/${encodeURIComponent(id)}/refund-request`,
   orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
   supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
   supportComplete: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/complete`,
+  /** @status DEPRECATED — ticket close is driven by refund/complete; UI uses report close. */
   supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
   supportQueue: '/api/support/queue',
   supportReports: '/api/support/reports',
@@ -404,7 +415,9 @@ export const API_PATHS = {
       : '/api/users/me/analytics'
   ),
   userTrustCard: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/trust-card`,
+  /** @status FUTURE — economy verification surface not wired in UI yet. */
   meVerifications: '/api/users/me/verifications',
+  /** @status FUTURE — Pro seller plan surface not wired in UI yet. */
   mePro: '/api/users/me/pro',
   productView: (id: string) => `/api/products/${encodeURIComponent(id)}/views`,
   notifications: '/api/notifications',
@@ -413,7 +426,24 @@ export const API_PATHS = {
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
   adminStatus: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/status`,
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
+  /** @status FUTURE — AI chat entry is via Chats list, not this path. */
   aiChat: '/api/ai/chat',
+} as const;
+
+/**
+ * FE↔API path classification for audits.
+ * LIVE = UI calls it; FUTURE = planned; DEPRECATED = keep for external/compat; FALLBACK = offline seed only.
+ */
+export const API_PATH_STATUS = {
+  dealCancel: 'LIVE',
+  dealDeliver: 'LIVE',
+  dealComplete: 'LIVE',
+  dealDispute: 'LIVE',
+  subcategories: 'LIVE',
+  meVerifications: 'FUTURE',
+  mePro: 'FUTURE',
+  aiChat: 'FUTURE',
+  supportClose: 'DEPRECATED',
 } as const;
 
 export const PLATFORM_STATUS_OPTIONS: Array<{ value: PlatformStatus; label: string }> = [
@@ -451,7 +481,7 @@ export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
   RP_PROJECTS: 'RP проекты', BRAWL_STARS: 'Brawl Stars', OTHER: 'Другое',
 };
 
-/** Prisma ProductSubcategory labels (not free-text). */
+/** Fallback only — prefer GET /api/products/catalog/subcategories at runtime. */
 export const SUBCATEGORIES_BY_CATEGORY: Record<(typeof CATEGORIES)[number], string[]> = {
   STANDOFF_2: ['STANDOFF_GOLD', 'STANDOFF_ACCOUNTS', 'STANDOFF_SKINS', 'STANDOFF_OTHER'],
   STEAM: ['STEAM_TOPUP', 'STEAM_ACCOUNTS', 'STEAM_KEYS', 'STEAM_SKINS', 'STEAM_OTHER'],
