@@ -81,15 +81,20 @@ html[data-theme="dark"] {
   --game-rp: #8B7FF5;
   --game-bs: #E8934A;
 
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-  --radius-xl: 28px;
-  --radius-sheet: 32px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-sheet: 24px;
   --radius: var(--radius-lg);
+  --radius-button: 12px;
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-hero: 24px;
+  --radius-nav: 28px;
 
-  --font-display: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "DM Sans", "Segoe UI", sans-serif;
-  --font-body: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "DM Sans", "Segoe UI", sans-serif;
+  --font-display: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "DM Sans", sans-serif;
+  --font-body: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "DM Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --direction: 1;
@@ -101,86 +106,105 @@ html[data-theme="dark"] {
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --shell-max: 720px;
 
+  /* Z-index scale — use these only (no magic 2100/9999) */
+  --z-base: 0;
   --z-scene: 0;
   --z-content: 1;
-  --z-sticky: 20;
-  --z-modal: 30;
-  --z-toast: 40;
+  --z-sticky: 100;
+  --z-header: 100;
+  --z-dropdown: 300;
+  --z-popover: 500;
+  --z-toast: 800;
+  --z-overlay: 1000;
+  --z-modal: 1100;
 
   --header-blur: 0;
   --nav-capsule: rgba(255, 255, 255, 0.1);
   --page-bg: #0A090E;
   --sparkle: rgba(255, 252, 245, 0.95);
+
+  /* Modal focus — dark: glass-first scene stays visible but recedes */
+  --modal-backdrop: rgb(0 0 0 / 42%);
+  --modal-backdrop-blur: blur(8px);
+
+  /* Nav states — subtle, not gaming glow pills */
+  --nav-hover-bg: rgb(255 255 255 / 5%);
+  --nav-active-bg: rgb(255 255 255 / 9%);
+  --nav-active-border: rgb(255 255 255 / 12%);
+  --nav-indicator: var(--accent-violet);
 }
 
 html[data-theme="light"] {
   color-scheme: light;
-  --bg-scene-0: #ebe6f6;
-  --bg-scene-1: #e0d9ef;
-  --bg-scene-2: #d4cce6;
-  --bg-scene-warm: #e4dcf0;
-  --bg-scene-deep: #d4cce6;
-  --page-bg: #d4cce6;
+  /* Light = surface-first (not dark-glass with higher opacity) */
+  --bg-scene-0: #f4f6f8;
+  --bg-scene-1: #eef1f5;
+  --bg-scene-2: #e8ecf2;
+  --bg-scene-warm: #f0eef6;
+  --bg-scene-deep: #e8ecf2;
+  --page-bg: #f4f6f8;
 
-  /* Dark enough to stay readable through water glass */
-  --text: #1a1625;
-  --text-primary: #1a1625;
-  --text-secondary: rgba(26, 22, 37, 0.62);
-  --text-caption: rgba(26, 22, 37, 0.45);
+  --text: #141820;
+  --text-primary: #141820;
+  --text-secondary: rgba(20, 24, 32, 0.62);
+  --text-caption: rgba(20, 24, 32, 0.45);
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Light acrylic — brighter white glass so profile/lots read clearly */
-  --glass-blur: 12px;
-  --glass-blur-thin: 8px;
-  --glass-blur-regular: 12px;
-  --glass-blur-thick: 16px;
-  --glass-saturate: 145%;
+  --surface-0: #f4f6f8;
+  --surface-1: rgb(255 255 255 / 0.88);
+  --surface-2: rgb(255 255 255 / 0.96);
+
+  /* Minimal blur — acrylic white, not lavender fog */
+  --glass-blur: 6px;
+  --glass-blur-thin: 4px;
+  --glass-blur-regular: 6px;
+  --glass-blur-thick: 8px;
+  --glass-saturate: 120%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(115%);
 
-  --glass-bg: rgba(255, 255, 255, 0.55);
-  --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.42);
-  --glass-regular-bg: rgba(255, 255, 255, 0.55);
-  --glass-thick-bg: rgba(255, 255, 255, 0.68);
-  --glass-card-bg: rgba(255, 255, 255, 0.62);
+  --glass-bg: var(--surface-1);
+  --glass-fill: var(--surface-1);
+  --glass-thin-bg: rgb(255 255 255 / 0.72);
+  --glass-regular-bg: var(--surface-1);
+  --glass-thick-bg: var(--surface-2);
+  --glass-card-bg: var(--surface-2);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.72);
+  --glass-border: 1px solid rgb(20 25 35 / 10%);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow: 0 8px 28px rgba(60, 50, 100, 0.1);
+  --glass-drop-shadow: 0 12px 40px rgb(20 25 35 / 8%);
   --glass-shadow: var(--glass-drop-shadow);
 
-  --glass-subtle-bg: rgba(255, 255, 255, 0.48);
-  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.7);
-  --glass-recessed-bg: rgba(120, 110, 150, 0.08);
-  --glass-recessed-border: 1px solid rgba(80, 70, 110, 0.1);
-  --glass-recessed-shadow: inset 0 1px 2px rgba(60, 50, 90, 0.06);
+  --glass-subtle-bg: rgb(255 255 255 / 0.7);
+  --glass-subtle-border: 1px solid rgb(20 25 35 / 8%);
+  --glass-recessed-bg: rgb(20 25 35 / 4%);
+  --glass-recessed-border: 1px solid rgb(20 25 35 / 8%);
+  --glass-recessed-shadow: inset 0 1px 2px rgb(20 25 35 / 4%);
 
-  --line: rgba(40, 32, 60, 0.10);
-  --line-strong: rgba(40, 32, 60, 0.18);
-  --surface: var(--glass-card-bg);
-  --surface-2: var(--glass-subtle-bg);
+  --line: rgb(20 25 35 / 10%);
+  --line-strong: rgb(20 25 35 / 16%);
+  --surface: var(--surface-2);
+  --surface-2-legacy: var(--glass-subtle-bg);
 
   --accent: #5B8DEF;
   --accent-coral: #5B8DEF;
   --accent-coral-deep: #3D6FD4;
-  --accent-coral-glow: 0 0 36px 4px rgba(91, 141, 239, 0.32);
+  --accent-coral-glow: 0 0 28px 4px rgba(91, 141, 239, 0.22);
   --accent-soft: #5B8DEF;
   --accent-mint: #2FA87A;
   --accent-violet: #6B5FE0;
   --accent-violet-deep: #5548C8;
-  --accent-violet-glow: 0 0 28px rgba(107, 95, 224, 0.28);
+  --accent-violet-glow: 0 0 20px rgba(107, 95, 224, 0.18);
   --accent-star: #C99620;
 
-  /* Light icons — soft slate glass, not heavy black */
-  --icon-color: rgba(55, 48, 78, 0.72);
-  --icon-color-hover: #2a2440;
-  --icon-glass-bg: rgba(255, 255, 255, 0.42);
-  --icon-glass-border: rgba(255, 255, 255, 0.65);
-  --icon-hover-bg: rgba(255, 255, 255, 0.62);
-  --icon-active-bg: color-mix(in srgb, #8B7FF5 18%, rgba(255, 255, 255, 0.55));
+  --icon-color: rgba(40, 44, 56, 0.72);
+  --icon-color-hover: #141820;
+  --icon-glass-bg: rgb(255 255 255 / 0.9);
+  --icon-glass-border: rgb(20 25 35 / 12%);
+  --icon-hover-bg: rgb(20 25 35 / 5%);
+  --icon-active-bg: color-mix(in srgb, #6B5FE0 12%, rgb(255 255 255 / 0.92));
 
   --success: #2FA87A;
   --success-green: #2FA87A;
@@ -189,10 +213,18 @@ html[data-theme="light"] {
   --steel: rgba(40, 36, 55, 0.72);
   --cyan: var(--accent-violet);
 
-  --nav-capsule: rgba(255, 255, 255, 0.4);
+  --nav-capsule: rgb(255 255 255 / 0.92);
   --sparkle: rgba(255, 255, 255, 0.95);
-  --_glow: rgba(107, 95, 224, 0.22);
+  --_glow: rgba(107, 95, 224, 0.14);
   --_bg: linear-gradient(145deg, #8B7FF5, #6B5FE0);
+
+  --modal-backdrop: rgb(20 24 32 / 24%);
+  --modal-backdrop-blur: blur(8px);
+
+  --nav-hover-bg: rgb(20 25 35 / 4%);
+  --nav-active-bg: rgb(20 25 35 / 7%);
+  --nav-active-border: rgb(20 25 35 / 10%);
+  --nav-indicator: var(--accent-violet);
 }
 
 /* Clear glass text — readable over colorful orbs */
@@ -202,36 +234,33 @@ html[data-theme="light"] .wallet-hero,
 html[data-theme="light"] .desktop-hero,
 html[data-theme="light"] .sidebar-left,
 html[data-theme="light"] .section-head,
-html[data-theme="light"] .topbar {
+html[data-theme="light"] .topbar,
+html[data-theme="light"] .modal__panel,
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .market-hero {
   color: var(--text);
   text-shadow: none;
-  background: var(--glass-bg) !important;
-  -webkit-backdrop-filter: var(--glass-filter) !important;
-  backdrop-filter: var(--glass-filter) !important;
+  background: var(--surface-2) !important;
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  /* Surface-first: little/no nested blur */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 html[data-theme="light"] .sidebar-left {
-  background: rgba(255, 255, 255, 0.52) !important;
+  background: var(--surface-1) !important;
 }
 html[data-theme="dark"] .sidebar-left {
   background: rgba(22, 18, 36, 0.55) !important;
 }
 
-/* Light theme: brighter profile sheet + lot cards */
-html[data-theme="light"] .modal__panel {
-  background: rgba(255, 255, 255, 0.78) !important;
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 16px 48px rgba(60, 50, 110, 0.12);
-}
 html[data-theme="light"] .modal__panel .card,
 html[data-theme="light"] .modal__panel .product-card,
 html[data-theme="light"] .public-profile .card,
 html[data-theme="light"] .public-profile .product-card {
-  background: rgba(255, 255, 255, 0.82) !important;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-}
-html[data-theme="light"] .product-card {
-  background: rgba(255, 255, 255, 0.7) !important;
+  background: var(--surface-2) !important;
+  border: var(--glass-border);
 }
 
 /* Sidebars never use backdrop-filter — hover repaint = horizontal stripe bug */
@@ -319,7 +348,7 @@ html[data-theme="light"] .topbar::after {
   box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  border-radius: 20px;
+  border-radius: var(--radius-card);
 }
 
 /* Sidebars: solid translucent glass only — backdrop-filter on hover causes stripe artifacts */
@@ -343,7 +372,7 @@ html[data-theme="light"] .topbar::after {
   overflow: visible !important;
 }
 
-.modal__panel { border-radius: 28px; overflow: hidden; }
+.modal__panel { border-radius: var(--radius-sheet); overflow: hidden; }
 .topbar { border-radius: var(--radius-xl); }
 /* Prefer clip over hidden — less backdrop-filter compositor banding */
 .card,
@@ -400,7 +429,7 @@ html[data-theme="light"] .topbar::after {
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  border-radius: 20px;
+  border-radius: var(--radius-card);
 }
 
 .toast { border-radius: 999px; }

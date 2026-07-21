@@ -18,6 +18,7 @@ import {
 } from './components/NavIcons';
 import { Button, Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
+import { t } from './i18n';
 import type { Screen } from './screens/types';
 import './App.css';
 
@@ -37,20 +38,20 @@ const RIGHT_MIN = 64;
 const RIGHT_DEFAULT = 320;
 const RIGHT_ICONS_AT = 88;
 const LEFT_ICONS_AT = 96;
-const TABS: Array<{ id: Screen; label: string; icon: ReactNode }> = [
-  { id: 'market', label: 'Market', icon: <IconMarket /> },
-  { id: 'deals', label: 'Deals', icon: <IconDeals /> },
-  { id: 'create', label: 'Lot', icon: <IconLot /> },
-  { id: 'chat', label: 'Chat', icon: <IconChat /> },
-  { id: 'profile', label: 'Profile', icon: <IconProfile /> },
+const TABS: Array<{ id: Screen; labelKey: Parameters<typeof t>[0]; icon: ReactNode }> = [
+  { id: 'market', labelKey: 'navigation.market', icon: <IconMarket /> },
+  { id: 'deals', labelKey: 'navigation.deals', icon: <IconDeals /> },
+  { id: 'create', labelKey: 'navigation.lot', icon: <IconLot /> },
+  { id: 'chat', labelKey: 'navigation.chat', icon: <IconChat /> },
+  { id: 'profile', labelKey: 'navigation.profile', icon: <IconProfile /> },
 ];
 
-const SIDEBAR_NAV: Array<{ id: Screen; label: string; icon: ReactNode }> = [
-  { id: 'market', label: 'Market', icon: <IconMarket /> },
-  { id: 'deals', label: 'My Orders', icon: <IconDeals /> },
-  { id: 'profile', label: 'Profile', icon: <IconProfile /> },
-  { id: 'chat', label: 'Messages', icon: <IconChat /> },
-  { id: 'create', label: 'Sell Account', icon: <IconLot /> },
+const SIDEBAR_NAV: Array<{ id: Screen; labelKey: Parameters<typeof t>[0]; icon: ReactNode }> = [
+  { id: 'market', labelKey: 'navigation.market', icon: <IconMarket /> },
+  { id: 'deals', labelKey: 'navigation.orders', icon: <IconDeals /> },
+  { id: 'profile', labelKey: 'navigation.profile', icon: <IconProfile /> },
+  { id: 'chat', labelKey: 'navigation.messages', icon: <IconChat /> },
+  { id: 'create', labelKey: 'navigation.sell', icon: <IconLot /> },
 ];
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
@@ -345,19 +346,20 @@ export default function App() {
     )}
 
     {/* Desktop left sidebar */}
-    <aside className={`sidebar-left desktop-only${leftIcons ? ' sidebar-left--icons' : ''}`} aria-label="Навигация">
+    <aside className={`sidebar-left desktop-only${leftIcons ? ' sidebar-left--icons' : ''}`} aria-label={t('navigation.sidebar')}>
       <div className="sidebar-left__brand"><BrandMark /></div>
       <nav className="sidebar-nav">
         {SIDEBAR_NAV.map((item) => (
           <button
-            key={item.label}
+            key={item.labelKey}
             type="button"
             className={screen === item.id ? 'active' : ''}
             onClick={() => switchTo(item.id)}
-            aria-label={item.label}
+            aria-label={t(item.labelKey)}
+            aria-current={screen === item.id ? 'page' : undefined}
           >
             {item.icon}
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </button>
         ))}
       </nav>
@@ -391,15 +393,15 @@ export default function App() {
         type="button"
         className="sidebar-theme"
         onClick={toggleTheme}
-        aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+        aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
       >
         {theme === 'dark' ? <IconSun /> : <IconMoon />}
-        <span>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
+        <span>{theme === 'dark' ? t('theme.light') : t('theme.dark')}</span>
       </button>
       <button
         type="button"
         className="sidebar-resizer sidebar-resizer--left"
-        aria-label="Изменить ширину левой панели"
+        aria-label={t('sidebar.resizeLeft')}
         onPointerDown={(e) => startResize('left', e)}
       />
     </aside>
@@ -413,17 +415,17 @@ export default function App() {
             type="button"
             className="icon-btn"
             onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+            aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
           >
             {theme === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
-          <button type="button" className="icon-btn" aria-label="Поиск" onClick={() => {
+          <button type="button" className="icon-btn" aria-label={t('search.aria')} onClick={() => {
             const el = document.querySelector<HTMLInputElement>('input[type="search"]');
             el?.focus();
           }}>
             <IconSearch />
           </button>
-          <button type="button" className="icon-btn" aria-label="Уведомления">
+          <button type="button" className="icon-btn" aria-label={t('widgets.notifications')}>
             <IconBell />
             {core.unread > 0 && <span className="icon-btn__badge" />}
           </button>
@@ -431,7 +433,7 @@ export default function App() {
             {core.states.profile === 'loading' && !core.profile ? (
               <strong>…</strong>
             ) : core.profile ? (
-              <span className="user-summary identity-user" aria-label="Баланс">
+              <span className="user-summary identity-user" aria-label={t('balance.aria')}>
                 <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
                 <strong>{money(core.profile.balanceCents)}</strong>
               </span>
@@ -503,30 +505,30 @@ export default function App() {
     {showMarketRail && (
       <aside
         className={`sidebar-right desktop-only${rightIcons ? ' sidebar-right--icons' : ''}`}
-        aria-label="Виджеты"
+        aria-label={t('widgets.aria')}
       >
         <button
           type="button"
           className="sidebar-resizer sidebar-resizer--right"
-          aria-label="Изменить ширину правой панели"
+          aria-label={t('sidebar.resizeRight')}
           onPointerDown={(e) => startResize('right', e)}
         />
         {rightIcons ? (
           <div className="sidebar-right__icons">
-            <button type="button" aria-label="Wallet" onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
+            <button type="button" aria-label={t('widgets.wallet')} onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
               <IconWallet size={20} />
             </button>
-            <button type="button" aria-label="Уведомления" onClick={() => switchTo('deals')}>
+            <button type="button" aria-label={t('widgets.notifications')} onClick={() => switchTo('deals')}>
               <IconBell />
             </button>
-            <button type="button" aria-label="Новые лоты" onClick={() => switchTo('market')}>
+            <button type="button" aria-label={t('widgets.newLots')} onClick={() => switchTo('market')}>
               <IconLot />
             </button>
           </div>
         ) : (
           <>
             <div className="widget widget--glass">
-              <p className="wallet-hero__label">Wallet</p>
+              <p className="wallet-hero__label">{t('widgets.wallet')}</p>
               <div className="wallet-hero__amount">
                 {core.profile ? money(core.profile.balanceCents) : '—'}
                 <small>RUB</small>
@@ -540,12 +542,12 @@ export default function App() {
                     switchTo('profile');
                   }}
                 >
-                  <IconWallet size={18} /> Add Funds
+                  <IconWallet size={18} /> {t('widgets.addFunds')}
                 </Button>
               </div>
             </div>
             <div className="widget widget--glass">
-              <h3>Live Notifications</h3>
+              <h3>{t('widgets.liveNotifications')}</h3>
               <div className="widget-notify">
                 {!core.profile ? (
                   <p className="widget-empty">Войдите, чтобы видеть личные уведомления.</p>
@@ -608,17 +610,18 @@ export default function App() {
       </aside>
     )}
 
-    <nav className="bottom-nav mobile-only" aria-label="Основная навигация">
+    <nav className="bottom-nav mobile-only" aria-label={t('navigation.aria')}>
       <span className="nav-indicator" style={{ transform: `translateX(${activeTab * 100}%)` }} />
       {TABS.map(tab => (
         <button
           key={tab.id}
           className={screen === tab.id ? 'active' : ''}
           onClick={() => switchTo(tab.id)}
+          aria-label={t(tab.labelKey)}
           aria-current={screen === tab.id ? 'page' : undefined}
         >
           <span aria-hidden="true">{tab.icon}</span>
-          <small>{tab.label}</small>
+          <small>{t(tab.labelKey)}</small>
           {tab.id === 'chat' && core.unread > 0 && <b className="nav-count">{unread}</b>}
         </button>
       ))}

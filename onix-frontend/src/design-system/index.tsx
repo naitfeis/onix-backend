@@ -66,15 +66,26 @@ export function Modal({ open, title, children, onClose, size = 'default' }: {
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  // Sync z-index on first paint — useState(2000) left nested modals under the parent for a frame
-  // (and sometimes stuck), so profile-from-lot / profile-from-chat looked like a no-op.
-  const [zIndex, setZIndex] = useState(() => 2100 + modalStackSize() * 10);
+  // Stack modals via --z-modal + depth (no magic 2100).
+  const [zIndex, setZIndex] = useState(() => {
+    const base = Number.parseInt(
+      typeof getComputedStyle !== 'undefined'
+        ? getComputedStyle(document.documentElement).getPropertyValue('--z-modal').trim()
+        : '1100',
+      10,
+    ) || 1100;
+    return base + modalStackSize() * 10;
+  });
   const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2, 9)}`).current;
 
   useEffect(() => {
     if (!open) return;
     const { id, depth } = pushModal(() => onCloseRef.current());
-    setZIndex(2100 + depth * 10);
+    const base = Number.parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue('--z-modal').trim(),
+      10,
+    ) || 1100;
+    setZIndex(base + depth * 10);
     return () => popModal(id);
   }, [open]);
 
