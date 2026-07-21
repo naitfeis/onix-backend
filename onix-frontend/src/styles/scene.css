@@ -23,8 +23,8 @@
 }
 
 html[data-theme="light"] .onix-bg__base {
-  /* Soft daylight canvas — orbs show through glass */
-  background: radial-gradient(ellipse at 50% 0%, #eef3fa 0%, #e0e9f4 48%, #d2dde9 100%);
+  /* Clear daylight canvas — sharp, not milky */
+  background: radial-gradient(ellipse at 50% 0%, #f7f9fc 0%, #eef3f9 50%, #e4ecf5 100%);
 }
 
 html[data-theme="dark"] {
@@ -32,8 +32,8 @@ html[data-theme="dark"] {
   --bg-scene-deep: #05040a;
 }
 html[data-theme="light"] {
-  --page-bg: #d2dde9;
-  --bg-scene-deep: #d2dde9;
+  --page-bg: #e4ecf5;
+  --bg-scene-deep: #e4ecf5;
 }
 
 /* —— Orbs —— */
@@ -86,12 +86,14 @@ html[data-theme="light"] .onix-bg__orbs--light { display: block; }
 
 .onix-bg__orbs--light .orb {
   mix-blend-mode: normal;
+  /* Light: sharp colorful orbs — no heavy Gaussian fog */
+  filter: blur(2px);
   background: radial-gradient(
     circle at 35% 30%,
-    rgba(255, 255, 255, 0.7) 0%,
-    var(--orb-color) 26%,
-    var(--orb-color) 60%,
-    transparent 76%
+    rgba(255, 255, 255, 0.85) 0%,
+    var(--orb-color) 22%,
+    var(--orb-color) 68%,
+    transparent 82%
   );
 }
 

@@ -2237,11 +2237,31 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     gap: 8px;
     padding: 20px 14px 20px 16px;
     border-radius: var(--radius-xl);
-    /* Clip nav highlights inside the glass frame */
+    /* Clip nav highlights; theme button stays pinned via flex */
     overflow: hidden;
     isolation: isolate;
     contain: paint;
     box-sizing: border-box;
+  }
+  .sidebar-left__brand,
+  .sidebar-nav,
+  .sidebar-divider,
+  .sidebar-theme {
+    flex-shrink: 0;
+  }
+  .sidebar-cats {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  .sidebar-spacer {
+    flex: 0 0 4px;
+    min-height: 4px;
+  }
+  .sidebar-theme {
+    margin-top: 4px;
+    flex-shrink: 0;
   }
   .sidebar-resizer {
     position: absolute;
@@ -2498,8 +2518,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .sidebar-spacer { flex: 1; min-height: 16px; }
-  .sidebar-theme { margin-top: 4px; }
+  .sidebar-spacer { flex: 0 0 4px; min-height: 4px; }
+  .sidebar-theme { margin-top: 4px; flex-shrink: 0; }
   .sidebar-right {
     grid-column: 3;
     grid-row: 1;
@@ -2789,4 +2809,45 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .onix-bg__orb,
   .onix-bg__star { animation: none !important; }
   .product-card { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
+
+/*
+ * Light only — chat list + sidebar as clear panels (screenshot windows).
+ * Dark theme untouched. Market / other cards untouched.
+ */
+html[data-theme="light"] .sidebar-left {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-theme="light"] .thread-list .thread {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-theme="light"] .thread-list .thread:hover,
+html[data-theme="light"] .thread-list .thread:focus-visible {
+  background: rgba(20, 25, 35, 0.06) !important;
+}
+
+html[data-theme="light"] .thread-list .chat-toolbar .control {
+  background: transparent !important;
+  border-color: rgba(20, 25, 35, 0.14) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-theme="light"] .thread-list .chat-toolbar .button--secondary {
+  background: transparent !important;
+  border-color: rgba(20, 25, 35, 0.14) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
