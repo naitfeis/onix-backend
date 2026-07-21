@@ -15,28 +15,26 @@ html[data-theme="dark"] {
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Frosted glass like product modal — soft blur + translucent fill */
-  --glass-blur: 22px;
-  --glass-blur-thin: 16px;
-  --glass-blur-regular: 22px;
-  --glass-blur-thick: 28px;
-  --glass-saturate: 155%;
+  /* Clear acrylic — light fill, soft blur (heavy blur tiles = vertical bands) */
+  --glass-blur: 10px;
+  --glass-blur-thin: 8px;
+  --glass-blur-regular: 10px;
+  --glass-blur-thick: 14px;
+  --glass-saturate: 140%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(140%);
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(130%);
 
-  --glass-bg: rgba(18, 16, 28, 0.52);
+  --glass-bg: rgba(22, 18, 36, 0.28);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(18, 16, 28, 0.4);
-  --glass-regular-bg: rgba(18, 16, 28, 0.52);
-  --glass-thick-bg: rgba(18, 16, 28, 0.62);
-  --glass-card-bg: rgba(18, 16, 28, 0.52);
+  --glass-thin-bg: rgba(22, 18, 36, 0.18);
+  --glass-regular-bg: rgba(22, 18, 36, 0.28);
+  --glass-thick-bg: rgba(22, 18, 36, 0.36);
+  --glass-card-bg: rgba(22, 18, 36, 0.28);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.16);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.18),
-    0 14px 36px rgba(0, 0, 0, 0.22);
+  --glass-drop-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
   --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.05);
@@ -124,26 +122,26 @@ html[data-theme="light"] {
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Light frosted glass — translucent + blur so orbs show through */
-  --glass-blur: 24px;
-  --glass-blur-thin: 18px;
-  --glass-blur-regular: 24px;
-  --glass-blur-thick: 30px;
-  --glass-saturate: 160%;
-  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(1.04);
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(150%) brightness(1.02);
+  /* Light acrylic — more transparent so orbs read evenly (no dark bands) */
+  --glass-blur: 12px;
+  --glass-blur-thin: 8px;
+  --glass-blur-regular: 12px;
+  --glass-blur-thick: 16px;
+  --glass-saturate: 145%;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
 
-  --glass-bg: rgba(255, 255, 255, 0.28);
+  --glass-bg: rgba(255, 255, 255, 0.22);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.22);
-  --glass-regular-bg: rgba(255, 255, 255, 0.28);
-  --glass-thick-bg: rgba(255, 255, 255, 0.34);
-  --glass-card-bg: rgba(255, 255, 255, 0.28);
+  --glass-thin-bg: rgba(255, 255, 255, 0.14);
+  --glass-regular-bg: rgba(255, 255, 255, 0.22);
+  --glass-thick-bg: rgba(255, 255, 255, 0.3);
+  --glass-card-bg: rgba(255, 255, 255, 0.22);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.55);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.45);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow: 0 8px 28px rgba(60, 50, 100, 0.12);
+  --glass-drop-shadow: 0 6px 20px rgba(60, 50, 100, 0.08);
   --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.28);
@@ -252,6 +250,7 @@ html[data-theme="light"] .topbar::after {
 .widget,
 .wallet-hero,
 .desktop-hero,
+.market-hero,
 .section-head,
 .modal__panel,
 .auth-notice,
@@ -263,7 +262,6 @@ html[data-theme="light"] .topbar::after {
 .trust-strip,
 .wallet-strip,
 .search-bar,
-.field,
 .input-shell {
   position: relative;
   overflow: visible;
@@ -273,17 +271,30 @@ html[data-theme="light"] .topbar::after {
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
   border-radius: 20px;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+}
+
+/* Nested Field must NOT create a second blur layer (causes vertical bands) */
+.field {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
 }
 
 .modal__panel { border-radius: 28px; overflow: hidden; }
 .topbar { border-radius: var(--radius-xl); }
+/* Prefer clip over hidden — less backdrop-filter compositor banding */
 .card,
 .desktop-hero,
+.market-hero,
 .wallet-hero,
 .widget,
-.cat-card { overflow: hidden; }
+.cat-card {
+  overflow: clip;
+}
 
 .live-pill,
 .bottom-nav,
@@ -316,7 +327,7 @@ html[data-theme="light"] .topbar::after {
   display: none !important;
 }
 
-/* Tiny controls only — panels use the same glass as .desktop-hero above */
+/* Tiny controls — no nested backdrop-filter (avoids vertical band artifacts) */
 .toast,
 .icon-btn,
 .chips button,
@@ -325,11 +336,12 @@ html[data-theme="light"] .topbar::after {
 .ai-quick-replies__btn {
   position: relative;
   overflow: hidden;
-  background: var(--glass-bg);
+  background: var(--glass-thin-bg);
   border: var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-radius: 20px;
 }
 
 .toast { border-radius: 999px; }

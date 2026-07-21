@@ -18,7 +18,6 @@ body {
 
 #root {
   position: relative;
-  isolation: isolate;
   min-height: 100dvh;
   background: transparent;
 }

@@ -265,8 +265,7 @@
 .viewport {
   padding-top: 16px;
   background: transparent;
-  /* clip only horizontal slide; never crop lots vertically */
-  overflow-x: clip;
+  overflow-x: visible;
   overflow-y: visible;
   /* No perspective / transform here — they break backdrop-filter vs fixed scene */
 }
@@ -335,7 +334,7 @@
   box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
-  overflow: hidden;
+  overflow: clip;
 }
 .market-hero__track {
   display: flex;
@@ -413,9 +412,9 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button {
   color: var(--text);
   background: var(--glass-thin-bg);
   border: var(--glass-border);
-  box-shadow: var(--glass-highlight);
-  -webkit-backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .button--danger {
   color: #fff;
@@ -572,8 +571,8 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button {
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .pill-rating {
   color: #fff;
@@ -589,12 +588,12 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 10px;
-  padding: 3px 7px;
-}
-.product-card--compact .pill-super {
   font-size: 9px;
   padding: 2px 6px;
+}
+.product-card--compact .pill-super {
+  font-size: 8px;
+  padding: 2px 5px;
 }
 .product-card__body {
   padding: 10px 12px 12px;
@@ -2098,7 +2097,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     border-radius: var(--radius-xl);
     /* overflow:visible — sticky+auto kills backdrop-filter in Chromium */
     overflow: visible;
-    isolation: isolate;
   }
   .sidebar-resizer {
     position: absolute;
