@@ -58,9 +58,12 @@ export function Chats({
     || core.profile?.roles.includes('MODERATOR'),
   );
   const canSeeReadReceipts = Boolean(
-    core.profile?.status === 'ADMIN'
+    core.profile?.isAdmin
+    || core.profile?.status === 'ADMIN'
+    || core.profile?.status === 'SUPER_ADMIN'
     || core.profile?.status === 'MODERATOR'
     || core.profile?.roles.includes('ADMIN')
+    || core.profile?.roles.includes('SUPER_ADMIN')
     || core.profile?.roles.includes('MODERATOR'),
   );
   const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
@@ -458,16 +461,6 @@ export function Chats({
               onOpenLot={(lot) => void openLot(lot)}
             /></p>
             {isStaff && message.deleted && <small className="receipt-admin">удалено · {message.deletedAt ? new Date(message.deletedAt).toLocaleString('ru-RU') : ''}</small>}
-            {message.mine && message.deliveryStatus && (
-              <small className="receipt" title={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
-                {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
-              </small>
-            )}
-            {canSeeReadReceipts && message.readBy && message.readBy.length > 0 && (
-              <small className="receipt-admin">
-                прочитали: {message.readBy.map((r) => `${r.username} ${new Date(r.readAt).toLocaleString('ru-RU')}`).join('; ')}
-              </small>
-            )}
             {message.kind === 'SYSTEM' && message.text.includes('Заказ создан') && (() => {
               const orderId = message.text.match(/Заказ #(\d+)/)?.[1]
                 || thread.dealId
@@ -498,7 +491,21 @@ export function Chats({
                 )}
               </div>
             )}
-            <time>{new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time>
+            <div className="message__meta">
+              {message.mine && message.deliveryStatus ? (
+                <span className="receipt" title={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
+                  {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
+                </span>
+              ) : null}
+              {canSeeReadReceipts && message.readBy && message.readBy.length > 0 ? (
+                <span className="receipt-admin" title={message.readBy.map((r) => `${r.username}: ${new Date(r.readAt).toLocaleString('ru-RU')}`).join('\n')}>
+                  прочитано {new Date(message.readBy[message.readBy.length - 1]!.readAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              ) : null}
+              <time dateTime={message.createdAt}>
+                {new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+              </time>
+            </div>
           </div>
         </div>)}</div>
       {pendingNewCount > 0 && (

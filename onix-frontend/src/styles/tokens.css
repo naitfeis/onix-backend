@@ -210,6 +210,22 @@ html[data-theme="light"] .topbar {
   backdrop-filter: var(--glass-filter) !important;
 }
 
+html[data-theme="light"] .sidebar-left {
+  background: rgba(255, 255, 255, 0.38) !important;
+}
+html[data-theme="dark"] .sidebar-left {
+  background: rgba(22, 18, 36, 0.55) !important;
+}
+
+/* Sidebars never use backdrop-filter — hover repaint = horizontal stripe bug */
+.sidebar-left,
+.sidebar-right,
+html[data-theme="light"] .sidebar-left,
+html[data-theme="dark"] .sidebar-left {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 /* No edge glints — they read as stripes through stacked glass */
 html[data-theme="light"] .glass-card::before,
 html[data-theme="light"] .card::before,
@@ -287,6 +303,15 @@ html[data-theme="light"] .topbar::after {
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
   border-radius: 20px;
+}
+
+/* Sidebars: solid translucent glass only — backdrop-filter on hover causes stripe artifacts */
+.sidebar-left,
+.sidebar-right,
+.app-shell--left-icons .sidebar-left,
+.app-shell--right-icons .sidebar-right {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 /* Nested Field must NOT create a second blur layer (causes vertical bands) */

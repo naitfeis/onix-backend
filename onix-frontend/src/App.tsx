@@ -354,7 +354,6 @@ export default function App() {
             type="button"
             className={screen === item.id ? 'active' : ''}
             onClick={() => switchTo(item.id)}
-            title={item.label}
             aria-label={item.label}
           >
             {item.icon}
@@ -371,7 +370,6 @@ export default function App() {
             <button
               key={cat}
               type="button"
-              title={CATEGORY_LABELS[cat]}
               aria-label={CATEGORY_LABELS[cat]}
               onClick={() => {
                 setMarketCategory(cat);
@@ -380,10 +378,10 @@ export default function App() {
             >
               <span
                 className="cat-card__emblem"
-                style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
+                style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
               >{style.letter}</span>
               <span className="sidebar-cats__label">{CATEGORY_LABELS[cat]}</span>
-              <em className="sidebar-cats__count" title={`${count} лотов`}>{formatLotCount(count)}</em>
+              <em className="sidebar-cats__count" aria-hidden="true">{formatLotCount(count)}</em>
             </button>
           );
         })}
@@ -394,7 +392,6 @@ export default function App() {
         className="sidebar-theme"
         onClick={toggleTheme}
         aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
-        title={theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}
       >
         {theme === 'dark' ? <IconSun /> : <IconMoon />}
         <span>{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
@@ -516,13 +513,13 @@ export default function App() {
         />
         {rightIcons ? (
           <div className="sidebar-right__icons">
-            <button type="button" title="Wallet" aria-label="Wallet" onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
+            <button type="button" aria-label="Wallet" onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
               <IconWallet size={20} />
             </button>
-            <button type="button" title="Уведомления" aria-label="Уведомления" onClick={() => switchTo('deals')}>
+            <button type="button" aria-label="Уведомления" onClick={() => switchTo('deals')}>
               <IconBell />
             </button>
-            <button type="button" title="Новые лоты" aria-label="Новые лоты" onClick={() => switchTo('market')}>
+            <button type="button" aria-label="Новые лоты" onClick={() => switchTo('market')}>
               <IconLot />
             </button>
           </div>
