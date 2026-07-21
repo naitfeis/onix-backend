@@ -492,15 +492,29 @@ export function Chats({
               </div>
             )}
             <div className="message__meta">
-              {message.mine && message.deliveryStatus ? (
-                <span className="receipt" title={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
-                  {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
-                </span>
-              ) : null}
-              {canSeeReadReceipts && message.readBy && message.readBy.length > 0 ? (
-                <span className="receipt-admin" title={message.readBy.map((r) => `${r.username}: ${new Date(r.readAt).toLocaleString('ru-RU')}`).join('\n')}>
-                  прочитано {new Date(message.readBy[message.readBy.length - 1]!.readAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                </span>
+              {(message.mine && message.deliveryStatus) || (canSeeReadReceipts && message.mine && message.deliveryStatus === 'READ') ? (
+                <div className="message__meta-status">
+                  {message.mine && message.deliveryStatus ? (
+                    <span className="receipt" aria-label={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
+                      {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
+                    </span>
+                  ) : null}
+                  {canSeeReadReceipts && message.mine && message.deliveryStatus === 'READ' ? (
+                    <span
+                      className="receipt-admin"
+                      title={
+                        message.readBy && message.readBy.length > 0
+                          ? message.readBy.map((r) => `${r.username}: ${new Date(r.readAt).toLocaleString('ru-RU')}`).join('\n')
+                          : 'Прочитано'
+                      }
+                    >
+                      прочитано
+                      {message.readBy && message.readBy.length > 0
+                        ? ` ${new Date(message.readBy[message.readBy.length - 1]!.readAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
+                        : ''}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
               <time dateTime={message.createdAt}>
                 {new Date(message.createdAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}

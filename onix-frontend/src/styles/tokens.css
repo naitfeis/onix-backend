@@ -312,6 +312,7 @@ html[data-theme="light"] .topbar::after {
 .app-shell--right-icons .sidebar-right {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
+  isolation: isolate;
 }
 
 /* Nested Field must NOT create a second blur layer (causes vertical bands) */

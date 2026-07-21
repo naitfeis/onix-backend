@@ -295,7 +295,9 @@ export function messageDto(message: {
         originalText: message.text,
       } : {}),
     } : {}),
-    ...(staffViewer && readers.length > 0 ? { readBy: readers } : {}),
+    // Staff always; sender also gets readBy so founder UI can show «прочитано HH:MM»
+    // even if auth.isAdmin is briefly out of sync with platformStatus.
+    ...((staffViewer || mine) && readers.length > 0 ? { readBy: readers } : {}),
   };
 }
 
