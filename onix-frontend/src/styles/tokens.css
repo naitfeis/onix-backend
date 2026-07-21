@@ -130,7 +130,7 @@ html[data-theme="light"] {
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Light acrylic — more transparent so orbs read evenly (no dark bands) */
+  /* Light acrylic — brighter white glass so profile/lots read clearly */
   --glass-blur: 12px;
   --glass-blur-thin: 8px;
   --glass-blur-regular: 12px;
@@ -139,24 +139,24 @@ html[data-theme="light"] {
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
 
-  --glass-bg: rgba(255, 255, 255, 0.22);
+  --glass-bg: rgba(255, 255, 255, 0.55);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.14);
-  --glass-regular-bg: rgba(255, 255, 255, 0.22);
-  --glass-thick-bg: rgba(255, 255, 255, 0.3);
-  --glass-card-bg: rgba(255, 255, 255, 0.22);
+  --glass-thin-bg: rgba(255, 255, 255, 0.42);
+  --glass-regular-bg: rgba(255, 255, 255, 0.55);
+  --glass-thick-bg: rgba(255, 255, 255, 0.68);
+  --glass-card-bg: rgba(255, 255, 255, 0.62);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.45);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.72);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow: 0 6px 20px rgba(60, 50, 100, 0.08);
+  --glass-drop-shadow: 0 8px 28px rgba(60, 50, 100, 0.1);
   --glass-shadow: var(--glass-drop-shadow);
 
-  --glass-subtle-bg: rgba(255, 255, 255, 0.28);
-  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.45);
-  --glass-recessed-bg: rgba(120, 110, 150, 0.10);
-  --glass-recessed-border: 1px solid rgba(80, 70, 110, 0.12);
-  --glass-recessed-shadow: inset 0 1px 2px rgba(60, 50, 90, 0.08);
+  --glass-subtle-bg: rgba(255, 255, 255, 0.48);
+  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.7);
+  --glass-recessed-bg: rgba(120, 110, 150, 0.08);
+  --glass-recessed-border: 1px solid rgba(80, 70, 110, 0.1);
+  --glass-recessed-shadow: inset 0 1px 2px rgba(60, 50, 90, 0.06);
 
   --line: rgba(40, 32, 60, 0.10);
   --line-strong: rgba(40, 32, 60, 0.18);
@@ -211,10 +211,27 @@ html[data-theme="light"] .topbar {
 }
 
 html[data-theme="light"] .sidebar-left {
-  background: rgba(255, 255, 255, 0.38) !important;
+  background: rgba(255, 255, 255, 0.52) !important;
 }
 html[data-theme="dark"] .sidebar-left {
   background: rgba(22, 18, 36, 0.55) !important;
+}
+
+/* Light theme: brighter profile sheet + lot cards */
+html[data-theme="light"] .modal__panel {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 48px rgba(60, 50, 110, 0.12);
+}
+html[data-theme="light"] .modal__panel .card,
+html[data-theme="light"] .modal__panel .product-card,
+html[data-theme="light"] .public-profile .card,
+html[data-theme="light"] .public-profile .product-card {
+  background: rgba(255, 255, 255, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+html[data-theme="light"] .product-card {
+  background: rgba(255, 255, 255, 0.7) !important;
 }
 
 /* Sidebars never use backdrop-filter — hover repaint = horizontal stripe bug */
