@@ -60,6 +60,14 @@ html[data-theme="dark"] {
   --accent-violet-glow: 0 0 30px rgba(139, 127, 245, 0.35);
   --accent-star: #E8B93E;
 
+  /* Icon glass — no blur, soft strokes (not black silhouettes) */
+  --icon-color: rgba(255, 255, 255, 0.88);
+  --icon-color-hover: #ffffff;
+  --icon-glass-bg: rgba(255, 255, 255, 0.12);
+  --icon-glass-border: rgba(255, 255, 255, 0.22);
+  --icon-hover-bg: rgba(255, 255, 255, 0.2);
+  --icon-active-bg: color-mix(in srgb, #8B7FF5 28%, rgba(255, 255, 255, 0.12));
+
   --success: #3FBF8F;
   --success-green: #3FBF8F;
   --warning: #E8B93E;
@@ -165,6 +173,14 @@ html[data-theme="light"] {
   --accent-violet-deep: #5548C8;
   --accent-violet-glow: 0 0 28px rgba(107, 95, 224, 0.28);
   --accent-star: #C99620;
+
+  /* Light icons — soft slate glass, not heavy black */
+  --icon-color: rgba(55, 48, 78, 0.72);
+  --icon-color-hover: #2a2440;
+  --icon-glass-bg: rgba(255, 255, 255, 0.42);
+  --icon-glass-border: rgba(255, 255, 255, 0.65);
+  --icon-hover-bg: rgba(255, 255, 255, 0.62);
+  --icon-active-bg: color-mix(in srgb, #8B7FF5 18%, rgba(255, 255, 255, 0.55));
 
   --success: #2FA87A;
   --success-green: #2FA87A;
@@ -327,7 +343,7 @@ html[data-theme="light"] .topbar::after {
   display: none !important;
 }
 
-/* Tiny controls — no nested backdrop-filter (avoids vertical band artifacts) */
+/* Tiny controls — clear glass fill, never blur (blur = stripes on hover) */
 .toast,
 .icon-btn,
 .chips button,
@@ -336,11 +352,11 @@ html[data-theme="light"] .topbar::after {
 .ai-quick-replies__btn {
   position: relative;
   overflow: hidden;
-  background: var(--glass-thin-bg);
-  border: var(--glass-border);
-  box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  background: var(--icon-glass-bg, var(--glass-thin-bg));
+  border: 1px solid var(--icon-glass-border, transparent);
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   border-radius: 20px;
 }
 
