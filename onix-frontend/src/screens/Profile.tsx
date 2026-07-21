@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
-import { api, money } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
@@ -286,8 +286,11 @@ export function Profile({
     ...(isAdmin ? (['admin'] as const) : []),
   ];
   const openAuthorProfile = async (onixId: string) => {
-    if (authorProfile?.onixId === onixId) return;
-    try { setAuthorProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+    try {
+      setAuthorProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
+    } catch (error) {
+      setToast(friendlyError(error));
+    }
   };
 
   const moneyTitle = moneyModal === 'MAIN_TOPUP' ? 'Пополнить баланс'

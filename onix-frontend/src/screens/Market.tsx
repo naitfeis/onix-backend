@@ -354,7 +354,11 @@ export function Market({
     </div>
 
     {onixQuery && <Button variant="secondary" onClick={async () => {
-      try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery))); } catch { /* ignore */ }
+      try {
+        setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixQuery)));
+      } catch (error) {
+        setToast(friendlyError(error));
+      }
     }}>Открыть профиль</Button>}
 
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
@@ -436,7 +440,16 @@ export function Market({
         <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {
-              try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(selected.seller.onixId))); } catch { /* ignore */ }
+              const onixId = selected.seller.onixId;
+              // Close lot sheet first so profile modal is never buried under it.
+              setSelected(null);
+              setSellerTrust(null);
+              setDetailReady(false);
+              try {
+                setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
+              } catch (error) {
+                setToast(friendlyError(error));
+              }
             }}>Профиль продавца</Button>
             <Button
               variant="secondary"
@@ -484,7 +497,7 @@ export function Market({
           <Button variant="secondary" onClick={async () => {
           setSelected(null);
           await openDirectChat(selected.seller.onixId);
-        }}>Написать</Button><Button disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>
+        }}>Написать</Button><Button variant="buy" disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>
       </div>}
     </Modal>
     <PublicProfileModal
@@ -492,8 +505,11 @@ export function Market({
       onClose={() => setSellerProfile(null)}
       core={core}
       onOpenOnix={async (onixId) => {
-        if (sellerProfile?.onixId === onixId) return;
-        try { setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+        try {
+          setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
+        } catch (error) {
+          setToast(friendlyError(error));
+        }
       }}
       onWrite={async (onixId) => {
         setSellerProfile(null);

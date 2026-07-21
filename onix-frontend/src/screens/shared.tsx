@@ -148,7 +148,7 @@ export function PublicProfileModal({
   );
   const banReady = Boolean(banReason && banComment.trim() && (banReason !== 'OTHER' || Number(banDays) > 0));
 
-  return <Modal open title="Профиль" onClose={onClose} size="wide">
+  return <Modal open={Boolean(profile)} title="Профиль" onClose={onClose} size="wide">
     <div className="stack public-profile">
       <Card className="profile-card">
         <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />

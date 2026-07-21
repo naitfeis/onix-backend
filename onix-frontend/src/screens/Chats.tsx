@@ -73,8 +73,13 @@ export function Chats({
   const memberPickerOpen = groupOpen || addMembersOpen;
 
   const openOnixProfile = async (onixId: string) => {
-    if (peerProfile?.onixId === onixId) return;
-    try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId))); } catch { /* ignore */ }
+    const id = formatOnixId(onixId) || onixId;
+    if (!id) return;
+    try {
+      setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(id)));
+    } catch (error) {
+      setToast(friendlyError(error));
+    }
   };
 
   const openLot = async (lotNumber: number) => {
@@ -386,8 +391,7 @@ export function Chats({
             return;
           }
           if (!thread.peerOnixId) return;
-          if (peerProfile?.onixId === thread.peerOnixId) return;
-          try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(thread.peerOnixId))); } catch { /* ignore */ }
+          await openOnixProfile(thread.peerOnixId);
         }}
       >
         {(thread.peerAvatarUrl !== undefined || thread.title) ? (
@@ -418,7 +422,7 @@ export function Chats({
       {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
         <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
           <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · Escrow</span></div>
-        <Button variant="secondary" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
+        <Button variant="primary" className="order-card-inline__cta" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
       </div>}
       <div className="messages-wrap">
       <div
@@ -466,7 +470,7 @@ export function Chats({
                 || thread.dealId
                 || thread.orderCard?.id;
               if (!orderId) return null;
-              return <Button variant="secondary" onClick={() => openDeal(orderId)}>Открыть заказ</Button>;
+              return <Button variant="primary" onClick={() => openDeal(orderId)}>Открыть заказ</Button>;
             })()}
             {thread.kind === 'AI' && message.kind === 'SYSTEM' && /Опубликовать|Изменить/i.test(message.text) && message.text.includes('Проверьте карточку') && (
               <div className="card-actions">
@@ -648,7 +652,7 @@ export function Chats({
               className="thread"
               onClick={async () => {
                 setGroupMembers(null);
-                try { setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(member.onixId))); } catch { /* ignore */ }
+                await openOnixProfile(member.onixId);
               }}
             >
               <span className="thread-peer">
