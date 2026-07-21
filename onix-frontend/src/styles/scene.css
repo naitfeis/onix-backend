@@ -23,8 +23,8 @@
 }
 
 html[data-theme="light"] .onix-bg__base {
-  /* Soft daylight — cool mist, not lavender fog */
-  background: radial-gradient(ellipse at 50% 0%, #f4f6fa 0%, #e8edf4 48%, #dde5ef 100%);
+  /* Soft daylight canvas — orbs show through glass */
+  background: radial-gradient(ellipse at 50% 0%, #eef3fa 0%, #e0e9f4 48%, #d2dde9 100%);
 }
 
 html[data-theme="dark"] {
@@ -32,8 +32,8 @@ html[data-theme="dark"] {
   --bg-scene-deep: #05040a;
 }
 html[data-theme="light"] {
-  --page-bg: #dde5ef;
-  --bg-scene-deep: #dde5ef;
+  --page-bg: #d2dde9;
+  --bg-scene-deep: #d2dde9;
 }
 
 /* —— Orbs —— */
@@ -51,8 +51,8 @@ html[data-theme="light"] .onix-bg__orbs--dark { display: none; }
 html[data-theme="light"] .onix-bg__orbs--light { display: block; }
 
 /*
- * One blur only: fixed 14px on the orb itself.
- * Solid color holds until ~62%, then a short fade — keeps a readable circle.
+ * One blur only: fixed 22px on the orb itself — softer scene for glass sampling.
+ * Solid color holds until ~58%, then fade — keeps readable disks behind acrylic.
  */
 .orb {
   position: absolute;
@@ -61,12 +61,12 @@ html[data-theme="light"] .onix-bg__orbs--light { display: block; }
   transform: translate(-50%, -50%);
   will-change: transform;
   mix-blend-mode: normal;
-  filter: blur(14px);
+  filter: blur(22px);
   background: radial-gradient(
     circle at 35% 30%,
     rgba(255, 255, 255, 0.45) 0%,
     var(--orb-color) 28%,
-    var(--orb-color) 62%,
+    var(--orb-color) 58%,
     transparent 78%
   );
   animation: orb-float var(--orb-dur, 18s) ease-in-out var(--orb-delay, 0s) infinite alternate;
