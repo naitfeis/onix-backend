@@ -86,14 +86,14 @@ html[data-theme="light"] .onix-bg__orbs--light { display: block; }
 
 .onix-bg__orbs--light .orb {
   mix-blend-mode: normal;
-  /* Light: sharp colorful orbs — no heavy Gaussian fog */
-  filter: blur(2px);
+  /* Light: soft blur like dark scene (~same softness) */
+  filter: blur(20px);
   background: radial-gradient(
     circle at 35% 30%,
-    rgba(255, 255, 255, 0.85) 0%,
-    var(--orb-color) 22%,
-    var(--orb-color) 68%,
-    transparent 82%
+    rgba(255, 255, 255, 0.7) 0%,
+    var(--orb-color) 26%,
+    var(--orb-color) 60%,
+    transparent 78%
   );
 }
 
