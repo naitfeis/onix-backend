@@ -171,39 +171,51 @@ export default function App() {
     const startX = event.clientX;
     const startW = side === 'left' ? leftW : rightW;
     const target = event.currentTarget;
+    const shell = target.closest('.app-shell') as HTMLElement | null;
     target.setPointerCapture(event.pointerId);
     document.body.classList.add('is-resizing-sidebar');
 
+    let latest = startW;
+    let raf = 0;
+
+    const applyWidth = (next: number) => {
+      latest = next;
+      if (!shell) return;
+      if (side === 'left') shell.style.setProperty('--sidebar-left-w', `${next}px`);
+      else shell.style.setProperty('--sidebar-right-w', `${next}px`);
+    };
+
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
-      if (side === 'left') {
-        const max = Math.floor(window.innerWidth * 0.8);
-        const next = clamp(startW + dx, LEFT_MIN, max);
-        setLeftW(next);
-      } else {
-        const max = Math.floor(window.innerWidth * 0.45);
-        const next = clamp(startW - dx, RIGHT_MIN, max);
-        setRightW(next);
-      }
+      const max = side === 'left'
+        ? Math.floor(window.innerWidth * 0.8)
+        : Math.floor(window.innerWidth * 0.45);
+      const next = clamp(
+        side === 'left' ? startW + dx : startW - dx,
+        side === 'left' ? LEFT_MIN : RIGHT_MIN,
+        max,
+      );
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => applyWidth(next));
     };
+
     const onUp = (ev: PointerEvent) => {
       try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (raf) cancelAnimationFrame(raf);
       document.body.classList.remove('is-resizing-sidebar');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      const rounded = Math.round(latest);
       if (side === 'left') {
-        setLeftW((w) => {
-          try { localStorage.setItem(LEFT_W_KEY, String(Math.round(w))); } catch { /* ignore */ }
-          return w;
-        });
+        setLeftW(rounded);
+        try { localStorage.setItem(LEFT_W_KEY, String(rounded)); } catch { /* ignore */ }
       } else {
-        setRightW((w) => {
-          try { localStorage.setItem(RIGHT_W_KEY, String(Math.round(w))); } catch { /* ignore */ }
-          return w;
-        });
+        setRightW(rounded);
+        try { localStorage.setItem(RIGHT_W_KEY, String(rounded)); } catch { /* ignore */ }
       }
     };
-    window.addEventListener('pointermove', onMove);
+
+    window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
   }, [leftW, rightW]);
 

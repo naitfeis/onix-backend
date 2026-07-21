@@ -32,16 +32,12 @@ html[data-theme="dark"] {
   --glass-card-bg: rgba(18, 16, 28, 0.52);
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.16);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  --glass-inner-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  --glass-highlight: none;
+  --glass-inner-shadow: none;
   --glass-drop-shadow:
     0 4px 16px rgba(0, 0, 0, 0.18),
     0 14px 36px rgba(0, 0, 0, 0.22);
-  --glass-shadow:
-    var(--glass-drop-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    inset 1px 0 0 rgba(255, 255, 255, 0.08);
+  --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.05);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.12);
@@ -145,13 +141,10 @@ html[data-theme="light"] {
   --glass-card-bg: rgba(255, 255, 255, 0.28);
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.55);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  --glass-inner-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+  --glass-highlight: none;
+  --glass-inner-shadow: none;
   --glass-drop-shadow: 0 8px 28px rgba(60, 50, 100, 0.12);
-  --glass-shadow:
-    0 8px 28px rgba(60, 50, 100, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.18);
+  --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.28);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.45);
@@ -197,12 +190,13 @@ html[data-theme="light"] .sidebar-left,
 html[data-theme="light"] .section-head,
 html[data-theme="light"] .topbar {
   color: var(--text);
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.6);
+  text-shadow: none;
   background: var(--glass-bg) !important;
   -webkit-backdrop-filter: var(--glass-filter) !important;
   backdrop-filter: var(--glass-filter) !important;
 }
 
+/* No edge glints — they read as stripes through stacked glass */
 html[data-theme="light"] .glass-card::before,
 html[data-theme="light"] .card::before,
 html[data-theme="light"] .widget::before,
@@ -211,19 +205,31 @@ html[data-theme="light"] .desktop-hero::before,
 html[data-theme="light"] .sidebar-left::before,
 html[data-theme="light"] .section-head::before,
 html[data-theme="light"] .auth-notice::before,
-html[data-theme="light"] .topbar::before {
-  left: 8%;
-  right: 8%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.9),
-    transparent
-  );
-}
-
-/* Hide left-edge specular — was causing vertical seam through widgets */
+html[data-theme="light"] .topbar::before,
+html[data-theme="light"] .control::before,
+html[data-theme="light"] .field::before,
+.glass-card::before,
+.card::before,
+.widget::before,
+.wallet-hero::before,
+.desktop-hero::before,
+.sidebar-left::before,
+.section-head::before,
+.auth-notice::before,
+.topbar::before,
+.control::before,
+.market-hero::before,
+.glass-card::after,
+.card::after,
+.widget::after,
+.wallet-hero::after,
+.desktop-hero::after,
+.sidebar-left::after,
+.section-head::after,
+.auth-notice::after,
+.topbar::after,
+.control::after,
+.market-hero::after,
 html[data-theme="light"] .glass-card::after,
 html[data-theme="light"] .card::after,
 html[data-theme="light"] .widget::after,
@@ -233,6 +239,7 @@ html[data-theme="light"] .sidebar-left::after,
 html[data-theme="light"] .section-head::after,
 html[data-theme="light"] .auth-notice::after,
 html[data-theme="light"] .topbar::after {
+  content: none !important;
   display: none !important;
 }
 
@@ -291,23 +298,9 @@ html[data-theme="light"] .topbar::after {
 .sidebar-left::before,
 .section-head::before,
 .auth-notice::before,
-.topbar::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 12%;
-  right: 12%;
-  height: 1px;
-  pointer-events: none;
-  z-index: 3;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.55),
-    transparent
-  );
-}
-
+.topbar::before,
+.control::before,
+.market-hero::before,
 .glass-card::after,
 .card::after,
 .widget::after,
@@ -316,7 +309,10 @@ html[data-theme="light"] .topbar::after {
 .sidebar-left::after,
 .section-head::after,
 .auth-notice::after,
-.topbar::after {
+.topbar::after,
+.control::after,
+.market-hero::after {
+  content: none !important;
   display: none !important;
 }
 
