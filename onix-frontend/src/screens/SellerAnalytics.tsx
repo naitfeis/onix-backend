@@ -3,22 +3,24 @@ import { api, money } from '../api/client';
 import { API_PATHS, type SellerAnalytics } from '../api/contracts';
 import { Button, Card, Skeleton, StateView } from '../design-system';
 
-const CHART_W = 320;
-const CHART_H = 148;
-const PAD_L = 48;
-const PAD_R = 10;
-const PAD_T = 10;
-const PAD_B = 28;
+const CHART_W = 280;
+const CHART_H = 100;
+const PAD_L = 36;
+const PAD_R = 8;
+const PAD_T = 8;
+const PAD_B = 22;
 
-/** Always up to 7 evenly spaced guides from 0→max (weekly chart readability). */
-function pickGuideValues(max: number, guideCount = 7): number[] {
+/** Few unique guides so tiny weeks don’t look like a skyscraper of “1”s. */
+function pickGuideValues(max: number, guideCount = 4): number[] {
   if (!(max > 0)) return [];
-  const steps = Math.max(1, Math.min(7, guideCount));
+  const steps = Math.max(1, Math.min(4, guideCount));
   const out: number[] = [];
   for (let i = 1; i <= steps; i += 1) {
-    out.push((max * i) / steps);
+    const v = (max * i) / steps;
+    const rounded = max <= 5 ? Math.round(v) : v;
+    if (out.length === 0 || out[out.length - 1] !== rounded) out.push(rounded);
   }
-  return out;
+  return out.filter((v) => v > 0);
 }
 
 function formatGuide(value: number, unit: 'rub' | 'views'): string {
@@ -42,7 +44,7 @@ function GuidedBarChart({
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...values);
-  const guides = useMemo(() => pickGuideValues(max, 7), [max]);
+  const guides = useMemo(() => pickGuideValues(max, 4), [max]);
   const plotW = CHART_W - PAD_L - PAD_R;
   const plotH = CHART_H - PAD_T - PAD_B;
   const gap = 4;

@@ -362,7 +362,7 @@ export function Market({
       items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid product-grid--compact">{items.map(product => {
         const rating = product.seller.rating.toFixed(1);
-        const isSuper = product.seller.rating >= 4.8 || product.seller.badge === 'VIP' || product.seller.badge === 'VERIFIED_SELLER';
+        const showFounder = product.seller.badge === 'SUPER_ADMIN';
         return (
           <Card key={product.id} interactive className="product-card product-card--compact">
             <div className="product-card__media">
@@ -374,7 +374,7 @@ export function Market({
               />
               <div className="product-card__badges">
                 <span className="pill-rating"><IconStar /> {rating}</span>
-                {isSuper && <span className="pill-super">Super</span>}
+                {showFounder && <span className="pill-super">Основатель</span>}
               </div>
               <div className="product-card__avatar">
                 <UserAvatar
