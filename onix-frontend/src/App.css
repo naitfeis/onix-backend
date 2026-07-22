@@ -814,28 +814,30 @@ html[data-theme="dark"] .button--secondary {
   gap: 10px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
   margin: 0 -4px;
   padding-inline: 4px;
   scrollbar-width: none;
 }
 .cat-row::-webkit-scrollbar { display: none; }
 .cat-card {
-  flex: 0 0 68px;
-  width: 68px;
-  height: 72px;
+  flex: 0 0 96px;
+  width: 96px;
+  min-height: 108px;
+  height: auto;
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px 4px 6px;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 12px 8px 12px;
   color: var(--text);
   cursor: pointer;
   transition: transform 120ms var(--ease), border-color 180ms, background 180ms, box-shadow 180ms;
   font: inherit;
-  /* compact filter chip — listings stay primary */
+  box-sizing: border-box;
+  overflow: visible;
 }
 .cat-card:active { transform: scale(0.97); }
 .cat-card.active {
@@ -844,12 +846,12 @@ html[data-theme="dark"] .button--secondary {
   box-shadow: var(--glass-shadow);
 }
 .cat-card__emblem {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
@@ -859,29 +861,31 @@ html[data-theme="dark"] .button--secondary {
   background: var(--_bg, linear-gradient(145deg, var(--accent-violet), var(--accent-violet-deep)));
 }
 .cat-card__name {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.25;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
   color: var(--text-primary);
 }
 .cat-card__count {
   min-width: 22px;
-  max-width: 36px;
-  height: 18px;
-  padding: 0 5px;
+  max-width: 40px;
+  height: 20px;
+  padding: 0 6px;
   margin: 0 auto;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 18px;
+  line-height: 20px;
   text-align: center;
   overflow: hidden;
   white-space: nowrap;
@@ -890,6 +894,36 @@ html[data-theme="dark"] .button--secondary {
   align-self: center;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* Mobile home wallet widget (Vision Pro glass card) */
+.wallet-hero--mobile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 18px 16px;
+  border-radius: var(--radius-xl);
+}
+.wallet-hero--mobile .wallet-hero__amount {
+  font-size: 28px;
+}
+.wallet-hero--mobile .wallet-hero__topup {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.wallet-hero--mobile .wallet-hero__topup svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
 }
 
 .wallet-strip {

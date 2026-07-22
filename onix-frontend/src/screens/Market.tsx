@@ -5,8 +5,9 @@ import {
   formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { IconStar } from '../components/NavIcons';
+import { IconStar, IconWallet } from '../components/NavIcons';
 import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
+import { t } from '../i18n';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
@@ -22,14 +23,14 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
 };
 
 function formatCatCount(n: number): string {
-  if (n <= 0) return '·';
+  if (n <= 0) return '';
   if (n > 99) return '99+';
   return String(n);
 }
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
-  externalCategory, onExternalCategoryConsumed,
+  externalCategory, onExternalCategoryConsumed, openTopup,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -41,6 +42,7 @@ export function Market({
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
+  openTopup?: () => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [confirm, setConfirm] = useState<Product | null>(null);
@@ -263,6 +265,24 @@ export function Market({
   }, [heroSlides.length]);
 
   return <div className="stack">
+    <section className="wallet-hero wallet-hero--mobile mobile-only" aria-label={t('widgets.wallet')}>
+      <p className="wallet-hero__label">{t('widgets.wallet')}</p>
+      <div className="wallet-hero__amount">
+        {core.profile ? money(core.profile.balanceCents) : '—'}
+        <small>RUB</small>
+      </div>
+      <Button
+        variant="violet"
+        className="wallet-hero__topup"
+        onClick={() => {
+          if (openTopup) openTopup();
+          else switchTo('profile');
+        }}
+      >
+        <IconWallet size={18} /> {t('widgets.addFunds')}
+      </Button>
+    </section>
+
     <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
       <div className="market-hero__track" ref={heroTrackRef}>
         {heroSlides.map((slide, index) => (
@@ -310,10 +330,11 @@ export function Market({
       >
         <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
         <span className="cat-card__name">Все</span>
-        <span className="cat-card__count">{formatCatCount(totalVisible)}</span>
+        {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
       </button>
       {CATEGORIES.map((cat) => {
         const style = CAT_STYLE[cat];
+        const count = categoryCounts[cat] ?? 0;
         return (
           <button
             type="button"
@@ -327,7 +348,7 @@ export function Market({
               style={{ background: style.bg, ['--_glow' as string]: style.glow }}
             >{style.letter}</span>
             <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
-            <span className="cat-card__count">{formatCatCount(categoryCounts[cat] ?? 0)}</span>
+            {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
           </button>
         );
       })}

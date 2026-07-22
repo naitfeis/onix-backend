@@ -462,6 +462,10 @@ export default function App() {
             }}
             externalCategory={marketCategory}
             onExternalCategoryConsumed={() => setMarketCategory('Все')}
+            openTopup={() => {
+              setOpenWalletTopup(true);
+              switchTo('profile');
+            }}
           />}
           {screen === 'deals' && <Deals
             core={core}
@@ -517,12 +521,6 @@ export default function App() {
           <div className="sidebar-right__icons">
             <button type="button" aria-label={t('widgets.wallet')} onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
               <IconWallet size={20} />
-            </button>
-            <button type="button" aria-label={t('widgets.notifications')} onClick={() => switchTo('deals')}>
-              <IconBell />
-            </button>
-            <button type="button" aria-label={t('widgets.newLots')} onClick={() => switchTo('market')}>
-              <IconLot />
             </button>
           </div>
         ) : (

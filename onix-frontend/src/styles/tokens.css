@@ -367,6 +367,11 @@ html[data-theme="light"] .topbar::after {
   border-radius: var(--radius-card);
 }
 
+/* cat chips: allow 2-line labels — do not clip */
+.cat-card {
+  overflow: visible;
+}
+
 /* Sidebar panel keeps acrylic blur; children must not add a second blur layer */
 .sidebar-left,
 .sidebar-right,
@@ -415,15 +420,17 @@ html[data-theme="light"] .topbar::after {
 .desktop-hero,
 .market-hero,
 .wallet-hero,
-.widget,
-.cat-card {
+.widget {
   overflow: clip;
+}
+.cat-card {
+  overflow: visible;
+  border-radius: var(--radius-md);
 }
 
 .live-pill,
 .bottom-nav,
 .control { border-radius: 999px; }
-.cat-card { border-radius: var(--radius-md); }
 
 .glass-card::before,
 .card::before,
