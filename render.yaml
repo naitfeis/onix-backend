@@ -1,24 +1,24 @@
-# ONIX API — Render Blueprint
+# ONIX — API + website shell on one Render web service (no Vercel).
+# www.onixtg.shop → this service (custom domain). Cookies stay same-origin (__Host-).
+#
 # Critical: migrate runs in preDeploy (separate one-shot), NOT in startCommand.
 # startCommand must be a single Node process (no npm wrapper, no migrate&&start).
 services:
   - type: web
     name: onix-api
     runtime: node
-    plan: starter
+    plan: free
     region: frankfurt
-    # --include=dev: NODE_ENV=production would otherwise omit destinies needed for tsc/prisma.
-    buildCommand: npm ci --include=dev && npm run build
+    # Frontend Vite needs devDependencies during build:spa.
+    buildCommand: npm ci --include=dev && npm run build:web
     preDeployCommand: npx prisma migrate deploy
     startCommand: node dist/main.js
     healthCheckPath: /api/health/ready
     envVars:
       - key: NODE_ENV
         value: production
-      # Prevent accidental multi-worker wrappers (Heroku-style) from forking Nest.
       - key: WEB_CONCURRENCY
         value: "1"
-      # Exposed by GET /api/health/network (ops probe).
       - key: RENDER_REGION
         value: frankfurt
       - key: OTEL_SERVICE_NAME
@@ -27,15 +27,24 @@ services:
         value: info
       - key: ALERTING_ENABLED
         value: "true"
-      # Set in Render dashboard (sync: false): OPS_METRICS_TOKEN, ALERT_WEBHOOK_URL, ERROR_WEBHOOK_URL, SENTRY_DSN
+      # Same-origin SPA: leave VITE_API_URL empty in Render (relative /api).
+      - key: VITE_API_URL
+        value: ""
+      - key: VITE_WEBSITE_AUTH_MODE
+        sync: false
+      - key: VITE_WEBSITE_LOGIN_PROVIDER
+        sync: false
+      - key: VITE_TELEGRAM_BOT_USERNAME
+        sync: false
       - key: OPS_METRICS_TOKEN
         sync: false
       - key: ALERT_WEBHOOK_URL
         sync: false
       - key: ERROR_WEBHOOK_URL
         sync: false
+      - key: SENTRY_DSN
+        sync: false
 
-  # Background jobs — separate process from HTTP (deposit unlock, trust, idempotency TTL, payment expire, ledger reconcile).
   - type: worker
     name: onix-worker
     runtime: node

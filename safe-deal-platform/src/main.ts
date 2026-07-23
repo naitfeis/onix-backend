@@ -14,6 +14,7 @@ import { MetricsService } from './observability/metrics.service';
 import { registerGracefulShutdown } from './observability/graceful-shutdown';
 import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
+import { spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
 
 /** Same-process guard — Nest must bootstrap exactly once per Node process. */
@@ -48,7 +49,8 @@ async function bootstrap(): Promise<void> {
   app.use(requestTimingMiddleware);
   app.use(createMetricsMiddleware(app.get(MetricsService)));
 
-  registerHealthEndpoint(app);
+  const spaEnabled = spaIndexExists();
+  registerHealthEndpoint(app, { spaEnabled });
 
   app.setGlobalPrefix('api');
   // Before Nest AuthGuard / controllers — must log even if handler never runs.
@@ -85,6 +87,7 @@ async function bootstrap(): Promise<void> {
 
   structuredLog.info('Listening', {
     port,
+    spaEnabled,
     keepAliveTimeout: server.keepAliveTimeout,
   });
 

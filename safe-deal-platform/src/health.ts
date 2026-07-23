@@ -15,9 +15,13 @@ type HealthResponse = ServerResponse & {
 /**
  * Production health for Render (and load balancers).
  * Express middleware — runs before Nest router / AuthGuard / API envelope.
- * GET / and HEAD / → 200 OK, body "ONIX API" (HEAD has no body).
+ *
+ * HEAD / → 200 (LB probe; no body).
+ * GET / → left for SPA (www shell). Use /api/health/live|ready for JSON health.
+ * If SPA is not mounted, GET / still returns plain "ONIX API".
  */
-export function registerHealthEndpoint(app: INestApplication): void {
+export function registerHealthEndpoint(app: INestApplication, opts?: { spaEnabled?: boolean }): void {
+  const spaEnabled = Boolean(opts?.spaEnabled);
   app.use((req: HealthRequest, res: HealthResponse, next: (err?: unknown) => void) => {
     const path = req.path ?? (req.url ? req.url.split('?')[0] : '');
     if (path !== '/') {
@@ -25,15 +29,16 @@ export function registerHealthEndpoint(app: INestApplication): void {
       return;
     }
     const method = (req.method ?? 'GET').toUpperCase();
-    if (method !== 'GET' && method !== 'HEAD') {
-      next();
-      return;
-    }
-    res.set('Cache-Control', 'no-store');
     if (method === 'HEAD') {
+      res.set('Cache-Control', 'no-store');
       res.status(200).type('text/plain').set('Content-Length', String(Buffer.byteLength(HEALTH_BODY))).end();
       return;
     }
-    res.status(200).type('text/plain').send(HEALTH_BODY);
+    if (method === 'GET' && !spaEnabled) {
+      res.set('Cache-Control', 'no-store');
+      res.status(200).type('text/plain').send(HEALTH_BODY);
+      return;
+    }
+    next();
   });
 }

@@ -17,9 +17,11 @@ import { SupportModule } from './support.module';
 import { EconomyModule } from './economy/economy.module';
 
 import { LoginChallengeModule } from './login-challenge/login-challenge.module';
+import { spaServeModules } from './spa-static';
 
 @Module({
   imports: [
+    ...spaServeModules(),
     DatabaseModule,
     ObservabilityModule,
     IdempotencyModule,
