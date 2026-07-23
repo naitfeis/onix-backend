@@ -70,7 +70,7 @@ describe('fetchResilience', () => {
     vi.useRealTimers();
   });
 
-  it('does not retry our own AbortController timeout', async () => {
+  it('does not retry our own AbortController timeout by default', async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => {
@@ -84,6 +84,34 @@ describe('fetchResilience', () => {
     await vi.advanceTimersByTimeAsync(1_000);
     await expectation;
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('retries once after timeout when maxTimeoutRetries=1', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => new Promise((resolve, reject) => {
+      calls += 1;
+      if (calls === 1) {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'));
+        });
+        return;
+      }
+      resolve({ ok: true, status: 200 });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = resilientFetch('/api/products', {
+      maxRetries: 0,
+      maxTimeoutRetries: 1,
+      timeoutMs: 1_000,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
 

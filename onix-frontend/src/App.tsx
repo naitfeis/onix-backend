@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { money, moneyAmount } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
+import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
 import {
   BrandMark,
@@ -17,17 +18,19 @@ import {
 import { Button, Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import { t } from './i18n';
+import AuthNotice from './screens/AuthGate';
 import type { Screen } from './screens/types';
 import { CATEGORY_IMAGES } from './utils/categoryImages';
+import { lazyRetry } from './utils/lazyRetry';
 import './App.css';
 
-const OnixBackground = lazy(() => import('./components/OnixBackground'));
-const AuthNotice = lazy(() => import('./screens/AuthGate'));
-const Market = lazy(() => import('./screens/Market'));
-const Deals = lazy(() => import('./screens/Deals'));
-const ProductForm = lazy(() => import('./screens/ProductForm'));
-const Chats = lazy(() => import('./screens/Chats'));
-const Profile = lazy(() => import('./screens/Profile'));
+/** AuthGate is eager — lazy chunk ERR_CONNECTION_RESET was blanking the whole app in RU. */
+const OnixBackground = lazyRetry(() => import('./components/OnixBackground'));
+const Market = lazyRetry(() => import('./screens/Market'));
+const Deals = lazyRetry(() => import('./screens/Deals'));
+const ProductForm = lazyRetry(() => import('./screens/ProductForm'));
+const Chats = lazyRetry(() => import('./screens/Chats'));
+const Profile = lazyRetry(() => import('./screens/Profile'));
 
 const LEFT_W_KEY = 'onix-sidebar-left-w';
 const RIGHT_W_KEY = 'onix-sidebar-right-w';
@@ -335,9 +338,11 @@ export default function App() {
   }, {});
 
   return <>
-    <Suspense fallback={null}>
-      <OnixBackground mode={mode} />
-    </Suspense>
+    <SoftErrorBoundary label="Фон не загрузился — можно продолжать.">
+      <Suspense fallback={null}>
+        <OnixBackground mode={mode} />
+      </Suspense>
+    </SoftErrorBoundary>
     <div
       className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
       style={{
@@ -349,7 +354,7 @@ export default function App() {
     <a className="skip-link" href="#content">К содержимому</a>
 
     {showAuth && (
-      <Suspense fallback={null}>
+      <SoftErrorBoundary label="Не удалось открыть вход. Обновите страницу.">
         <AuthNotice
           miniApp={miniApp}
           message={core.errors.profile}
@@ -357,7 +362,7 @@ export default function App() {
           onAuthenticated={onAuthenticated}
           onBan={setBanNotice}
         />
-      </Suspense>
+      </SoftErrorBoundary>
     )}
 
     {/* Desktop left sidebar */}
@@ -459,6 +464,7 @@ export default function App() {
 
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
       <div key={screen} className="screen-transition">
+        <SoftErrorBoundary label="Экран не загрузился (сеть). Нажмите «Обновить».">
         <Suspense fallback={<ScreenFallback />}>
           {screen === 'market' && <Market
             core={core}
@@ -510,6 +516,7 @@ export default function App() {
             }}
           />}
         </Suspense>
+        </SoftErrorBoundary>
       </div>
     </main>
 

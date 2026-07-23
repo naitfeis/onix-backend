@@ -67,10 +67,13 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
   if (options.body) headers.set('Content-Type', 'application/json');
 
   const url = apiUrl(path);
+  const method = (options.method ?? 'GET').toUpperCase();
+  // Public GET catalog: one timeout retry (RU rewrite hangs); auth POSTs stay fail-fast on timeout.
   const response = await resilientFetch(url, {
     ...options,
     headers,
     credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
+    maxTimeoutRetries: method === 'GET' && !options.signal ? 1 : 0,
   });
   let payload: ApiEnvelope<T> | undefined;
   try {

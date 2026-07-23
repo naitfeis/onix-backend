@@ -7,13 +7,18 @@
  * (first attempt hung until timeout, second succeeded).
  */
 
-/** Bound hung sockets; keep under UX pain without double-waiting on retry. */
-export const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
+/** Bound hung sockets (Vercel→Render rewrite can stall on RU). */
+export const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
 /**
- * Retry only fast network failures (reset) and 502–504 — not full-timeout aborts.
+ * Retry only fast network failures (reset) and 502–504.
  * RU ISPs often reset the first TCP attempt; 3 quick retries recover without VPN.
  */
 export const MAX_NETWORK_RETRIES = 3;
+/**
+ * Extra attempts after our AbortController timeout (idempotent GET catalog).
+ * Auth refresh/session keep this at 0 — avoid 8s×N on login.
+ */
+export const DEFAULT_TIMEOUT_RETRIES = 0;
 
 export function isRetryableHttpStatus(status: number): boolean {
   if (status === 401 || status === 403) return false;
@@ -53,6 +58,8 @@ function mergeAbortSignals(signals: AbortSignal[]): AbortSignal {
 export type ResilientFetchOptions = RequestInit & {
   timeoutMs?: number;
   maxRetries?: number;
+  /** Retries after our timeout abort (default 0). Use 1 for public GET on RU. */
+  maxTimeoutRetries?: number;
 };
 
 /**
@@ -65,9 +72,11 @@ export async function resilientFetch(
 ): Promise<Response> {
   const timeoutMs = init.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
   const maxRetries = init.maxRetries ?? MAX_NETWORK_RETRIES;
-  const { timeoutMs: _t, maxRetries: _r, signal: externalSignal, ...rest } = init;
+  const maxTimeoutRetries = init.maxTimeoutRetries ?? DEFAULT_TIMEOUT_RETRIES;
+  const { timeoutMs: _t, maxRetries: _r, maxTimeoutRetries: _tr, signal: externalSignal, ...rest } = init;
 
   let attempt = 0;
+  let timeoutAttempts = 0;
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const timeout = new AbortController();
@@ -89,9 +98,15 @@ export async function resilientFetch(
     } catch (error) {
       clearTimeout(timer);
       if (externalSignal?.aborted) throw error;
-      // Do NOT retry our own timeout — avoids 8s abort + successful retry = "201 after 8s".
       const timedOut = timeout.signal.aborted && !externalSignal?.aborted;
-      if (timedOut) throw error;
+      if (timedOut) {
+        if (timeoutAttempts < maxTimeoutRetries) {
+          timeoutAttempts += 1;
+          await delay(backoffMs(timeoutAttempts));
+          continue;
+        }
+        throw error;
+      }
       if (isRetryableNetworkError(error) && attempt < maxRetries) {
         attempt += 1;
         await delay(backoffMs(attempt));
