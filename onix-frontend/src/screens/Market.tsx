@@ -10,6 +10,7 @@ import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from
 import { t } from '../i18n';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
+import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 
@@ -335,6 +336,7 @@ export function Market({
       {CATEGORIES.map((cat) => {
         const style = CAT_STYLE[cat];
         const count = categoryCounts[cat] ?? 0;
+        const image = CATEGORY_IMAGES[cat];
         return (
           <button
             type="button"
@@ -343,10 +345,16 @@ export function Market({
             className={`cat-card${category === cat ? ' active' : ''}`}
             onClick={() => { setCategory(cat); setSubcategory(''); }}
           >
-            <span
-              className="cat-card__emblem"
-              style={{ background: style.bg, ['--_glow' as string]: style.glow }}
-            >{style.letter}</span>
+            {image ? (
+              <span className="cat-card__emblem cat-card__emblem--photo">
+                <img src={image} alt="" width={40} height={40} loading="lazy" decoding="async" />
+              </span>
+            ) : (
+              <span
+                className="cat-card__emblem"
+                style={{ background: style.bg, ['--_glow' as string]: style.glow }}
+              >{style.letter}</span>
+            )}
             <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
             {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
           </button>

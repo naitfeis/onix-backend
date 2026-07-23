@@ -20,6 +20,7 @@ import { Button, Card, Skeleton, Toast } from './design-system';
 import { useOnixCore } from './hooks/useOnixCore';
 import { t } from './i18n';
 import type { Screen } from './screens/types';
+import { CATEGORY_IMAGES } from './utils/categoryImages';
 import './App.css';
 
 const OnixBackground = lazy(() => import('./components/OnixBackground'));
@@ -368,6 +369,7 @@ export default function App() {
         {CATEGORIES.map((cat) => {
           const style = CAT_STYLE[cat];
           const count = sidebarCatCounts[cat] ?? 0;
+          const image = CATEGORY_IMAGES[cat];
           return (
             <button
               key={cat}
@@ -378,10 +380,16 @@ export default function App() {
                 switchTo('market');
               }}
             >
-              <span
-                className="cat-card__emblem"
-                style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
-              >{style.letter}</span>
+              {image ? (
+                <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
+                  <img src={image} alt="" width={28} height={28} loading="lazy" decoding="async" />
+                </span>
+              ) : (
+                <span
+                  className="cat-card__emblem"
+                  style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
+                >{style.letter}</span>
+              )}
               <span className="sidebar-cats__label">{CATEGORY_LABELS[cat]}</span>
               <em className="sidebar-cats__count" aria-hidden="true">{formatLotCount(count)}</em>
             </button>
@@ -583,6 +591,7 @@ export default function App() {
                 ) : (
                   core.products.slice(0, 5).map((product: Product) => {
                     const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
+                    const image = CATEGORY_IMAGES[product.category];
                     return (
                       <button
                         type="button"
@@ -590,10 +599,16 @@ export default function App() {
                         key={product.id}
                         onClick={() => openProductCard(product.id)}
                       >
-                        <span
-                          className="cat-card__emblem"
-                          style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
-                        >{style.letter}</span>
+                        {image ? (
+                          <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
+                            <img src={image} alt="" width={28} height={28} loading="lazy" decoding="async" />
+                          </span>
+                        ) : (
+                          <span
+                            className="cat-card__emblem"
+                            style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
+                          >{style.letter}</span>
+                        )}
                         <span className="widget-trend__title">{product.title}</span>
                         <strong>{money(product.priceCents)}</strong>
                       </button>
