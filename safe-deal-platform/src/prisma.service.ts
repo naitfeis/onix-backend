@@ -11,6 +11,7 @@ import { Pool } from 'pg';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private static pool: Pool | undefined;
   private static connectPromise: Promise<void> | undefined;
+  private static poolEndPromise: Promise<void> | undefined;
   private static connectionErrors = 0;
   private readonly logger = new Logger(PrismaService.name);
 
@@ -61,11 +62,20 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.$disconnect();
-    if (PrismaService.pool) {
-      await PrismaService.pool.end();
+    await this.$disconnect().catch(() => undefined);
+    // Render SIGTERM can invoke destroy hooks more than once — pg Pool.end() is not idempotent.
+    if (!PrismaService.pool) {
+      if (PrismaService.poolEndPromise) await PrismaService.poolEndPromise;
+      return;
+    }
+    if (!PrismaService.poolEndPromise) {
+      const pool = PrismaService.pool;
       PrismaService.pool = undefined;
       PrismaService.connectPromise = undefined;
+      PrismaService.poolEndPromise = pool.end().catch(() => undefined).then(() => {
+        PrismaService.poolEndPromise = undefined;
+      });
     }
+    await PrismaService.poolEndPromise;
   }
 }

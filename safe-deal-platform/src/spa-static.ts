@@ -29,8 +29,8 @@ export function spaServeModules(): DynamicModule[] {
   return [
     ServeStaticModule.forRoot({
       rootPath: spaDir,
-      // Everything except Nest API (global prefix `api`).
-      exclude: ['/api', '/api/(.*)'],
+      // path-to-regexp v8: `/api/(.*)` throws. Nest sample uses `/api/{*path}`.
+      exclude: ['/api/{*path}'],
       serveStaticOptions: {
         index: 'index.html',
         fallthrough: false,
