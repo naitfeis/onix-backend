@@ -266,6 +266,8 @@ export function useOnixCore() {
       }
 
       if (boot.status === 'network') {
+        // Session probe timed out (Render cold start / rewrite blip) while catalog
+        // may already be fine — show guest market, re-probe once in background.
         setProfile(null);
         setStates((previous) => ({
           ...previous,
@@ -277,11 +279,19 @@ export function useOnixCore() {
         }));
         setErrors((previous) => ({
           ...previous,
-          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
+          profile: 'Войдите через Telegram, чтобы продолжить.',
         }));
         printBootstrapSummary('bootstrap-network');
         markAppReady('bootstrap-settled');
         void catalogReady;
+        void (async () => {
+          await new Promise((r) => setTimeout(r, 2_000));
+          const again = await restoreWebsiteSession();
+          if (again.status !== 'authenticated') return;
+          const current = await loadProfile();
+          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+          warmSecondaryCollections(current, load);
+        })();
         return;
       }
 

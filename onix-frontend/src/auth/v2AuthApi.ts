@@ -168,10 +168,12 @@ export type AuthV2SessionData = {
 
 /**
  * GET /api/v2/auth/session — HttpOnly refresh cookie only.
- * RU paths (CF → Vercel → Render) often exceed 2.5s; keep under refresh budget
- * and allow one fast network retry. Server 401 still fails as soon as it arrives.
+ * Keep short: hung probes used to sit at ~8s (see bootstrap session-check=8002ms)
+ * while public /api/products already returned in ~20ms. Connection-reset retries
+ * still apply via resilientFetch; full timeout must not retry (avoid 8s×N).
+ * Server 401 still fails as soon as it arrives.
  */
-export const AUTH_SESSION_PROBE_TIMEOUT_MS = 8_000;
+export const AUTH_SESSION_PROBE_TIMEOUT_MS = 3_000;
 
 export async function getAuthV2Session(
   fetchImpl: AuthV2Fetch = fetch,
