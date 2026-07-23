@@ -171,9 +171,16 @@ function TelegramLogin({ onBan }: { onBan?: (ban: BanInfo) => void }) {
     script.setAttribute('data-onauth', 'onixTelegramAuth(user)');
     const handleError = () => setError('Telegram Login Widget не загрузился.');
     script.addEventListener('error', handleError);
+    // RU: telegram.org can hang — fail soft so the page is not stuck waiting forever.
+    const loadWatch = window.setTimeout(() => {
+      if (!host.querySelector('iframe')) {
+        setError('Виджет Telegram не ответил. Обновите страницу или включите вход через бота.');
+      }
+    }, 8_000);
     host.appendChild(script);
 
     return () => {
+      window.clearTimeout(loadWatch);
       reportTelegramLoginError = () => {};
       reportTelegramBan = () => {};
       script.removeEventListener('error', handleError);
