@@ -18,6 +18,16 @@ const CATEGORY_LABELS: Record<ProductCategory, string> = {
   VALORANT: 'Valorant',
   GTA_5: 'GTA 5',
   GTA_6: 'GTA 6',
+  DOTA_2: 'Dota 2',
+  PUBG_MOBILE: 'PUBG Mobile',
+  GENSHIN: 'Genshin Impact',
+  MOBILE_LEGENDS: 'Mobile Legends',
+  APP_STORE: 'App Store',
+  PUBG: 'PUBG',
+  MINECRAFT: 'Minecraft',
+  PLAYSTATION: 'PlayStation',
+  STALCRAFT: 'Stalcraft',
+  PATH_OF_EXILE_2: 'Path of Exile 2',
   OTHER: 'Другое',
 };
 
@@ -32,6 +42,15 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   VALORANT_DONATE: 'Донат', VALORANT_ACCOUNTS: 'Аккаунты', VALORANT_SERVICES: 'Услуги', VALORANT_OTHER: 'Прочее',
   GTA5_DONATE: 'Донат', GTA5_CURRENCY: 'Валюта', GTA5_ACCOUNTS: 'Аккаунты', GTA5_SERVICES: 'Услуги', GTA5_OTHER: 'Прочее',
   GTA6_ACCOUNTS: 'Аккаунты', GTA6_KEYS: 'Ключи',
+  DOTA_ACCOUNTS: 'Аккаунты', DOTA_ITEMS: 'Предметы', DOTA_BOOST: 'Буст', DOTA_OTHER: 'Прочее',
+  PUBG_DONATE: 'Донат', PUBG_ACCOUNTS: 'Аккаунты', PUBG_SERVICES: 'Услуги', PUBG_OTHER: 'Прочее',
+  GENSHIN_DONATE: 'Донат', GENSHIN_ACCOUNTS: 'Аккаунты', GENSHIN_SERVICES: 'Услуги', GENSHIN_OTHER: 'Прочее',
+  ML_DONATE: 'Донат', ML_ACCOUNTS: 'Аккаунты', ML_SERVICES: 'Услуги', ML_OTHER: 'Прочее',
+  APPSTORE_TOPUP: 'Пополнение', APPSTORE_GIFTCARDS: 'Подарочные карты', APPSTORE_ACCOUNTS: 'Аккаунты', APPSTORE_OTHER: 'Прочее',
+  MC_ACCOUNTS: 'Аккаунты', MC_ITEMS: 'Предметы', MC_SERVICES: 'Услуги', MC_OTHER: 'Прочее',
+  PS_ACCOUNTS: 'Аккаунты', PS_GAMES: 'Игры', PS_TOPUP: 'Пополнение', PS_OTHER: 'Прочее',
+  STALCRAFT_ACCOUNTS: 'Аккаунты', STALCRAFT_ITEMS: 'Предметы', STALCRAFT_SERVICES: 'Услуги', STALCRAFT_OTHER: 'Прочее',
+  POE2_ACCOUNTS: 'Аккаунты', POE2_CURRENCY: 'Валюта', POE2_ITEMS: 'Предметы', POE2_OTHER: 'Прочее',
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 

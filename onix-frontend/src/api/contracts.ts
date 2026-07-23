@@ -476,8 +476,10 @@ export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hi
 ];
 
 export const CATEGORIES = [
-  'STEAM', 'ROBLOX', 'RP_PROJECTS', 'STANDOFF_2', 'BRAWL_STARS',
-  'CS2', 'FORTNITE', 'VALORANT', 'GTA_5', 'GTA_6', 'OTHER',
+  'STEAM', 'ROBLOX', 'RP_PROJECTS',
+  'CS2', 'STANDOFF_2', 'FORTNITE', 'BRAWL_STARS', 'VALORANT', 'GTA_5', 'GTA_6',
+  'DOTA_2', 'PUBG_MOBILE', 'GENSHIN', 'MOBILE_LEGENDS', 'APP_STORE',
+  'PUBG', 'MINECRAFT', 'PLAYSTATION', 'STALCRAFT', 'PATH_OF_EXILE_2', 'OTHER',
 ] as const;
 export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
   STEAM: 'Steam',
@@ -490,6 +492,16 @@ export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
   VALORANT: 'Valorant',
   GTA_5: 'GTA 5',
   GTA_6: 'GTA 6',
+  DOTA_2: 'Dota 2',
+  PUBG_MOBILE: 'PUBG Mobile',
+  GENSHIN: 'Genshin Impact',
+  MOBILE_LEGENDS: 'Mobile Legends',
+  APP_STORE: 'App Store',
+  PUBG: 'PUBG',
+  MINECRAFT: 'Minecraft',
+  PLAYSTATION: 'PlayStation',
+  STALCRAFT: 'Stalcraft',
+  PATH_OF_EXILE_2: 'Path of Exile 2',
   OTHER: 'Другое',
 };
 
@@ -505,6 +517,16 @@ export const SUBCATEGORIES_BY_CATEGORY: Record<(typeof CATEGORIES)[number], stri
   VALORANT: ['VALORANT_DONATE', 'VALORANT_ACCOUNTS', 'VALORANT_SERVICES', 'VALORANT_OTHER'],
   GTA_5: ['GTA5_DONATE', 'GTA5_CURRENCY', 'GTA5_ACCOUNTS', 'GTA5_SERVICES', 'GTA5_OTHER'],
   GTA_6: ['GTA6_ACCOUNTS', 'GTA6_KEYS'],
+  DOTA_2: ['DOTA_ACCOUNTS', 'DOTA_ITEMS', 'DOTA_BOOST', 'DOTA_OTHER'],
+  PUBG_MOBILE: ['PUBG_DONATE', 'PUBG_ACCOUNTS', 'PUBG_SERVICES', 'PUBG_OTHER'],
+  GENSHIN: ['GENSHIN_DONATE', 'GENSHIN_ACCOUNTS', 'GENSHIN_SERVICES', 'GENSHIN_OTHER'],
+  MOBILE_LEGENDS: ['ML_DONATE', 'ML_ACCOUNTS', 'ML_SERVICES', 'ML_OTHER'],
+  APP_STORE: ['APPSTORE_TOPUP', 'APPSTORE_GIFTCARDS', 'APPSTORE_ACCOUNTS', 'APPSTORE_OTHER'],
+  PUBG: ['PUBG_DONATE', 'PUBG_ACCOUNTS', 'PUBG_SERVICES', 'PUBG_OTHER'],
+  MINECRAFT: ['MC_ACCOUNTS', 'MC_ITEMS', 'MC_SERVICES', 'MC_OTHER'],
+  PLAYSTATION: ['PS_ACCOUNTS', 'PS_GAMES', 'PS_TOPUP', 'PS_OTHER'],
+  STALCRAFT: ['STALCRAFT_ACCOUNTS', 'STALCRAFT_ITEMS', 'STALCRAFT_SERVICES', 'STALCRAFT_OTHER'],
+  PATH_OF_EXILE_2: ['POE2_ACCOUNTS', 'POE2_CURRENCY', 'POE2_ITEMS', 'POE2_OTHER'],
   OTHER: ['OTHER_ACCOUNTS', 'OTHER_ITEMS', 'OTHER_BOOST', 'OTHER_MISC'],
 };
 
@@ -519,6 +541,15 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   VALORANT_DONATE: 'Донат', VALORANT_ACCOUNTS: 'Аккаунты', VALORANT_SERVICES: 'Услуги', VALORANT_OTHER: 'Прочее',
   GTA5_DONATE: 'Донат', GTA5_CURRENCY: 'Валюта', GTA5_ACCOUNTS: 'Аккаунты', GTA5_SERVICES: 'Услуги', GTA5_OTHER: 'Прочее',
   GTA6_ACCOUNTS: 'Аккаунты', GTA6_KEYS: 'Ключи',
+  DOTA_ACCOUNTS: 'Аккаунты', DOTA_ITEMS: 'Предметы', DOTA_BOOST: 'Буст', DOTA_OTHER: 'Прочее',
+  PUBG_DONATE: 'Донат', PUBG_ACCOUNTS: 'Аккаунты', PUBG_SERVICES: 'Услуги', PUBG_OTHER: 'Прочее',
+  GENSHIN_DONATE: 'Донат', GENSHIN_ACCOUNTS: 'Аккаунты', GENSHIN_SERVICES: 'Услуги', GENSHIN_OTHER: 'Прочее',
+  ML_DONATE: 'Донат', ML_ACCOUNTS: 'Аккаунты', ML_SERVICES: 'Услуги', ML_OTHER: 'Прочее',
+  APPSTORE_TOPUP: 'Пополнение', APPSTORE_GIFTCARDS: 'Подарочные карты', APPSTORE_ACCOUNTS: 'Аккаунты', APPSTORE_OTHER: 'Прочее',
+  MC_ACCOUNTS: 'Аккаунты', MC_ITEMS: 'Предметы', MC_SERVICES: 'Услуги', MC_OTHER: 'Прочее',
+  PS_ACCOUNTS: 'Аккаунты', PS_GAMES: 'Игры', PS_TOPUP: 'Пополнение', PS_OTHER: 'Прочее',
+  STALCRAFT_ACCOUNTS: 'Аккаунты', STALCRAFT_ITEMS: 'Предметы', STALCRAFT_SERVICES: 'Услуги', STALCRAFT_OTHER: 'Прочее',
+  POE2_ACCOUNTS: 'Аккаунты', POE2_CURRENCY: 'Валюта', POE2_ITEMS: 'Предметы', POE2_OTHER: 'Прочее',
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 

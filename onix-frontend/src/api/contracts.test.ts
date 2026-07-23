@@ -51,8 +51,10 @@ describe('ONIX API paths', () => {
 
   it('uses canonical backend category enum values', () => {
     expect(CATEGORIES).toEqual([
-      'STEAM', 'ROBLOX', 'RP_PROJECTS', 'STANDOFF_2', 'BRAWL_STARS',
-      'CS2', 'FORTNITE', 'VALORANT', 'GTA_5', 'GTA_6', 'OTHER',
+      'STEAM', 'ROBLOX', 'RP_PROJECTS',
+      'CS2', 'STANDOFF_2', 'FORTNITE', 'BRAWL_STARS', 'VALORANT', 'GTA_5', 'GTA_6',
+      'DOTA_2', 'PUBG_MOBILE', 'GENSHIN', 'MOBILE_LEGENDS', 'APP_STORE',
+      'PUBG', 'MINECRAFT', 'PLAYSTATION', 'STALCRAFT', 'PATH_OF_EXILE_2', 'OTHER',
     ]);
   });
 });

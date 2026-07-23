@@ -22,7 +22,16 @@ const CATEGORY_ALIASES: Array<{ re: RegExp; value: ProductCategory }> = [
   { re: /\b(valorant|валорант)\b/i, value: 'VALORANT' },
   { re: /\b(gta\s*5|гта\s*5|gta\s*v)\b/i, value: 'GTA_5' },
   { re: /\b(gta\s*6|гта\s*6|gta\s*vi)\b/i, value: 'GTA_6' },
-  { re: /\b(pubg|пубг|mobile\s*legends|млбб)\b/i, value: 'OTHER' },
+  { re: /\b(dota\s*2|дота\s*2|дота)\b/i, value: 'DOTA_2' },
+  { re: /\b(pubg\s*mobile|пубг\s*мобайл)\b/i, value: 'PUBG_MOBILE' },
+  { re: /\b(pubg|пубг|battlegrounds)\b/i, value: 'PUBG' },
+  { re: /\b(genshin|геншин)\b/i, value: 'GENSHIN' },
+  { re: /\b(mobile\s*legends|млбб|mobile\s*legend)\b/i, value: 'MOBILE_LEGENDS' },
+  { re: /\b(app\s*store|апп\s*стор|appstore)\b/i, value: 'APP_STORE' },
+  { re: /\b(minecraft|майнкрафт|майн)\b/i, value: 'MINECRAFT' },
+  { re: /\b(playstation|плейстейшн|ps\s*[45]|псо)\b/i, value: 'PLAYSTATION' },
+  { re: /\b(stalcraft|сталкрафт)\b/i, value: 'STALCRAFT' },
+  { re: /\b(path\s*of\s*exile\s*2|poe\s*2|поэ\s*2)\b/i, value: 'PATH_OF_EXILE_2' },
   { re: /\b(другое|other)\b/i, value: 'OTHER' },
 ];
 
