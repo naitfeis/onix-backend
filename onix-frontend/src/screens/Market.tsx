@@ -10,6 +10,7 @@ import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
+import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 
@@ -74,8 +75,14 @@ export function Market({
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
+  const [catVisibleCount, setCatVisibleCount] = useState(8);
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
+  /** One “page” of category cards under «Все» (≈ one desktop row). */
+  const CAT_PAGE_SIZE = 8;
+  const visibleCats = CATEGORIES.slice(0, catVisibleCount);
+  const hiddenCatCount = CATEGORIES.length - catVisibleCount;
+  const catsFullyOpen = hiddenCatCount <= 0;
   const isAdmin = Boolean(
     core.profile?.isAdmin
     || core.profile?.status === 'ADMIN'
@@ -143,6 +150,10 @@ export function Market({
     if (!externalCategory || externalCategory === 'Все') return;
     setCategory(externalCategory);
     setSubcategory('');
+    const idx = CATEGORIES.indexOf(externalCategory as typeof CATEGORIES[number]);
+    if (idx >= 0) {
+      setCatVisibleCount((n) => Math.max(n, Math.min(CATEGORIES.length, idx + 1)));
+    }
     onExternalCategoryConsumed?.();
   }, [externalCategory, onExternalCategoryConsumed]);
 
@@ -153,9 +164,13 @@ export function Market({
       setMarketState('loading');
       setOffset(0);
       const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
+      const q = query.trim();
+      const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
       void core.listProducts({
-        search: query.trim() || undefined,
-        category: category === 'Все' ? undefined : category,
+        // Exact category name → filter by category (all lots in that game).
+        // Otherwise keep free-text title/seller search.
+        search: searchCat ? undefined : (q || undefined),
+        category: category === 'Все' ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: serverSort,
         limit: PAGE,
@@ -182,9 +197,11 @@ export function Market({
     const next = offset + PAGE;
     const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
     try {
+      const q = query.trim();
+      const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
       const data = await core.listProducts({
-        search: query.trim() || undefined,
-        category: category === 'Все' ? undefined : category,
+        search: searchCat ? undefined : (q || undefined),
+        category: category === 'Все' ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: serverSort,
         limit: PAGE,
@@ -317,44 +334,77 @@ export function Market({
       </div>
     </section>
 
-    <div className="cat-row" role="list" aria-label="Категории">
-      <button
-        type="button"
-        role="listitem"
-        className={`cat-card${category === 'Все' ? ' active' : ''}`}
-        onClick={() => { setCategory('Все'); setSubcategory(''); }}
-      >
-        <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
-        <span className="cat-card__name">Все</span>
-        {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
-      </button>
-      {CATEGORIES.map((cat) => {
-        const style = CAT_STYLE[cat];
-        const count = categoryCounts[cat] ?? 0;
-        const image = CATEGORY_IMAGES[cat];
-        return (
-          <button
-            type="button"
-            role="listitem"
-            key={cat}
-            className={`cat-card${category === cat ? ' active' : ''}`}
-            onClick={() => { setCategory(cat); setSubcategory(''); }}
-          >
-            {image ? (
-              <span className="cat-card__emblem cat-card__emblem--photo">
-                <img src={image} alt="" width={40} height={40} loading="lazy" decoding="async" />
-              </span>
-            ) : (
-              <span
-                className="cat-card__emblem"
-                style={{ background: style.bg, ['--_glow' as string]: style.glow }}
-              >{style.letter}</span>
-            )}
-            <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
-            {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
-          </button>
-        );
-      })}
+    <div className="cat-block">
+      <div className="cat-row" role="list" aria-label="Категории">
+        <button
+          type="button"
+          role="listitem"
+          className={`cat-card${category === 'Все' ? ' active' : ''}`}
+          onClick={() => { setCategory('Все'); setSubcategory(''); }}
+        >
+          <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
+          <span className="cat-card__name">Все</span>
+          {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
+        </button>
+        {visibleCats.map((cat) => {
+          const style = CAT_STYLE[cat];
+          const count = categoryCounts[cat] ?? 0;
+          const image = CATEGORY_IMAGES[cat];
+          return (
+            <button
+              type="button"
+              role="listitem"
+              key={cat}
+              className={`cat-card${category === cat ? ' active' : ''}`}
+              onClick={() => { setCategory(cat); setSubcategory(''); }}
+            >
+              {image ? (
+                <span className="cat-card__emblem cat-card__emblem--photo">
+                  <img
+                    src={image}
+                    alt=""
+                    width={40}
+                    height={40}
+                    loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
+                  />
+                </span>
+              ) : (
+                <span
+                  className="cat-card__emblem"
+                  style={{ background: style.bg, ['--_glow' as string]: style.glow }}
+                >{style.letter}</span>
+              )}
+              <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
+              {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {CATEGORIES.length > CAT_PAGE_SIZE && (
+        <button
+          type="button"
+          className="cat-more"
+          aria-expanded={catsFullyOpen || catVisibleCount > CAT_PAGE_SIZE}
+          onClick={() => {
+            if (catsFullyOpen) {
+              const collapsing = CATEGORIES.slice(CAT_PAGE_SIZE);
+              if (category !== 'Все' && collapsing.includes(category as typeof CATEGORIES[number])) {
+                setCategory('Все');
+                setSubcategory('');
+              }
+              setCatVisibleCount(CAT_PAGE_SIZE);
+              return;
+            }
+            setCatVisibleCount((n) => Math.min(CATEGORIES.length, n + CAT_PAGE_SIZE));
+          }}
+        >
+          {catsFullyOpen
+            ? 'Скрыть'
+            : `Показать ещё (${Math.min(CAT_PAGE_SIZE, hiddenCatCount)})`}
+        </button>
+      )}
     </div>
 
     {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">

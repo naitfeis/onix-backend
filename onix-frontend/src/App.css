@@ -818,6 +818,13 @@ html[data-theme="dark"] .button--secondary {
 }
 .live-pill__time { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+.cat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
 .cat-row {
   display: flex;
   flex-wrap: nowrap;
@@ -837,6 +844,32 @@ html[data-theme="dark"] .button--secondary {
   scrollbar-width: none;
 }
 .cat-row::-webkit-scrollbar { display: none; }
+.cat-more {
+  align-self: center;
+  min-height: 36px;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.cat-more:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+html[data-theme="light"] .cat-more {
+  border-color: rgba(20, 24, 32, 0.12);
+  background: rgba(20, 24, 32, 0.04);
+}
+html[data-theme="light"] .cat-more:hover {
+  background: rgba(20, 24, 32, 0.08);
+}
 .cat-card {
   flex: 0 0 96px;
   width: 96px;
@@ -2784,6 +2817,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     overflow: visible;
     margin: 0;
     padding: 0;
+    touch-action: auto;
+    scroll-snap-type: none;
+  }
+  .cat-more {
+    margin-top: 2px;
   }
   .cat-card {
     flex: none;

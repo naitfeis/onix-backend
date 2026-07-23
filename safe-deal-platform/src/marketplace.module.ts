@@ -10,7 +10,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { assertSubcategoryForCategory, SUBCATEGORIES_BY_CATEGORY } from './catalog';
+import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthRequest, AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
 import { AuthModule, AuthService } from './auth.module';
@@ -39,7 +39,13 @@ class ProductDto {
   @IsString() @Length(5, 32) title!: string;
   @IsOptional() @IsString() @MaxLength(20_000) description?: string;
   @IsString() @Matches(/^\d+$/) priceCents!: string;
-  @IsEnum(ProductCategory) category!: ProductCategory;
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return value;
+    const raw = String(value).trim();
+    return matchProductCategory(raw) ?? raw.toUpperCase().replace(/[\s-]+/g, '_');
+  })
+  @IsIn(PRODUCT_CATEGORIES)
+  category!: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity!: number;
   @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
@@ -54,7 +60,14 @@ class UpdateProductDto {
   @IsOptional() @IsString() @Length(5, 32) title?: string;
   @IsOptional() @IsString() @MaxLength(20_000) description?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) priceCents?: string;
-  @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const raw = String(value).trim();
+    return matchProductCategory(raw) ?? raw.toUpperCase().replace(/[\s-]+/g, '_');
+  })
+  @IsIn(PRODUCT_CATEGORIES)
+  category?: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity?: number;
   @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
@@ -63,7 +76,14 @@ class UpdateProductDto {
 
 class ProductQuery {
   @IsOptional() @IsString() @Length(1, 100) search?: string;
-  @IsOptional() @IsEnum(ProductCategory) category?: ProductCategory;
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '' || value === 'Все') return undefined;
+    const raw = String(value).trim();
+    return matchProductCategory(raw) ?? raw.toUpperCase().replace(/[\s-]+/g, '_');
+  })
+  @IsIn(PRODUCT_CATEGORIES)
+  category?: ProductCategory;
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
@@ -128,6 +148,9 @@ export class MarketplaceService {
       }
     }
     const viewerId = user?.id ?? null;
+    const searchCat = query.search && !query.category
+      ? matchProductCategory(query.search)
+      : undefined;
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       ...(query.category ? { category: query.category } : {}),
@@ -137,6 +160,7 @@ export class MarketplaceService {
           { title: { contains: query.search, mode: 'insensitive' } },
           { seller: { displayName: { contains: query.search, mode: 'insensitive' } } },
           { seller: { onixId: { in: onixIdLookupCandidates(query.search) } } },
+          ...(searchCat ? [{ category: searchCat }] : []),
         ],
       } : {}),
       ...((query.minPriceCents || query.maxPriceCents) ? {
