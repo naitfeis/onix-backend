@@ -1,18 +1,16 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { money } from './api/client';
+import { money, moneyAmount } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import UserAvatar from './components/UserAvatar';
 import {
   BrandMark,
-  IconBell,
   IconChat,
   IconDeals,
   IconLot,
   IconMarket,
   IconMoon,
   IconProfile,
-  IconSearch,
   IconSun,
   IconWallet,
 } from './components/NavIcons';
@@ -61,6 +59,11 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   ROBLOX: { bg: 'linear-gradient(145deg,#5B8DEF,#3D6FD4)', glow: 'rgba(91,141,239,.32)', letter: 'RB' },
   RP_PROJECTS: { bg: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)', glow: 'rgba(139,127,245,.32)', letter: 'RP' },
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
+  CS2: { bg: 'linear-gradient(145deg,#F08A2E,#C45A1A)', glow: 'rgba(240,138,46,.35)', letter: 'CS' },
+  FORTNITE: { bg: 'linear-gradient(145deg,#6EC8FF,#3B8FE0)', glow: 'rgba(110,200,255,.32)', letter: 'FN' },
+  VALORANT: { bg: 'linear-gradient(145deg,#FF4655,#C43A45)', glow: 'rgba(255,70,85,.32)', letter: 'VA' },
+  GTA_5: { bg: 'linear-gradient(145deg,#4CAF50,#2E7D32)', glow: 'rgba(76,175,80,.32)', letter: 'V' },
+  GTA_6: { bg: 'linear-gradient(145deg,#E91E8C,#7B2CBF)', glow: 'rgba(233,30,140,.32)', letter: 'VI' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
 
@@ -427,16 +430,6 @@ export default function App() {
           >
             {theme === 'dark' ? <IconSun /> : <IconMoon />}
           </button>
-          <button type="button" className="icon-btn" aria-label={t('search.aria')} onClick={() => {
-            const el = document.querySelector<HTMLInputElement>('input[type="search"]');
-            el?.focus();
-          }}>
-            <IconSearch />
-          </button>
-          <button type="button" className="icon-btn" aria-label={t('widgets.notifications')}>
-            <IconBell />
-            {core.unread > 0 && <span className="icon-btn__badge" />}
-          </button>
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (
               <strong>…</strong>
@@ -470,10 +463,6 @@ export default function App() {
             }}
             externalCategory={marketCategory}
             onExternalCategoryConsumed={() => setMarketCategory('Все')}
-            openTopup={() => {
-              setOpenWalletTopup(true);
-              switchTo('profile');
-            }}
           />}
           {screen === 'deals' && <Deals
             core={core}
@@ -536,7 +525,7 @@ export default function App() {
             <div className="widget widget--glass">
               <p className="wallet-hero__label">{t('widgets.wallet')}</p>
               <div className="wallet-hero__amount">
-                {core.profile ? money(core.profile.balanceCents) : '—'}
+                <span>{core.profile ? moneyAmount(core.profile.balanceCents) : '—'}</span>
                 <small>RUB</small>
               </div>
               <div style={{ marginTop: 14 }}>

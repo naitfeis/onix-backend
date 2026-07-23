@@ -475,10 +475,22 @@ export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hi
   { value: 'OTHER', label: 'Другое', hint: 'Срок вручную' },
 ];
 
-export const CATEGORIES = ['STANDOFF_2', 'STEAM', 'ROBLOX', 'RP_PROJECTS', 'BRAWL_STARS', 'OTHER'] as const;
+export const CATEGORIES = [
+  'STEAM', 'ROBLOX', 'RP_PROJECTS', 'STANDOFF_2', 'BRAWL_STARS',
+  'CS2', 'FORTNITE', 'VALORANT', 'GTA_5', 'GTA_6', 'OTHER',
+] as const;
 export const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
-  STANDOFF_2: 'Standoff 2', STEAM: 'Steam', ROBLOX: 'Roblox',
-  RP_PROJECTS: 'RP проекты', BRAWL_STARS: 'Brawl Stars', OTHER: 'Другое',
+  STEAM: 'Steam',
+  ROBLOX: 'Roblox',
+  RP_PROJECTS: 'RP проекты',
+  STANDOFF_2: 'Standoff 2',
+  BRAWL_STARS: 'Brawl Stars',
+  CS2: 'Counter-Strike 2',
+  FORTNITE: 'Fortnite',
+  VALORANT: 'Valorant',
+  GTA_5: 'GTA 5',
+  GTA_6: 'GTA 6',
+  OTHER: 'Другое',
 };
 
 /** Fallback only — prefer GET /api/products/catalog/subcategories at runtime. */
@@ -488,6 +500,11 @@ export const SUBCATEGORIES_BY_CATEGORY: Record<(typeof CATEGORIES)[number], stri
   ROBLOX: ['ROBLOX_ROBUX', 'ROBLOX_ACCOUNTS', 'ROBLOX_ITEMS', 'ROBLOX_OTHER'],
   RP_PROJECTS: ['RP_VIRTS', 'RP_ACCOUNTS', 'RP_ITEMS', 'RP_OTHER'],
   BRAWL_STARS: ['BRAWL_DONATE', 'BRAWL_ACCOUNTS', 'BRAWL_BOOST', 'BRAWL_OTHER'],
+  CS2: ['CS2_SKINS', 'CS2_ACCOUNTS', 'CS2_BOOST', 'CS2_OTHER'],
+  FORTNITE: ['FORTNITE_DONATE', 'FORTNITE_ACCOUNTS', 'FORTNITE_SERVICES', 'FORTNITE_OTHER'],
+  VALORANT: ['VALORANT_DONATE', 'VALORANT_ACCOUNTS', 'VALORANT_SERVICES', 'VALORANT_OTHER'],
+  GTA_5: ['GTA5_DONATE', 'GTA5_CURRENCY', 'GTA5_ACCOUNTS', 'GTA5_SERVICES', 'GTA5_OTHER'],
+  GTA_6: ['GTA6_ACCOUNTS', 'GTA6_KEYS'],
   OTHER: ['OTHER_ACCOUNTS', 'OTHER_ITEMS', 'OTHER_BOOST', 'OTHER_MISC'],
 };
 
@@ -497,6 +514,11 @@ export const SUBCATEGORY_LABELS: Record<string, string> = {
   ROBLOX_ROBUX: 'Робуксы', ROBLOX_ACCOUNTS: 'Аккаунты', ROBLOX_ITEMS: 'Предметы', ROBLOX_OTHER: 'Другое',
   RP_VIRTS: 'Вирты', RP_ACCOUNTS: 'Аккаунты', RP_ITEMS: 'Предметы', RP_OTHER: 'Другое',
   BRAWL_DONATE: 'Донат', BRAWL_ACCOUNTS: 'Аккаунты', BRAWL_BOOST: 'Буст', BRAWL_OTHER: 'Другое',
+  CS2_SKINS: 'Скины', CS2_ACCOUNTS: 'Аккаунты', CS2_BOOST: 'Буст', CS2_OTHER: 'Прочее',
+  FORTNITE_DONATE: 'Донат', FORTNITE_ACCOUNTS: 'Аккаунты', FORTNITE_SERVICES: 'Услуги', FORTNITE_OTHER: 'Прочее',
+  VALORANT_DONATE: 'Донат', VALORANT_ACCOUNTS: 'Аккаунты', VALORANT_SERVICES: 'Услуги', VALORANT_OTHER: 'Прочее',
+  GTA5_DONATE: 'Донат', GTA5_CURRENCY: 'Валюта', GTA5_ACCOUNTS: 'Аккаунты', GTA5_SERVICES: 'Услуги', GTA5_OTHER: 'Прочее',
+  GTA6_ACCOUNTS: 'Аккаунты', GTA6_KEYS: 'Ключи',
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 

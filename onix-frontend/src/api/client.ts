@@ -177,6 +177,16 @@ export function money(cents: string): string {
   }).format(value / 100);
 }
 
+/** Numeric amount only (no ₽) — for wallet widgets that already show RUB. */
+export function moneyAmount(cents: string): string {
+  const value = Number(cents);
+  if (!Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value / 100);
+}
+
 export function friendlyError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof DOMException && error.name === 'AbortError') return '';

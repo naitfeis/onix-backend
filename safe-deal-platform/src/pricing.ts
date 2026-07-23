@@ -1,16 +1,19 @@
 /** Platform sale commission — 5% of order total (buyer pays full price; seller gets 95%). */
 export const SALE_FEE_BPS = 500n;
 
-/** Subcategories allowed at 0 ₽ (gold / robux / steam top-up / RP virts). */
-export const NO_MIN_PRICE_SUBCATEGORIES = new Set([
+/** Soft floor 0.1 ₽ (gold / robux / steam top-up / RP virts). Nothing may list free. */
+export const SOFT_MIN_PRICE_SUBCATEGORIES = new Set([
   'STANDOFF_GOLD',
   'ROBLOX_ROBUX',
   'STEAM_TOPUP',
   'RP_VIRTS',
 ]);
 
+/** @deprecated Use SOFT_MIN_PRICE_SUBCATEGORIES */
+export const NO_MIN_PRICE_SUBCATEGORIES = SOFT_MIN_PRICE_SUBCATEGORIES;
+
 export function minListingPriceCents(subcategory?: string | null): bigint {
-  if (subcategory && NO_MIN_PRICE_SUBCATEGORIES.has(subcategory)) return 0n;
+  if (subcategory && SOFT_MIN_PRICE_SUBCATEGORIES.has(subcategory)) return 10n; // 0.1 ₽
   return 1000n; // 10 ₽
 }
 

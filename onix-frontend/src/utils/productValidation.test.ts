@@ -20,14 +20,26 @@ describe('validateDraft', () => {
     expect(errors).toHaveLength(3);
   });
 
-  it('allows prices from 0 ₽ for gold/robux/steam/virts', () => {
+  it('allows prices from 0.1 ₽ for gold/robux/steam/virts', () => {
     expect(validateDraft({
+      title: 'Robux pack',
+      description: '',
+      priceRubles: '0.1',
+      quantity: 1,
+      category: 'Roblox',
+      subcategory: 'ROBLOX_ROBUX',
+    })).toEqual([]);
+  });
+
+  it('rejects free (0 ₽) listings even for soft-min subcategories', () => {
+    const errors = validateDraft({
       title: 'Robux pack',
       description: '',
       priceRubles: '0',
       quantity: 1,
       category: 'Roblox',
       subcategory: 'ROBLOX_ROBUX',
-    })).toEqual([]);
+    });
+    expect(errors.some((e) => e.includes('Цена'))).toBe(true);
   });
 });

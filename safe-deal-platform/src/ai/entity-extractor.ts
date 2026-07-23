@@ -17,7 +17,12 @@ const CATEGORY_ALIASES: Array<{ re: RegExp; value: ProductCategory }> = [
   { re: /\b(roblox|роблокс)\b/i, value: 'ROBLOX' },
   { re: /\b(rp\s*проект|рп\s*проект|rp_projects)\b/i, value: 'RP_PROJECTS' },
   { re: /\b(brawl\s*stars|бравл)\b/i, value: 'BRAWL_STARS' },
-  { re: /\b(pubg|пубг|mobile\s*legends|млбб|cs:?\s*go|ксго|valorant|валорант)\b/i, value: 'OTHER' },
+  { re: /\b(counter[-\s]?strike\s*2|cs\s*2|кс\s*2|ксго|cs:?\s*go)\b/i, value: 'CS2' },
+  { re: /\b(fortnite|фортнайт)\b/i, value: 'FORTNITE' },
+  { re: /\b(valorant|валорант)\b/i, value: 'VALORANT' },
+  { re: /\b(gta\s*5|гта\s*5|gta\s*v)\b/i, value: 'GTA_5' },
+  { re: /\b(gta\s*6|гта\s*6|gta\s*vi)\b/i, value: 'GTA_6' },
+  { re: /\b(pubg|пубг|mobile\s*legends|млбб)\b/i, value: 'OTHER' },
   { re: /\b(другое|other)\b/i, value: 'OTHER' },
 ];
 
@@ -25,13 +30,15 @@ const SUB_ALIASES: Array<{ re: RegExp; value: ProductSubcategory; prefer?: Produ
   { re: /\b(gold|голд[аы]?)\b/i, value: 'STANDOFF_GOLD', prefer: 'STANDOFF_2' },
   { re: /\b(робукс|robux)\b/i, value: 'ROBLOX_ROBUX', prefer: 'ROBLOX' },
   { re: /\b(вирт[ыа]?|virts?)\b/i, value: 'RP_VIRTS', prefer: 'RP_PROJECTS' },
-  { re: /\b(пополнен\w*|top\s*-?up|валют[аы]?)\b/i, value: 'STEAM_TOPUP', prefer: 'STEAM' },
+  { re: /\b(пополнен\w*|top\s*-?up)\b/i, value: 'STEAM_TOPUP', prefer: 'STEAM' },
   { re: /\b(ключ\w*|keys?)\b/i, value: 'STEAM_KEYS', prefer: 'STEAM' },
   { re: /\b(скин\w*|skins?)\b/i, value: 'STEAM_SKINS' },
   { re: /\b(аккаунт\w*|accounts?)\b/i, value: 'STEAM_ACCOUNTS' },
   { re: /\b(предмет\w*|items?)\b/i, value: 'ROBLOX_ITEMS' },
   { re: /\b(донат|donate)\b/i, value: 'BRAWL_DONATE', prefer: 'BRAWL_STARS' },
   { re: /\b(буст|boost)\b/i, value: 'BRAWL_BOOST', prefer: 'BRAWL_STARS' },
+  { re: /\b(услуг\w*|services?)\b/i, value: 'FORTNITE_SERVICES', prefer: 'FORTNITE' },
+  { re: /\b(валют[аы]?|currency)\b/i, value: 'GTA5_CURRENCY', prefer: 'GTA_5' },
 ];
 
 const CREATE_PREFIX = /^(?:создай\s+(?:новый\s+)?товар|новый\s+товар|создать\s+(?:новый\s+)?товар|добавить\s+товар)\s*/i;
@@ -222,7 +229,7 @@ export class EntityExtractor {
     }
     const labelMap: Record<string, ProductSubcategory> = {
       'пополнение': 'STEAM_TOPUP',
-      'валюта': 'STEAM_TOPUP',
+      'валюта': 'GTA5_CURRENCY',
       'ключи': 'STEAM_KEYS',
       'скины': 'STEAM_SKINS',
       'аккаунты': 'STEAM_ACCOUNTS',
@@ -233,12 +240,19 @@ export class EntityExtractor {
       'голда': 'STANDOFF_GOLD',
       'донат': 'BRAWL_DONATE',
       'буст': 'BRAWL_BOOST',
+      'услуги': 'FORTNITE_SERVICES',
+      'прочее': 'OTHER_MISC',
       'другое': 'STEAM_OTHER',
     };
     const key = t.toLowerCase();
     const mapped = labelMap[key];
     if (mapped) {
       if (category && !SUBCATEGORIES_BY_CATEGORY[category].includes(mapped)) {
+        const suffix = mapped.includes('_') ? mapped.slice(mapped.indexOf('_') + 1) : mapped;
+        const bySuffix = SUBCATEGORIES_BY_CATEGORY[category].find(
+          (s) => s === `${category}_${suffix}` || s.endsWith(`_${suffix}`),
+        );
+        if (bySuffix) return bySuffix;
         const others = SUBCATEGORIES_BY_CATEGORY[category].filter((s) => s.endsWith('_OTHER') || s.endsWith('_MISC'));
         return others[0];
       }

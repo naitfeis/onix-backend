@@ -123,15 +123,6 @@
   flex: 0 0 auto;
   text-transform: uppercase;
 }
-.brand__mark {
-  width: 4px;
-  height: 4px;
-  transform: rotate(45deg);
-  background: var(--accent-coral);
-  border: 0;
-  border-radius: 0.5px;
-  box-shadow: 0 0 10px 2px rgba(240, 86, 74, 0.45);
-}
 .topbar__actions {
   display: flex;
   align-items: center;
@@ -282,11 +273,15 @@
   background: transparent;
   overflow-x: visible;
   overflow-y: visible;
+  min-width: 0;
+  max-width: 100%;
   /* No perspective / transform here — they break backdrop-filter vs fixed scene */
 }
 .screen-transition {
   animation: page-turn 320ms var(--ease-out) both;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 @keyframes page-turn {
   from { opacity: 0; }
@@ -733,13 +728,27 @@ html[data-theme="dark"] .button--secondary {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-family: var(--font-display), sans-serif;
+  position: relative;
+  z-index: 1;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   font-size: 34px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
+  line-height: 1.2;
   color: var(--text-primary);
+  -webkit-text-fill-color: var(--text-primary);
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
+  transform: translateZ(0);
+  overflow: visible;
+  min-height: 1.2em;
+}
+.wallet-hero__amount > span {
+  display: inline-block;
+  color: inherit;
+  -webkit-text-fill-color: inherit;
 }
 .wallet-hero__amount small {
   font-size: 13px;
@@ -811,12 +820,20 @@ html[data-theme="dark"] .button--secondary {
 
 .cat-row {
   display: flex;
+  flex-wrap: nowrap;
   gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   scroll-snap-type: x mandatory;
   padding-bottom: 4px;
-  margin: 0 -4px;
-  padding-inline: 4px;
+  margin: 0;
+  padding-inline: 0;
   scrollbar-width: none;
 }
 .cat-row::-webkit-scrollbar { display: none; }
@@ -2762,7 +2779,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .live-pill:last-child { flex: 0 0 140px; max-width: 140px; }
   .cat-row {
     display: grid;
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
     gap: 10px;
     overflow: visible;
     margin: 0;

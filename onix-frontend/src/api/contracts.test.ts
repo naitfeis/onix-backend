@@ -51,7 +51,8 @@ describe('ONIX API paths', () => {
 
   it('uses canonical backend category enum values', () => {
     expect(CATEGORIES).toEqual([
-      'STANDOFF_2', 'STEAM', 'ROBLOX', 'RP_PROJECTS', 'BRAWL_STARS', 'OTHER',
+      'STEAM', 'ROBLOX', 'RP_PROJECTS', 'STANDOFF_2', 'BRAWL_STARS',
+      'CS2', 'FORTNITE', 'VALORANT', 'GTA_5', 'GTA_6', 'OTHER',
     ]);
   });
 });

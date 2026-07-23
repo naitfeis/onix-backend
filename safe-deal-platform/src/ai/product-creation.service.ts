@@ -13,6 +13,11 @@ const CATEGORY_LABELS: Record<ProductCategory, string> = {
   ROBLOX: 'Roblox',
   RP_PROJECTS: 'RP проекты',
   BRAWL_STARS: 'Brawl Stars',
+  CS2: 'Counter-Strike 2',
+  FORTNITE: 'Fortnite',
+  VALORANT: 'Valorant',
+  GTA_5: 'GTA 5',
+  GTA_6: 'GTA 6',
   OTHER: 'Другое',
 };
 
@@ -22,6 +27,11 @@ const SUBCATEGORY_LABELS: Record<string, string> = {
   ROBLOX_ROBUX: 'Робуксы', ROBLOX_ACCOUNTS: 'Аккаунты', ROBLOX_ITEMS: 'Предметы', ROBLOX_OTHER: 'Другое',
   RP_VIRTS: 'Вирты', RP_ACCOUNTS: 'Аккаунты', RP_ITEMS: 'Предметы', RP_OTHER: 'Другое',
   BRAWL_DONATE: 'Донат', BRAWL_ACCOUNTS: 'Аккаунты', BRAWL_BOOST: 'Буст', BRAWL_OTHER: 'Другое',
+  CS2_SKINS: 'Скины', CS2_ACCOUNTS: 'Аккаунты', CS2_BOOST: 'Буст', CS2_OTHER: 'Прочее',
+  FORTNITE_DONATE: 'Донат', FORTNITE_ACCOUNTS: 'Аккаунты', FORTNITE_SERVICES: 'Услуги', FORTNITE_OTHER: 'Прочее',
+  VALORANT_DONATE: 'Донат', VALORANT_ACCOUNTS: 'Аккаунты', VALORANT_SERVICES: 'Услуги', VALORANT_OTHER: 'Прочее',
+  GTA5_DONATE: 'Донат', GTA5_CURRENCY: 'Валюта', GTA5_ACCOUNTS: 'Аккаунты', GTA5_SERVICES: 'Услуги', GTA5_OTHER: 'Прочее',
+  GTA6_ACCOUNTS: 'Аккаунты', GTA6_KEYS: 'Ключи',
   OTHER_ACCOUNTS: 'Аккаунты', OTHER_ITEMS: 'Предметы', OTHER_BOOST: 'Буст', OTHER_MISC: 'Прочее',
 };
 

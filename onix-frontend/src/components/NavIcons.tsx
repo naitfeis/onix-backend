@@ -153,7 +153,6 @@ export function BrandMark() {
   return (
     <div className="brand" aria-label="ONIX">
       <span className="brand__text">ONIX</span>
-      <span className="brand__mark" aria-hidden="true" />
     </div>
   );
 }

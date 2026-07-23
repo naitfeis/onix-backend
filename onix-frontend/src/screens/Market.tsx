@@ -5,9 +5,8 @@ import {
   formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { IconStar, IconWallet } from '../components/NavIcons';
+import { IconStar } from '../components/NavIcons';
 import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
-import { t } from '../i18n';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
@@ -20,6 +19,11 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   ROBLOX: { bg: 'linear-gradient(145deg,#5B8DEF,#3D6FD4)', glow: 'rgba(91,141,239,.32)', letter: 'RB' },
   RP_PROJECTS: { bg: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)', glow: 'rgba(139,127,245,.32)', letter: 'RP' },
   BRAWL_STARS: { bg: 'linear-gradient(145deg,#E8934A,#C47535)', glow: 'rgba(232,147,74,.32)', letter: 'BS' },
+  CS2: { bg: 'linear-gradient(145deg,#F08A2E,#C45A1A)', glow: 'rgba(240,138,46,.35)', letter: 'CS' },
+  FORTNITE: { bg: 'linear-gradient(145deg,#6EC8FF,#3B8FE0)', glow: 'rgba(110,200,255,.32)', letter: 'FN' },
+  VALORANT: { bg: 'linear-gradient(145deg,#FF4655,#C43A45)', glow: 'rgba(255,70,85,.32)', letter: 'VA' },
+  GTA_5: { bg: 'linear-gradient(145deg,#4CAF50,#2E7D32)', glow: 'rgba(76,175,80,.32)', letter: 'V' },
+  GTA_6: { bg: 'linear-gradient(145deg,#E91E8C,#7B2CBF)', glow: 'rgba(233,30,140,.32)', letter: 'VI' },
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
 
@@ -31,7 +35,7 @@ function formatCatCount(n: number): string {
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
-  externalCategory, onExternalCategoryConsumed, openTopup,
+  externalCategory, onExternalCategoryConsumed,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -43,7 +47,6 @@ export function Market({
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
-  openTopup?: () => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [confirm, setConfirm] = useState<Product | null>(null);
@@ -266,24 +269,6 @@ export function Market({
   }, [heroSlides.length]);
 
   return <div className="stack">
-    <section className="wallet-hero wallet-hero--mobile mobile-only" aria-label={t('widgets.wallet')}>
-      <p className="wallet-hero__label">{t('widgets.wallet')}</p>
-      <div className="wallet-hero__amount">
-        {core.profile ? money(core.profile.balanceCents) : '—'}
-        <small>RUB</small>
-      </div>
-      <Button
-        variant="violet"
-        className="wallet-hero__topup"
-        onClick={() => {
-          if (openTopup) openTopup();
-          else switchTo('profile');
-        }}
-      >
-        <IconWallet size={18} /> {t('widgets.addFunds')}
-      </Button>
-    </section>
-
     <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
       <div className="market-hero__track" ref={heroTrackRef}>
         {heroSlides.map((slide, index) => (
