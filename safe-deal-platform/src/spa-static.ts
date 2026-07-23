@@ -33,7 +33,8 @@ export function spaServeModules(): DynamicModule[] {
       exclude: ['/api/{*path}'],
       serveStaticOptions: {
         index: 'index.html',
-        fallthrough: false,
+        // Missing assets → next() instead of Nest NotFoundException stack traces.
+        fallthrough: true,
         setHeaders: (res, filePath) => {
           if (filePath.endsWith('index.html')) {
             res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');

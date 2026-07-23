@@ -14,6 +14,7 @@ import { MetricsService } from './observability/metrics.service';
 import { registerGracefulShutdown } from './observability/graceful-shutdown';
 import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
+import { httpNoiseMiddleware } from './http-noise.middleware';
 import { spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
 
@@ -44,6 +45,8 @@ async function bootstrap(): Promise<void> {
   if (process.env.NODE_ENV === 'production') {
     app.use(compression());
   }
+  // Scanners / favicon.ico — before ServeStatic and Nest (clean logs).
+  app.use(httpNoiseMiddleware);
   // requestId first so timing/metrics/logs can correlate every request.
   app.use(requestIdMiddleware);
   app.use(requestTimingMiddleware);

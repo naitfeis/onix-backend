@@ -34,7 +34,8 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
 
     const requestId = (req.headers['x-request-id'] as string | undefined) ?? undefined;
     const userId = (req as AuthedRequest).user?.id?.toString();
-    const route = `${req.method} ${(req.originalUrl ?? req.url ?? '').split('?')[0]}`;
+    const pathOnly = (req.originalUrl ?? req.url ?? '').split('?')[0] || '';
+    const route = `${req.method} ${pathOnly}`;
     const fields = {
       requestId,
       userId,
@@ -42,9 +43,22 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
       status: res.statusCode,
       durationMs: Number(durationMs.toFixed(1)),
     };
-    if (durationMs >= 1000 || res.statusCode >= 500) {
+    // Render health + LB probes — log only when slow or failing.
+    const isHealthProbe = pathOnly === '/api/health/live'
+      || pathOnly === '/api/health/ready'
+      || pathOnly === '/api/health'
+      || (pathOnly === '/' && req.method === 'HEAD');
+    if (isHealthProbe && res.statusCode < 500 && durationMs < 2000) {
+      return (originalEnd as any)(...args);
+    }
+    // Skip access log for empty scanner 404s (middleware already ended).
+    if (res.statusCode === 404 && (route.endsWith(' /.env') || route.includes(' /.git'))) {
+      return (originalEnd as any)(...args);
+    }
+    // Fast OK / expected 401 guest stay info; warn only on slow or 5xx. Silent 404.
+    if (durationMs >= 2000 || res.statusCode >= 500) {
       structuredLog.warn('http_request', fields);
-    } else {
+    } else if (res.statusCode !== 404) {
       structuredLog.info('http_request', fields);
     }
 

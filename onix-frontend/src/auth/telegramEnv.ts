@@ -72,6 +72,8 @@ export function logTelegramDetect(label: string, detectResult?: boolean): void {
     const key = `${label}:${result}:${initData.length}:${platform}:${Boolean(root.Telegram)}`;
     if (key === lastDetectLogKey) return;
     lastDetectLogKey = key;
+    // Dev-only — production console stays clean (bootstrap timing is enough).
+    if (!import.meta.env.DEV) return;
     // eslint-disable-next-line no-console
     console.info('[tg-detect]', {
       label,

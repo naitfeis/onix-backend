@@ -17,9 +17,21 @@ function initials(name: string): string {
   return value.slice(0, 2).toUpperCase() || '?';
 }
 
+/** Telegram CDN often times out in RU without VPN — skip fetch, show initials. */
+function isUnreliableAvatarHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 't.me' || host.endsWith('.t.me')
+      || host === 'telegram.org' || host.endsWith('.telegram.org');
+  } catch {
+    return false;
+  }
+}
+
 export default function UserAvatar({ avatarUrl, name, size = 'small', online }: UserAvatarProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const showImage = Boolean(avatarUrl && avatarUrl !== failedUrl);
+  const usableUrl = avatarUrl && !isUnreliableAvatarHost(avatarUrl) ? avatarUrl : undefined;
+  const showImage = Boolean(usableUrl && usableUrl !== failedUrl);
   const showPresence = online === true || online === false;
 
   return (
@@ -34,11 +46,12 @@ export default function UserAvatar({ avatarUrl, name, size = 'small', online }: 
       <span className={`user-avatar user-avatar--${size}`}>
         {showImage
           ? <img
-            src={avatarUrl}
+            src={usableUrl}
             alt=""
             loading="lazy"
             decoding="async"
-            onError={() => setFailedUrl(avatarUrl ?? null)}
+            referrerPolicy="no-referrer"
+            onError={() => setFailedUrl(usableUrl ?? null)}
           />
           : <span aria-hidden="true">{initials(name)}</span>}
       </span>

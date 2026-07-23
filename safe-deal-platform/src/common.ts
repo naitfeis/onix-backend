@@ -88,12 +88,18 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const route = `${request?.method ?? '?'} ${request?.originalUrl ?? request?.url ?? '?'}`;
 
     if (error instanceof AuthPlatformError) {
-      structuredLog.warn('auth platform error', {
-        requestId,
-        userId,
-        route,
-        code: error.code,
-      });
+      // Guest / expired cookie on Website is expected — keep logs clean.
+      const quietGuest = error.code === 'AUTH_REFRESH_MISSING'
+        || error.code === 'AUTH_SESSION_EXPIRED'
+        || error.code === 'AUTH_INVALID_TOKEN';
+      if (!quietGuest) {
+        structuredLog.warn('auth platform error', {
+          requestId,
+          userId,
+          route,
+          code: error.code,
+        });
+      }
       response.status(error.httpStatus).json(authErrorBody(error));
       return;
     }
@@ -101,8 +107,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     if (status >= 500) {
       this.errors?.capture(error, { requestId, route, userId, level: 'error' });
-    } else {
-      // Client errors: structured warn only (no error-tracking noise).
+    } else if (status !== 404) {
+      // Client errors: structured warn only (no error-tracking / 404 noise).
       structuredLog.warn(formatErrorForLog(error), { requestId, userId, route, status });
     }
 

@@ -42,9 +42,11 @@ export function authSessionPathMiddleware(req: Request, res: Response, next: Nex
 
   res.on('finish', () => {
     const totalMs = performance.now() - started;
-    const failed = res.statusCode >= 400;
+    // 401 on session probe = guest / expired — not an ops incident.
+    const unexpectedFail = res.statusCode >= 500
+      || (res.statusCode >= 400 && res.statusCode !== 401);
     const slow = totalMs >= 1000;
-    if (!failed && !slow) return;
+    if (!unexpectedFail && !slow) return;
     logger.warn(
       `${isAuthSession ? 'AUTH_SESSION' : 'AUTH_PATH'} `
       + `path=${path} requestId=${requestId} status=${res.statusCode} dur=${totalMs.toFixed(0)}ms`,

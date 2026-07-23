@@ -6,7 +6,6 @@ import {
   isTelegramMiniApp,
   signalTelegramReadyIfMiniApp,
   telegramHaptic,
-  logTelegramDetect,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
@@ -329,7 +328,6 @@ export function useOnixCore() {
     if (coldBootstrapOnce) return;
     coldBootstrapOnce = true;
     bootstrapStart();
-    logTelegramDetect('before refreshAll()');
     void refreshAll();
   }, [refreshAll]);
 

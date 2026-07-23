@@ -16,7 +16,13 @@ const MAX_SAMPLES = 80;
 function push(sample: TimingSample): void {
   samples.push(sample);
   if (samples.length > MAX_SAMPLES) samples.shift();
-  console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
+  // Production: only slow/fail samples (bootstrap summary covers happy path).
+  const failed = Boolean(sample.detail && sample.detail !== 'ok');
+  const slow = sample.durationMs >= 500;
+  if (import.meta.env.DEV || failed || slow) {
+    // eslint-disable-next-line no-console
+    console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
+  }
 }
 
 /** Capture Navigation Timing (call as early as possible from main.tsx). */
@@ -70,5 +76,10 @@ export function getTimingSamples(): readonly TimingSample[] {
 
 /** Mark shell / bootstrap milestones (ms since navigation start ≈ performance.now()). */
 export function markAppReady(label = 'app-ready'): void {
-  push({ name: label, durationMs: performance.now(), at: Date.now() });
+  const sample: TimingSample = { name: label, durationMs: performance.now(), at: Date.now() };
+  samples.push(sample);
+  if (samples.length > MAX_SAMPLES) samples.shift();
+  // Milestones always visible once — complements [bootstrap] summary.
+  // eslint-disable-next-line no-console
+  console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms`);
 }
