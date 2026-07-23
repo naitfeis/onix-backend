@@ -74,8 +74,35 @@ export function markMainEval(phase: 'start' | 'end'): void {
   }
 }
 
+/** Log resources slower than threshold — catches hung CDN/fonts next cold start. */
+export function captureSlowResources(thresholdMs = 1_000): void {
+  try {
+    const entries = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+    const slow = entries
+      .filter((e) => e.duration >= thresholdMs)
+      .sort((a, b) => b.duration - a.duration)
+      .slice(0, 12);
+    for (const entry of slow) {
+      let host = entry.name;
+      try {
+        const u = new URL(entry.name, location.origin);
+        host = u.origin === location.origin ? u.pathname : `${u.host}${u.pathname}`;
+      } catch {
+        /* keep raw */
+      }
+      // eslint-disable-next-line no-console
+      console.info(
+        `[onix-timing] slow-resource=${Math.round(entry.duration)}ms type=${entry.initiatorType || '?'} ${host}`,
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export function printBundleSummary(label = 'bundle'): void {
   captureScriptResourceTiming();
+  captureSlowResources();
   const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const lines = [
     `[${label}]`,

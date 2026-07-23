@@ -730,7 +730,7 @@ html[data-theme="dark"] .button--secondary {
   gap: 8px;
   position: relative;
   z-index: 1;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-display), system-ui, sans-serif;
   font-size: 34px;
   font-weight: 600;
   letter-spacing: -0.01em;
