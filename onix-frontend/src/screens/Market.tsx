@@ -75,11 +75,13 @@ export function Market({
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
-  const [catVisibleCount, setCatVisibleCount] = useState(8);
+  const [catVisibleCount, setCatVisibleCount] = useState(9);
+  const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
+  const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
-  /** One “page” of category cards under «Все» (≈ one desktop row). */
-  const CAT_PAGE_SIZE = 8;
+  /** Categories revealed per «Показать ещё» (under «Все»). */
+  const CAT_PAGE_SIZE = 9;
   const visibleCats = CATEGORIES.slice(0, catVisibleCount);
   const hiddenCatCount = CATEGORIES.length - catVisibleCount;
   const catsFullyOpen = hiddenCatCount <= 0;
@@ -158,6 +160,46 @@ export function Market({
   }, [externalCategory, onExternalCategoryConsumed]);
 
   useEffect(() => {
+    const el = catRowRef.current;
+    if (!el) return;
+    const sync = () => {
+      const max = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCatScroll({ max, value: Math.min(el.scrollLeft, max) });
+    };
+    sync();
+    el.addEventListener('scroll', sync, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', sync);
+    return () => {
+      el.removeEventListener('scroll', sync);
+      ro?.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [visibleCats.length]);
+
+  useEffect(() => {
+    const isDefaultBrowse =
+      category === 'Все' && !subcategory && !query.trim() && sort === 'new';
+
+    // Default home feed: reuse bootstrap catalog — do not fire a second /api/products
+    // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
+    if (isDefaultBrowse) {
+      if (core.states.products === 'success') {
+        setItems(core.products);
+        setHasMore(core.products.length >= PAGE);
+        setMarketError(undefined);
+        setMarketState('success');
+        setOffset(0);
+        return;
+      }
+      if (core.states.products === 'loading' || core.states.products === 'idle') {
+        setMarketState((prev) => (prev === 'success' ? prev : 'loading'));
+        return;
+      }
+      // products === 'error' → fall through to one recoverable fetch
+    }
+
     const controller = new AbortController();
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
@@ -189,7 +231,7 @@ export function Market({
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [category, core.listProducts, query, sort, subcategory]);
+  }, [category, core.listProducts, core.products, core.states.products, query, sort, subcategory]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return;
@@ -335,7 +377,29 @@ export function Market({
     </section>
 
     <div className="cat-block">
-      <div className="cat-row" role="list" aria-label="Категории">
+      {catScroll.max > 0 && (
+        <input
+          type="range"
+          className="cat-scroll-slider mobile-only"
+          min={0}
+          max={catScroll.max}
+          step={1}
+          value={catScroll.value}
+          aria-label="Прокрутка категорий"
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            const row = catRowRef.current;
+            if (row) row.scrollLeft = next;
+            setCatScroll((prev) => ({ ...prev, value: next }));
+          }}
+        />
+      )}
+      <div
+        className="cat-row"
+        role="list"
+        aria-label="Категории"
+        ref={catRowRef}
+      >
         <button
           type="button"
           role="listitem"

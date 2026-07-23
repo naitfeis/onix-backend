@@ -12,11 +12,25 @@
 const phases = new Map<string, number>();
 let bootStarted = 0;
 let summaryPrinted = false;
+let bootAttempt = 0;
+let bootId = '';
 
 export function bootstrapStart(): void {
+  bootAttempt += 1;
   bootStarted = performance.now();
+  bootId = `${bootAttempt}-${Math.round(bootStarted)}`;
   phases.clear();
   summaryPrinted = false;
+  // eslint-disable-next-line no-console
+  console.info(`[bootstrap] START #${bootAttempt} id=${bootId}`);
+}
+
+export function getBootstrapAttempt(): number {
+  return bootAttempt;
+}
+
+export function getBootstrapId(): string {
+  return bootId;
 }
 
 export async function bootstrapPhase<T>(name: string, run: () => Promise<T>): Promise<T> {
@@ -48,7 +62,7 @@ export function printBootstrapSummary(label = 'settled'): void {
   const total = performance.now() - bootStarted;
   phases.set('bootstrap', total);
   const lines = [
-    '[bootstrap]',
+    `[bootstrap] settled #${bootAttempt} id=${bootId}`,
     ...['telegram', 'products-public', 'session-check', 'cookie-check', 'refresh', 'profile-load', 'auth-session', 'me', 'products', 'orders', 'chats', 'profile', 'marketplace', 'bootstrap']
       .filter((key) => phases.has(key))
       .map((key) => `${key}=${Math.round(phases.get(key)!)} ms`),

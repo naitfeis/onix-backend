@@ -26,6 +26,15 @@ let miniAppReadyPromise: Promise<string> | null = null;
 /** Set after ensureTelegramMiniAppReady — covers SDK initData before inject sync. */
 let ensuredInitData = '';
 
+/**
+ * Cached detect result for this page load.
+ * - `true` sticks once initData / markers confirm Mini App.
+ * - `false` sticks only for definitive www (no inject, no tgWebAppData URL).
+ * Ambiguous cases (empty WebApp stub / URL-only) are not cached as false.
+ */
+let cachedIsMiniApp: boolean | undefined;
+let lastDetectLogKey: string | undefined;
+
 function readInjectedWebApp(): TelegramWebAppLike | undefined {
   try {
     const root = globalThis as typeof globalThis & {
@@ -60,6 +69,9 @@ export function logTelegramDetect(label: string, detectResult?: boolean): void {
     const initData = injected?.initData ?? '';
     const platform = injected?.platform ?? '';
     const result = detectResult ?? computeIsTelegramMiniApp();
+    const key = `${label}:${result}:${initData.length}:${platform}:${Boolean(root.Telegram)}`;
+    if (key === lastDetectLogKey) return;
+    lastDetectLogKey = key;
     // eslint-disable-next-line no-console
     console.info('[tg-detect]', {
       label,
@@ -93,9 +105,26 @@ function computeIsTelegramMiniApp(): boolean {
 
 /** True inside Telegram Mini App (initData / URL markers / native platform). */
 export function isTelegramMiniApp(): boolean {
+  if (cachedIsMiniApp === true) return true;
+  if (cachedIsMiniApp === false) return false;
+
   const result = computeIsTelegramMiniApp();
-  logTelegramDetect('isTelegramMiniApp()', result);
-  return result;
+  if (result) {
+    cachedIsMiniApp = true;
+    logTelegramDetect('isTelegramMiniApp:true', true);
+    return true;
+  }
+
+  // Definitive ordinary www — safe to cache for the page lifetime.
+  if (!readInjectedWebApp() && !hasTgWebAppUrlMarker()) {
+    cachedIsMiniApp = false;
+    logTelegramDetect('isTelegramMiniApp:false', false);
+    return false;
+  }
+
+  // Ambiguous: empty inject / pending initData — recompute next call, log once.
+  logTelegramDetect('isTelegramMiniApp:pending', false);
+  return false;
 }
 
 export function getTelegramInitData(): string {
@@ -138,6 +167,7 @@ export async function ensureTelegramMiniAppReady(): Promise<string> {
       if (initData) {
         signalReady(readInjectedWebApp());
         ensuredInitData = initData;
+        cachedIsMiniApp = true;
         logTelegramDetect('ensureTelegramMiniAppReady:injected');
         return initData;
       }
@@ -148,6 +178,7 @@ export async function ensureTelegramMiniAppReady(): Promise<string> {
       initData = (sdk?.initData && String(sdk.initData))
         || (readInjectedWebApp()?.initData ?? '');
       ensuredInitData = initData;
+      if (initData) cachedIsMiniApp = true;
       logTelegramDetect('ensureTelegramMiniAppReady:sdk', Boolean(initData));
       return initData;
     })();
@@ -168,7 +199,7 @@ export function signalTelegramReadyIfMiniApp(): void {
 }
 
 export function telegramHaptic(kind: 'success' | 'error'): void {
-  if (!computeIsTelegramMiniApp()) return;
+  if (!isTelegramMiniApp()) return;
   try {
     telegramWebApp()?.HapticFeedback?.notificationOccurred?.(kind);
   } catch {
@@ -177,7 +208,7 @@ export function telegramHaptic(kind: 'success' | 'error'): void {
 }
 
 export function telegramImpact(style = 'light'): void {
-  if (!computeIsTelegramMiniApp()) return;
+  if (!isTelegramMiniApp()) return;
   try {
     telegramWebApp()?.HapticFeedback?.impactOccurred?.(style);
   } catch {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { money, moneyAmount } from './api/client';
 import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
@@ -180,6 +180,7 @@ export default function App() {
 
   const leftIcons = leftW <= LEFT_ICONS_AT;
   const rightIcons = rightW <= RIGHT_ICONS_AT;
+  const miniApp = useMemo(() => isTelegramMiniApp(), []);
 
   const startResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -350,7 +351,7 @@ export default function App() {
     {showAuth && (
       <Suspense fallback={null}>
         <AuthNotice
-          miniApp={isTelegramMiniApp()}
+          miniApp={miniApp}
           message={core.errors.profile}
           ban={banNotice}
           onAuthenticated={onAuthenticated}

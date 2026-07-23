@@ -825,6 +825,50 @@ html[data-theme="dark"] .button--secondary {
   min-width: 0;
   max-width: 100%;
 }
+.cat-scroll-slider {
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent-violet, #8b7ff5);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+.cat-scroll-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.cat-scroll-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent-violet, #8b7ff5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.cat-scroll-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+.cat-scroll-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-violet, #8b7ff5);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+html[data-theme="light"] .cat-scroll-slider::-webkit-slider-runnable-track,
+html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
+  background: rgba(20, 24, 32, 0.12);
+}
 .cat-row {
   display: flex;
   flex-wrap: nowrap;
@@ -837,13 +881,24 @@ html[data-theme="dark"] .button--secondary {
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x;
-  scroll-snap-type: x mandatory;
-  padding-bottom: 4px;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 4px;
+  padding-bottom: 6px;
   margin: 0;
   padding-inline: 0;
-  scrollbar-width: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 127, 245, 0.55) transparent;
 }
-.cat-row::-webkit-scrollbar { display: none; }
+.cat-row::-webkit-scrollbar {
+  height: 4px;
+}
+.cat-row::-webkit-scrollbar-thumb {
+  background: rgba(139, 127, 245, 0.45);
+  border-radius: 999px;
+}
+.cat-row::-webkit-scrollbar-track {
+  background: transparent;
+}
 .cat-more {
   align-self: center;
   min-height: 36px;
@@ -2819,7 +2874,10 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     padding: 0;
     touch-action: auto;
     scroll-snap-type: none;
+    scrollbar-width: none;
   }
+  .cat-row::-webkit-scrollbar { display: none; }
+  .cat-scroll-slider { display: none !important; }
   .cat-more {
     margin-top: 2px;
   }
