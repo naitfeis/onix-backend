@@ -76,13 +76,13 @@ export function Market({
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
-  const [catVisibleCount, setCatVisibleCount] = useState(9);
+  const [catVisibleCount, setCatVisibleCount] = useState(10);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
   /** Categories shown under «Все» — collapsed = first page, expanded = all. */
-  const CAT_PAGE_SIZE = 9;
+  const CAT_PAGE_SIZE = 10;
   const catsFullyOpen = catVisibleCount >= CATEGORIES.length;
   const visibleCats = catsFullyOpen ? CATEGORIES : CATEGORIES.slice(0, CAT_PAGE_SIZE);
   const isAdmin = Boolean(

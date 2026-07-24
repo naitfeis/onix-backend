@@ -512,16 +512,16 @@ html[data-theme="dark"] .button--secondary {
 }
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, 200px);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  justify-content: start;
+  justify-content: stretch;
 }
 .product-card {
   padding: 0;
   overflow: clip;
   min-height: 0;
-  width: 200px;
-  max-width: 200px;
+  width: 100%;
+  max-width: none;
   position: relative;
   border-radius: var(--radius-card);
   animation: card-in 320ms var(--ease) both;
@@ -881,34 +881,34 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
   background: rgba(20, 24, 32, 0.12);
 }
 .cat-row {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-auto-rows: auto;
   gap: 10px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-x;
-  scroll-snap-type: x proximity;
-  scroll-padding-inline: 4px;
-  padding-bottom: 6px;
+  overflow: visible;
   margin: 0;
-  padding-inline: 0;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(139, 127, 245, 0.55) transparent;
+  padding: 0;
+  touch-action: auto;
+  scroll-snap-type: none;
+  scrollbar-width: none;
 }
 .cat-row::-webkit-scrollbar {
-  height: 4px;
+  display: none;
 }
-.cat-row::-webkit-scrollbar-thumb {
-  background: rgba(139, 127, 245, 0.45);
-  border-radius: 999px;
+.cat-card {
+  width: 100%;
+  min-width: 0;
 }
-.cat-row::-webkit-scrollbar-track {
-  background: transparent;
+@media (max-width: 559px) {
+  .cat-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.cat-scroll-slider {
+  display: none !important;
 }
 .cat-more {
   align-self: center;
@@ -937,11 +937,11 @@ html[data-theme="light"] .cat-more:hover {
   background: rgba(20, 24, 32, 0.08);
 }
 .cat-card {
-  flex: 0 0 96px;
-  width: 96px;
+  flex: none;
+  width: 100%;
+  min-width: 0;
   min-height: 108px;
   height: auto;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1910,6 +1910,15 @@ body.is-resizing-chat * {
   display: flex;
   flex-direction: column;
 }
+@media (max-width: 699px) {
+  .app-shell--chat .conversation {
+    min-height: 0;
+    max-height: none;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
 .conversation .messages { flex: 1 1 auto; min-height: 220px; }
 .conversation__head { padding: 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .conversation__head > div { display: grid; gap: 3px; font-size: 10px; }
@@ -2424,7 +2433,48 @@ body.modal-open {
 body.modal-open .bottom-nav { display: none; }
 body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 
-@media (max-width: 699px) { .chat-layout .mobile-hidden { display: none; } }
+@media (max-width: 699px) {
+  .chat-layout .mobile-hidden { display: none; }
+
+  /* Mini-app chat: fill down to the bottom nav */
+  .app-shell--chat {
+    padding: 0;
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+  .app-shell--chat .viewport {
+    height: calc(100dvh - 78px - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 78px - env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow: hidden;
+  }
+  .app-shell--chat .screen-transition {
+    height: 100%;
+    min-height: 0;
+  }
+  .app-shell--chat .chat-layout {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+    flex: 1 1 auto;
+  }
+  .app-shell--chat .conversation,
+  .app-shell--chat .thread-list {
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .app-shell--chat .chat-edge-resizer,
+  .app-shell--chat .chat-col-resizer {
+    display: none !important;
+  }
+}
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
   .app-shell--chat { padding-inline: 0; }
@@ -3001,7 +3051,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .live-pill:last-child { flex: 0 0 140px; max-width: 140px; }
   .cat-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 10px;
     overflow: visible;
     margin: 0;
@@ -3017,17 +3067,17 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .cat-card {
     flex: none;
-    width: auto;
+    width: 100%;
     height: 72px;
   }
   .product-grid {
-    grid-template-columns: repeat(auto-fill, 220px);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
-    justify-content: start;
+    justify-content: stretch;
   }
   .product-card {
-    width: 220px;
-    max-width: 220px;
+    width: 100%;
+    max-width: none;
   }
   .product-grid--compact { margin-top: 4px; }
   .product-card__buy { width: 100%; border-radius: var(--radius-md); min-height: 40px; }
@@ -3101,8 +3151,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     border-color: var(--nav-active-border);
   }
   .sidebar-right { display: none; }
-  .product-grid { grid-template-columns: repeat(auto-fill, 200px); justify-content: start; }
-  .product-card { width: 200px; max-width: 200px; }
+  .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
+  .product-card { width: 100%; max-width: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3118,10 +3168,10 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 
 /*
- * Light only — chat list + sidebar as clear panels (screenshot windows).
- * Dark theme untouched. Market / other cards untouched.
+ * Frameless sidebars — light + dark (no glass panel frame on the left rail).
  */
-html[data-theme="light"] .sidebar-left {
+html[data-theme="light"] .sidebar-left,
+html[data-theme="dark"] .sidebar-left {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
@@ -3129,7 +3179,8 @@ html[data-theme="light"] .sidebar-left {
   backdrop-filter: none !important;
 }
 
-html[data-theme="light"] .thread-list .thread {
+html[data-theme="light"] .thread-list .thread,
+html[data-theme="dark"] .thread-list .thread {
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
@@ -3141,6 +3192,10 @@ html[data-theme="light"] .thread-list .thread:hover,
 html[data-theme="light"] .thread-list .thread:focus-visible {
   background: rgba(20, 25, 35, 0.06) !important;
 }
+html[data-theme="dark"] .thread-list .thread:hover,
+html[data-theme="dark"] .thread-list .thread:focus-visible {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
 
 html[data-theme="light"] .thread-list .chat-toolbar .control {
   background: transparent !important;
@@ -3149,10 +3204,24 @@ html[data-theme="light"] .thread-list .chat-toolbar .control {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+html[data-theme="dark"] .thread-list .chat-toolbar .control {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
 
 html[data-theme="light"] .thread-list .chat-toolbar .button--secondary {
   background: transparent !important;
   border-color: rgba(20, 25, 35, 0.14) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

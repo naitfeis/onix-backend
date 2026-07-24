@@ -588,7 +588,6 @@ export default function App() {
                   ))
                 )}
               </div>
-              <button type="button" className="widget-link" onClick={() => switchTo('deals')}>Мои сделки →</button>
             </div>
             <div className="widget widget--glass">
               <h3>Новые лоты</h3>
@@ -623,7 +622,6 @@ export default function App() {
                   })
                 )}
               </div>
-              <button type="button" className="widget-link" onClick={() => switchTo('market')}>Все лоты →</button>
             </div>
           </>
         )}
