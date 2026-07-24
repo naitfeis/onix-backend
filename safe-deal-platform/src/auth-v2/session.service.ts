@@ -718,8 +718,8 @@ export class SessionService {
   private async waitForGraceRotation(
     sessionId: string,
     presentedHash: string,
-    attempts = 10,
-    delayMs = 20,
+    attempts = 15,
+    delayMs = 25,
   ): Promise<SessionAuthResult | null> {
     for (let i = 0; i < attempts; i += 1) {
       const hit = this.takeGraceRotation(sessionId, presentedHash);

@@ -6,6 +6,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { requestIdMiddleware } from './auth-v2/request-id.middleware';
 import { authSessionPathMiddleware } from './auth-v2/auth-session-path.middleware';
+import { buildInfo } from './build-info';
 import { ApiEnvelopeInterceptor } from './common';
 import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
 import { registerHealthEndpoint } from './health';
@@ -15,6 +16,7 @@ import { registerGracefulShutdown } from './observability/graceful-shutdown';
 import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
+import { createSecurityMiddleware, resolveCorsOrigins } from './security-headers';
 import { spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
 
@@ -34,19 +36,21 @@ async function bootstrap(): Promise<void> {
     log: (m) => structuredLog.info(m),
     warn: (m) => structuredLog.warn(m),
   });
-  structuredLog.info('NestFactory starting');
+  structuredLog.info('NestFactory starting', buildInfo());
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     // Single Nest logger — avoid duplicate framework noise on Render.
     logger: ['error', 'warn', 'log'],
   });
 
+  // Security headers first (Helmet + CSP).
+  app.use(createSecurityMiddleware());
+  // Scanners / favicon.ico — before ServeStatic and Nest (clean 404, never 500).
+  app.use(httpNoiseMiddleware);
   // gzip only in production (Render NODE_ENV=production). Dev stays uncompressed for easier debugging.
   if (process.env.NODE_ENV === 'production') {
     app.use(compression());
   }
-  // Scanners / favicon.ico — before ServeStatic and Nest (clean logs).
-  app.use(httpNoiseMiddleware);
   // requestId first so timing/metrics/logs can correlate every request.
   app.use(requestIdMiddleware);
   app.use(requestTimingMiddleware);
@@ -66,9 +70,7 @@ async function bootstrap(): Promise<void> {
     exceptionFactory: validationExceptionFactory,
   }));
   app.useGlobalInterceptors(new ApiEnvelopeInterceptor());
-  const origins = (process.env.CORS_ORIGINS
-    ?? 'http://localhost:5173,https://www.onixtg.shop,https://onixtg.shop')
-    .split(',').map((value) => value.trim()).filter(Boolean);
+  const origins = resolveCorsOrigins();
   app.enableCors({
     origin: origins,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -91,7 +93,9 @@ async function bootstrap(): Promise<void> {
   structuredLog.info('Listening', {
     port,
     spaEnabled,
+    corsOrigins: origins.join(','),
     keepAliveTimeout: server.keepAliveTimeout,
+    ...buildInfo(),
   });
 
   process.on('unhandledRejection', (reason) => {

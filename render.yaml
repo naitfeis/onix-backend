@@ -17,6 +17,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: ENABLE_DEBUG_ENDPOINTS
+        value: "false"
       - key: WEB_CONCURRENCY
         value: "1"
       - key: RENDER_REGION

@@ -2,6 +2,15 @@
  * Client-facing avatar URL — same-origin so RU browsers never hit t.me CDN.
  * Source Telegram photo_url stays in DB; GET /api/avatars/:id fetches + caches.
  */
+
+export const AVATAR_MAX_BYTES = 512 * 1024;
+export const AVATAR_ALLOWED_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 export function publicAvatarUrl(userId: bigint | string | number): string {
   return `/api/avatars/${userId.toString()}`;
 }
@@ -29,4 +38,30 @@ export function isAllowedTelegramAvatarHost(hostname: string): boolean {
     || host.endsWith('.telegram-cdn.org')
     || host === 'api.telegram.org'
   );
+}
+
+/** Reject private / link-local / weird hosts even if somehow allowlisted later. */
+export function isBlockedAvatarIpLiteral(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host === '0.0.0.0') return true;
+  if (host.startsWith('127.') || host.startsWith('10.') || host.startsWith('192.168.')) return true;
+  if (host.startsWith('169.254.')) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(host)) return true;
+  if (host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return true;
+  if (host.endsWith('.local') || host.endsWith('.internal')) return true;
+  return false;
+}
+
+export function assertSafeAvatarUrl(raw: string): URL | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:') return null;
+  if (parsed.username || parsed.password) return null;
+  if (isBlockedAvatarIpLiteral(parsed.hostname)) return null;
+  if (!isAllowedTelegramAvatarHost(parsed.hostname)) return null;
+  return parsed;
 }

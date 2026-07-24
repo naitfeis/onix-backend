@@ -87,7 +87,7 @@ export class AuthV2Controller {
     @Res({ passthrough: true }) res: Response,
   ) {
     const t0 = process.hrtime.bigint();
-    assertRateLimit(`auth:v2:refresh:${req.ip ?? 'unknown'}`, 120, 60_000);
+    assertRateLimit(`auth:v2:refresh:${req.ip ?? 'unknown'}`, 60, 60_000);
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     if (!refreshToken) {
@@ -140,8 +140,10 @@ export class AuthV2Controller {
   @Header('Cache-Control', 'no-store')
   async session(
     @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: { ip?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
+    assertRateLimit(`auth:v2:session:${req.ip ?? 'unknown'}`, 90, 60_000);
     const t0 = performance.now();
 
     const tCookie = performance.now();

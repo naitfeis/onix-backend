@@ -22,7 +22,8 @@ export class AvatarController {
     @Req() req: { ip?: string; headers?: { 'if-none-match'?: string } },
     @Res() res: Response,
   ): Promise<void> {
-    assertRateLimit(`avatar:${req.ip ?? 'unknown'}`, 120, 60_000);
+    // Public CDN-like endpoint — tighter than before to limit enumeration / cost.
+    assertRateLimit(`avatar:${req.ip ?? 'unknown'}`, 90, 60_000);
 
     if (!/^\d+$/.test(userIdRaw)) {
       res.status(404).end();
@@ -39,6 +40,8 @@ export class AvatarController {
       res.setHeader('Content-Type', contentType);
       res.setHeader('ETag', etag);
       res.setHeader('X-Content-Type-Options', 'nosniff');
+      // Avoid SVG/document XSS if content-type ever drifts — treat as downloadable asset.
+      res.setHeader('Content-Disposition', 'inline');
       stream.pipe(res);
     } catch {
       res.status(404).end();

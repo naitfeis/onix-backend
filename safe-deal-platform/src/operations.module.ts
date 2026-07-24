@@ -21,9 +21,10 @@ import { requireUserByOnixId } from './onix-id-lookup';
 import {
   flagsFromPlatformStatus, isPlatformStatus, isPrivilegedAdmin, isSuperAdminStatus,
 } from './platform-status';
+import { debugEndpointsEnabled } from './debug-endpoints';
+import { buildInfo } from './build-info';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
-import { debugEndpointsEnabled } from './debug-endpoints';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -479,14 +480,29 @@ class HealthController {
   @Public()
   @Get('live')
   @Header('Cache-Control', 'no-store')
-  live() { return { status: 'ok', service: 'onix-api' }; }
+  live() {
+    const info = buildInfo();
+    return {
+      status: 'ok',
+      service: info.service,
+      version: info.version,
+      commit: info.commitShort,
+      region: info.region,
+    };
+  }
 
   @Public()
   @Get('ready')
   @Header('Cache-Control', 'no-store')
   async ready() {
     await this.prisma.$queryRaw`SELECT 1`;
-    return { status: 'ready', database: 'ok' };
+    const info = buildInfo();
+    return {
+      status: 'ready',
+      database: 'ok',
+      version: info.version,
+      commit: info.commitShort,
+    };
   }
 
   /**

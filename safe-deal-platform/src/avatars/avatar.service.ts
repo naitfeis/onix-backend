@@ -4,11 +4,15 @@ import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { isAllowedTelegramAvatarHost } from './avatar-url';
+import {
+  assertSafeAvatarUrl,
+  AVATAR_ALLOWED_TYPES,
+  AVATAR_MAX_BYTES,
+} from './avatar-url';
 
-const MAX_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 10_000;
 const NEGATIVE_TTL_MS = 60_000;
+const MAX_REDIRECTS = 5;
 
 type CacheMeta = {
   sourceUrl: string;
@@ -119,7 +123,12 @@ export class AvatarService {
     if (existsSync(metaFile) && existsSync(binFile)) {
       try {
         const meta = JSON.parse(await readFile(metaFile, 'utf8')) as CacheMeta;
-        if (meta.sourceUrl === sourceUrl && meta.contentType && meta.etag) {
+        if (
+          meta.sourceUrl === sourceUrl
+          && meta.contentType
+          && meta.etag
+          && AVATAR_ALLOWED_TYPES.has(meta.contentType)
+        ) {
           return meta;
         }
       } catch {
@@ -199,51 +208,66 @@ export class AvatarService {
     }
   }
 
+  /**
+   * SSRF-safe fetch: each hop (including redirects) must stay on Telegram allowlist.
+   * Never follows open redirects to arbitrary hosts.
+   */
   private async fetchTelegramAvatar(
     sourceUrl: string,
   ): Promise<{ buffer: Buffer; contentType: string } | null> {
-    let parsed: URL;
-    try {
-      parsed = new URL(sourceUrl);
-    } catch {
-      return null;
-    }
-    if (parsed.protocol !== 'https:') return null;
-    if (!isAllowedTelegramAvatarHost(parsed.hostname)) {
-      this.logger.warn(`avatar fetch blocked host=${parsed.hostname}`);
-      return null;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const response = await fetch(parsed.toString(), {
-        method: 'GET',
-        redirect: 'follow',
-        signal: controller.signal,
-        headers: {
-          Accept: 'image/*,*/*;q=0.8',
-          'User-Agent': 'ONIX-AvatarCache/1.0',
-        },
-      });
-      if (!response.ok) return null;
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      if (buffer.length === 0 || buffer.length > MAX_BYTES) return null;
-
-      // t.me often 302→telesco.pe; sniff magic if Content-Type is wrong/missing.
-      let contentType = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
-      if (!contentType.startsWith('image/')) {
-        contentType = sniffImageContentType(buffer) ?? '';
+    let current = sourceUrl;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+      const parsed = assertSafeAvatarUrl(current);
+      if (!parsed) {
+        this.logger.warn(`avatar fetch blocked url=${safeUrlForLog(current)}`);
+        return null;
       }
-      if (!contentType.startsWith('image/')) return null;
-      return { buffer, contentType };
-    } catch (error) {
-      this.logger.warn(`avatar fetch failed: ${error instanceof Error ? error.message : error}`);
-      return null;
-    } finally {
-      clearTimeout(timer);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const response = await fetch(parsed.toString(), {
+          method: 'GET',
+          redirect: 'manual',
+          signal: controller.signal,
+          headers: {
+            Accept: 'image/jpeg,image/png,image/webp,image/gif',
+            'User-Agent': 'ONIX-AvatarCache/1.0',
+          },
+        });
+
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get('location');
+          if (!location) return null;
+          try {
+            current = new URL(location, parsed).toString();
+          } catch {
+            return null;
+          }
+          continue;
+        }
+
+        if (!response.ok) return null;
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length === 0 || buffer.length > AVATAR_MAX_BYTES) return null;
+
+        let contentType = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+        if (!AVATAR_ALLOWED_TYPES.has(contentType)) {
+          contentType = sniffRasterContentType(buffer) ?? '';
+        }
+        // SVG banned — XSS if served as document; Telegram profile photos are raster after CDN.
+        if (!AVATAR_ALLOWED_TYPES.has(contentType)) return null;
+        return { buffer, contentType };
+      } catch (error) {
+        this.logger.warn(`avatar fetch failed: ${error instanceof Error ? error.message : error}`);
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    this.logger.warn('avatar fetch exceeded redirect limit');
+    return null;
   }
 
   /** Test helper */
@@ -259,7 +283,17 @@ function botProfileMarker(telegramId: bigint): string {
   return `tg:profile:${telegramId.toString()}`;
 }
 
-function sniffImageContentType(buffer: Buffer): string | null {
+function safeUrlForLog(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.host}${u.pathname}`;
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+/** Raster only — never SVG/XML. */
+function sniffRasterContentType(buffer: Buffer): string | null {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg';
   }
@@ -283,7 +317,5 @@ function sniffImageContentType(buffer: Buffer): string | null {
     const head = buffer.toString('ascii', 0, 6);
     if (head === 'GIF87a' || head === 'GIF89a') return 'image/gif';
   }
-  const asText = buffer.subarray(0, Math.min(buffer.length, 256)).toString('utf8').trimStart();
-  if (asText.startsWith('<svg') || asText.startsWith('<?xml')) return 'image/svg+xml';
   return null;
 }

@@ -105,6 +105,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
 
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const isProd = (process.env.NODE_ENV ?? '').toLowerCase() === 'production';
     if (status >= 500) {
       this.errors?.capture(error, { requestId, route, userId, level: 'error' });
     } else if (status !== 404 && status !== 401 && status !== 403) {
@@ -115,18 +116,34 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     const raw = error instanceof HttpException ? error.getResponse() : null;
     const details = typeof raw === 'object' && raw ? (raw as Record<string, unknown>) : undefined;
-    const message = typeof raw === 'string'
+    let message = typeof raw === 'string'
       ? raw
       : (details as { message?: string | string[] } | undefined)?.message ?? 'Внутренняя ошибка сервера.';
     const field = typeof details?.field === 'string' ? details.field : undefined;
     const fieldError = typeof details?.error === 'string' ? details.error : undefined;
+
+    // Production 5xx: never leak stacks / internal details to clients.
+    if (status >= 500 && isProd) {
+      message = 'Внутренняя ошибка сервера.';
+      response.status(status).json({
+        success: false,
+        error: {
+          code: 'InternalServerError',
+          message,
+          ...(requestId ? { requestId } : {}),
+        },
+      });
+      return;
+    }
+
     response.status(status).json({
       success: false,
       error: {
         code: error instanceof HttpException ? error.name : 'InternalServerError',
         message,
         ...(field ? { field, error: fieldError ?? (typeof message === 'string' ? message : field) } : {}),
-        ...(details ? { details } : {}),
+        ...(details && status < 500 ? { details } : {}),
+        ...(requestId ? { requestId } : {}),
       },
     });
   }

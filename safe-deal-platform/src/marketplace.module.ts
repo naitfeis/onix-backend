@@ -466,10 +466,11 @@ export class MarketplaceController {
   @Public()
   @Get()
   async list(
-    @Req() req: { headers?: Record<string, string | string[] | undefined> },
+    @Req() req: { headers?: Record<string, string | string[] | undefined>; ip?: string },
     @Res({ passthrough: true }) res: Response,
     @Query() query: ProductQuery,
   ) {
+    assertRateLimit(`products:list:${req.ip ?? 'unknown'}`, 90, 60_000);
     const user = await this.optionalViewer(req);
     res.setHeader(
       'Cache-Control',
@@ -513,9 +514,10 @@ export class MarketplaceController {
   @Get(':id')
   @Header('Cache-Control', 'private, no-store')
   async get(
-    @Req() req: { headers?: Record<string, string | string[] | undefined> },
+    @Req() req: { headers?: Record<string, string | string[] | undefined>; ip?: string },
     @Param('id') id: string,
   ) {
+    assertRateLimit(`products:get:${req.ip ?? 'unknown'}`, 120, 60_000);
     const user = await this.optionalViewer(req);
     return this.service.get(user, id);
   }
