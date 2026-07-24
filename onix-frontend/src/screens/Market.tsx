@@ -15,6 +15,26 @@ import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 
+/** Lot-type filters when category is «Все» — always visible under search/sort. */
+const ALL_TYPE_FILTERS = [
+  { id: 'donate', label: 'Донат' },
+  { id: 'accounts', label: 'Аккаунты' },
+  { id: 'services', label: 'Услуги' },
+  { id: 'other', label: 'Прочее' },
+] as const;
+type AllTypeId = (typeof ALL_TYPE_FILTERS)[number]['id'];
+
+function matchesLotType(subcategory: string | undefined, type: AllTypeId): boolean {
+  const code = (subcategory || '').toUpperCase();
+  if (!code) return type === 'other';
+  if (type === 'donate') {
+    return /DONATE|TOPUP|GOLD|ROBUX|VIRTS|CURRENCY|GIFTCARD/.test(code);
+  }
+  if (type === 'accounts') return /ACCOUNT/.test(code);
+  if (type === 'services') return /SERVICE|BOOST/.test(code);
+  return !/DONATE|TOPUP|GOLD|ROBUX|VIRTS|CURRENCY|GIFTCARD|ACCOUNT|SERVICE|BOOST/.test(code);
+}
+
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
   STEAM: { bg: 'linear-gradient(145deg,#4A8FE0,#346FB8)', glow: 'rgba(74,143,224,.32)', letter: 'ST' },
@@ -144,9 +164,22 @@ export function Market({
   };
 
   const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
-  const marketSubs = category !== 'Все'
-    ? (SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
+  const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
+  const categorySubs = category !== 'Все'
+    ? (catalog[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
+  /** Under search/sort: game subs, or global Донат/Аккаунты/… when «Все». */
+  const marketChips = category !== 'Все'
+    ? categorySubs.map((code) => ({ id: code, label: (SUBCATEGORY_LABELS[code] ?? code).toUpperCase() }))
+    : ALL_TYPE_FILTERS.map((item) => ({ id: `type:${item.id}`, label: item.label.toUpperCase() }));
+  const activeTypeFilter = subcategory.startsWith('type:')
+    ? (subcategory.slice(5) as AllTypeId)
+    : null;
+
+  const applyLocalFilters = (rows: Product[]) => {
+    if (!activeTypeFilter || category !== 'Все') return rows;
+    return rows.filter((row) => matchesLotType(row.subcategory, activeTypeFilter));
+  };
 
   useEffect(() => {
     if (!externalCategory || externalCategory === 'Все') return;
@@ -213,12 +246,12 @@ export function Market({
         // Otherwise keep free-text title/seller search.
         search: searchCat ? undefined : (q || undefined),
         category: category === 'Все' ? searchCat : category,
-        subcategory: subcategory || undefined,
+        subcategory: activeTypeFilter ? undefined : (subcategory || undefined),
         sort: serverSort,
         limit: PAGE,
         offset: 0,
       }, controller.signal).then((data) => {
-        setItems(data);
+        setItems(applyLocalFilters(data));
         setHasMore(data.length >= PAGE);
         setMarketError(undefined);
         setMarketState('success');
@@ -244,12 +277,12 @@ export function Market({
       const data = await core.listProducts({
         search: searchCat ? undefined : (q || undefined),
         category: category === 'Все' ? searchCat : category,
-        subcategory: subcategory || undefined,
+        subcategory: activeTypeFilter ? undefined : (subcategory || undefined),
         sort: serverSort,
         limit: PAGE,
         offset: next,
       });
-      setItems((prev) => [...prev, ...data]);
+      setItems((prev) => [...prev, ...applyLocalFilters(data)]);
       setOffset(next);
       setHasMore(data.length >= PAGE);
     } catch (error) {
@@ -526,16 +559,19 @@ export function Market({
       </Select>
     </div>
 
-    {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
-      {marketSubs.map(item => (
-        <button
-          role="listitem"
-          className={subcategory === item ? 'active' : ''}
-          key={item}
-          onClick={() => setSubcategory(subcategory === item ? '' : item)}
-        >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
-      ))}
-    </div>}
+    {marketChips.length > 0 && (
+      <div className="chips market-subchips" role="list" aria-label="Подкатегории">
+        {marketChips.map((item) => (
+          <button
+            type="button"
+            role="listitem"
+            className={subcategory === item.id ? 'active' : ''}
+            key={item.id}
+            onClick={() => setSubcategory(subcategory === item.id ? '' : item.id)}
+          >{item.label}</button>
+        ))}
+      </div>
+    )}
 
     {onixQuery && <Button variant="secondary" onClick={async () => {
       try {

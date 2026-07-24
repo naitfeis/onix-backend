@@ -1539,6 +1539,15 @@ select.control:focus {
   box-sizing: border-box;
   justify-content: center;
 }
+.market-subchips {
+  margin: 4px 0 12px;
+  justify-content: flex-start;
+}
+@media (max-width: 699px) {
+  .market-subchips {
+    justify-content: center;
+  }
+}
 .chips button, .segmented button {
   flex: 0 1 auto;
   white-space: normal;
