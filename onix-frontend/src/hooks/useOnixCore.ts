@@ -440,7 +440,9 @@ export function useOnixCore() {
           return {
             ...previous,
             products: previous.products.map((p) => (
-              p.id === msg.productId ? { ...p, status: msg.status, quantity: msg.quantity } : p
+              p.id === msg.productId
+                ? { ...p, status: 'ACTIVE' as const, quantity: msg.quantity }
+                : p
             )),
           };
         });
