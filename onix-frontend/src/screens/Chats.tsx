@@ -15,7 +15,6 @@ const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
 const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
-const CHAT_PANEL_Y_KEY = 'onix-chat-panel-y';
 const CHAT_LIST_DEFAULT = 280;
 const CHAT_LIST_MIN = 200;
 const CHAT_PANEL_W_MIN = 520;
@@ -37,10 +36,11 @@ function chatViewportH(): number {
 }
 
 function defaultChatPanelSize(): { w: number; h: number } {
-  if (typeof window === 'undefined') return { w: 960, h: 640 };
+  if (typeof window === 'undefined') return { w: 960, h: 800 };
+  const vh = chatViewportH();
   return {
     w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
-    h: Math.min(720, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 200)),
+    h: vh,
   };
 }
 
@@ -110,13 +110,10 @@ export function Chats({
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
   const [panelH, setPanelH] = useState(() => {
-    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN);
-    return Math.min(raw, Math.max(CHAT_PANEL_H_MIN, chatViewportH()));
-  });
-  const [panelY, setPanelY] = useState(() => {
     const vh = chatViewportH();
-    const raw = readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0);
-    return Math.min(raw, Math.max(0, vh - CHAT_PANEL_H_MIN));
+    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, vh, CHAT_PANEL_H_MIN);
+    // Old short heights → fill the screen so more messages fit without scrolling.
+    return Math.min(vh, raw < vh * 0.85 ? vh : raw);
   });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -153,49 +150,6 @@ export function Chats({
     window.addEventListener('pointerup', onUp);
   };
 
-  /** Top handle: lower / raise — window stays fully on screen (no page scroll). */
-  const startPanelMove = (event: ReactPointerEvent<HTMLElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const startY = event.clientY;
-    const startOffset = panelY;
-    const target = event.currentTarget;
-    const layout = (target.closest('.chat-layout') as HTMLElement | null) ?? target;
-    try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-    document.body.classList.add('is-moving-chat');
-    let latest = startOffset;
-    let raf = 0;
-    const vh = chatViewportH();
-    // Can lower far: top moves down; height caps so the window never leaves the screen.
-    const maxY = Math.max(0, vh - CHAT_PANEL_H_MIN);
-    const apply = (next: number) => {
-      latest = next;
-      const h = Math.min(panelH, Math.max(CHAT_PANEL_H_MIN, vh - next));
-      layout.style.setProperty('--chat-panel-y', `${next}px`);
-      layout.style.marginTop = `${next}px`;
-      layout.style.height = `${h}px`;
-    };
-    const onMove = (ev: PointerEvent) => {
-      const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => apply(next));
-    };
-    const onUp = (ev: PointerEvent) => {
-      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
-      if (raf) cancelAnimationFrame(raf);
-      document.body.classList.remove('is-moving-chat');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      const rounded = Math.round(latest);
-      setPanelY(rounded);
-      try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(rounded)); } catch { /* ignore */ }
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  };
-
   const startPanelResize = (
     mode: 'x' | 'y' | 'xy',
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -214,9 +168,7 @@ export function Chats({
     let latestW = startW;
     let latestH = startH;
     let raf = 0;
-    const vh = chatViewportH();
-    // Grow downward only into remaining space under current offset.
-    const maxH = Math.max(CHAT_PANEL_H_MIN, vh - panelY);
+    const maxH = chatViewportH();
     const apply = (w: number, h: number) => {
       latestW = w;
       latestH = h;
@@ -249,13 +201,6 @@ export function Chats({
       const h = Math.round(latestH);
       setPanelW(w);
       setPanelH(h);
-      const maxY = Math.max(0, vh - h);
-      if (panelY > maxY) {
-        setPanelY(maxY);
-        try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(maxY)); } catch { /* ignore */ }
-        layout?.style.setProperty('--chat-panel-y', `${maxY}px`);
-        if (layout) layout.style.marginTop = `${maxY}px`;
-      }
       try {
         localStorage.setItem(CHAT_PANEL_W_KEY, String(w));
         localStorage.setItem(CHAT_PANEL_H_KEY, String(h));
@@ -550,26 +495,16 @@ export function Chats({
     return <Card><Skeleton lines={6} /></Card>;
   }
 
-  const fittedH = Math.min(panelH, Math.max(CHAT_PANEL_H_MIN, chatViewportH() - panelY));
-
   return <div
     className="chat-layout"
     style={{
       '--chat-list-w': `${listW}px`,
       '--chat-panel-w': `${panelW}px`,
       '--chat-panel-h': `${panelH}px`,
-      '--chat-panel-y': `${panelY}px`,
       width: panelW,
-      height: fittedH,
-      marginTop: panelY,
+      height: panelH,
     } as CSSProperties}
   >
-    <button
-      type="button"
-      className="chat-move-handle desktop-only"
-      aria-label="Опустить или поднять окно чата"
-      onPointerDown={startPanelMove}
-    />
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
         <Input
@@ -862,7 +797,7 @@ export function Chats({
     <button
       type="button"
       className="chat-edge-resizer chat-edge-resizer--y desktop-only"
-      aria-label="Тяни вниз, чтобы увеличить высоту чата"
+      aria-label="Растянуть чат вниз"
       onPointerDown={(event) => startPanelResize('y', event)}
     />
     <button
