@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header,
-  Injectable, Module, NotFoundException, Param, Patch, Post, Query,
+  Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -20,7 +20,8 @@ import { publicDisplayName } from './public-username';
 import { clientAvatarUrl } from './avatars/avatar-url';
 import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
-
+import { RealtimeBus } from './realtime/realtime-bus.service';
+import { RealtimeModule } from './realtime/realtime.module';
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
 class MessageDto { @IsString() @Length(1, 2000) text!: string; }
 class MessagesQuery {
@@ -67,6 +68,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AIService,
+    @Optional() private readonly realtime?: RealtimeBus,
   ) {}
 
   async list(user: AuthUser, search?: string) {
@@ -473,10 +475,73 @@ export class ChatService {
       void pushTelegramToChatId(peer.telegramId, 'Новое сообщение', body.slice(0, 200));
     }
 
+    this.fanoutChatMessage(
+      chatId,
+      message,
+      user,
+      others.map((o) => o.userId),
+      memberReads,
+    );
+
     return messageDto(message, user.id, {
       staffViewer: isStaffViewer(user),
       memberReads,
     });
+  }
+
+  private fanoutChatMessage(
+    chatId: string,
+    message: {
+      id: bigint;
+      chatId: string;
+      senderId: bigint | null;
+      kind?: string;
+      text: string;
+      createdAt: Date;
+      deletedAt?: Date | null;
+      deletedById?: bigint | null;
+      deletedReason?: string | null;
+      sender: Parameters<typeof messageDto>[0]['sender'];
+    },
+    sender: AuthUser,
+    peerIds: bigint[],
+    memberReads: Array<{
+      userId: bigint;
+      onixId: string;
+      username: string;
+      lastReadAt: Date | null;
+    }>,
+  ): void {
+    if (!this.realtime) return;
+    const messageByViewer = new Map<string, Record<string, unknown>>();
+    const viewers = [sender.id, ...peerIds];
+    for (const viewerId of viewers) {
+      messageByViewer.set(
+        viewerId.toString(),
+        messageDto(message, viewerId, {
+          staffViewer: viewerId === sender.id ? isStaffViewer(sender) : false,
+          memberReads: viewerId === sender.id ? memberReads : undefined,
+        }) as unknown as Record<string, unknown>,
+      );
+    }
+    this.realtime.publish({
+      kind: 'chat.message',
+      chatId,
+      recipientUserIds: peerIds,
+      messageByViewer,
+      senderId: sender.id,
+    });
+    for (const peerId of peerIds) {
+      this.realtime.publish({
+        kind: 'notification',
+        userId: peerId,
+        id: `msg-${message.id.toString()}`,
+        title: 'Новое сообщение',
+        body: message.text.slice(0, 160),
+        createdAt: message.createdAt.toISOString(),
+        data: { chatId },
+      });
+    }
   }
 
   /** Hide message for current user only. */
@@ -883,7 +948,7 @@ export class EngagementController {
 }
 
 @Module({
-  imports: [AiModule],
+  imports: [AiModule, RealtimeModule],
   controllers: [EngagementController],
   providers: [ChatService, NotificationService, ReviewService],
 })

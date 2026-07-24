@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
-  Module, NotFoundException, Param, Post, Query,
+  Module, NotFoundException, Optional, Param, Post, Query,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -14,6 +14,8 @@ import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
+import { RealtimeBus } from './realtime/realtime-bus.service';
+import { RealtimeModule } from './realtime/realtime.module';
 import { buildLightDisputeCard, invalidateArbitrationContextCache } from './dispute-card';
 import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect } from './query-selects';
@@ -58,7 +60,25 @@ export class EscrowService {
     private readonly balance: BalanceService,
     private readonly clawbacks: ClawbackService,
     private readonly locks: LockService,
+    @Optional() private readonly realtime?: RealtimeBus,
   ) {}
+
+  private emitOrderUpdated(order: {
+    id: bigint;
+    status: string;
+    buyerId: bigint;
+    sellerId: bigint;
+    chatId?: string | null;
+  }): void {
+    if (!this.realtime) return;
+    this.realtime.publish({
+      kind: 'order.updated',
+      orderId: order.id.toString(),
+      status: order.status,
+      ...(order.chatId ? { chatId: order.chatId } : {}),
+      recipientUserIds: [order.buyerId, order.sellerId],
+    });
+  }
 
   async list(user: AuthUser, query: OrderQuery = {}) {
     const statusWhere: Prisma.OrderWhereInput =
@@ -265,6 +285,11 @@ export class EscrowService {
 
   async deliver(user: AuthUser, id: bigint, key: string) {
     await this.transition(id, user, 'PAYMENT_HOLD', 'DELIVERING', 'seller', key);
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
+    });
+    this.emitOrderUpdated(order);
     return this.one(user, id);
   }
 
@@ -273,11 +298,14 @@ export class EscrowService {
       allowedFrom: ['DELIVERING'],
       requireBuyer: true,
     });
-    const seller = await this.prisma.user.findUnique({
-      where: { id: (await this.prisma.order.findUniqueOrThrow({ where: { id }, select: { sellerId: true } })).sellerId },
-      select: { telegramId: true },
+    const order = await this.prisma.order.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true, seller: { select: { telegramId: true } } },
     });
-    if (seller) void pushTelegramToChatId(seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
+    this.emitOrderUpdated(order);
+    if (order.seller.telegramId) {
+      void pushTelegramToChatId(order.seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
+    }
     return this.one(user, id);
   }
 
@@ -329,6 +357,13 @@ export class EscrowService {
     if (sellerTg) {
       void pushTelegramToChatId(sellerTg.telegramId, 'Поступили деньги', 'Поддержка подтвердила сделку — выплата зачислена.');
     }
+    this.emitOrderUpdated({
+      id: order.id,
+      status: order.status,
+      buyerId: order.buyerId,
+      sellerId: order.sellerId,
+      chatId: order.chat?.id,
+    });
     return dealDto(order, actor);
   }
 
@@ -461,7 +496,13 @@ export class EscrowService {
     for (const peer of peers) {
       void pushTelegramToChatId(peer.telegramId, 'Открыт спор', reason?.slice(0, 200) ?? 'По сделке открыт спор.');
     }
-    return this.one(user, id);
+    const updated = await this.one(user, id);
+    const row = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
+    });
+    if (row) this.emitOrderUpdated(row);
+    return updated;
   }
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
@@ -564,6 +605,12 @@ export class EscrowService {
         fromStatus: order.status,
       });
     }, SERIALIZABLE);
+
+    const live = await this.prisma.order.findUnique({
+      where: { id },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
+    });
+    if (live) this.emitOrderUpdated(live);
 
     if (canActAsSupport(actor)) {
       await this.prisma.supportTicket.updateMany({
@@ -694,7 +741,7 @@ export class EscrowController {
 }
 
 @Module({
-  imports: [EconomyModule],
+  imports: [EconomyModule, RealtimeModule],
   controllers: [EscrowController],
   providers: [EscrowService],
   exports: [EscrowService],

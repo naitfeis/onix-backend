@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body, Query, Req,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Body, Query, Req,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
@@ -11,6 +11,8 @@ import { LockService } from './economy/wallet/lock.service';
 import { findUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { assertRateLimit } from './rate-limit';
+import { RealtimeBus } from './realtime/realtime-bus.service';
+import { RealtimeModule } from './realtime/realtime.module';
 import { ledgerDto, profileDto, reviewDto, sellerDto } from './response';
 
 /** First page embedded in GET /users/me — further pages via GET /wallet/ledger. */
@@ -33,6 +35,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly locks: LockService,
+    @Optional() private readonly realtime?: RealtimeBus,
   ) {}
 
   /**
@@ -173,7 +176,26 @@ export class ProfilesService {
       where: { id: user.id },
       data: { lastSeenAt: now },
     });
-    return { lastOnline: now.toISOString(), online: true as const };
+    const lastOnline = now.toISOString();
+    if (this.realtime) {
+      const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`
+        SELECT DISTINCT cm2."userId" AS "userId"
+        FROM "ChatMember" cm1
+        INNER JOIN "ChatMember" cm2 ON cm2."chatId" = cm1."chatId"
+        WHERE cm1."userId" = ${user.id}
+          AND cm2."userId" <> ${user.id}
+        LIMIT 200
+      `;
+      this.realtime.publish({
+        kind: 'presence',
+        userId: user.id,
+        onixId: user.onixId,
+        online: true,
+        lastOnline,
+        watchers: peers.map((p) => p.userId),
+      });
+    }
+    return { lastOnline, online: true as const };
   }
 
   async ledger(user: AuthUser, query: LedgerQueryDto) {
@@ -219,7 +241,7 @@ export class ProfilesController {
 }
 
 @Module({
-  imports: [EconomyModule],
+  imports: [EconomyModule, RealtimeModule],
   controllers: [ProfilesController],
   providers: [ProfilesService],
 })

@@ -18,6 +18,7 @@ import { EconomyModule } from './economy/economy.module';
 
 import { AvatarsModule } from './avatars/avatars.module';
 import { LoginChallengeModule } from './login-challenge/login-challenge.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { spaServeModules } from './spa-static';
 
 @Module({
@@ -26,6 +27,7 @@ import { spaServeModules } from './spa-static';
     DatabaseModule,
     ObservabilityModule,
     IdempotencyModule,
+    RealtimeModule,
     AvatarsModule,
     AuthModule, AuthV2Module, LoginChallengeModule, ProfilesModule, MarketplaceModule, SocialModule,
     EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule, AiModule,

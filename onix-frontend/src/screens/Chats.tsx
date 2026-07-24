@@ -8,6 +8,7 @@ import { parseMemberTokens } from '../utils/parseMemberTokens';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
+import { getRealtimeClient } from '../realtime/client';
 
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
@@ -71,6 +72,9 @@ export function Chats({
   const messages = threadId ? core.messages[threadId] || [] : [];
   const { loadMessages, searchChats, refreshChats, sendMessage } = core;
   const memberPickerOpen = groupOpen || addMembersOpen;
+  const [typingLabel, setTypingLabel] = useState<string | null>(null);
+  const typingClearRef = useRef<number | null>(null);
+  const lastTypingSentRef = useRef(0);
 
   const openOnixProfile = async (onixId: string) => {
     const id = formatOnixId(onixId) || onixId;
@@ -94,6 +98,26 @@ export function Chats({
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
   }, [loadMessages, threadId]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    core.subscribeRealtimeChat(threadId);
+    return () => core.unsubscribeRealtimeChat(threadId);
+  }, [threadId, core.subscribeRealtimeChat, core.unsubscribeRealtimeChat]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    const off = getRealtimeClient().onMessage((msg) => {
+      if (msg.type !== 'chat.typing' || msg.chatId !== threadId) return;
+      setTypingLabel(`${msg.username} печатает…`);
+      if (typingClearRef.current != null) window.clearTimeout(typingClearRef.current);
+      typingClearRef.current = window.setTimeout(() => setTypingLabel(null), 2500);
+    });
+    return () => {
+      off();
+      if (typingClearRef.current != null) window.clearTimeout(typingClearRef.current);
+    };
+  }, [threadId]);
 
   useEffect(() => {
     if (!focusChatId) return;
@@ -575,9 +599,23 @@ export function Chats({
           else void sent;
         }
       }}>
-        <Input value={text} onChange={event => setText(event.target.value)} maxLength={1000} placeholder="Введите сообщение..." aria-label="Сообщение" />
+        <Input
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            const now = Date.now();
+            if (now - lastTypingSentRef.current > 1200) {
+              lastTypingSentRef.current = now;
+              core.sendRealtimeTyping(thread.id);
+            }
+          }}
+          maxLength={1000}
+          placeholder="Введите сообщение..."
+          aria-label="Сообщение"
+        />
         <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>Отправить</Button>
       </form>
+      {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
     <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); resetMemberPicker(); }}>
       <div className="form">

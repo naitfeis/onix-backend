@@ -46,7 +46,9 @@
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.27",
     "@nestjs/platform-express": "^11.1.27",
+    "@nestjs/platform-ws": "^11.1.28",
     "@nestjs/serve-static": "^5.0.5",
+    "@nestjs/websockets": "^11.1.28",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@types/compression": "^1.8.1",
@@ -59,11 +61,13 @@
     "patch-package": "^8.0.1",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@types/node": "^26.0.1",
     "@types/pg": "^8.20.0",
+    "@types/ws": "^8.18.1",
     "fast-check": "^4.5.3",
     "prisma": "^7.8.0",
     "ts-node": "^10.9.2",

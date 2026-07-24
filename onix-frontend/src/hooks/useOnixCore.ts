@@ -17,7 +17,7 @@ import {
   printBootstrapSummary,
 } from '../perf/bootstrapTiming';
 import { markAppReady } from '../perf/timing';
-
+import { getRealtimeClient } from '../realtime/client';
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
 type AuthBootstrap =
@@ -356,6 +356,78 @@ export function useOnixCore() {
     };
   }, [profile?.onixId]);
 
+  // Stage 5.6 — realtime fan-out (chat / presence / order / notifications).
+  useEffect(() => {
+    if (!profile) {
+      getRealtimeClient().disconnect();
+      return;
+    }
+    const token = getSharedAuthManager().getAccessToken() ?? getAccessToken();
+    if (!token) return;
+    const rt = getRealtimeClient();
+    rt.connect(token);
+    const off = rt.onMessage((msg) => {
+      if (msg.type === 'chat.message') {
+        const incoming = msg.message as Message;
+        setMessages((previous) => {
+          const list = previous[msg.chatId] ?? [];
+          if (list.some((row) => row.id === incoming.id)) return previous;
+          return { ...previous, [msg.chatId]: [...list, incoming] };
+        });
+        if (msg.unreadDelta) {
+          setStore((previous) => ({
+            ...previous,
+            chats: previous.chats.map((chat) => (
+              chat.id === msg.chatId
+                ? { ...chat, unreadCount: (chat.unreadCount ?? 0) + (msg.unreadDelta ?? 0) }
+                : chat
+            )),
+          }));
+        }
+        return;
+      }
+      if (msg.type === 'order.updated') {
+        void load('deals', API_PATHS.orders, { silent: true });
+        return;
+      }
+      if (msg.type === 'notification') {
+        setStore((previous) => ({
+          ...previous,
+          notifications: [
+            {
+              id: msg.id,
+              title: msg.title,
+              body: msg.body,
+              createdAt: msg.createdAt,
+              read: false,
+            },
+            ...previous.notifications,
+          ].slice(0, 100),
+        }));
+      }
+    });
+    const tokenRefresh = window.setInterval(() => {
+      const next = getSharedAuthManager().getAccessToken() ?? getAccessToken();
+      if (next) rt.updateToken(next);
+    }, 50_000);
+    return () => {
+      off();
+      window.clearInterval(tokenRefresh);
+    };
+  }, [profile?.onixId, load]);
+
+  const subscribeRealtimeChat = useCallback((chatId: string) => {
+    getRealtimeClient().subscribeChat(chatId);
+  }, []);
+
+  const unsubscribeRealtimeChat = useCallback((chatId: string) => {
+    getRealtimeClient().unsubscribeChat(chatId);
+  }, []);
+
+  const sendRealtimeTyping = useCallback((chatId: string) => {
+    getRealtimeClient().typing(chatId);
+  }, []);
+
   const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {
     if (actionBusy) return null;
     setActionBusy(key);
@@ -639,5 +711,6 @@ export function useOnixCore() {
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction, setUserStatus, reportUser,
+    subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
   };
 }

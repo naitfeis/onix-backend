@@ -17,6 +17,7 @@ import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
 import { createSecurityMiddleware, resolveCorsOrigins } from './security-headers';
+import { RealtimeHubService } from './realtime/realtime-hub.service';
 import { spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
 
@@ -89,6 +90,9 @@ async function bootstrap(): Promise<void> {
   server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS ?? 65_000);
   server.headersTimeout = Number(process.env.HTTP_HEADERS_TIMEOUT_MS ?? 66_000);
   server.requestTimeout = Number(process.env.HTTP_REQUEST_TIMEOUT_MS ?? 120_000);
+
+  // Stage 5.6 realtime — same HTTP server, path /api/realtime
+  app.get(RealtimeHubService).attach(server);
 
   structuredLog.info('Listening', {
     port,
