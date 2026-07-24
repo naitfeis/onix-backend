@@ -18,7 +18,7 @@ const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
 const CHAT_LIST_DEFAULT = 280;
 const CHAT_LIST_MIN = 200;
 const CHAT_PANEL_W_MIN = 520;
-const CHAT_PANEL_H_MIN = 360;
+const CHAT_PANEL_H_MIN = 280;
 
 function readStoredChatSize(key: string, fallback: number, min: number): number {
   try {
@@ -30,17 +30,21 @@ function readStoredChatSize(key: string, fallback: number, min: number): number 
   }
 }
 
+/** Available height for the chat panel (no phantom mobile-nav gap on desktop). */
 function chatViewportH(): number {
   if (typeof window === 'undefined') return 800;
-  return Math.max(400, window.innerHeight - 88);
+  const desktop = window.matchMedia('(min-width: 1100px)').matches;
+  const chrome = desktop ? 24 : 88;
+  return Math.max(320, window.innerHeight - chrome);
 }
 
 function defaultChatPanelSize(): { w: number; h: number } {
-  if (typeof window === 'undefined') return { w: 960, h: 800 };
+  if (typeof window === 'undefined') return { w: 960, h: 640 };
   const vh = chatViewportH();
   return {
     w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
-    h: vh,
+    /* Leave room above/below so height can be dragged both ways */
+    h: Math.round(vh * 0.78),
   };
 }
 
@@ -111,9 +115,8 @@ export function Chats({
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
   const [panelH, setPanelH] = useState(() => {
     const vh = chatViewportH();
-    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, vh, CHAT_PANEL_H_MIN);
-    // Old short heights → fill the screen so more messages fit without scrolling.
-    return Math.min(vh, raw < vh * 0.85 ? vh : raw);
+    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN);
+    return Math.min(vh, Math.max(CHAT_PANEL_H_MIN, raw));
   });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -168,7 +171,7 @@ export function Chats({
     let latestW = startW;
     let latestH = startH;
     let raf = 0;
-    const maxH = chatViewportH();
+    // Recalculate each move so desktop/mobile chrome stays correct.
     const apply = (w: number, h: number) => {
       latestW = w;
       latestH = h;
@@ -177,9 +180,12 @@ export function Chats({
       layout.style.setProperty('--chat-panel-h', `${h}px`);
       layout.style.width = `${w}px`;
       layout.style.height = `${h}px`;
+      layout.style.maxHeight = 'none';
+      layout.style.flex = '0 0 auto';
     };
     const onMove = (ev: PointerEvent) => {
-      const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 80);
+      const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 48);
+      const maxH = chatViewportH();
       const nextW = mode === 'y'
         ? startW
         : Math.max(CHAT_PANEL_W_MIN, Math.min(maxW, startW + (ev.clientX - startX)));

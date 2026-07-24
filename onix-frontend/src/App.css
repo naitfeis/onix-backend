@@ -1637,13 +1637,13 @@ html[data-theme="light"] .timeline li {
   height: 100%;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: flex-start;
   overflow: hidden;
 }
 .app-shell--chat .chat-layout {
   width: min(100%, var(--chat-panel-w, 100%));
-  height: min(100%, var(--chat-panel-h, 100%));
-  min-height: 360px;
+  height: var(--chat-panel-h, 70vh);
+  min-height: 280px;
   max-width: 100%;
   max-height: 100%;
   margin: 0;
@@ -1653,7 +1653,8 @@ html[data-theme="light"] .timeline li {
   background: var(--glass-regular-bg);
   overflow: hidden;
   box-shadow: var(--glass-shadow);
-  flex: 1 1 auto;
+  /* Must NOT flex-grow — otherwise height drag is ignored */
+  flex: 0 0 auto;
 }
 .app-shell--chat .conversation {
   min-height: 0;
@@ -1764,8 +1765,8 @@ html[data-theme="light"] .timeline li {
 .chat-edge-resizer--y {
   left: 0;
   bottom: 0;
-  width: calc(100% - 14px);
-  height: 14px;
+  width: calc(100% - 16px);
+  height: 20px;
   cursor: ns-resize;
   touch-action: none;
   z-index: 10;
@@ -1773,13 +1774,13 @@ html[data-theme="light"] .timeline li {
 }
 .chat-edge-resizer--y:hover,
 .chat-edge-resizer--y:focus-visible {
-  background: transparent;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .chat-edge-resizer--xy {
   right: 0;
   bottom: 0;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   cursor: nwse-resize;
   z-index: 11;
   background: transparent;
@@ -1788,7 +1789,7 @@ html[data-theme="light"] .timeline li {
 .chat-edge-resizer--xy:hover,
 .chat-edge-resizer--x:focus-visible,
 .chat-edge-resizer--xy:focus-visible {
-  background: transparent;
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 body.is-resizing-chat {
   cursor: col-resize !important;
@@ -2475,8 +2476,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .app-shell--chat {
     grid-template-columns: var(--sidebar-left-w, 272px) minmax(0, 1fr);
-    padding: 12px 12px 24px;
+    padding: 12px 12px 16px;
     gap: 12px;
+  }
+  .app-shell--chat .viewport {
+    height: calc(100dvh - 28px);
+    max-height: calc(100dvh - 28px);
+  }
+  .app-shell--chat .chat-layout {
+    max-height: calc(100dvh - 28px);
   }
   .app-shell--auth > .auth-notice {
     grid-column: 1 / -1;
