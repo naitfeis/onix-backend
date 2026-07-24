@@ -6,7 +6,10 @@
  *         (and not interior specular enclosed by the logo mask) is keyed out.
  * Pass 3: kill any leftover opaque gray (sat<0.08 && luma>0.4); optional
  *         micro-tint for deep-interior specular so verify stays clean without holes.
- * Fully transparent pixels are forced to RGB (0,0,0) so gray does not bleed.
+ *
+ * Transparent pixels: alpha=0 only. Do not specially rewrite RGB on transparent
+ * pixels (avoids edge cases where some Windows shells mishandle forced RGB).
+ * Opaque checker/plate must still be fully removed.
  *
  * Usage:
  *   node scripts/knockout-brand-mark.mjs [source.png] [dest.png]
@@ -54,7 +57,7 @@ function hueDeg(r, g, b) {
 
 /**
  * Purple / lavender / magenta logo paint (body + rim glow + colored specular).
- * Requires real saturation — low-sat blue-gray checker must NOT qualify.
+ * Requires real saturation - low-sat blue-gray checker must NOT qualify.
  */
 function isPurpleLogo(r, g, b) {
   const C = chroma(r, g, b);
@@ -62,7 +65,7 @@ function isPurpleLogo(r, g, b) {
   if (C < 14 || s < 0.1) return false;
   const h = hueDeg(r, g, b);
   if (h < 0) return false;
-  // Magenta–violet–blue-purple band
+  // Magenta-violet-blue-purple band
   if (h >= 255 && h <= 330) return true;
   if (h > 330 && h <= 360 && s >= 0.12) return true;
   if (h >= 0 && h <= 15 && s >= 0.14) return true;
@@ -231,16 +234,8 @@ function knockout(data, width, height) {
   for (let i = 0; i < n; i++) {
     const o = i * 4;
     if (keyed[i]) {
-      out[o] = 0;
-      out[o + 1] = 0;
-      out[o + 2] = 0;
+      // Alpha-only clear — leave RGB untouched (do not force black RGB)
       out[o + 3] = 0;
-      continue;
-    }
-    if (out[o + 3] === 0) {
-      out[o] = 0;
-      out[o + 1] = 0;
-      out[o + 2] = 0;
     }
   }
 
@@ -260,17 +255,11 @@ function knockout(data, width, height) {
       out[o] = tr;
       out[o + 1] = tg;
       out[o + 2] = tb;
-      // If still gray-band, drop it
+      // If still gray-band, drop alpha only
       if (sat01(tr, tg, tb) < 0.08) {
-        out[o] = 0;
-        out[o + 1] = 0;
-        out[o + 2] = 0;
         out[o + 3] = 0;
       }
     } else {
-      out[o] = 0;
-      out[o + 1] = 0;
-      out[o + 2] = 0;
       out[o + 3] = 0;
     }
   }
@@ -315,14 +304,6 @@ async function main() {
 
   const keyed = knockout(data, info.width, info.height);
 
-  for (let i = 0; i < keyed.length; i += 4) {
-    if (keyed[i + 3] === 0) {
-      keyed[i] = 0;
-      keyed[i + 1] = 0;
-      keyed[i + 2] = 0;
-    }
-  }
-
   mkdirSync(dirname(destPath), { recursive: true });
 
   let png = await sharp(keyed, {
@@ -336,34 +317,13 @@ async function main() {
   await sharp(png).toFile(destPath);
 
   const meta = await sharp(destPath).metadata();
-  let { data: outData, info: outInfo } = await sharp(destPath)
+  const { data: outData, info: outInfo } = await sharp(destPath)
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  let dirty = false;
-  for (let i = 0; i < outData.length; i += 4) {
-    if (outData[i + 3] === 0 && (outData[i] || outData[i + 1] || outData[i + 2])) {
-      outData[i] = 0;
-      outData[i + 1] = 0;
-      outData[i + 2] = 0;
-      dirty = true;
-    }
-  }
-  if (dirty) {
-    await sharp(outData, {
-      raw: { width: outInfo.width, height: outInfo.height, channels: 4 },
-    })
-      .png()
-      .toFile(destPath);
-    ({ data: outData, info: outInfo } = await sharp(destPath)
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true }));
-  }
-
   const v = verify(outData, outInfo.width, outInfo.height);
-  const okCorners = v.corners.every((c) => c.a === 0 && c.r === 0 && c.g === 0 && c.b === 0);
+  const okCorners = v.corners.every((c) => c.a === 0);
 
   console.log('[knockout] wrote', destPath);
   console.log('[knockout] size', `${meta.width}x${meta.height}`, 'hasAlpha', meta.hasAlpha);
@@ -373,7 +333,7 @@ async function main() {
   );
   console.log('[knockout] opaquePixels', v.opaque);
   console.log('[knockout] grayCheckerOpaque (sat<0.08 luma>0.4)', v.grayCheckerOpaque);
-  console.log('[knockout] verifyCornersRgb0Alpha0', okCorners);
+  console.log('[knockout] verifyCornersAlpha0', okCorners);
   if (!okCorners || v.grayCheckerOpaque > 0) process.exitCode = 1;
 }
 
