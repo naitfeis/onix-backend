@@ -15,6 +15,7 @@ import {
 } from './refresh-cookie';
 import { SessionService } from './session.service';
 import { assertRateLimit } from '../rate-limit';
+import { resolveClientIp } from '../http/client-ip';
 
 /**
  * Website auth API. Marked @Public so legacy APP AuthGuard skips.
@@ -35,17 +36,19 @@ export class AuthV2Controller {
   async login(
     @Body() body: LoginDto,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { ip?: string; headers: Record<string, string | undefined> },
+    @Req() req: { ip?: string; headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
-    assertRateLimit(`auth:v2:login:${req.ip ?? 'unknown'}`, 20, 60_000);
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    assertRateLimit(`auth:v2:login:${clientIp ?? 'unknown'}`, 20, 60_000);
     const result = await this.orchestrator.loginWithTelegram({
       telegram: body.telegram,
       rememberMe: body.rememberMe,
       device: {
         ...body.device,
         userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
-        ipAddress: body.device?.ipAddress ?? req.ip,
+        // Never trust client-supplied device.ipAddress.
+        ipAddress: clientIp,
       },
     });
 
@@ -83,11 +86,12 @@ export class AuthV2Controller {
   async refresh(
     @Body() body: RefreshDto,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { ip?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
     const t0 = process.hrtime.bigint();
-    assertRateLimit(`auth:v2:refresh:${req.ip ?? 'unknown'}`, 60, 60_000);
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    assertRateLimit(`auth:v2:refresh:${clientIp ?? 'unknown'}`, 60, 60_000);
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     if (!refreshToken) {
@@ -98,7 +102,7 @@ export class AuthV2Controller {
     const result = await this.orchestrator.refresh(refreshToken, {
       ...body.device,
       userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
-      ipAddress: body.device?.ipAddress ?? req.ip,
+      ipAddress: clientIp,
     }, timing);
 
     res.setHeader('Set-Cookie', buildRefreshCookieHeader(result.refreshToken, result.refreshMaxAgeSeconds));

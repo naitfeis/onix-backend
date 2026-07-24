@@ -14,6 +14,7 @@ import {
   readLoginSessionId,
 } from './login-session-cookie';
 import { assertRateLimit } from '../rate-limit';
+import { resolveClientIp } from '../http/client-ip';
 
 @Public()
 @Controller('v2/auth/telegram-bot')
@@ -29,15 +30,16 @@ export class BotLoginController {
   async start(
     @Body() body: { browserFingerprintHash?: string; rememberMe?: boolean },
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { ip?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
-    assertRateLimit(`auth:bot:start:${req.ip ?? 'unknown'}`, 10, 60_000);
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    assertRateLimit(`auth:bot:start:${clientIp ?? 'unknown'}`, 10, 60_000);
     const existing = readLoginSessionId(headerString(headers, 'cookie'));
     const started = await this.challenges.start({
       loginSessionId: existing,
       browserFingerprintHash: body?.browserFingerprintHash,
-      createdIp: req.ip,
+      createdIp: clientIp,
       createdUserAgent: headerString(headers, 'user-agent'),
     });
 
@@ -62,9 +64,10 @@ export class BotLoginController {
   @Get('status')
   async status(
     @Query('challengeId') challengeId: string,
-    @Req() req: { ip?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
   ) {
-    assertRateLimit(`auth:bot:status:${req.ip ?? 'unknown'}`, 60, 60_000);
+    const clientIp = resolveClientIp(req);
+    assertRateLimit(`auth:bot:status:${clientIp ?? 'unknown'}`, 60, 60_000);
     return this.challenges.status(challengeId);
   }
 
@@ -77,10 +80,11 @@ export class BotLoginController {
   async complete(
     @Body() body: { challengeId: string; rememberMe?: boolean; device?: Record<string, unknown> },
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { ip?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
-    assertRateLimit(`auth:bot:complete:${req.ip ?? 'unknown'}`, 20, 60_000);
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    assertRateLimit(`auth:bot:complete:${clientIp ?? 'unknown'}`, 20, 60_000);
     const loginSessionId = readLoginSessionId(headerString(headers, 'cookie'));
     if (!loginSessionId) {
       throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Login session cookie is required.');
@@ -93,7 +97,8 @@ export class BotLoginController {
       device: {
         ...(body.device as object),
         userAgent: headerString(headers, 'user-agent'),
-        ipAddress: req.ip,
+        // Server-resolved only — ignore any client-supplied device.ipAddress.
+        ipAddress: clientIp,
       },
     });
 
@@ -125,9 +130,10 @@ export class BotLoginController {
   async continueWithCode(
     @Body() body: { exchangeCode: string; rememberMe?: boolean },
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { ip?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
     const loginSessionId = readLoginSessionId(headerString(headers, 'cookie'));
     const result = await this.challenges.completeWithExchangeCode({
       exchangeCode: body.exchangeCode,
@@ -135,7 +141,7 @@ export class BotLoginController {
       rememberMe: body.rememberMe,
       device: {
         userAgent: headerString(headers, 'user-agent'),
-        ipAddress: req.ip,
+        ipAddress: clientIp,
       },
     });
 

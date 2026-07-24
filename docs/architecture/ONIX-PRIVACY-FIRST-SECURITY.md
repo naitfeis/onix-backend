@@ -91,6 +91,17 @@ Worker job: `security-ip-retention`.
 
 Aggregated risk / AbuseMarker hashes may live longer (no raw IP required).
 
+### Client IP resolution (Bot Login / Auth)
+
+Bot Login and Auth v2 resolve IP server-side via `resolveClientIp` (`src/http/client-ip.ts`):
+
+1. `CF-Connecting-IP` (Cloudflare)
+2. `True-Client-IP` / `X-Real-IP`
+3. first public hop in `X-Forwarded-For`
+4. Express `req.ip` (requires `trust proxy`)
+
+Nest sets `trust proxy = 1` by default (`TRUST_PROXY` env override). Client-supplied `device.ipAddress` is ignored. Local `::1` in Telegram prompts is labeled `(локально)` — expected on localhost only.
+
 ## Risk Engine (Slice 2)
 
 Separate from registration `RiskScoreService` (AbuseMarker multi-factor).

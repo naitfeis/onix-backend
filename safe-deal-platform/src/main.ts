@@ -44,6 +44,18 @@ async function bootstrap(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
 
+  // Cloudflare / Render terminate TLS and forward X-Forwarded-For / CF-Connecting-IP.
+  // Without this, Express `req.ip` is often the proxy peer (::1 / 127.0.0.1).
+  const trustProxy = process.env.TRUST_PROXY?.trim();
+  if (trustProxy === 'false' || trustProxy === '0') {
+    app.set('trust proxy', false);
+  } else if (trustProxy && /^\d+$/.test(trustProxy)) {
+    app.set('trust proxy', Number(trustProxy));
+  } else {
+    // Default: trust one hop (Render LB / Cloudflare → Nest).
+    app.set('trust proxy', 1);
+  }
+
   // Security headers first (Helmet + CSP).
   app.use(createSecurityMiddleware());
   // Scanners before ServeStatic / Nest (clean 404, never 500).

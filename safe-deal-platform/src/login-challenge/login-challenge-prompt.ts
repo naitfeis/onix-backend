@@ -1,3 +1,5 @@
+import { formatClientIpForPrompt } from '../http/client-ip';
+
 /**
  * Formats LoginChallenge metadata for the Telegram confirm prompt.
  * Does not change LoginChallenge storage — read-only presentation.
@@ -59,7 +61,7 @@ export function formatLoginConfirmPrompt(
   now = new Date(),
 ): string {
   const { browser, os } = parseUserAgentHints(source.createdUserAgent);
-  const ip = source.createdIp?.trim() || 'скрыт';
+  const ip = formatClientIpForPrompt(source.createdIp);
   const when = formatLoginAttemptTime(source.createdAt, now);
   const greeting = firstName?.trim() ? `${escapeHtml(firstName.trim())}, ` : '';
 
