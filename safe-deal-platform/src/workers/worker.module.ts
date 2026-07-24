@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ChatAttachmentsModule } from '../chat-attachments/chat-attachments.module';
 import { DatabaseModule } from '../database.module';
 import { EconomyModule } from '../economy/economy.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
@@ -10,6 +11,7 @@ import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
+import { ChatAttachmentCleanupJob } from './jobs/chat-attachment-cleanup.job';
 import { WorkerLockService } from './worker-lock.service';
 import { WorkerRunnerService } from './worker-runner.service';
 
@@ -18,7 +20,13 @@ import { WorkerRunnerService } from './worker-runner.service';
  * Start with: node dist/worker.main.js
  */
 @Module({
-  imports: [DatabaseModule, ObservabilityModule, IdempotencyModule, EconomyModule],
+  imports: [
+    DatabaseModule,
+    ObservabilityModule,
+    IdempotencyModule,
+    EconomyModule,
+    ChatAttachmentsModule,
+  ],
   providers: [
     WorkerLockService,
     DepositUnlockJob,
@@ -28,6 +36,7 @@ import { WorkerRunnerService } from './worker-runner.service';
     LedgerReconciliationJob,
     PaymentReconciliationJob,
     ClawbackRecoverJob,
+    ChatAttachmentCleanupJob,
     WorkerRunnerService,
   ],
 })

@@ -108,6 +108,7 @@ export interface Message {
   id: string;
   threadId: string;
   kind?: 'USER' | 'SYSTEM';
+  contentType?: 'TEXT' | 'IMAGE' | 'FILE';
   sender: Pick<Seller, 'id' | 'username' | 'avatarUrl' | 'badge'>;
   text: string;
   createdAt: string;
@@ -119,6 +120,12 @@ export interface Message {
   deletedReason?: string | null;
   originalText?: string;
   readBy?: Array<{ onixId: string; username: string; readAt: string }>;
+  attachment?: {
+    id: string;
+    mimeType: string;
+    originalName: string;
+    sizeBytes: number;
+  };
 }
 
 export interface ChatUserHit {
@@ -393,6 +400,9 @@ export const API_PATHS = {
   addChatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   chatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
+  attachmentUploadIntent: (chatId: string) => `/api/chats/${encodeURIComponent(chatId)}/attachments/upload-intent`,
+  attachmentComplete: (chatId: string, id: string) => `/api/chats/${encodeURIComponent(chatId)}/attachments/${encodeURIComponent(id)}/complete`,
+  attachmentDownload: (id: string) => `/api/chats/attachments/${encodeURIComponent(id)}/download`,
   messageDelete: (threadId: string, messageId: string, scope?: 'self' | 'global') =>
     `/api/chats/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}${scope === 'global' ? '?scope=global' : ''}`,
   userPublic: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}`,

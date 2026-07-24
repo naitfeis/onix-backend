@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import { api, friendlyError, money } from '../api/client';
 import { API_PATHS, formatLastSeen, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
+import ChatAttachmentView from '../components/ChatAttachmentView';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { parseMemberTokens } from '../utils/parseMemberTokens';
@@ -12,6 +13,9 @@ import { getRealtimeClient } from '../realtime/client';
 
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
+const ATTACH_COOLDOWN_MS = 1000;
+const ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,application/pdf,text/plain';
+const ATTACH_MAX_BYTES = 20 * 1024 * 1024;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
 const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
@@ -105,9 +109,11 @@ export function Chats({
   const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
-  const { loadMessages, searchChats, refreshChats, sendMessage } = core;
+  const { loadMessages, searchChats, refreshChats, sendMessage, sendChatAttachment } = core;
   const memberPickerOpen = groupOpen || addMembersOpen;
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
+  const [attachCooldownUntil, setAttachCooldownUntil] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
   const defaults = defaultChatPanelSize();
@@ -660,11 +666,19 @@ export function Chats({
           >
             {message.kind !== 'SYSTEM' && <small>{publicAt(message.sender.username)} <StaffBadge badge={message.sender.badge} /></small>}
             {message.kind === 'SYSTEM' && <small>{thread.kind === 'AI' ? 'ONIX AI' : '🛡 ONIX'}</small>}
-            <p><MessageText
-              text={isStaff && message.deleted && message.originalText ? message.originalText : message.text}
-              onOpenOnix={openOnixProfile}
-              onOpenLot={(lot) => void openLot(lot)}
-            /></p>
+            {message.attachment && !message.deleted && (
+              <ChatAttachmentView
+                attachment={message.attachment}
+                onError={(err) => setToast(err)}
+              />
+            )}
+            {(message.text || message.deleted) && (
+              <p><MessageText
+                text={isStaff && message.deleted && message.originalText ? message.originalText : message.text}
+                onOpenOnix={openOnixProfile}
+                onOpenLot={(lot) => void openLot(lot)}
+              /></p>
+            )}
             {isStaff && message.deleted && <small className="receipt-admin">удалено · {message.deletedAt ? new Date(message.deletedAt).toLocaleString('ru-RU') : ''}</small>}
             {message.kind === 'SYSTEM' && message.text.includes('Заказ создан') && (() => {
               const orderId = message.text.match(/Заказ #(\d+)/)?.[1]
@@ -776,6 +790,47 @@ export function Chats({
           else void sent;
         }
       }}>
+        {thread.kind !== 'AI' && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="sr-only"
+              accept={ATTACH_ACCEPT}
+              aria-label="Прикрепить файл"
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+                if (Date.now() < attachCooldownUntil) {
+                  setToast('Подождите секунду перед следующей отправкой файла.');
+                  return;
+                }
+                if (file.size > ATTACH_MAX_BYTES) {
+                  setToast('Файл больше 20 МБ.');
+                  return;
+                }
+                const ok = await sendChatAttachment(thread.id, file, text.trim() || undefined);
+                if (ok) {
+                  setText('');
+                  setAttachCooldownUntil(Date.now() + ATTACH_COOLDOWN_MS);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              className="composer__attach"
+              disabled={Date.now() < attachCooldownUntil || Boolean(core.actionBusy)}
+              busy={
+                core.actionBusy === `attach-intent-${thread.id}`
+                || core.actionBusy === `attach-complete-${thread.id}`
+              }
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Прикрепить изображение или файл"
+            >📎</Button>
+          </>
+        )}
         <Input
           value={text}
           onChange={(event) => {

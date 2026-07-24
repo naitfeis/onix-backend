@@ -706,6 +706,63 @@ export function useOnixCore() {
     return false;
   }, [run]);
 
+  const sendChatAttachment = useCallback(async (
+    threadId: string,
+    file: File,
+    caption?: string,
+  ) => {
+    const intent = await run(`attach-intent-${threadId}`, () => api.post<{
+      attachmentId: string;
+      uploadUrl: string;
+      headers?: Record<string, string>;
+      maxBytes: number;
+      contentType: 'IMAGE' | 'FILE';
+    }>(API_PATHS.attachmentUploadIntent(threadId), {
+      mimeType: file.type || 'application/octet-stream',
+      sizeBytes: file.size,
+      originalName: file.name || 'file',
+    }));
+    if (!intent) return false;
+
+    try {
+      const put = await fetch(intent.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          ...(intent.headers ?? {}),
+        },
+        body: file,
+      });
+      if (!put.ok) {
+        setErrors((previous) => ({
+          ...previous,
+          [`message-${threadId}`]: 'Не удалось загрузить файл в хранилище.',
+        }));
+        return false;
+      }
+    } catch {
+      setErrors((previous) => ({
+        ...previous,
+        [`message-${threadId}`]: 'Не удалось загрузить файл в хранилище.',
+      }));
+      return false;
+    }
+
+    const result = await run(`attach-complete-${threadId}`, () => api.post<Message>(
+      API_PATHS.attachmentComplete(threadId, intent.attachmentId),
+      { caption: caption?.trim() || undefined },
+    ));
+    if (result) {
+      setMessages((previous) => {
+        const list = previous[threadId] || [];
+        if (list.some((m) => m.id === result.id)) return previous;
+        return { ...previous, [threadId]: [...list, result] };
+      });
+      return true;
+    }
+    return false;
+  }, [run]);
+
   const startChat = useCallback((onixId: string) => run(`chat-${onixId}`, () =>
     api.post<ChatThread>(API_PATHS.directChat, { onixId }),
   ).then((thread) => {
@@ -802,7 +859,7 @@ export function useOnixCore() {
     profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
+    toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
     markNotificationRead, adminAction, setUserStatus, reportUser,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
   };
