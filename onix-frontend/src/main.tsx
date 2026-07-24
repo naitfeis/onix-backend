@@ -14,12 +14,15 @@ import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { scheduleBundleAudit, markMainEval } from './perf/bundleAudit'
 import { captureNavigationTimingWhenReady, markAppReady } from './perf/timing'
+import { registerPwa } from './pwa/registerPwa'
+import { dismissBootSplash } from './shell/dismissBootSplash'
 import { installGlobalErrorHandlers } from './utils/globalErrorHandlers'
 
 markMainEval('start')
 markAppReady('js-main')
 captureNavigationTimingWhenReady()
 installGlobalErrorHandlers()
+registerPwa()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -29,5 +32,6 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+dismissBootSplash()
 markMainEval('end')
 scheduleBundleAudit()

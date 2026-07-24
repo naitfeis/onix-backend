@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -49,6 +50,63 @@ export default ({ mode }: { mode: string }) => {
     plugins: [
       react(),
       tsconfigPaths(),
+      VitePWA({
+        registerType: 'prompt',
+        includeAssets: [
+          'favicon.svg',
+          'icons/favicon-32.png',
+          'icons/apple-touch-icon.png',
+          'brand/onix-mark.png',
+        ],
+        manifest: {
+          name: 'ONIX',
+          short_name: 'ONIX',
+          description: 'ONIX — безопасный маркетплейс цифровых товаров',
+          lang: 'ru',
+          dir: 'ltr',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          orientation: 'any',
+          background_color: '#0A090E',
+          theme_color: '#8B7FF5',
+          categories: ['shopping', 'finance'],
+          icons: [
+            {
+              src: 'icons/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'icons/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any',
+            },
+            {
+              src: 'icons/icon-maskable-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable',
+            },
+          ],
+        },
+        workbox: {
+          navigateFallback: '/index.html',
+          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/ws(?:\/|$)/],
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+          runtimeCaching: [
+            {
+              urlPattern: ({ url }) => url.pathname.startsWith('/api') || url.pathname.startsWith('/ws'),
+              handler: 'NetworkOnly',
+            },
+          ],
+        },
+        devOptions: {
+          enabled: false,
+        },
+      }),
     ],
 
     server: {

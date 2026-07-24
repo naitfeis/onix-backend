@@ -2,16 +2,83 @@
 <html lang="ru" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="ONIX — безопасные сделки" />
+    <meta name="description" content="ONIX — безопасный маркетплейс цифровых товаров" />
+    <meta name="theme-color" content="#0A090E" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F4F2F8" media="(prefers-color-scheme: light)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ONIX" />
+    <meta name="application-name" content="ONIX" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>ONIX</title>
     <!--
       Fonts: self-hosted via @fontsource in main.tsx (DM Sans / Syne / JetBrains Mono).
       Do NOT load fonts.googleapis.com — in RU it often stalls ~15s and blocks DOM interactive.
     -->
+    <style>
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #0A090E;
+        color: rgba(255, 255, 255, 0.92);
+      }
+      #root:empty,
+      #onix-boot {
+        min-height: 100dvh;
+      }
+      #onix-boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(ellipse 70% 50% at 20% 15%, rgba(139, 127, 245, 0.22), transparent 55%),
+          radial-gradient(ellipse 60% 45% at 85% 80%, rgba(91, 141, 239, 0.12), transparent 50%),
+          #0A090E;
+        transition: opacity 280ms ease, visibility 280ms ease;
+      }
+      #onix-boot.is-done {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #onix-boot__mark {
+        width: min(42vw, 148px);
+        height: auto;
+        display: block;
+        animation: onix-boot-pulse 1.6s ease-in-out infinite;
+      }
+      #onix-boot__label {
+        margin-top: 18px;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.55);
+        text-align: center;
+      }
+      @keyframes onix-boot-pulse {
+        0%, 100% { transform: scale(1); opacity: 0.92; }
+        50% { transform: scale(1.04); opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #onix-boot__mark { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="onix-boot" role="status" aria-live="polite" aria-label="Загрузка ONIX">
+      <div>
+        <img id="onix-boot__mark" src="/brand/onix-mark.png" width="148" height="148" alt="" />
+        <div id="onix-boot__label">ONIX</div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

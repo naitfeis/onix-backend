@@ -20,6 +20,7 @@ import { useOnixCore } from './hooks/useOnixCore';
 import { t } from './i18n';
 import AuthNotice from './screens/AuthGate';
 import type { Screen } from './screens/types';
+import PwaInstallBanner from './shell/PwaInstallBanner';
 import { CATEGORY_IMAGES } from './utils/categoryImages';
 import { lazyRetry } from './utils/lazyRetry';
 import './App.css';
@@ -127,6 +128,10 @@ function readStoredTheme(): ThemeMode | null {
 
 function applyTheme(theme: ThemeMode) {
   document.documentElement.setAttribute('data-theme', theme);
+  const color = theme === 'light' ? '#F4F2F8' : '#0A090E';
+  document.querySelectorAll('meta[name="theme-color"]').forEach((node) => {
+    node.setAttribute('content', color);
+  });
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch { /* ignore */ }
@@ -644,6 +649,7 @@ export default function App() {
         </button>
       ))}
     </nav>
+    {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
     {toast && <Toast message={toast} />}
   </div>
   </>;

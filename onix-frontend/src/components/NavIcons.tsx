@@ -152,6 +152,7 @@ export function IconMoon({ size = 20 }: { size?: number }) {
 export function BrandMark() {
   return (
     <div className="brand" aria-label="ONIX">
+      <img className="brand__mark" src="/brand/onix-mark.png" width={28} height={28} alt="" />
       <span className="brand__text">ONIX</span>
     </div>
   );
