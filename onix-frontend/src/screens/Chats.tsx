@@ -13,20 +13,29 @@ import { getRealtimeClient } from '../realtime/client';
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
-const CHAT_PEERS_W_KEY = 'onix-chat-peers-w';
+const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
+const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
 const CHAT_LIST_DEFAULT = 280;
-const CHAT_PEERS_DEFAULT = 260;
 const CHAT_LIST_MIN = 200;
-const CHAT_PEERS_MIN = 180;
+const CHAT_PANEL_W_MIN = 520;
+const CHAT_PANEL_H_MIN = 360;
 
-function readStoredChatWidth(key: string, fallback: number): number {
+function readStoredChatSize(key: string, fallback: number, min: number): number {
   try {
     const raw = localStorage.getItem(key);
     const n = raw ? Number(raw) : NaN;
-    return Number.isFinite(n) && n >= 160 ? Math.round(n) : fallback;
+    return Number.isFinite(n) && n >= min ? Math.round(n) : fallback;
   } catch {
     return fallback;
   }
+}
+
+function defaultChatPanelSize(): { w: number; h: number } {
+  if (typeof window === 'undefined') return { w: 960, h: 720 };
+  return {
+    w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
+    h: Math.min(860, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 120)),
+  };
 }
 
 export function Chats({
@@ -91,33 +100,15 @@ export function Chats({
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
-  const [listW, setListW] = useState(() => readStoredChatWidth(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT));
-  const [peersW, setPeersW] = useState(() => readStoredChatWidth(CHAT_PEERS_W_KEY, CHAT_PEERS_DEFAULT));
+  const defaults = defaultChatPanelSize();
+  const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
+  const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
+  const [panelH, setPanelH] = useState(() => readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN));
 
-  const peerContacts = (() => {
-    const seen = new Set<string>();
-    const rows: Array<{ onixId: string; title: string; avatarUrl?: string; badge?: typeof core.chats[0]['peerBadge']; lastOnline?: string; chatId: string }> = [];
-    for (const chat of core.chats) {
-      if (!chat.peerOnixId || chat.kind === 'AI') continue;
-      const key = chat.peerOnixId.trim().toUpperCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push({
-        onixId: chat.peerOnixId,
-        title: chat.title,
-        avatarUrl: chat.peerAvatarUrl,
-        badge: chat.peerBadge,
-        lastOnline: chat.peerLastOnline,
-        chatId: chat.id,
-      });
-    }
-    return rows;
-  })();
-
-  const startChatColResize = (side: 'list' | 'peers', event: ReactPointerEvent<HTMLButtonElement>) => {
+  const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startW = side === 'list' ? listW : peersW;
+    const startW = listW;
     const target = event.currentTarget;
     const layout = target.closest('.chat-layout') as HTMLElement | null;
     target.setPointerCapture(event.pointerId);
@@ -126,17 +117,11 @@ export function Chats({
     let raf = 0;
     const apply = (next: number) => {
       latest = next;
-      if (!layout) return;
-      if (side === 'list') layout.style.setProperty('--chat-list-w', `${next}px`);
-      else layout.style.setProperty('--chat-peers-w', `${next}px`);
+      layout?.style.setProperty('--chat-list-w', `${next}px`);
     };
     const onMove = (ev: PointerEvent) => {
-      const dx = ev.clientX - startX;
-      const max = Math.floor(window.innerWidth * 0.4);
-      const next = Math.max(
-        side === 'list' ? CHAT_LIST_MIN : CHAT_PEERS_MIN,
-        Math.min(max, side === 'list' ? startW + dx : startW - dx),
-      );
+      const max = Math.floor(panelW * 0.55);
+      const next = Math.max(CHAT_LIST_MIN, Math.min(max, startW + (ev.clientX - startX)));
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => apply(next));
     };
@@ -147,13 +132,62 @@ export function Chats({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       const rounded = Math.round(latest);
-      if (side === 'list') {
-        setListW(rounded);
-        try { localStorage.setItem(CHAT_LIST_W_KEY, String(rounded)); } catch { /* ignore */ }
-      } else {
-        setPeersW(rounded);
-        try { localStorage.setItem(CHAT_PEERS_W_KEY, String(rounded)); } catch { /* ignore */ }
-      }
+      setListW(rounded);
+      try { localStorage.setItem(CHAT_LIST_W_KEY, String(rounded)); } catch { /* ignore */ }
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startPanelResize = (
+    mode: 'x' | 'y' | 'xy',
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = panelW;
+    const startH = panelH;
+    const target = event.currentTarget;
+    const layout = target.closest('.chat-layout') as HTMLElement | null;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-chat');
+    let latestW = startW;
+    let latestH = startH;
+    let raf = 0;
+    const apply = (w: number, h: number) => {
+      latestW = w;
+      latestH = h;
+      if (!layout) return;
+      layout.style.setProperty('--chat-panel-w', `${w}px`);
+      layout.style.setProperty('--chat-panel-h', `${h}px`);
+    };
+    const onMove = (ev: PointerEvent) => {
+      const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 80);
+      const maxH = Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 64);
+      const nextW = mode === 'y'
+        ? startW
+        : Math.max(CHAT_PANEL_W_MIN, Math.min(maxW, startW + (ev.clientX - startX)));
+      const nextH = mode === 'x'
+        ? startH
+        : Math.max(CHAT_PANEL_H_MIN, Math.min(maxH, startH + (ev.clientY - startY)));
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => apply(nextW, nextH));
+    };
+    const onUp = (ev: PointerEvent) => {
+      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (raf) cancelAnimationFrame(raf);
+      document.body.classList.remove('is-resizing-chat');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const w = Math.round(latestW);
+      const h = Math.round(latestH);
+      setPanelW(w);
+      setPanelH(h);
+      try {
+        localStorage.setItem(CHAT_PANEL_W_KEY, String(w));
+        localStorage.setItem(CHAT_PANEL_H_KEY, String(h));
+      } catch { /* ignore */ }
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
@@ -447,7 +481,8 @@ export function Chats({
     className="chat-layout"
     style={{
       '--chat-list-w': `${listW}px`,
-      '--chat-peers-w': `${peersW}px`,
+      '--chat-panel-w': `${panelW}px`,
+      '--chat-panel-h': `${panelH}px`,
     } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
@@ -504,7 +539,7 @@ export function Chats({
       type="button"
       className="chat-col-resizer chat-col-resizer--list desktop-only"
       aria-label="Изменить ширину списка чатов"
-      onPointerDown={(event) => startChatColResize('list', event)}
+      onPointerDown={startListResize}
     />
     <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
       <button
@@ -735,48 +770,22 @@ export function Chats({
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
     <button
       type="button"
-      className="chat-col-resizer chat-col-resizer--peers desktop-only"
-      aria-label="Изменить ширину списка пользователей"
-      onPointerDown={(event) => startChatColResize('peers', event)}
+      className="chat-edge-resizer chat-edge-resizer--x desktop-only"
+      aria-label="Изменить ширину окна чата"
+      onPointerDown={(event) => startPanelResize('x', event)}
     />
-    <aside className="chat-peers desktop-only" aria-label="Пользователи">
-      <p className="chat-peers__title">Пользователи</p>
-      {peerContacts.length === 0
-        ? <p className="muted" style={{ padding: '0 4px' }}>Контакты появятся из ваших диалогов.</p>
-        : peerContacts.map((peer) => (
-          <button
-            type="button"
-            className={`thread${peer.chatId === threadId ? ' active' : ''}`}
-            key={peer.onixId}
-            onClick={() => setThreadId(peer.chatId)}
-          >
-            <span className="thread-peer">
-              <UserAvatar
-                avatarUrl={peer.avatarUrl}
-                name={peer.title}
-                online={sellerIsPresent(
-                  { onixId: peer.onixId, lastOnline: peer.lastOnline },
-                  core.profile,
-                  core.presenceOf(peer.onixId),
-                )}
-              />
-              <span>
-                <b>{peer.title} <StaffBadge badge={peer.badge} /></b>
-                <small>
-                  {formatOnixId(peer.onixId)} ·{' '}
-                  {sellerIsPresent(
-                    { onixId: peer.onixId, lastOnline: peer.lastOnline },
-                    core.profile,
-                    core.presenceOf(peer.onixId),
-                  )
-                    ? 'Online'
-                    : formatLastSeen(core.presenceOf(peer.onixId)?.lastOnline ?? peer.lastOnline)}
-                </small>
-              </span>
-            </span>
-          </button>
-        ))}
-    </aside>
+    <button
+      type="button"
+      className="chat-edge-resizer chat-edge-resizer--y desktop-only"
+      aria-label="Изменить высоту окна чата"
+      onPointerDown={(event) => startPanelResize('y', event)}
+    />
+    <button
+      type="button"
+      className="chat-edge-resizer chat-edge-resizer--xy desktop-only"
+      aria-label="Изменить размер окна чата"
+      onPointerDown={(event) => startPanelResize('xy', event)}
+    />
     <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); resetMemberPicker(); }}>
       <div className="form">
         <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>
