@@ -13,8 +13,11 @@ export class DeviceInfoDto {
   @IsOptional() @IsString() @MaxLength(512) userAgent?: string;
   @IsOptional() @IsString() @MaxLength(64) fingerprintHash?: string;
   @IsOptional() @IsString() @MaxLength(64) browserId?: string;
+  @IsOptional() @IsString() @MaxLength(64) pwaInstallId?: string;
   @IsOptional() @IsString() @MaxLength(32) screenResolution?: string;
+  /** @deprecated Ignored — privacy-first Slice 1 rejects canvas/WebGL fingerprints. */
   @IsOptional() @IsString() @MaxLength(64) webglHash?: string;
+  /** @deprecated Ignored — privacy-first Slice 1 rejects canvas/WebGL fingerprints. */
   @IsOptional() @IsString() @MaxLength(64) canvasHash?: string;
   @IsOptional() @IsString() @MaxLength(64) ipAddress?: string;
   @IsOptional() @IsInt() asn?: number;

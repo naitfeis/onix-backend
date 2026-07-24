@@ -12,6 +12,7 @@ import {
 } from '../src/auth-v2/auth-v2.flags';
 import { AuthEventPublisher } from '../src/auth-v2/auth-events';
 import { EnvSecretsProvider } from '../src/auth-v2/secrets.provider';
+import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
@@ -119,7 +120,7 @@ function buildOrchestrator(store: Store): AuthOrchestrator {
   const keys = new SigningKeyService(new EnvSecretsProvider());
   keys.clearCache();
   const tokens = new TokenService(keys);
-  const sessions = new SessionService(createSessionPrisma(store) as never, tokens);
+  const sessions = new SessionService(createSessionPrisma(store) as never, tokens, new DeviceTrustService());
   return new AuthOrchestrator(
     createSessionPrisma(store) as never,
     {} as never,

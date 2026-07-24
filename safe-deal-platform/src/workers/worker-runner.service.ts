@@ -11,6 +11,7 @@ import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
+import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { WorkerLockService } from './worker-lock.service';
 
 type JobDef = {
@@ -38,6 +39,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly ledgerReconciliation: LedgerReconciliationJob,
     private readonly paymentReconciliation: PaymentReconciliationJob,
     private readonly clawbackRecover: ClawbackRecoverJob,
+    private readonly securityIpRetention: SecurityIpRetentionJob,
   ) {}
 
   onModuleInit(): void {
@@ -83,6 +85,12 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         intervalMs: Number(process.env.WORKER_CLAWBACK_RECOVER_MS ?? 60_000),
         leaseTtlMs: 120_000,
         run: () => this.clawbackRecover.run(),
+      },
+      {
+        name: 'security-ip-retention',
+        intervalMs: Number(process.env.WORKER_SECURITY_IP_RETENTION_MS ?? 3_600_000),
+        leaseTtlMs: 600_000,
+        run: () => this.securityIpRetention.run(),
       },
     ];
 

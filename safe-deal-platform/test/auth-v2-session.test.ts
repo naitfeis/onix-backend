@@ -5,6 +5,7 @@ import { AuthPlatformError } from '../src/auth-v2/auth-errors';
 import { EnvSecretsProvider } from '../src/auth-v2/secrets.provider';
 import { MAX_SESSIONS_PER_USER } from '../src/auth-v2/session.constants';
 import { SessionService } from '../src/auth-v2/session.service';
+import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
 
@@ -208,7 +209,7 @@ function buildService(store: Store): SessionService {
   const keys = new SigningKeyService(new EnvSecretsProvider());
   keys.clearCache();
   const tokens = new TokenService(keys);
-  return new SessionService(createPrismaMock(store) as never, tokens);
+  return new SessionService(createPrismaMock(store) as never, tokens, new DeviceTrustService());
 }
 
 test('SessionService createSession stores refresh hash only and returns opaque token', async () => {
@@ -237,11 +238,23 @@ test('SessionService createSession stores refresh hash only and returns opaque t
 });
 
 test('SessionService createSession marks TrustedDevice and lowers risk', async () => {
+  process.env.DEVICE_HMAC_SECRET = 'test-device-secret';
+  const trust = new DeviceTrustService();
+  const device = {
+    browser: 'chrome',
+    os: 'windows',
+    browserId: 'trusted-browser',
+    timezone: 'UTC',
+    language: 'en',
+  };
+  const deviceId = trust.resolveDeviceId(device);
+  assert.ok(deviceId);
+
   const store: Store = {
     users: new Map([['7', baseUser()]]),
     sessions: new Map(),
     trusted: new Map([['td1', {
-      id: 'td1', userId: 7n, fingerprintHash: 'trusted-fp', revokedAt: null, expiresAt: null, lastSeenAt: new Date(0),
+      id: 'td1', userId: 7n, fingerprintHash: deviceId!, revokedAt: null, expiresAt: null, lastSeenAt: new Date(0),
     }]]),
     audits: [],
     securityEvents: [],
@@ -249,10 +262,17 @@ test('SessionService createSession marks TrustedDevice and lowers risk', async (
   const service = buildService(store);
   const result = await service.createSession({
     userId: 7n,
-    device: { fingerprintHash: 'trusted-fp' },
+    device: {
+      ...device,
+      fingerprintHash: 'client-should-be-ignored',
+      canvasHash: 'nope',
+    },
   });
   assert.equal(result.trustedDevice, true);
   assert.equal(result.session.riskScore, 5);
+  assert.equal(result.session.fingerprintHash, deviceId);
+  assert.equal(result.session.canvasHash, null);
+  assert.equal(result.session.webglHash, null);
   assert.ok(store.trusted.get('td1')!.lastSeenAt.getTime() > 0);
 });
 

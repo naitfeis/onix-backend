@@ -1,11 +1,13 @@
-/** Session lifetime defaults — ADR-028 / ADD v1.4 */
+/** Session lifetime defaults — Privacy-first Slice 1 / ADR-028 */
 
 export const SESSION_IDLE_TTL_MS = Number(process.env.AUTH_SESSION_IDLE_MS ?? 14 * 24 * 60 * 60 * 1000);
+/** Remember-device idle refresh window (default 180d). */
 export const SESSION_REMEMBER_IDLE_TTL_MS = Number(
-  process.env.AUTH_SESSION_REMEMBER_IDLE_MS ?? 30 * 24 * 60 * 60 * 1000,
+  process.env.AUTH_SESSION_REMEMBER_IDLE_MS ?? 180 * 24 * 60 * 60 * 1000,
 );
+/** Absolute session cap (default 365d). */
 export const SESSION_ABSOLUTE_TTL_MS = Number(
-  process.env.AUTH_SESSION_ABSOLUTE_MS ?? 90 * 24 * 60 * 60 * 1000,
+  process.env.AUTH_SESSION_ABSOLUTE_MS ?? 365 * 24 * 60 * 60 * 1000,
 );
 export const MAX_SESSIONS_PER_USER = Number(process.env.AUTH_MAX_SESSIONS ?? 10);
 export const TRUSTED_DEVICE_RISK_SCORE = 5;

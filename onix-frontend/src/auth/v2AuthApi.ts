@@ -60,9 +60,11 @@ export type AuthV2LoginRequest = {
     timezone?: string;
     language?: string;
     userAgent?: string;
+    /** Ignored by server — HMAC deviceId is derived server-side. */
     fingerprintHash?: string;
     screenResolution?: string;
     browserId?: string;
+    pwaInstallId?: string;
   };
 };
 

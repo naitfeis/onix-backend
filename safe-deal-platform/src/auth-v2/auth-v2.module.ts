@@ -13,6 +13,7 @@ import { RbacService } from './rbac.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
 import { RiskScoreService } from '../risk-score.service';
 import { SessionService } from './session.service';
+import { DeviceTrustService } from './device-trust.service';
 import { SigningKeyService } from './signing-key.service';
 import { TelegramLoginVerifier } from './telegram-login.verifier';
 import { TokenService } from './token.service';
@@ -37,6 +38,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
     { provide: AUTH_EVENT_PUBLISHER, useValue: new AuthEventPublisher() },
     SigningKeyService,
     TokenService,
+    DeviceTrustService,
     SessionService,
     DualAccessService,
     AuthRolloutService,
@@ -53,6 +55,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
     TokenService,
     SigningKeyService,
     SessionService,
+    DeviceTrustService,
     DualAccessService,
     AuthRolloutService,
     AuthOrchestrator,

@@ -10,6 +10,7 @@ import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
+import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { WorkerLockService } from './worker-lock.service';
 import { WorkerRunnerService } from './worker-runner.service';
 
@@ -28,6 +29,7 @@ import { WorkerRunnerService } from './worker-runner.service';
     LedgerReconciliationJob,
     PaymentReconciliationJob,
     ClawbackRecoverJob,
+    SecurityIpRetentionJob,
     WorkerRunnerService,
   ],
 })

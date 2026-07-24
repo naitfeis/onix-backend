@@ -9,6 +9,7 @@ import { AuthGuard, AuthService } from '../src/auth.module';
 import { isAcceptV2AccessEnabled, isNewAuthEnabled } from '../src/auth-v2/auth-v2.flags';
 import { DualAccessService, peekJwtAlg } from '../src/auth-v2/dual-access.service';
 import { EnvSecretsProvider } from '../src/auth-v2/secrets.provider';
+import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
@@ -232,7 +233,7 @@ test('AuthGuard: Ed25519 passes when AUTH_ACCEPT_V2_ACCESS=true', async () => {
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
   };
-  const sessions = new SessionService(prisma as never, tokens);
+  const sessions = new SessionService(prisma as never, tokens, new DeviceTrustService());
   const dual = new DualAccessService(tokens, sessions);
 
   let legacyCalled = false;
@@ -255,6 +256,7 @@ test('AuthGuard: Ed25519 passes when AUTH_ACCEPT_V2_ACCESS=true', async () => {
     onixId: 'ONIX-000007',
     isAdmin: false,
     isSupport: false,
+    platformStatus: undefined,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });
@@ -274,7 +276,7 @@ test('AuthGuard: revoked session → 401', async () => {
   const sessions = new SessionService({
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
-  } as never, tokens);
+  } as never, tokens, new DeviceTrustService());
   const dual = new DualAccessService(tokens, sessions);
   const guard = new AuthGuard(new Reflector(), { verifyToken: async () => assert.fail('no') } as never, dual);
   await assert.rejects(
@@ -301,7 +303,7 @@ test('AuthGuard: sessionVersion mismatch → 401', async () => {
   const sessions = new SessionService({
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
-  } as never, tokens);
+  } as never, tokens, new DeviceTrustService());
   const dual = new DualAccessService(tokens, sessions);
   const guard = new AuthGuard(new Reflector(), { verifyToken: async () => assert.fail('no') } as never, dual);
   await assert.rejects(
@@ -354,7 +356,7 @@ test('DualAccessService maps Ed25519 claims to AuthUser without controller branc
     new SessionService({
       user: { findUnique: async () => user },
       session: { findUnique: async () => session },
-    } as never, tokens),
+    } as never, tokens, new DeviceTrustService()),
   );
   assert.equal(dual.isEdDsaAccessToken(jwt), true);
   assert.equal(dual.isAcceptEnabled(), true);
@@ -365,6 +367,7 @@ test('DualAccessService maps Ed25519 claims to AuthUser without controller branc
     onixId: 'ONIX-000007',
     isAdmin: true,
     isSupport: true,
+    platformStatus: undefined,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });

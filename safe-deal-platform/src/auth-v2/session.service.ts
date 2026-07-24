@@ -14,6 +14,7 @@ import {
   TRUSTED_DEVICE_RISK_SCORE,
 } from './session.constants';
 import { type AccessTokenClaims, TokenService } from './token.service';
+import { DeviceTrustService } from './device-trust.service';
 
 export interface DeviceContext {
   deviceName?: string | null;
@@ -23,10 +24,14 @@ export interface DeviceContext {
   timezone?: string | null;
   language?: string | null;
   userAgent?: string | null;
+  /** @deprecated Client value ignored — server derives deviceId via DeviceTrustService. */
   fingerprintHash?: string | null;
   browserId?: string | null;
+  pwaInstallId?: string | null;
   screenResolution?: string | null;
+  /** @deprecated Ignored (privacy-first). */
   webglHash?: string | null;
+  /** @deprecated Ignored (privacy-first). */
   canvasHash?: string | null;
   ipAddress?: string | null;
   asn?: number | null;
@@ -68,6 +73,7 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly deviceTrust: DeviceTrustService,
   ) {}
 
   /** Test helper — simulate grace expiry / multi-instance without shared cache. */
@@ -148,8 +154,8 @@ export class SessionService {
     const rememberMe = input.rememberMe === true;
     const now = new Date();
     const idleMs = rememberMe ? SESSION_REMEMBER_IDLE_TTL_MS : SESSION_IDLE_TTL_MS;
-    const device = input.device ?? {};
-    const fingerprintHash = device.fingerprintHash ?? null;
+    const device = this.deviceTrust.sanitizeDevice(input.device);
+    const fingerprintHash = this.deviceTrust.resolveDeviceId(device);
 
     const trusted = fingerprintHash
       ? await db.trustedDevice.findFirst({
@@ -211,8 +217,8 @@ export class SessionService {
         userAgent: device.userAgent ?? null,
         fingerprintHash,
         screenResolution: device.screenResolution ?? null,
-        webglHash: device.webglHash ?? null,
-        canvasHash: device.canvasHash ?? null,
+        webglHash: null,
+        canvasHash: null,
         ipAddress: device.ipAddress ?? null,
         asn: device.asn ?? null,
         country: device.country ?? null,
@@ -597,7 +603,9 @@ export class SessionService {
             ipAddress: device?.ipAddress ?? session.ipAddress,
             country: device?.country ?? session.country,
             userAgent: device?.userAgent ?? session.userAgent,
-            fingerprintHash: device?.fingerprintHash ?? session.fingerprintHash,
+            fingerprintHash: this.deviceTrust.resolveDeviceId(device) ?? session.fingerprintHash,
+            webglHash: null,
+            canvasHash: null,
           },
         });
 
