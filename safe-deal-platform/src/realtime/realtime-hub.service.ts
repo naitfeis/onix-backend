@@ -277,9 +277,8 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         online: event.online,
         lastOnline: event.lastOnline,
       };
-      for (const id of event.watchers) this.sendToUser(id, payload);
-      // Echo to self (profile lastOnline)
-      this.sendToUser(event.userId, payload);
+      // Market avatars + chats need live presence — broadcast to all connected users (single-node).
+      this.broadcast(payload);
       return;
     }
     if (event.kind === 'notification') {
@@ -301,14 +300,33 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         ...(event.chatId ? { chatId: event.chatId } : {}),
       };
       for (const id of event.recipientUserIds) this.sendToUser(id, payload);
+      return;
+    }
+    if (event.kind === 'product.changed') {
+      this.broadcast({
+        type: 'product.changed',
+        productId: event.productId,
+        status: event.status,
+        quantity: event.quantity,
+        ...(event.created ? { created: true } : {}),
+      });
+    }
+  }
+
+  private broadcast(payload: RealtimeServerMessage): void {
+    for (const set of this.byUser.values()) {
+      for (const state of set) this.send(state.ws, payload);
     }
   }
 
   private sendToUser(userId: bigint, payload: RealtimeServerMessage): void {
     const set = this.byUser.get(userId.toString());
     if (!set || set.size === 0) {
-      if (payload.type === 'chat.message') {
-        structuredLog.info('realtime chat.message: user offline', { userId: userId.toString() });
+      if (payload.type === 'chat.message' || payload.type === 'order.updated') {
+        structuredLog.info('realtime deliver: user offline', {
+          userId: userId.toString(),
+          type: payload.type,
+        });
       }
       return;
     }
@@ -334,13 +352,24 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
   private detach(state: SocketState): void {
     if (state.authTimer) clearTimeout(state.authTimer);
     this.sockets.delete(state);
-    if (state.user) {
-      const key = state.user.id.toString();
-      const set = this.byUser.get(key);
-      if (set) {
-        set.delete(state);
-        if (set.size === 0) this.byUser.delete(key);
-      }
+    const user = state.user;
+    if (!user) return;
+    const key = user.id.toString();
+    const set = this.byUser.get(key);
+    if (set) {
+      set.delete(state);
+      if (set.size === 0) this.byUser.delete(key);
+    }
+    // Last socket gone → mark offline for market/chat peers.
+    if (!this.byUser.has(key)) {
+      this.bus.publish({
+        kind: 'presence',
+        userId: user.id,
+        onixId: user.onixId,
+        online: false,
+        lastOnline: new Date().toISOString(),
+        watchers: [],
+      });
     }
   }
 

@@ -79,6 +79,16 @@ export class EscrowService {
     });
   }
 
+  private emitProductChanged(product: { id: string; status: string; quantity: number }, opts?: { created?: boolean }): void {
+    this.realtime.publish({
+      kind: 'product.changed',
+      productId: product.id,
+      status: product.status,
+      quantity: product.quantity,
+      ...(opts?.created ? { created: true } : {}),
+    });
+  }
+
   async list(user: AuthUser, query: OrderQuery = {}) {
     const statusWhere: Prisma.OrderWhereInput =
       query.status === 'open' || query.status === 'active'
@@ -278,6 +288,31 @@ export class EscrowService {
       .then((buyer) => {
         if (buyer) void pushTelegramToChatId(buyer.telegramId, 'Заказ создан', 'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.');
       });
+
+    const live = await this.prisma.order.findUnique({
+      where: { id: order.id },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
+    });
+    if (live) {
+      this.emitOrderUpdated(live);
+      this.realtime.publish({
+        kind: 'notification',
+        userId: live.sellerId,
+        id: `order-paid-${live.id.toString()}`,
+        title: 'Новая покупка',
+        body: 'Покупатель оплатил заказ — средства в Escrow.',
+        createdAt: new Date().toISOString(),
+        data: {
+          orderId: live.id.toString(),
+          ...(live.chatId ? { chatId: live.chatId } : {}),
+        },
+      });
+    }
+    const productLive = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, status: true, quantity: true },
+    });
+    if (productLive) this.emitProductChanged(productLive);
 
     return this.one(user, order.id);
   }
@@ -607,9 +642,16 @@ export class EscrowService {
 
     const live = await this.prisma.order.findUnique({
       where: { id },
-      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true, productId: true },
     });
-    if (live) this.emitOrderUpdated(live);
+    if (live) {
+      this.emitOrderUpdated(live);
+      const productLive = await this.prisma.product.findUnique({
+        where: { id: live.productId },
+        select: { id: true, status: true, quantity: true },
+      });
+      if (productLive) this.emitProductChanged(productLive);
+    }
 
     if (canActAsSupport(actor)) {
       await this.prisma.supportTicket.updateMany({

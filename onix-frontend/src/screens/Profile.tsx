@@ -342,7 +342,7 @@ export function Profile({
             <h2>{item.title}</h2>
             <div className="seller-row">
               <span className="user-summary">
-                <UserAvatar userId={item.seller.id} avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile)} />
+                <UserAvatar userId={item.seller.id} avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile, core.presenceOf(item.seller.onixId))} />
                 <span>{publicAt(item.seller.username)}</span>
               </span>
               <strong>{money(item.priceCents)}</strong>

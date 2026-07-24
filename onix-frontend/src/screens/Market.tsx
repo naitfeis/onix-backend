@@ -13,6 +13,7 @@ import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
+import { getRealtimeClient } from '../realtime/client';
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
@@ -269,6 +270,39 @@ export function Market({
     ));
   }, [core.products, items, selected]);
 
+  // Live market: stock/status + soft sellers from presence map (re-render via core.presenceByOnixId).
+  useEffect(() => {
+    const off = getRealtimeClient().onMessage((msg) => {
+      if (msg.type !== 'product.changed') return;
+      if (msg.status !== 'ACTIVE') {
+        setItems((prev) => prev.filter((p) => p.id !== msg.productId));
+        setSelected((prev) => (prev?.id === msg.productId ? null : prev));
+        return;
+      }
+      setItems((prev) => prev.map((p) => (
+        p.id === msg.productId ? { ...p, status: msg.status as Product['status'], quantity: msg.quantity } : p
+      )));
+      if (msg.created) {
+        // New listing — pull first page for current browse filters.
+        void core.listProducts({ limit: 15, offset: 0 }).then((data) => {
+          if (Array.isArray(data) && data.length) setItems(data);
+        }).catch(() => { /* ignore */ });
+      }
+    });
+    return () => { off(); };
+  }, [core.listProducts]);
+
+  // Re-apply presence timestamps onto visible cards when WS presence arrives.
+  useEffect(() => {
+    const entries = Object.entries(core.presenceByOnixId);
+    if (!entries.length) return;
+    setItems((prev) => prev.map((product) => {
+      const live = core.presenceOf(product.seller.onixId);
+      if (!live || product.seller.lastOnline === live.lastOnline) return product;
+      return { ...product, seller: { ...product.seller, lastOnline: live.lastOnline } };
+    }));
+  }, [core.presenceByOnixId, core.presenceOf]);
+
   useEffect(() => {
     if (!focusProductId) return;
     let cancelled = false;
@@ -524,7 +558,7 @@ export function Market({
                   avatarUrl={product.seller.avatarUrl}
                   name={product.seller.username}
                   size="medium"
-                  online={sellerIsPresent(product.seller, core.profile)}
+                  online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
                 />
               </div>
               <button
@@ -576,7 +610,7 @@ export function Market({
             {sellerTrust.voiceVerified && <span>Голос</span>}
           </div>
         )}
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar userId={selected.seller.id} avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar userId={selected.seller.id} avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId))} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId)) ? 'Online' : formatLastSeen(core.presenceOf(selected.seller.onixId)?.lastOnline ?? selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {
               const onixId = selected.seller.onixId;

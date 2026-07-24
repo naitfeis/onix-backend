@@ -20,6 +20,8 @@ import { pushNewProductToFollowers } from './domain-notify';
 import { onixIdLookupCandidates } from './onix-id';
 import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
+import { RealtimeBus } from './realtime/realtime-bus.service';
+import { RealtimeModule } from './realtime/realtime.module';
 import {
   productDetailSelect, productListSelect, sellerCatalogSelect, sellerPublicSelect,
 } from './query-selects';
@@ -126,7 +128,20 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
 
 @Injectable()
 export class MarketplaceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeBus,
+  ) {}
+
+  private emitProductChanged(product: { id: string; status: string; quantity: number }, opts?: { created?: boolean }): void {
+    this.realtime.publish({
+      kind: 'product.changed',
+      productId: product.id,
+      status: product.status,
+      quantity: product.quantity,
+      ...(opts?.created ? { created: true } : {}),
+    });
+  }
 
   catalog() {
     return SUBCATEGORIES_BY_CATEGORY;
@@ -331,6 +346,10 @@ export class MarketplaceService {
         product,
       );
     }
+    this.emitProductChanged(
+      { id: product.id, status: product.status, quantity: product.quantity },
+      { created: true },
+    );
     return this.get(user, product.id);
   }
 
@@ -383,7 +402,13 @@ export class MarketplaceService {
       }
     }
     await this.prisma.product.update({ where: { id }, data: patch });
-    return this.get(user, id);
+    const updated = await this.get(user, id);
+    this.emitProductChanged({
+      id: updated.id,
+      status: updated.status,
+      quantity: updated.quantity,
+    });
+    return updated;
   }
 
   async status(user: AuthUser, id: string, status: 'ACTIVE' | 'ARCHIVED') {
@@ -409,7 +434,13 @@ export class MarketplaceService {
         await tx.favorite.deleteMany({ where: { productId: id } });
       }
     });
-    return this.get(user, id);
+    const updated = await this.get(user, id);
+    this.emitProductChanged({
+      id: updated.id,
+      status: updated.status,
+      quantity: updated.quantity,
+    });
+    return updated;
   }
 
   /** Admin-only: force-remove listing from market in one click. */
@@ -431,6 +462,7 @@ export class MarketplaceService {
         },
       });
     });
+    this.emitProductChanged({ id, status: 'ARCHIVED', quantity: product.quantity });
     return { ok: true as const, id, status: 'ARCHIVED' as const };
   }
 
@@ -578,7 +610,7 @@ export class AdminProductsController {
 }
 
 @Module({
-  imports: [AuthV2Module, AuthModule],
+  imports: [AuthV2Module, AuthModule, RealtimeModule],
   controllers: [MarketplaceController, AdminProductsController],
   providers: [MarketplaceService],
   exports: [MarketplaceService],

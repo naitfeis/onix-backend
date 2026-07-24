@@ -48,6 +48,14 @@ export type RealtimeServerMessage =
       orderId: string;
       status: string;
       chatId?: string;
+    }
+  | {
+      type: 'product.changed';
+      productId: string;
+      status: string;
+      quantity: number;
+      /** New listing — clients may soft-reload catalog. */
+      created?: boolean;
     };
 
 /** Internal bus events (domain → hub). */
@@ -76,7 +84,7 @@ export type RealtimeBusEvent =
       onixId: string;
       online: boolean;
       lastOnline: string;
-      /** Who should see this (followers / open chat peers) — empty = skip fanout except self */
+      /** Hint list (chat peers). Hub still broadcasts presence to all sockets. */
       watchers: bigint[];
     }
   | {
@@ -94,4 +102,11 @@ export type RealtimeBusEvent =
       status: string;
       chatId?: string;
       recipientUserIds: bigint[];
+    }
+  | {
+      kind: 'product.changed';
+      productId: string;
+      status: string;
+      quantity: number;
+      created?: boolean;
     };

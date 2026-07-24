@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, friendlyError, money } from '../api/client';
-import { API_PATHS, formatLastSeen, isOnline, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, isOnline, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -394,7 +394,13 @@ export function Chats({
             <UserAvatar
               avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
               name={chat.title}
-              online={chat.kind === 'GROUP' || chat.kind === 'AI' ? undefined : isOnline(chat.peerLastOnline)}
+              online={chat.kind === 'GROUP' || chat.kind === 'AI' || !chat.peerOnixId
+                ? undefined
+                : sellerIsPresent(
+                  { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
+                  core.profile,
+                  core.presenceOf(chat.peerOnixId),
+                )}
             />
             <span>
               <b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
@@ -431,13 +437,19 @@ export function Chats({
           <UserAvatar
             avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
             name={thread.title}
-            online={thread.kind === 'GROUP' || thread.kind === 'AI' ? undefined : isOnline(thread.peerLastOnline)}
+            online={thread.kind === 'GROUP' || thread.kind === 'AI' || !thread.peerOnixId
+              ? undefined
+              : sellerIsPresent(
+                { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
+                core.profile,
+                core.presenceOf(thread.peerOnixId),
+              )}
           />
         ) : null}
         <div>
           <b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
           <small>
-            {thread.kind === 'AI' ? 'Помощник платформы' : thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(thread.peerLastOnline)}
+            {thread.kind === 'AI' ? 'Помощник платформы' : thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}
           </small>
         </div>
       </button>
@@ -706,7 +718,7 @@ export function Chats({
                 <UserAvatar
                   avatarUrl={member.avatarUrl}
                   name={member.username}
-                  online={isOnline(member.lastOnline)}
+                  online={isOnline(core.presenceOf(member.onixId)?.lastOnline ?? member.lastOnline)}
                 />
                 <span>
                   <b>{publicAt(member.username)} <StaffBadge badge={member.badge} /></b>

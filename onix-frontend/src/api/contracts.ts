@@ -564,16 +564,22 @@ export function isOnline(iso?: string | null): boolean {
   return Date.now() - at < ONLINE_WINDOW_MS;
 }
 
+/** Normalize ONIX id for presence map / identity compares. */
+export function normOnixId(value: string): string {
+  return value.trim().toUpperCase().replace(/^ONIX-0+/, 'ONIX-');
+}
+
 /**
  * Presence for avatars: if this seller is the signed-in user browsing the app → online.
- * Otherwise use lastOnline freshness (kept alive by /users/me/presence heartbeat).
+ * Prefer live WS presence when available; else lastOnline freshness.
  */
 export function sellerIsPresent(
   seller: Pick<Seller, 'onixId' | 'lastOnline'>,
   me?: Pick<Seller, 'onixId' | 'lastOnline'> | null,
+  live?: { online: boolean; lastOnline: string } | null,
 ): boolean {
-  const norm = (v: string) => v.trim().toUpperCase().replace(/^ONIX-0+/, 'ONIX-');
-  if (me && norm(seller.onixId) === norm(me.onixId)) return true;
+  if (me && normOnixId(seller.onixId) === normOnixId(me.onixId)) return true;
+  if (live) return live.online && isOnline(live.lastOnline);
   return isOnline(seller.lastOnline);
 }
 

@@ -11,7 +11,14 @@ export type RealtimeInbound =
   | { type: 'chat.typing'; chatId: string; userId: string; onixId: string; username: string }
   | { type: 'presence'; userId: string; onixId: string; online: boolean; lastOnline: string }
   | { type: 'notification'; id: string; title: string; body: string; createdAt: string; data?: Record<string, unknown> }
-  | { type: 'order.updated'; orderId: string; status: string; chatId?: string };
+  | { type: 'order.updated'; orderId: string; status: string; chatId?: string }
+  | {
+      type: 'product.changed';
+      productId: string;
+      status: string;
+      quantity: number;
+      created?: boolean;
+    };
 
 type Listener = (msg: RealtimeInbound) => void;
 type TokenProvider = () => Promise<string | null>;

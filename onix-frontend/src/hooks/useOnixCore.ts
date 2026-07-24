@@ -8,7 +8,7 @@ import {
   telegramHaptic,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
-import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
+import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
 import {
   bootstrapPhase,
   bootstrapPhaseSync,
@@ -136,6 +136,7 @@ export function useOnixCore() {
   });
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
+  const [presenceByOnixId, setPresenceByOnixId] = useState<Record<string, { online: boolean; lastOnline: string }>>({});
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
 
@@ -394,8 +395,55 @@ export function useOnixCore() {
         }));
         return;
       }
+      if (msg.type === 'presence') {
+        const key = normOnixId(msg.onixId);
+        setPresenceByOnixId((previous) => ({
+          ...previous,
+          [key]: { online: msg.online, lastOnline: msg.lastOnline },
+        }));
+        setStore((previous) => ({
+          ...previous,
+          chats: previous.chats.map((chat) => (
+            chat.peerOnixId && normOnixId(chat.peerOnixId) === key
+              ? { ...chat, peerLastOnline: msg.lastOnline }
+              : chat
+          )),
+          products: previous.products.map((product) => (
+            normOnixId(product.seller.onixId) === key
+              ? { ...product, seller: { ...product.seller, lastOnline: msg.lastOnline } }
+              : product
+          )),
+          deals: previous.deals.map((deal) => (
+            normOnixId(deal.counterparty.onixId) === key
+              ? { ...deal, counterparty: { ...deal.counterparty, lastOnline: msg.lastOnline } }
+              : deal
+          )),
+        }));
+        return;
+      }
       if (msg.type === 'order.updated') {
         void load('deals', API_PATHS.orders, { silent: true });
+        void load('chats', API_PATHS.chats, { silent: true });
+        return;
+      }
+      if (msg.type === 'product.changed') {
+        if (msg.created || msg.status === 'ACTIVE') {
+          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true });
+        }
+        setStore((previous) => {
+          if (msg.status !== 'ACTIVE') {
+            return {
+              ...previous,
+              products: previous.products.filter((p) => p.id !== msg.productId),
+            };
+          }
+          return {
+            ...previous,
+            products: previous.products.map((p) => (
+              p.id === msg.productId ? { ...p, status: msg.status, quantity: msg.quantity } : p
+            )),
+          };
+        });
         return;
       }
       if (msg.type === 'notification') {
@@ -725,11 +773,16 @@ export function useOnixCore() {
   const setUserStatus = useCallback((userId: string, status: PlatformStatus) =>
     run('admin-status', () => api.patch(API_PATHS.adminStatus(userId), { status })), [run]);
 
+  const presenceOf = useCallback((onixId: string) => {
+    return presenceByOnixId[normOnixId(onixId)] ?? null;
+  }, [presenceByOnixId]);
+
   // Badge: chat unread only (in-app notifications stay for API/history; UI tab removed).
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
     profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     markNotificationRead, adminAction, setUserStatus, reportUser,
