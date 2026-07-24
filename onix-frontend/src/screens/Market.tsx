@@ -502,17 +502,6 @@ export function Market({
       )}
     </div>
 
-    {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
-      {marketSubs.map(item => (
-        <button
-          role="listitem"
-          className={subcategory === item ? 'active' : ''}
-          key={item}
-          onClick={() => setSubcategory(subcategory === item ? '' : item)}
-        >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
-      ))}
-    </div>}
-
     <div className="search-row desktop-search">
       <Input
         type="search"
@@ -536,6 +525,17 @@ export function Market({
         <option value="rating">По рейтингу</option>
       </Select>
     </div>
+
+    {marketSubs.length > 0 && <div className="chips" role="list" aria-label="Подкатегории">
+      {marketSubs.map(item => (
+        <button
+          role="listitem"
+          className={subcategory === item ? 'active' : ''}
+          key={item}
+          onClick={() => setSubcategory(subcategory === item ? '' : item)}
+        >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
+      ))}
+    </div>}
 
     {onixQuery && <Button variant="secondary" onClick={async () => {
       try {

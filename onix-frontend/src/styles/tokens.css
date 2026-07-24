@@ -447,6 +447,11 @@ html[data-theme="dark"] .product-card {
 .cat-card {
   overflow: visible;
   border-radius: var(--radius-md);
+  /* Solid fill only — backdrop blur paints purple horizontal bands on active chips */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--glass-card-bg, var(--glass-bg)) !important;
+  box-shadow: none !important;
 }
 
 .live-pill,

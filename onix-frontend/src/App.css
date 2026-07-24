@@ -589,6 +589,17 @@ html[data-theme="dark"] .button--secondary {
   height: 56px !important;
   font-size: 18px;
 }
+.product-card__avatar .user-avatar__presence {
+  width: 14px;
+  height: 14px;
+  right: 1px;
+  bottom: 1px;
+  border-width: 2px;
+  border-color: rgba(18, 18, 24, 0.92);
+}
+html[data-theme="light"] .product-card__avatar .user-avatar__presence {
+  border-color: #fff;
+}
 .product-card__badges {
   position: absolute;
   inset: 8px;
@@ -962,9 +973,15 @@ html[data-theme="light"] .cat-more:hover {
 }
 .cat-card:active { transform: scale(0.97); }
 .cat-card.active {
-  border-color: rgba(139, 127, 245, 0.55);
-  background: color-mix(in srgb, var(--accent-violet) 28%, rgba(255, 255, 255, 0.05));
-  box-shadow: var(--glass-shadow);
+  border-color: rgba(139, 127, 245, 0.45);
+  background: color-mix(in srgb, var(--accent-violet) 22%, var(--glass-card-bg, transparent)) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-theme="light"] .cat-card.active {
+  background: color-mix(in srgb, var(--accent-violet) 14%, #fff) !important;
+  border-color: rgba(107, 95, 224, 0.35);
 }
 .cat-card__emblem {
   width: 40px;
@@ -1008,24 +1025,30 @@ html[data-theme="light"] .cat-more:hover {
   color: var(--text-primary);
 }
 .cat-card__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 22px;
-  max-width: 40px;
   height: 20px;
-  padding: 0 6px;
+  padding: 0 7px;
   margin: 0 auto;
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
+  font-family: var(--font-body), sans-serif;
+  font-size: 11px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 20px;
+  line-height: 1;
   text-align: center;
-  overflow: hidden;
-  white-space: nowrap;
   color: var(--text-primary);
-  opacity: 0.85;
-  align-self: center;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border: 0;
+  box-shadow: none;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html[data-theme="light"] .cat-card__count {
+  background: rgba(20, 25, 35, 0.08);
+  color: rgba(20, 25, 35, 0.78);
 }
 
 /* Mobile home wallet widget (Vision Pro glass card) */
@@ -1254,22 +1277,36 @@ html[data-theme="light"] .cat-more:hover {
 .user-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .user-avatar__presence {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 11px;
-  height: 11px;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  border: 2px solid rgba(110, 111, 122, 0.95);
+  border: 2px solid var(--bg-elevated, rgba(110, 111, 122, 0.95));
   box-sizing: border-box;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
   background: #5a5a62;
 }
 .user-avatar-wrap--medium .user-avatar__presence {
-  width: 14px;
-  height: 14px;
-  right: -1px;
-  bottom: -1px;
+  width: 13px;
+  height: 13px;
+  right: 1px;
+  bottom: 1px;
+}
+.identity .user-avatar-wrap,
+.identity-user .user-avatar-wrap {
+  overflow: visible;
+}
+.identity .user-summary > :last-child {
+  overflow: visible;
+}
+html[data-theme="light"] .user-avatar__presence {
+  border-color: #fff;
+}
+html[data-theme="dark"] .user-avatar__presence,
+:root:not([data-theme="light"]) .user-avatar__presence {
+  border-color: rgba(22, 22, 28, 0.95);
 }
 .user-avatar-wrap.is-online .user-avatar__presence { background: var(--success-green); }
 .user-avatar-wrap.is-offline .user-avatar__presence { background: #5a5a62; }
@@ -1496,6 +1533,7 @@ select.control:focus {
   gap: 8px;
   overflow: visible;
   padding-bottom: 3px;
+  margin-top: 2px;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
