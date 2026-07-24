@@ -24,12 +24,12 @@ html[data-theme="dark"] {
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
 
-  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(18, 16, 28, 0.78);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.06);
-  --glass-regular-bg: rgba(255, 255, 255, 0.1);
-  --glass-thick-bg: rgba(255, 255, 255, 0.14);
-  --glass-card-bg: rgba(255, 255, 255, 0.12);
+  --glass-thin-bg: rgba(18, 16, 28, 0.7);
+  --glass-regular-bg: rgba(18, 16, 28, 0.82);
+  --glass-thick-bg: rgba(18, 16, 28, 0.88);
+  --glass-card-bg: rgba(18, 16, 28, 0.8);
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.18);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
@@ -166,12 +166,12 @@ html[data-theme="light"] {
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
 
-  --glass-bg: rgba(255, 255, 255, 0.42);
+  --glass-bg: rgba(255, 255, 255, 0.78);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.32);
-  --glass-regular-bg: rgba(255, 255, 255, 0.42);
-  --glass-thick-bg: rgba(255, 255, 255, 0.58);
-  --glass-card-bg: rgba(255, 255, 255, 0.5);
+  --glass-thin-bg: rgba(255, 255, 255, 0.7);
+  --glass-regular-bg: rgba(255, 255, 255, 0.82);
+  --glass-thick-bg: rgba(255, 255, 255, 0.9);
+  --glass-card-bg: rgba(255, 255, 255, 0.84);
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.55);
   --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);

@@ -39,6 +39,7 @@ export class RealtimeClient {
   private subscribedChats = new Set<string>();
   private ready = false;
   private authInFlight = false;
+  private visibilityBound = false;
 
   /** True after server `ready` (authenticated). */
   isReady(): boolean {
@@ -52,12 +53,14 @@ export class RealtimeClient {
   connect(getAccessToken: TokenProvider): void {
     this.tokenProvider = getAccessToken;
     this.intentionalClose = false;
+    this.bindVisibility();
     this.open();
   }
 
   disconnect(): void {
     this.intentionalClose = true;
     this.ready = false;
+    this.unbindVisibility();
     if (this.reconnectTimer != null) window.clearTimeout(this.reconnectTimer);
     if (this.pingTimer != null) window.clearInterval(this.pingTimer);
     this.reconnectTimer = null;
@@ -143,6 +146,26 @@ export class RealtimeClient {
     } finally {
       this.authInFlight = false;
     }
+  }
+
+  private onVisibility = (): void => {
+    if (document.hidden || this.intentionalClose) return;
+    if (!this.isReady()) this.open();
+    else this.send({ type: 'ping' });
+  };
+
+  private bindVisibility(): void {
+    if (this.visibilityBound) return;
+    this.visibilityBound = true;
+    document.addEventListener('visibilitychange', this.onVisibility);
+    window.addEventListener('focus', this.onVisibility);
+  }
+
+  private unbindVisibility(): void {
+    if (!this.visibilityBound) return;
+    this.visibilityBound = false;
+    document.removeEventListener('visibilitychange', this.onVisibility);
+    window.removeEventListener('focus', this.onVisibility);
   }
 
   private send(payload: Record<string, unknown>): void {

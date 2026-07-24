@@ -332,12 +332,13 @@ export function useOnixCore() {
     void refreshAll();
   }, [refreshAll]);
 
-  // Keep lastSeenAt fresh while the shell is visible — profile only (no full catalog rewrite).
+  // Keep lastSeenAt fresh while the shell is open — including background tabs
+  // (browsers throttle timers, but we must not skip beats solely because document.hidden).
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
     const beat = async () => {
-      if (cancelled || document.hidden) return;
+      if (cancelled) return;
       try {
         const res = await api.post<{ lastOnline: string; online: boolean }>(API_PATHS.mePresence, {});
         if (cancelled || !res?.lastOnline) return;
@@ -347,13 +348,28 @@ export function useOnixCore() {
       }
     };
     void beat();
-    const id = window.setInterval(() => { void beat(); }, 90_000);
-    const onVis = () => { if (!document.hidden) void beat(); };
+    const id = window.setInterval(() => { void beat(); }, 45_000);
+    const onVis = () => {
+      if (document.hidden) return;
+      void beat();
+      const rt = getRealtimeClient();
+      if (!rt.isReady()) {
+        const freshToken = async () => {
+          const manager = getSharedAuthManager();
+          const ensured = await manager.ensureAccessToken();
+          if (ensured) return ensured;
+          return getAccessToken();
+        };
+        rt.connect(freshToken);
+      }
+    };
     document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onVis);
     return () => {
       cancelled = true;
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onVis);
     };
   }, [profile?.onixId]);
 

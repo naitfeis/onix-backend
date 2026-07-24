@@ -1,7 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, sellerIsPresent,
+  API_PATHS, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -324,8 +324,8 @@ export function Profile({
     </Card>
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
-    {section === 'overview' && <Card><h2>// ИСТОРИЯ БАЛАНСА</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
-      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{item.type}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
+    {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
+      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
       {historyHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
           <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>Показать ещё</Button>

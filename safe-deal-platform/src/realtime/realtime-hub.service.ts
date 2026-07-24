@@ -187,7 +187,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       const oldest = existing.values().next().value;
       if (oldest) {
         try { oldest.ws.close(1000, 'replaced'); } catch { /* ignore */ }
-        this.detach(oldest);
+        this.detach(oldest, { silent: true });
       }
     }
     state.user = user;
@@ -202,6 +202,20 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
     set.add(state);
     this.send(state.ws, { type: 'ready', userId: key });
+    // Announce online immediately on WS auth (works even if HTTP presence is throttled in background tabs).
+    void this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastSeenAt: new Date() },
+    }).then(() => {
+      this.bus.publish({
+        kind: 'presence',
+        userId: user.id,
+        onixId: user.onixId,
+        online: true,
+        lastOnline: new Date().toISOString(),
+        watchers: [],
+      });
+    }).catch(() => { /* ignore */ });
   }
 
   private async subscribeChat(state: SocketState, chatId: string): Promise<void> {
@@ -349,7 +363,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private detach(state: SocketState): void {
+  private detach(state: SocketState, opts?: { silent?: boolean }): void {
     if (state.authTimer) clearTimeout(state.authTimer);
     this.sockets.delete(state);
     const user = state.user;
@@ -361,7 +375,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       if (set.size === 0) this.byUser.delete(key);
     }
     // Last socket gone → mark offline for market/chat peers.
-    if (!this.byUser.has(key)) {
+    if (!opts?.silent && !this.byUser.has(key)) {
       this.bus.publish({
         kind: 'presence',
         userId: user.id,

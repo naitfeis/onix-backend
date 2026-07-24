@@ -44,12 +44,12 @@ html[data-theme="light"] .onix-bg__base {
 html[data-theme="dark"] {
   --page-bg: #05040a;
   --bg-scene-deep: #05040a;
-  --orb-blur: 17px;
+  --orb-blur: 28px;
 }
 html[data-theme="light"] {
   --page-bg: #e4ecf5;
   --bg-scene-deep: #e4ecf5;
-  --orb-blur: 15px;
+  --orb-blur: 26px;
 }
 
 /* —— Orbs —— */
@@ -179,8 +179,14 @@ html[data-theme="light"] .onix-bg__vignette {
   box-shadow: inset 0 0 180px 70px rgba(140, 120, 180, 0.18);
 }
 
-.onix-bg[data-mode="chat"] .onix-bg__orbs { opacity: 0.9; }
-.onix-bg[data-mode="focus"] .onix-bg__orbs { opacity: 0.85; }
+.onix-bg[data-mode="chat"] .onix-bg__orbs { opacity: 0.35; }
+.onix-bg[data-mode="focus"] .onix-bg__orbs { opacity: 0.4; }
+.onix-bg[data-mode="normal"] .onix-bg__orbs { opacity: 0.45; }
+
+/* Kill vignette banding / edge streaks through glass */
+.onix-bg__vignette {
+  display: none !important;
+}
 
 .onix-bg[data-reduced="true"] .orb,
 .onix-bg[data-reduced="true"] .onix-bg__star {

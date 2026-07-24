@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, friendlyError, money } from '../api/client';
-import { API_PATHS, formatLastSeen, isOnline, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -12,6 +12,22 @@ import { getRealtimeClient } from '../realtime/client';
 
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
+const CHAT_LIST_W_KEY = 'onix-chat-list-w';
+const CHAT_PEERS_W_KEY = 'onix-chat-peers-w';
+const CHAT_LIST_DEFAULT = 280;
+const CHAT_PEERS_DEFAULT = 260;
+const CHAT_LIST_MIN = 200;
+const CHAT_PEERS_MIN = 180;
+
+function readStoredChatWidth(key: string, fallback: number): number {
+  try {
+    const raw = localStorage.getItem(key);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) && n >= 160 ? Math.round(n) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export function Chats({
   core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast,
@@ -75,6 +91,73 @@ export function Chats({
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
+  const [listW, setListW] = useState(() => readStoredChatWidth(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT));
+  const [peersW, setPeersW] = useState(() => readStoredChatWidth(CHAT_PEERS_W_KEY, CHAT_PEERS_DEFAULT));
+
+  const peerContacts = (() => {
+    const seen = new Set<string>();
+    const rows: Array<{ onixId: string; title: string; avatarUrl?: string; badge?: typeof core.chats[0]['peerBadge']; lastOnline?: string; chatId: string }> = [];
+    for (const chat of core.chats) {
+      if (!chat.peerOnixId || chat.kind === 'AI') continue;
+      const key = chat.peerOnixId.trim().toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        onixId: chat.peerOnixId,
+        title: chat.title,
+        avatarUrl: chat.peerAvatarUrl,
+        badge: chat.peerBadge,
+        lastOnline: chat.peerLastOnline,
+        chatId: chat.id,
+      });
+    }
+    return rows;
+  })();
+
+  const startChatColResize = (side: 'list' | 'peers', event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = side === 'list' ? listW : peersW;
+    const target = event.currentTarget;
+    const layout = target.closest('.chat-layout') as HTMLElement | null;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-chat');
+    let latest = startW;
+    let raf = 0;
+    const apply = (next: number) => {
+      latest = next;
+      if (!layout) return;
+      if (side === 'list') layout.style.setProperty('--chat-list-w', `${next}px`);
+      else layout.style.setProperty('--chat-peers-w', `${next}px`);
+    };
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const max = Math.floor(window.innerWidth * 0.4);
+      const next = Math.max(
+        side === 'list' ? CHAT_LIST_MIN : CHAT_PEERS_MIN,
+        Math.min(max, side === 'list' ? startW + dx : startW - dx),
+      );
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => apply(next));
+    };
+    const onUp = (ev: PointerEvent) => {
+      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (raf) cancelAnimationFrame(raf);
+      document.body.classList.remove('is-resizing-chat');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const rounded = Math.round(latest);
+      if (side === 'list') {
+        setListW(rounded);
+        try { localStorage.setItem(CHAT_LIST_W_KEY, String(rounded)); } catch { /* ignore */ }
+      } else {
+        setPeersW(rounded);
+        try { localStorage.setItem(CHAT_PEERS_W_KEY, String(rounded)); } catch { /* ignore */ }
+      }
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+  };
 
   const openOnixProfile = async (onixId: string) => {
     const id = formatOnixId(onixId) || onixId;
@@ -360,7 +443,13 @@ export function Chats({
     return <Card><Skeleton lines={6} /></Card>;
   }
 
-  return <div className="chat-layout">
+  return <div
+    className="chat-layout"
+    style={{
+      '--chat-list-w': `${listW}px`,
+      '--chat-peers-w': `${peersW}px`,
+    } as CSSProperties}
+  >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
         <Input
@@ -411,6 +500,12 @@ export function Chats({
           </span>
           {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
         </button>)}</div>
+    <button
+      type="button"
+      className="chat-col-resizer chat-col-resizer--list desktop-only"
+      aria-label="Изменить ширину списка чатов"
+      onPointerDown={(event) => startChatColResize('list', event)}
+    />
     <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
       <button
         type="button"
@@ -638,6 +733,50 @@ export function Chats({
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
+    <button
+      type="button"
+      className="chat-col-resizer chat-col-resizer--peers desktop-only"
+      aria-label="Изменить ширину списка пользователей"
+      onPointerDown={(event) => startChatColResize('peers', event)}
+    />
+    <aside className="chat-peers desktop-only" aria-label="Пользователи">
+      <p className="chat-peers__title">Пользователи</p>
+      {peerContacts.length === 0
+        ? <p className="muted" style={{ padding: '0 4px' }}>Контакты появятся из ваших диалогов.</p>
+        : peerContacts.map((peer) => (
+          <button
+            type="button"
+            className={`thread${peer.chatId === threadId ? ' active' : ''}`}
+            key={peer.onixId}
+            onClick={() => setThreadId(peer.chatId)}
+          >
+            <span className="thread-peer">
+              <UserAvatar
+                avatarUrl={peer.avatarUrl}
+                name={peer.title}
+                online={sellerIsPresent(
+                  { onixId: peer.onixId, lastOnline: peer.lastOnline },
+                  core.profile,
+                  core.presenceOf(peer.onixId),
+                )}
+              />
+              <span>
+                <b>{peer.title} <StaffBadge badge={peer.badge} /></b>
+                <small>
+                  {formatOnixId(peer.onixId)} ·{' '}
+                  {sellerIsPresent(
+                    { onixId: peer.onixId, lastOnline: peer.lastOnline },
+                    core.profile,
+                    core.presenceOf(peer.onixId),
+                  )
+                    ? 'Online'
+                    : formatLastSeen(core.presenceOf(peer.onixId)?.lastOnline ?? peer.lastOnline)}
+                </small>
+              </span>
+            </span>
+          </button>
+        ))}
+    </aside>
     <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); resetMemberPicker(); }}>
       <div className="form">
         <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>
@@ -718,11 +857,15 @@ export function Chats({
                 <UserAvatar
                   avatarUrl={member.avatarUrl}
                   name={member.username}
-                  online={isOnline(core.presenceOf(member.onixId)?.lastOnline ?? member.lastOnline)}
+                  online={sellerIsPresent(
+                    { onixId: member.onixId, lastOnline: member.lastOnline },
+                    core.profile,
+                    core.presenceOf(member.onixId),
+                  )}
                 />
                 <span>
                   <b>{publicAt(member.username)} <StaffBadge badge={member.badge} /></b>
-                  <small>{formatOnixId(member.onixId)} · {formatLastSeen(member.lastOnline)}</small>
+                  <small>{formatOnixId(member.onixId)} · {formatLastSeen(core.presenceOf(member.onixId)?.lastOnline ?? member.lastOnline)}</small>
                 </span>
               </span>
             </button>

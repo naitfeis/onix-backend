@@ -16,30 +16,20 @@ type OrbSpec = {
  * No per-orb blur values — stacking with card backdrop-filter is forbidden.
  */
 const ORBS_DARK: OrbSpec[] = [
-  { color: '#8b6bff', size: 180, opacity: 0.72, top: '5%', left: '10%', duration: '22s', delay: '0s' },
-  { color: '#ff6fb8', size: 140, opacity: 0.65, top: '4%', left: '88%', duration: '26s', delay: '-5s' },
-  { color: '#4fc3f7', size: 160, opacity: 0.68, top: '14%', left: '70%', duration: '20s', delay: '-10s' },
-  { color: '#7c5cff', size: 200, opacity: 0.7, top: '28%', left: '16%', duration: '28s', delay: '-3s' },
-  { color: '#5ac8fa', size: 130, opacity: 0.62, top: '52%', left: '86%', duration: '18s', delay: '-8s' },
-  { color: '#e94fb0', size: 170, opacity: 0.65, top: '68%', left: '8%', duration: '24s', delay: '-12s' },
-  { color: '#7c5cff', size: 150, opacity: 0.62, top: '84%', left: '58%', duration: '30s', delay: '-6s' },
+  { color: '#8b6bff', size: 220, opacity: 0.38, top: '8%', left: '12%', duration: '28s', delay: '0s' },
+  { color: '#4fc3f7', size: 200, opacity: 0.32, top: '18%', left: '78%', duration: '32s', delay: '-8s' },
+  { color: '#7c5cff', size: 240, opacity: 0.34, top: '62%', left: '18%', duration: '30s', delay: '-4s' },
+  { color: '#5ac8fa', size: 180, opacity: 0.28, top: '72%', left: '82%', duration: '26s', delay: '-12s' },
 ];
 
 /**
- * Light — daylight canvas: cool mist + soft coral/cyan (not lavender-dominant).
- * Positions: all four corners + top band + mid-right.
+ * Light — soft daylight mist (fewer orbs, lower opacity → no glass banding streaks).
  */
 const ORBS_LIGHT: OrbSpec[] = [
-  /* Sharp daylight blobs — clear through transparent panels */
-  { color: '#7eb8e8', size: 200, opacity: 0.9, top: '8%', left: '12%', duration: '22s', delay: '0s' },
-  { color: '#a8c4e0', size: 170, opacity: 0.85, top: '5%', left: '48%', duration: '24s', delay: '-4s' },
-  { color: '#f098b0', size: 150, opacity: 0.88, top: '6%', left: '80%', duration: '26s', delay: '-8s' },
-  { color: '#f0c890', size: 100, opacity: 0.9, top: '10%', left: '92%', duration: '18s', delay: '-2s' },
-  { color: '#6ec0d4', size: 155, opacity: 0.85, top: '42%', left: '8%', duration: '28s', delay: '-10s' },
-  { color: '#e8a8c0', size: 120, opacity: 0.8, top: '40%', left: '76%', duration: '20s', delay: '-6s' },
-  { color: '#90b0d0', size: 210, opacity: 0.88, top: '88%', left: '14%', duration: '30s', delay: '-12s' },
-  { color: '#78c4d4', size: 180, opacity: 0.85, top: '86%', left: '82%', duration: '25s', delay: '-5s' },
-  { color: '#d8a0b8', size: 140, opacity: 0.78, top: '70%', left: '52%', duration: '21s', delay: '-9s' },
+  { color: '#7eb8e8', size: 240, opacity: 0.42, top: '10%', left: '14%', duration: '28s', delay: '0s' },
+  { color: '#a8c4e0', size: 200, opacity: 0.36, top: '8%', left: '72%', duration: '30s', delay: '-6s' },
+  { color: '#90b0d0', size: 220, opacity: 0.38, top: '78%', left: '18%', duration: '32s', delay: '-10s' },
+  { color: '#78c4d4', size: 190, opacity: 0.34, top: '70%', left: '80%', duration: '26s', delay: '-4s' },
 ];
 
 function buildStars(count: number, seedStart: number) {
@@ -72,8 +62,8 @@ function buildStars(count: number, seedStart: number) {
   return stars;
 }
 
-const STARS_DARK = buildStars(55, 42);
-const STARS_LIGHT = buildStars(32, 91);
+const STARS_DARK = buildStars(28, 42);
+const STARS_LIGHT = buildStars(18, 91);
 
 function Orb({
   color,

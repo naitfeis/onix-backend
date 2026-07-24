@@ -579,8 +579,25 @@ export function sellerIsPresent(
   live?: { online: boolean; lastOnline: string } | null,
 ): boolean {
   if (me && normOnixId(seller.onixId) === normOnixId(me.onixId)) return true;
-  if (live) return live.online && isOnline(live.lastOnline);
+  // WS presence flag is authoritative (do not re-gate on lastOnline freshness).
+  if (live) return live.online;
   return isOnline(seller.lastOnline);
+}
+
+/** Human labels for wallet ledger operation types. */
+export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
+  DEPOSIT: 'Пополнение',
+  DEPOSIT_FUND: 'Пополнение залога',
+  DEPOSIT_RETURN: 'Возврат залога',
+  PURCHASE_HOLD: 'Оплата в Escrow',
+  REFUND: 'Возврат',
+  SALE_PAYOUT: 'Выплата с продажи',
+  ADMIN_ADJUSTMENT: 'Корректировка',
+  WITHDRAWAL: 'Вывод',
+};
+
+export function ledgerTypeLabel(type: string): string {
+  return LEDGER_TYPE_LABELS[type as WalletOperation['type']] ?? type;
 }
 
 export interface SupportQueueItem {
