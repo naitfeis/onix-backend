@@ -81,11 +81,10 @@ export function Market({
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
-  /** Categories revealed per «Показать ещё» (under «Все»). */
+  /** Categories shown under «Все» — collapsed = first page, expanded = all. */
   const CAT_PAGE_SIZE = 9;
-  const visibleCats = CATEGORIES.slice(0, catVisibleCount);
-  const hiddenCatCount = CATEGORIES.length - catVisibleCount;
-  const catsFullyOpen = hiddenCatCount <= 0;
+  const catsFullyOpen = catVisibleCount >= CATEGORIES.length;
+  const visibleCats = catsFullyOpen ? CATEGORIES : CATEGORIES.slice(0, CAT_PAGE_SIZE);
   const isAdmin = Boolean(
     core.profile?.isAdmin
     || core.profile?.status === 'ADMIN'
@@ -484,7 +483,7 @@ export function Market({
         <button
           type="button"
           className="cat-more"
-          aria-expanded={catsFullyOpen || catVisibleCount > CAT_PAGE_SIZE}
+          aria-expanded={catsFullyOpen}
           onClick={() => {
             if (catsFullyOpen) {
               const collapsing = CATEGORIES.slice(CAT_PAGE_SIZE);
@@ -495,12 +494,10 @@ export function Market({
               setCatVisibleCount(CAT_PAGE_SIZE);
               return;
             }
-            setCatVisibleCount((n) => Math.min(CATEGORIES.length, n + CAT_PAGE_SIZE));
+            setCatVisibleCount(CATEGORIES.length);
           }}
         >
-          {catsFullyOpen
-            ? 'Скрыть'
-            : `Показать ещё (${Math.min(CAT_PAGE_SIZE, hiddenCatCount)})`}
+          {catsFullyOpen ? 'Скрыть' : 'Показать всё'}
         </button>
       )}
     </div>
@@ -517,7 +514,22 @@ export function Market({
     </div>}
 
     <div className="search-row desktop-search">
-      <Input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Товар, продавец или ONIX ID" aria-label="Поиск" />
+      <Input
+        type="search"
+        value={query}
+        onChange={(event) => {
+          const next = event.target.value;
+          setQuery(next);
+          const matched = matchCategorySearch(next);
+          if (matched) {
+            setCategory(matched);
+            setSubcategory('');
+            setCatVisibleCount(CATEGORIES.length);
+          }
+        }}
+        placeholder="Товар, продавец или ONIX ID"
+        aria-label="Поиск"
+      />
       <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка">
         <option value="new">Сначала новые</option>
         <option value="price">Сначала дешевле</option>

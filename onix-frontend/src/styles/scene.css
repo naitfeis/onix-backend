@@ -1,18 +1,4 @@
-/* ONIX Market background — sharp orbs (one blur layer) + stars */
-
-/*
- * Scene CSS vars (set per-orb/star via inline style from OnixBackground.tsx).
- * Defaults silence IDE "cannot resolve" warnings; runtime always overrides.
- */
-:root {
-  --orb-color: #8b6bff;
-  --orb-dur: 18s;
-  --orb-delay: 0s;
-  /* ★ Background orb blur — change this (dark default). Light overrides below. */
-  --orb-blur: 22px;
-  --dur: 3s;
-  --delay: 0s;
-}
+/* ONIX Market background — clean solid canvas (no orb/star banding) */
 
 .onix-bg {
   position: fixed;
@@ -20,205 +6,39 @@
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  /* No blur on scene wrapper — blur lives only on .orb */
   filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
-/* —— Base —— */
 .onix-bg__base {
   position: absolute;
   inset: 0;
   filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: radial-gradient(ellipse at 50% 0%, #14101f 0%, #0a0812 60%, #05040a 100%);
+  background: #0a0812;
 }
 
 html[data-theme="light"] .onix-bg__base {
-  /* Clear daylight canvas — sharp, not milky */
-  background: radial-gradient(ellipse at 50% 0%, #f7f9fc 0%, #eef3f9 50%, #e4ecf5 100%);
+  background: #e8eef6;
 }
 
 html[data-theme="dark"] {
-  --page-bg: #05040a;
-  --bg-scene-deep: #05040a;
-  --orb-blur: 28px;
+  --page-bg: #0a0812;
+  --bg-scene-deep: #0a0812;
 }
+
 html[data-theme="light"] {
-  --page-bg: #e4ecf5;
-  --bg-scene-deep: #e4ecf5;
-  --orb-blur: 26px;
+  --page-bg: #e8eef6;
+  --bg-scene-deep: #e8eef6;
 }
 
-/* —— Orbs —— */
-.onix-bg__orbs {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-
-.onix-bg__orbs--light { display: none; }
-html[data-theme="light"] .onix-bg__orbs--dark { display: none; }
-html[data-theme="light"] .onix-bg__orbs--light { display: block; }
-
-/*
- * Background blur lives HERE — filter: blur(var(--orb-blur)).
- * Change --orb-blur above (dark/light), not backdrop-filter on cards.
- */
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  will-change: transform;
-  mix-blend-mode: normal;
-  filter: blur(var(--orb-blur, 22px));
-  background: radial-gradient(
-    circle at 35% 30%,
-    rgba(255, 255, 255, 0.45) 0%,
-    var(--orb-color, #8b6bff) 28%,
-    var(--orb-color, #8b6bff) 58%,
-    transparent 78%
-  );
-  animation: orb-float var(--orb-dur, 18s) ease-in-out var(--orb-delay, 0s) infinite alternate;
-}
-
-.onix-bg__orbs--dark .orb {
-  mix-blend-mode: normal;
-  background: radial-gradient(
-    circle at 35% 30%,
-    rgba(255, 255, 255, 0.4) 0%,
-    var(--orb-color, #8b6bff) 26%,
-    var(--orb-color, #8b6bff) 60%,
-    transparent 76%
-  );
-}
-
-.onix-bg__orbs--light .orb {
-  mix-blend-mode: normal;
-  background: radial-gradient(
-    circle at 35% 30%,
-    rgba(255, 255, 255, 0.7) 0%,
-    var(--orb-color, #7eb8e8) 26%,
-    var(--orb-color, #7eb8e8) 60%,
-    transparent 78%
-  );
-}
-
-@keyframes orb-float {
-  0% { transform: translate(-50%, -50%) translate(0, 0); }
-  50% { transform: translate(-50%, -50%) translate(12px, -8px); }
-  100% { transform: translate(-50%, -50%) translate(-8px, 6px); }
-}
-
-/* —— Stars —— */
-.onix-bg__stars {
-  position: absolute;
-  inset: 0;
-  filter: none !important;
-}
-
-.onix-bg__stars--light { display: none; }
-html[data-theme="light"] .onix-bg__stars--dark { display: none; }
-html[data-theme="light"] .onix-bg__stars--light { display: block; }
-
+/* Legacy selectors — keep empty so old markup never paints artifacts */
+.onix-bg__orbs,
+.onix-bg__stars,
+.onix-bg__vignette,
+.orb,
 .onix-bg__star {
-  position: absolute;
-  display: block;
-  border-radius: 50%;
-  background: #ffffff;
-  filter: none;
-  transform: translate(-50%, -50%);
-  animation: star-twinkle var(--dur, 3s) ease-in-out var(--delay, 0s) infinite;
-}
-
-.onix-bg__star--bright {
-  box-shadow: 0 0 4px 1px rgba(255, 255, 255, 0.8);
-}
-
-/* Light: white sparks need glow on soft sky */
-.onix-bg__star--light {
-  width: 2px;
-  height: 2px;
-  background: #ffffff;
-  box-shadow:
-    0 0 5px 2px rgba(255, 255, 255, 0.85),
-    0 0 10px 3px rgba(255, 255, 255, 0.4);
-}
-
-@keyframes star-twinkle {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
-}
-
-html[data-theme="light"] .onix-bg__star--light {
-  animation-name: star-twinkle-light;
-}
-
-@keyframes star-twinkle-light {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
-/* —— Soft vignette (shadow only — not a blur filter) —— */
-.onix-bg__vignette {
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 180px 60px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-  filter: none !important;
-}
-
-html[data-theme="light"] .onix-bg__vignette {
-  /* Soft lavender edge darken — reinforces non-white base */
-  box-shadow: inset 0 0 180px 70px rgba(140, 120, 180, 0.18);
-}
-
-.onix-bg[data-mode="chat"] .onix-bg__orbs { opacity: 0.35; }
-.onix-bg[data-mode="focus"] .onix-bg__orbs { opacity: 0.4; }
-.onix-bg[data-mode="normal"] .onix-bg__orbs { opacity: 0.45; }
-
-/* Kill vignette banding / edge streaks through glass */
-.onix-bg__vignette {
   display: none !important;
-}
-
-.onix-bg[data-reduced="true"] .orb,
-.onix-bg[data-reduced="true"] .onix-bg__star {
-  animation: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .orb,
-  .onix-bg__star {
-    animation: none !important;
-  }
-}
-
-@media (max-width: 767px) {
-  .onix-bg__orbs--dark .orb:nth-child(n+6),
-  .onix-bg__orbs--light .orb:nth-child(n+8) {
-    display: none;
-  }
-
-  /* Do NOT scale orbs down — that raises blur:size ratio and destroys the circle */
-  .orb {
-    animation-name: orb-float-mobile;
-  }
-
-  @keyframes orb-float-mobile {
-    0% { transform: translate(-50%, -50%) translate(0, 0); }
-    50% { transform: translate(-50%, -50%) translate(10px, -8px); }
-    100% { transform: translate(-50%, -50%) translate(-6px, 6px); }
-  }
-
-  .onix-bg__stars--dark .onix-bg__star:nth-child(n+36),
-  .onix-bg__stars--light .onix-bg__star:nth-child(n+28) {
-    display: none;
-  }
 }

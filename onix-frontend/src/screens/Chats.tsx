@@ -15,6 +15,7 @@ const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
 const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
+const CHAT_PANEL_Y_KEY = 'onix-chat-panel-y';
 const CHAT_LIST_DEFAULT = 280;
 const CHAT_LIST_MIN = 200;
 const CHAT_PANEL_W_MIN = 520;
@@ -104,6 +105,7 @@ export function Chats({
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
   const [panelH, setPanelH] = useState(() => readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN));
+  const [panelY, setPanelY] = useState(() => readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0));
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -134,6 +136,40 @@ export function Chats({
       const rounded = Math.round(latest);
       setListW(rounded);
       try { localStorage.setItem(CHAT_LIST_W_KEY, String(rounded)); } catch { /* ignore */ }
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointerup', onUp);
+  };
+
+  const startPanelMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startOffset = panelY;
+    const target = event.currentTarget;
+    const layout = target.closest('.chat-layout') as HTMLElement | null;
+    target.setPointerCapture(event.pointerId);
+    document.body.classList.add('is-resizing-chat');
+    let latest = startOffset;
+    let raf = 0;
+    const apply = (next: number) => {
+      latest = next;
+      layout?.style.setProperty('--chat-panel-y', `${next}px`);
+    };
+    const onMove = (ev: PointerEvent) => {
+      const maxY = Math.max(0, window.innerHeight - panelH - 48);
+      const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => apply(next));
+    };
+    const onUp = (ev: PointerEvent) => {
+      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+      if (raf) cancelAnimationFrame(raf);
+      document.body.classList.remove('is-resizing-chat');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      const rounded = Math.round(latest);
+      setPanelY(rounded);
+      try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(rounded)); } catch { /* ignore */ }
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
@@ -483,8 +519,15 @@ export function Chats({
       '--chat-list-w': `${listW}px`,
       '--chat-panel-w': `${panelW}px`,
       '--chat-panel-h': `${panelH}px`,
+      '--chat-panel-y': `${panelY}px`,
     } as CSSProperties}
   >
+    <button
+      type="button"
+      className="chat-move-handle desktop-only"
+      aria-label="Переместить окно чата"
+      onPointerDown={startPanelMove}
+    />
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
         <Input

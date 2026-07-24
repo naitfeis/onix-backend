@@ -726,33 +726,44 @@ html[data-theme="dark"] .button--secondary {
 }
 .wallet-hero__amount {
   display: flex;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 8px;
   position: relative;
   z-index: 1;
-  font-family: var(--font-display), system-ui, sans-serif;
-  font-size: 34px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: clamp(16px, 1.8vw, 24px);
   font-weight: 600;
   letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  line-height: 1.15;
   color: var(--text-primary);
   -webkit-text-fill-color: var(--text-primary);
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
-  transform: translateZ(0);
-  overflow: visible;
-  min-height: 1.2em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+  word-break: keep-all;
 }
 .wallet-hero__amount > span {
   display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
   color: inherit;
   -webkit-text-fill-color: inherit;
 }
 .wallet-hero__amount small {
-  font-size: 13px;
-  font-weight: 400;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: 0.04em;
 }
@@ -1611,8 +1622,10 @@ html[data-theme="light"] .timeline li {
 .app-shell--chat .viewport {
   margin: 0;
   min-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  overflow: auto;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   justify-content: stretch;
 }
 .app-shell--chat .screen-transition {
@@ -1629,12 +1642,36 @@ html[data-theme="light"] .timeline li {
   min-height: 360px;
   max-width: 100%;
   max-height: calc(100dvh - 64px - env(safe-area-inset-bottom));
+  margin-top: var(--chat-panel-y, 0px);
   gap: 0;
   border: var(--glass-border);
   border-radius: var(--radius-xl);
   background: var(--glass-regular-bg);
   overflow: hidden;
   box-shadow: var(--glass-shadow);
+}
+.chat-move-handle {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: 72px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0 0 10px 10px;
+  background: color-mix(in srgb, var(--accent-violet) 35%, transparent);
+  cursor: grab;
+}
+.chat-move-handle:active {
+  cursor: grabbing;
+}
+.chat-move-handle:hover,
+.chat-move-handle:focus-visible {
+  background: color-mix(in srgb, var(--accent-violet) 55%, transparent);
 }
 .app-shell--chat .conversation {
   min-height: 0;
@@ -3000,7 +3037,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     align-items: stretch;
   }
   .app-shell--chat .chat-col-resizer,
-  .app-shell--chat .chat-edge-resizer { display: block; }
+  .app-shell--chat .chat-edge-resizer,
+  .app-shell--chat .chat-move-handle { display: block; }
   .app-shell--chat .thread-list.mobile-hidden,
   .app-shell--chat .conversation.mobile-hidden {
     display: flex !important;
