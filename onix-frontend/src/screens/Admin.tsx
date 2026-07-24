@@ -22,7 +22,7 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
   return (
     <div className="stack compact">
       <Card className="admin-card">
-        <h2>// ADMIN · СТАТУСЫ</h2>
+        <h2>Статусы</h2>
         <p className="muted">
           {isSuperAdmin
             ? 'Основатель может назначать ADMIN и остальные статусы. Действие пишется в audit log.'
@@ -57,7 +57,7 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
         />
       </Card>
       <Card className="admin-card">
-        <h2>// ADMIN · МОДЕРАЦИЯ</h2>
+        <h2>Модерация</h2>
         <p className="muted">Доступ показан только по роли, полученной от сервера.</p>
         <Field label="ONIX ID пользователя"><Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-7 или 7" /></Field>
         <Field label="Причина блокировки" hint={reasonOption?.hint}>

@@ -515,6 +515,12 @@ html[data-theme="dark"] .button--secondary {
   gap: 12px;
   justify-content: stretch;
 }
+@media (min-width: 1100px) {
+  .product-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
 .product-card {
   padding: 0;
   overflow: clip;
@@ -3091,7 +3097,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     height: 72px;
   }
   .product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
     justify-content: stretch;
   }
