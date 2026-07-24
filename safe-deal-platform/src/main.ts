@@ -46,7 +46,7 @@ async function bootstrap(): Promise<void> {
 
   // Security headers first (Helmet + CSP).
   app.use(createSecurityMiddleware());
-  // Scanners / favicon.ico — before ServeStatic and Nest (clean 404, never 500).
+  // Scanners before ServeStatic / Nest (clean 404, never 500).
   app.use(httpNoiseMiddleware);
   // gzip only in production (Render NODE_ENV=production). Dev stays uncompressed for easier debugging.
   if (process.env.NODE_ENV === 'production') {

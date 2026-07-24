@@ -1,8 +1,5 @@
 ﻿/**
- * PWA / shell icons for Windows + browser chrome.
- *
- * - brand/onix-mark.png — transparent figure (UI / splash)
- * - icons/* + favicon — solid #000000 so Windows does not paint a gray plate
+ * PWA / shell icons — ALL on true transparent backgrounds (no black/gray plate).
  *
  * Usage: node scripts/generate-pwa-icons.mjs
  */
@@ -17,7 +14,6 @@ const outDir = join(root, 'public', 'icons');
 const publicDir = join(root, 'public');
 mkdirSync(outDir, { recursive: true });
 
-const BG = { r: 0, g: 0, b: 0, alpha: 1 };
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 
 async function makeIcon(size, logoRatio, outPath) {
@@ -42,7 +38,7 @@ async function makeIcon(size, logoRatio, outPath) {
       width: size,
       height: size,
       channels: 4,
-      background: BG,
+      background: TRANSPARENT,
     },
   })
     .composite([{ input: logo, left, top }])
@@ -58,8 +54,8 @@ function pngToIco(png) {
   header.writeUInt16LE(1, 4);
 
   const entry = Buffer.alloc(16);
-  entry.writeUInt8(0, 0); // width 0 → 256, but we use 32 via PNG
-  entry.writeUInt8(0, 1);
+  entry.writeUInt8(32, 0); // width
+  entry.writeUInt8(32, 1); // height
   entry.writeUInt8(0, 2);
   entry.writeUInt8(0, 3);
   entry.writeUInt16LE(1, 4);
@@ -70,13 +66,16 @@ function pngToIco(png) {
   return Buffer.concat([header, entry, png]);
 }
 
-await makeIcon(192, 0.82, join(outDir, 'icon-192.png'));
-await makeIcon(512, 0.82, join(outDir, 'icon-512.png'));
-await makeIcon(512, 0.62, join(outDir, 'icon-maskable-512.png'));
-await makeIcon(180, 0.82, join(outDir, 'apple-touch-icon.png'));
-await makeIcon(48, 0.82, join(outDir, 'favicon-48.png'));
-await makeIcon(32, 0.82, join(outDir, 'favicon-32.png'));
-await makeIcon(16, 0.88, join(outDir, 'favicon-16.png'));
+const STANDARD = 0.88;
+const MASKABLE = 0.65;
+
+await makeIcon(192, STANDARD, join(outDir, 'icon-192.png'));
+await makeIcon(512, STANDARD, join(outDir, 'icon-512.png'));
+await makeIcon(512, MASKABLE, join(outDir, 'icon-maskable-512.png'));
+await makeIcon(180, STANDARD, join(outDir, 'apple-touch-icon.png'));
+await makeIcon(48, STANDARD, join(outDir, 'favicon-48.png'));
+await makeIcon(32, STANDARD, join(outDir, 'favicon-32.png'));
+await makeIcon(16, STANDARD, join(outDir, 'favicon-16.png'));
 
 const fav32 = await sharp(join(outDir, 'favicon-32.png')).png().toBuffer();
 writeFileSync(join(publicDir, 'favicon.ico'), pngToIco(fav32));
@@ -87,9 +86,26 @@ writeFileSync(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">\n  <image href="data:image/png;base64,${svgPng}" width="32" height="32"/>\n</svg>\n`,
 );
 
-// Also expose 32px at a stable path some clients probe
 copyFileSync(join(outDir, 'favicon-32.png'), join(publicDir, 'favicon-32.png'));
 
-const { data } = await sharp(join(outDir, 'icon-512.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-console.log('[pwa-icons] wrote icons →', outDir);
-console.log(`[pwa-icons] icon-512 corner rgba(${data[0]},${data[1]},${data[2]},${data[3]})`);
+const { data, info } = await sharp(join(outDir, 'icon-512.png'))
+  .ensureAlpha()
+  .raw()
+  .toBuffer({ resolveWithObject: true });
+const w = info.width;
+const h = info.height;
+const px = (x, y) => {
+  const i = (y * w + x) * 4;
+  return `rgba(${data[i]},${data[i + 1]},${data[i + 2]},${data[i + 3]})`;
+};
+
+console.log('[pwa-icons] wrote icons ->', outDir);
+console.log('[pwa-icons] icon-512 corners', px(0, 0), px(w - 1, 0), px(0, h - 1), px(w - 1, h - 1));
+const ok = [0, w - 1].every((x) =>
+  [0, h - 1].every((y) => {
+    const i = (y * w + x) * 4;
+    return data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 0 && data[i + 3] === 0;
+  }),
+);
+console.log('[pwa-icons] verify icon-512 corners rgba(0,0,0,0)', ok);
+if (!ok) process.exitCode = 1;

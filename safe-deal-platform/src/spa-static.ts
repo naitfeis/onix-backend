@@ -36,7 +36,15 @@ export function spaServeModules(): DynamicModule[] {
         // Missing assets → next() instead of Nest NotFoundException stack traces.
         fallthrough: true,
         setHeaders: (res, filePath) => {
-          if (filePath.endsWith('index.html')) {
+          const base = filePath.replace(/\\/g, '/');
+          if (
+            base.endsWith('index.html')
+            || base.endsWith('sw.js')
+            || base.endsWith('sw.js.map')
+            || base.endsWith('registerSW.js')
+            || base.endsWith('manifest.webmanifest')
+            || /\/workbox-[^/]+\.js(?:\.map)?$/.test(base)
+          ) {
             res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
             return;
           }

@@ -13,10 +13,7 @@ export function httpNoiseMiddleware(req: Request, res: Response, next: NextFunct
   const path = (req.path || req.url || '').split('?')[0] || '';
   const lower = path.toLowerCase();
 
-  if (path === '/favicon.ico') {
-    res.redirect(302, '/favicon.svg');
-    return;
-  }
+  // /favicon.ico is served from SPA public/ (ONIX mark). Do not redirect to legacy SVG.
 
   if (isScannerPath(lower)) {
     res.status(404).type('text/plain').end();
