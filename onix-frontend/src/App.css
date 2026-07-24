@@ -1641,66 +1641,14 @@ html[data-theme="light"] .timeline li {
   height: var(--chat-panel-h, calc(100dvh - 200px - env(safe-area-inset-bottom)));
   min-height: 360px;
   max-width: 100%;
-  /* Leave room below: offset pushes window down and caps height so it visibly slides */
-  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom) - var(--chat-panel-y, 0px));
-  margin-top: var(--chat-panel-y, 0px);
-  margin-bottom: 12px;
+  max-height: calc(100dvh - 96px - env(safe-area-inset-bottom));
+  margin: 0;
   gap: 0;
   border: var(--glass-border);
   border-radius: var(--radius-xl);
   background: var(--glass-regular-bg);
   overflow: hidden;
   box-shadow: var(--glass-shadow);
-}
-.chat-move-handle {
-  display: none;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 12;
-  width: 100%;
-  height: 28px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  background: color-mix(in srgb, var(--glass-regular-bg) 70%, transparent);
-  cursor: grab;
-  touch-action: none;
-}
-.chat-move-handle::after {
-  content: '';
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  width: 56px;
-  height: 5px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-violet) 65%, transparent);
-}
-.chat-move-handle:active {
-  cursor: grabbing;
-}
-.chat-move-handle:hover::after,
-.chat-move-handle:focus-visible::after {
-  background: color-mix(in srgb, var(--accent-violet) 90%, transparent);
-}
-body.is-moving-chat {
-  cursor: grabbing !important;
-  user-select: none !important;
-}
-body.is-moving-chat * {
-  cursor: inherit !important;
-}
-.app-shell--chat .conversation__head--drag {
-  cursor: grab;
-  touch-action: none;
-  padding-top: 22px;
-}
-.app-shell--chat .conversation__head--drag:active {
-  cursor: grabbing;
 }
 .app-shell--chat .conversation {
   min-height: 0;
@@ -1811,26 +1759,56 @@ body.is-moving-chat * {
 .chat-edge-resizer--y {
   left: 0;
   bottom: 0;
-  width: calc(100% - 14px);
-  height: 10px;
+  width: calc(100% - 18px);
+  height: 22px;
   cursor: ns-resize;
+  touch-action: none;
+  z-index: 10;
+  background: color-mix(in srgb, var(--glass-regular-bg) 85%, transparent);
+}
+.chat-edge-resizer--y::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  width: 56px;
+  height: 5px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-violet) 70%, transparent);
+  pointer-events: none;
+}
+.chat-edge-resizer--y:hover,
+.chat-edge-resizer--y:focus-visible {
+  background: color-mix(in srgb, var(--accent-violet) 18%, transparent);
+}
+.chat-edge-resizer--y:hover::after,
+.chat-edge-resizer--y:focus-visible::after {
+  background: color-mix(in srgb, var(--accent-violet) 95%, transparent);
 }
 .chat-edge-resizer--xy {
   right: 0;
   bottom: 0;
-  width: 16px;
-  height: 16px;
+  width: 22px;
+  height: 22px;
   cursor: nwse-resize;
+  z-index: 11;
 }
 .chat-edge-resizer--x:hover,
-.chat-edge-resizer--y:hover,
 .chat-edge-resizer--xy:hover,
-.chat-edge-resizer:focus-visible {
+.chat-edge-resizer--x:focus-visible,
+.chat-edge-resizer--xy:focus-visible {
   background: rgba(139, 127, 245, 0.28);
 }
 body.is-resizing-chat {
   cursor: col-resize !important;
   user-select: none !important;
+}
+body.is-resizing-chat[data-chat-resize="y"] {
+  cursor: ns-resize !important;
+}
+body.is-resizing-chat[data-chat-resize="xy"] {
+  cursor: nwse-resize !important;
 }
 body.is-resizing-chat * {
   cursor: inherit !important;
@@ -3066,8 +3044,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     align-items: stretch;
   }
   .app-shell--chat .chat-col-resizer,
-  .app-shell--chat .chat-edge-resizer,
-  .app-shell--chat .chat-move-handle { display: block; }
+  .app-shell--chat .chat-edge-resizer { display: block; }
   .app-shell--chat .thread-list.mobile-hidden,
   .app-shell--chat .conversation.mobile-hidden {
     display: flex !important;

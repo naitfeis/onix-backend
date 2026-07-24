@@ -15,7 +15,6 @@ const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
 const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
-const CHAT_PANEL_Y_KEY = 'onix-chat-panel-y';
 const CHAT_LIST_DEFAULT = 280;
 const CHAT_LIST_MIN = 200;
 const CHAT_PANEL_W_MIN = 520;
@@ -35,8 +34,8 @@ function defaultChatPanelSize(): { w: number; h: number } {
   if (typeof window === 'undefined') return { w: 960, h: 640 };
   return {
     w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
-    /* Leave free space below so the window can slide down */
-    h: Math.min(760, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 220)),
+    /* Start shorter so user can drag the bottom edge down to grow */
+    h: Math.min(720, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 200)),
   };
 }
 
@@ -107,13 +106,8 @@ export function Chats({
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
   const [panelH, setPanelH] = useState(() => {
     const raw = readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN);
-    const maxH = typeof window !== 'undefined' ? Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 160) : raw;
+    const maxH = typeof window !== 'undefined' ? Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 96) : raw;
     return Math.min(raw, maxH);
-  });
-  const [panelY, setPanelY] = useState(() => {
-    const raw = readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0);
-    const maxY = typeof window !== 'undefined' ? Math.max(0, window.innerHeight - 288) : raw;
-    return Math.min(raw, maxY);
   });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -150,83 +144,40 @@ export function Chats({
     window.addEventListener('pointerup', onUp);
   };
 
-  const startPanelMove = (event: ReactPointerEvent<HTMLElement>) => {
-    const target = event.currentTarget;
-    const hit = event.target as HTMLElement | null;
-    // Move-handle is a <button> — must still start drag. Skip other controls in the header.
-    if (
-      !target.classList.contains('chat-move-handle')
-      && hit?.closest('button, a, input, textarea, select, label')
-    ) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const startY = event.clientY;
-    const startOffset = panelY;
-    const layout = (target.closest('.chat-layout') as HTMLElement | null) ?? target;
-    try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-    document.body.classList.add('is-moving-chat');
-    let latest = startOffset;
-    let raf = 0;
-    const chatViewport = Math.max(360, window.innerHeight - 88);
-    const apply = (next: number) => {
-      latest = next;
-      layout.style.setProperty('--chat-panel-y', `${next}px`);
-      layout.style.marginTop = `${next}px`;
-    };
-    apply(startOffset);
-    const onMove = (ev: PointerEvent) => {
-      const maxY = Math.max(0, chatViewport - 200);
-      const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => apply(next));
-    };
-    const onUp = (ev: PointerEvent) => {
-      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
-      if (raf) cancelAnimationFrame(raf);
-      document.body.classList.remove('is-moving-chat');
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      const rounded = Math.round(latest);
-      setPanelY(rounded);
-      try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(rounded)); } catch { /* ignore */ }
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  };
-
   const startPanelResize = (
     mode: 'x' | 'y' | 'xy',
     event: ReactPointerEvent<HTMLButtonElement>,
   ) => {
     event.preventDefault();
+    event.stopPropagation();
     const startX = event.clientX;
     const startY = event.clientY;
     const startW = panelW;
     const startH = panelH;
     const target = event.currentTarget;
     const layout = target.closest('.chat-layout') as HTMLElement | null;
-    target.setPointerCapture(event.pointerId);
+    try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
     document.body.classList.add('is-resizing-chat');
+    document.body.dataset.chatResize = mode;
     let latestW = startW;
     let latestH = startH;
     let raf = 0;
+    const maxH = Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 96);
     const apply = (w: number, h: number) => {
       latestW = w;
       latestH = h;
       if (!layout) return;
       layout.style.setProperty('--chat-panel-w', `${w}px`);
       layout.style.setProperty('--chat-panel-h', `${h}px`);
+      layout.style.width = `${w}px`;
+      layout.style.height = `${h}px`;
     };
     const onMove = (ev: PointerEvent) => {
       const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 80);
-      const maxH = Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 160 - panelY);
       const nextW = mode === 'y'
         ? startW
         : Math.max(CHAT_PANEL_W_MIN, Math.min(maxW, startW + (ev.clientX - startX)));
+      // Drag bottom edge down → taller chat
       const nextH = mode === 'x'
         ? startH
         : Math.max(CHAT_PANEL_H_MIN, Math.min(maxH, startH + (ev.clientY - startY)));
@@ -237,8 +188,10 @@ export function Chats({
       try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
       if (raf) cancelAnimationFrame(raf);
       document.body.classList.remove('is-resizing-chat');
+      delete document.body.dataset.chatResize;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       const w = Math.round(latestW);
       const h = Math.round(latestH);
       setPanelW(w);
@@ -250,6 +203,7 @@ export function Chats({
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   const openOnixProfile = async (onixId: string) => {
@@ -542,16 +496,10 @@ export function Chats({
       '--chat-list-w': `${listW}px`,
       '--chat-panel-w': `${panelW}px`,
       '--chat-panel-h': `${panelH}px`,
-      '--chat-panel-y': `${panelY}px`,
-      marginTop: panelY,
+      width: panelW,
+      height: panelH,
     } as CSSProperties}
   >
-    <button
-      type="button"
-      className="chat-move-handle desktop-only"
-      aria-label="Переместить окно чата вниз или вверх"
-      onPointerDown={startPanelMove}
-    />
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
         <Input
@@ -608,10 +556,7 @@ export function Chats({
       aria-label="Изменить ширину списка чатов"
       onPointerDown={startListResize}
     />
-    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div
-      className="conversation__head conversation__head--drag"
-      onPointerDown={startPanelMove}
-    ><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
+    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
       <button
         type="button"
         className="conversation__peer"
@@ -847,7 +792,7 @@ export function Chats({
     <button
       type="button"
       className="chat-edge-resizer chat-edge-resizer--y desktop-only"
-      aria-label="Изменить высоту окна чата"
+      aria-label="Тяни вниз, чтобы увеличить высоту чата"
       onPointerDown={(event) => startPanelResize('y', event)}
     />
     <button
