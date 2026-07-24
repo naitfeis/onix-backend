@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="ONIX — безопасный маркетплейс цифровых товаров" />
-    <meta name="theme-color" content="#0A090E" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F4F2F8" media="(prefers-color-scheme: light)" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -23,7 +23,7 @@
       html, body {
         margin: 0;
         min-height: 100%;
-        background: #0A090E;
+        background: #000000;
         color: rgba(255, 255, 255, 0.92);
       }
       #root:empty,
@@ -36,10 +36,7 @@
         z-index: 9999;
         display: grid;
         place-items: center;
-        background:
-          radial-gradient(ellipse 70% 50% at 20% 15%, rgba(139, 127, 245, 0.22), transparent 55%),
-          radial-gradient(ellipse 60% 45% at 85% 80%, rgba(91, 141, 239, 0.12), transparent 50%),
-          #0A090E;
+        background: #000000;
         transition: opacity 280ms ease, visibility 280ms ease;
       }
       #onix-boot.is-done {
@@ -48,24 +45,25 @@
         pointer-events: none;
       }
       #onix-boot__mark {
-        width: min(42vw, 148px);
+        width: min(48vw, 180px);
         height: auto;
         display: block;
+        border-radius: 28px;
         animation: onix-boot-pulse 1.6s ease-in-out infinite;
       }
       #onix-boot__label {
-        margin-top: 18px;
+        margin-top: 20px;
         font-family: system-ui, sans-serif;
         font-size: 13px;
         font-weight: 600;
         letter-spacing: 0.28em;
         text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.55);
+        color: rgba(255, 255, 255, 0.5);
         text-align: center;
       }
       @keyframes onix-boot-pulse {
-        0%, 100% { transform: scale(1); opacity: 0.92; }
-        50% { transform: scale(1.04); opacity: 1; }
+        0%, 100% { transform: scale(1); opacity: 0.95; }
+        50% { transform: scale(1.03); opacity: 1; }
       }
       @media (prefers-reduced-motion: reduce) {
         #onix-boot__mark { animation: none; }
@@ -75,7 +73,7 @@
   <body>
     <div id="onix-boot" role="status" aria-live="polite" aria-label="Загрузка ONIX">
       <div>
-        <img id="onix-boot__mark" src="/brand/onix-mark.png" width="148" height="148" alt="" />
+        <img id="onix-boot__mark" src="/icons/icon-512.png" width="180" height="180" alt="" />
         <div id="onix-boot__label">ONIX</div>
       </div>
     </div>

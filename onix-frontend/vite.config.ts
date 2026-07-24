@@ -68,8 +68,8 @@ export default ({ mode }: { mode: string }) => {
           scope: '/',
           display: 'standalone',
           orientation: 'any',
-          background_color: '#0A090E',
-          theme_color: '#8B7FF5',
+          background_color: '#000000',
+          theme_color: '#000000',
           categories: ['shopping', 'finance'],
           icons: [
             {
