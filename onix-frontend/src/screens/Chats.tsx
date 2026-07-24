@@ -151,14 +151,20 @@ export function Chats({
   };
 
   const startPanelMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.currentTarget;
     const hit = event.target as HTMLElement | null;
-    if (hit?.closest('button, a, input, textarea, select, label')) return;
+    // Move-handle is a <button> — must still start drag. Skip other controls in the header.
+    if (
+      !target.classList.contains('chat-move-handle')
+      && hit?.closest('button, a, input, textarea, select, label')
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const startY = event.clientY;
     const startOffset = panelY;
-    const target = event.currentTarget;
-    const layout = target.closest('.chat-layout') as HTMLElement | null;
+    const layout = (target.closest('.chat-layout') as HTMLElement | null) ?? target;
     try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
     document.body.classList.add('is-moving-chat');
     let latest = startOffset;
@@ -166,10 +172,11 @@ export function Chats({
     const chatViewport = Math.max(360, window.innerHeight - 88);
     const apply = (next: number) => {
       latest = next;
-      layout?.style.setProperty('--chat-panel-y', `${next}px`);
+      layout.style.setProperty('--chat-panel-y', `${next}px`);
+      layout.style.marginTop = `${next}px`;
     };
+    apply(startOffset);
     const onMove = (ev: PointerEvent) => {
-      // Can slide down until only ~200px of the panel stays in view.
       const maxY = Math.max(0, chatViewport - 200);
       const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
       if (raf) cancelAnimationFrame(raf);
@@ -536,12 +543,13 @@ export function Chats({
       '--chat-panel-w': `${panelW}px`,
       '--chat-panel-h': `${panelH}px`,
       '--chat-panel-y': `${panelY}px`,
+      marginTop: panelY,
     } as CSSProperties}
   >
     <button
       type="button"
       className="chat-move-handle desktop-only"
-      aria-label="Переместить окно чата"
+      aria-label="Переместить окно чата вниз или вверх"
       onPointerDown={startPanelMove}
     />
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
