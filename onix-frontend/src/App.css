@@ -1237,6 +1237,26 @@ html[data-theme="light"] .cat-card__count {
   min-width: 120px;
 }
 
+.profile-logout {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.profile-logout__btn.button,
+.profile-logout .button {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+.profile-logout .button:hover {
+  color: var(--danger, #e85d5d);
+  opacity: 1;
+}
+
 .money-form {
   display: grid;
   gap: 14px;

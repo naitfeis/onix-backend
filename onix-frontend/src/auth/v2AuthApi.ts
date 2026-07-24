@@ -147,6 +147,26 @@ export async function getAuthV2Me(
   return readEnvelope<AuthV2MeData>(response);
 }
 
+/**
+ * POST /api/v2/auth/logout — revokes session + clears HttpOnly refresh cookie.
+ */
+export async function postAuthV2Logout(
+  accessToken: string,
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<{ ok: true }> {
+  const response = await fetchImpl(`${apiBase}/api/v2/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'X-ONIX-CSRF': '1',
+    },
+  });
+  return readEnvelope<{ ok: true }>(response);
+}
+
 /** Cookie-only session probe — no Bearer, no Telegram, no token rotation. */
 export type AuthV2SessionData = {
   authenticated: true;

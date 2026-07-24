@@ -1,11 +1,12 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
+import { isTelegramMiniApp } from '../auth/telegramEnv';
 import UserAvatar from '../components/UserAvatar';
-import { Button, Card, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
+import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
@@ -130,6 +131,9 @@ export function Profile({
   const [walletHistory, setWalletHistory] = useState<WalletOperation[]>([]);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+  const showWebsiteLogout = useMemo(() => !isTelegramMiniApp(), []);
   const PAGE = 15;
   const profile = core.profile;
   const deposit = profile?.deposit ?? null;
@@ -321,7 +325,38 @@ export function Profile({
           </div>
         )}
       </div>
+      {showWebsiteLogout && (
+        <div className="profile-logout">
+          <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
+            Выйти из аккаунта
+          </Button>
+        </div>
+      )}
     </Card>
+    {showWebsiteLogout && (
+      <Confirm
+        open={logoutOpen}
+        title="Выйти из аккаунта?"
+        text="Сессия на этом устройстве будет завершена. Чтобы снова пользоваться профилем, войдите через Telegram."
+        dangerous
+        busy={logoutBusy}
+        onCancel={() => { if (!logoutBusy) setLogoutOpen(false); }}
+        onConfirm={() => {
+          void (async () => {
+            setLogoutBusy(true);
+            try {
+              await core.signOut();
+              setToast('Вы вышли из аккаунта.');
+            } catch (error) {
+              setToast(friendlyError(error));
+            } finally {
+              setLogoutBusy(false);
+              setLogoutOpen(false);
+            }
+          })();
+        }}
+      />
+    )}
     <div className="chips profile-tabs">{profileSections.map(item =>
       <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>

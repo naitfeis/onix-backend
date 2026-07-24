@@ -11,6 +11,7 @@ import {
   AuthV2ApiError,
   getAuthV2Me,
   postAuthV2Login,
+  postAuthV2Logout,
   probeAuthV2Session,
   type AuthV2Fetch,
   type AuthV2MeData,
@@ -117,12 +118,27 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
 
   async logout(): Promise<void> {
     this.cachedUser = null;
-    this.manager.clearSession('logout');
+    try {
+      let token = this.manager.getAccessToken();
+      if (!token || this.manager.isAccessExpired()) {
+        try {
+          token = await this.manager.refreshAccessToken();
+        } catch {
+          token = this.manager.getAccessToken();
+        }
+      }
+      if (token) {
+        await postAuthV2Logout(token, this.fetchImpl, this.apiBase);
+      }
+    } catch {
+      // Best-effort: still clear local session / cookie may already be gone.
+    } finally {
+      this.manager.clearSession('logout');
+    }
   }
 
   async logoutAll(): Promise<void> {
-    this.cachedUser = null;
-    this.manager.clearSession('logout');
+    await this.logout();
   }
 
   async getMe(): Promise<WebsiteAuthUser | null> {

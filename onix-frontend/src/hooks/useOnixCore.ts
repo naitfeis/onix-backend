@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, bootstrapAuth, friendlyError, getAccessToken, ApiError } from '../api/client';
-import { getSharedAuthManager, probeAuthV2Session } from '../auth';
+import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
+import { getSharedAuthManager, getWebsiteAuthProvider, probeAuthV2Session } from '../auth';
 import {
   ensureTelegramMiniAppReady,
   isTelegramMiniApp,
@@ -848,6 +848,33 @@ export function useOnixCore() {
   const setUserStatus = useCallback((userId: string, status: PlatformStatus) =>
     run('admin-status', () => api.patch(API_PATHS.adminStatus(userId), { status })), [run]);
 
+  /** Website / PWA only — revoke session and return to AuthGate. Hidden in Telegram Mini App. */
+  const signOut = useCallback(async () => {
+    if (isTelegramMiniApp()) return;
+    try {
+      await getWebsiteAuthProvider().logout();
+    } catch {
+      clearAccessToken();
+      getSharedAuthManager().clearSession('logout');
+    }
+    setProfile(null);
+    setStore(emptyStore);
+    setMessages({});
+    setPresenceByOnixId({});
+    setStates((previous) => ({
+      ...previous,
+      profile: 'error',
+      deals: 'idle',
+      chats: 'idle',
+      notifications: 'idle',
+      reviews: 'idle',
+    }));
+    setErrors((previous) => ({
+      ...previous,
+      profile: 'Вы вышли из аккаунта. Войдите через Telegram, чтобы продолжить.',
+    }));
+  }, []);
+
   const presenceOf = useCallback((onixId: string) => {
     return presenceByOnixId[normOnixId(onixId)] ?? null;
   }, [presenceByOnixId]);
@@ -860,7 +887,7 @@ export function useOnixCore() {
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
-    markNotificationRead, adminAction, setUserStatus, reportUser,
+    markNotificationRead, adminAction, setUserStatus, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
   };
 }

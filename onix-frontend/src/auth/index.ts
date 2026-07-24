@@ -48,6 +48,7 @@ export {
   getAuthV2Session,
   probeAuthV2Session,
   postAuthV2Login,
+  postAuthV2Logout,
 } from './v2AuthApi';
 export type {
   AuthV2LoginData,
