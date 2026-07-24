@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter } from 'node:events';
+import { structuredLog } from '../observability/structured-logger';
 import type { RealtimeBusEvent } from './realtime.types';
 
 /**
@@ -15,6 +16,10 @@ export class RealtimeBus {
   }
 
   publish(event: RealtimeBusEvent): void {
+    const listeners = this.ee.listenerCount('event');
+    if (listeners === 0) {
+      structuredLog.warn('realtime bus publish with zero subscribers', { kind: event.kind });
+    }
     this.ee.emit('event', event);
   }
 

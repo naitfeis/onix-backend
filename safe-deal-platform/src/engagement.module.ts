@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header,
-  Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query,
+  Injectable, Module, NotFoundException, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -68,7 +68,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AIService,
-    @Optional() private readonly realtime?: RealtimeBus,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   async list(user: AuthUser, search?: string) {
@@ -512,7 +512,6 @@ export class ChatService {
       lastReadAt: Date | null;
     }>,
   ): void {
-    if (!this.realtime) return;
     const messageByViewer = new Map<string, Record<string, unknown>>();
     const viewers = [sender.id, ...peerIds];
     for (const viewerId of viewers) {

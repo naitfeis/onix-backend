@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Header, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Body, Query, Req,
+  Controller, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Body, Query, Req,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
@@ -35,7 +35,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly locks: LockService,
-    @Optional() private readonly realtime?: RealtimeBus,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   /**
@@ -177,24 +177,22 @@ export class ProfilesService {
       data: { lastSeenAt: now },
     });
     const lastOnline = now.toISOString();
-    if (this.realtime) {
-      const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`
-        SELECT DISTINCT cm2."userId" AS "userId"
-        FROM "ChatMember" cm1
-        INNER JOIN "ChatMember" cm2 ON cm2."chatId" = cm1."chatId"
-        WHERE cm1."userId" = ${user.id}
-          AND cm2."userId" <> ${user.id}
-        LIMIT 200
-      `;
-      this.realtime.publish({
-        kind: 'presence',
-        userId: user.id,
-        onixId: user.onixId,
-        online: true,
-        lastOnline,
-        watchers: peers.map((p) => p.userId),
-      });
-    }
+    const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`
+      SELECT DISTINCT cm2."userId" AS "userId"
+      FROM "ChatMember" cm1
+      INNER JOIN "ChatMember" cm2 ON cm2."chatId" = cm1."chatId"
+      WHERE cm1."userId" = ${user.id}
+        AND cm2."userId" <> ${user.id}
+      LIMIT 200
+    `;
+    this.realtime.publish({
+      kind: 'presence',
+      userId: user.id,
+      onixId: user.onixId,
+      online: true,
+      lastOnline,
+      watchers: peers.map((p) => p.userId),
+    });
     return { lastOnline, online: true as const };
   }
 

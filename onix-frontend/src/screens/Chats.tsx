@@ -105,6 +105,15 @@ export function Chats({
     return () => core.unsubscribeRealtimeChat(threadId);
   }, [threadId, core.subscribeRealtimeChat, core.unsubscribeRealtimeChat]);
 
+  // HTTP poll while thread is open — covers WS auth/reconnect gaps (HTTP = source of truth).
+  useEffect(() => {
+    if (!threadId) return;
+    const id = window.setInterval(() => {
+      void loadMessages(threadId);
+    }, 4_000);
+    return () => window.clearInterval(id);
+  }, [threadId, loadMessages]);
+
   useEffect(() => {
     if (!threadId) return;
     const off = getRealtimeClient().onMessage((msg) => {

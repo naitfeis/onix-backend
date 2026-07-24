@@ -110,12 +110,22 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
   private originAllowed(req: IncomingMessage): boolean {
     const origin = req.headers.origin;
     if (!origin) {
-      // Same-origin browser WS often sends Origin; non-browser may omit — allow only if no Origin
-      // when not production, or allow omit (Telegram WebView quirks).
+      // Same-origin browser WS often sends Origin; non-browser may omit — allow omit
+      // (Telegram WebView quirks / native clients).
       return true;
     }
     const allowed = resolveCorsOrigins();
-    return allowed.includes(origin);
+    if (allowed.includes(origin)) return true;
+    // Same-host as this request (Render custom domain / www vs apex already in CORS;
+    // also covers accidental Host-only mismatch behind Cloudflare).
+    try {
+      const host = req.headers.host?.split(':')[0];
+      const originHost = new URL(origin).hostname;
+      if (host && originHost && host === originHost) return true;
+    } catch {
+      /* ignore */
+    }
+    return false;
   }
 
   private async onMessage(state: SocketState, raw: RawData): Promise<void> {
@@ -142,6 +152,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       if (msg.type === 'ping') {
+        state.alive = true;
         this.send(state.ws, { type: 'pong', ts: Date.now() });
         return;
       }
@@ -295,7 +306,12 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
 
   private sendToUser(userId: bigint, payload: RealtimeServerMessage): void {
     const set = this.byUser.get(userId.toString());
-    if (!set) return;
+    if (!set || set.size === 0) {
+      if (payload.type === 'chat.message') {
+        structuredLog.info('realtime chat.message: user offline', { userId: userId.toString() });
+      }
+      return;
+    }
     for (const state of set) {
       // chat.message / typing: if subscribed to chats, prefer only open chats for typing;
       // messages always delivered to user channel (inbox).

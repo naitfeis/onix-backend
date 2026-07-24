@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
-  Module, NotFoundException, Optional, Param, Post, Query,
+  Module, NotFoundException, Param, Post, Query,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -60,7 +60,7 @@ export class EscrowService {
     private readonly balance: BalanceService,
     private readonly clawbacks: ClawbackService,
     private readonly locks: LockService,
-    @Optional() private readonly realtime?: RealtimeBus,
+    private readonly realtime: RealtimeBus,
   ) {}
 
   private emitOrderUpdated(order: {
@@ -70,7 +70,6 @@ export class EscrowService {
     sellerId: bigint;
     chatId?: string | null;
   }): void {
-    if (!this.realtime) return;
     this.realtime.publish({
       kind: 'order.updated',
       orderId: order.id.toString(),

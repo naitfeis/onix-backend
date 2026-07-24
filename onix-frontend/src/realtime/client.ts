@@ -14,6 +14,7 @@ export type RealtimeInbound =
   | { type: 'order.updated'; orderId: string; status: string; chatId?: string };
 
 type Listener = (msg: RealtimeInbound) => void;
+type TokenProvider = () => Promise<string | null>;
 
 function realtimeUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -27,30 +28,35 @@ export class RealtimeClient {
   private reconnectTimer: number | null = null;
   private pingTimer: number | null = null;
   private readonly listeners = new Set<Listener>();
-  private accessToken: string | null = null;
+  private tokenProvider: TokenProvider | null = null;
   private subscribedChats = new Set<string>();
+  private ready = false;
+  private authInFlight = false;
 
-  connect(accessToken: string): void {
-    this.accessToken = accessToken;
+  /** True after server `ready` (authenticated). */
+  isReady(): boolean {
+    return this.ready && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Start (or restart) the socket. `getAccessToken` must return a fresh JWT
+   * (refresh if expired) — HTTP already does this via AuthManager; WS must too.
+   */
+  connect(getAccessToken: TokenProvider): void {
+    this.tokenProvider = getAccessToken;
     this.intentionalClose = false;
     this.open();
   }
 
   disconnect(): void {
     this.intentionalClose = true;
+    this.ready = false;
     if (this.reconnectTimer != null) window.clearTimeout(this.reconnectTimer);
     if (this.pingTimer != null) window.clearInterval(this.pingTimer);
     this.reconnectTimer = null;
     this.pingTimer = null;
     this.ws?.close(1000, 'client disconnect');
     this.ws = null;
-  }
-
-  updateToken(accessToken: string): void {
-    this.accessToken = accessToken;
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.send({ type: 'auth', accessToken });
-    }
   }
 
   onMessage(listener: Listener): () => void {
@@ -73,15 +79,16 @@ export class RealtimeClient {
   }
 
   private open(): void {
-    if (this.intentionalClose || !this.accessToken) return;
+    if (this.intentionalClose || !this.tokenProvider) return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
     const ws = new WebSocket(realtimeUrl());
     this.ws = ws;
+    this.ready = false;
     ws.onopen = () => {
       this.attempt = 0;
-      this.send({ type: 'auth', accessToken: this.accessToken! });
+      void this.authenticate();
       if (this.pingTimer != null) window.clearInterval(this.pingTimer);
       this.pingTimer = window.setInterval(() => this.send({ type: 'ping' }), 20_000);
     };
@@ -89,9 +96,15 @@ export class RealtimeClient {
       try {
         const msg = JSON.parse(String(ev.data)) as RealtimeInbound;
         if (msg.type === 'ready') {
+          this.ready = true;
           for (const chatId of this.subscribedChats) {
             this.send({ type: 'subscribe_chat', chatId });
           }
+        }
+        if (msg.type === 'error' && (msg.code === 'AUTH_INVALID_TOKEN' || msg.code === 'AUTH_SESSION_REVOKED' || msg.code.startsWith('AUTH_'))) {
+          this.ready = false;
+          // Drop socket so reconnect path re-fetches a fresh token.
+          try { ws.close(1008, 'auth retry'); } catch { /* ignore */ }
         }
         for (const listener of this.listeners) listener(msg);
       } catch {
@@ -102,6 +115,7 @@ export class RealtimeClient {
       if (this.pingTimer != null) window.clearInterval(this.pingTimer);
       this.pingTimer = null;
       this.ws = null;
+      this.ready = false;
       if (this.intentionalClose) return;
       const delay = Math.min(30_000, 500 * (2 ** this.attempt) + Math.random() * 300);
       this.attempt += 1;
@@ -110,6 +124,18 @@ export class RealtimeClient {
     ws.onerror = () => {
       /* onclose will reconnect */
     };
+  }
+
+  private async authenticate(): Promise<void> {
+    if (this.authInFlight || !this.tokenProvider) return;
+    this.authInFlight = true;
+    try {
+      const accessToken = await this.tokenProvider();
+      if (!accessToken || this.ws?.readyState !== WebSocket.OPEN) return;
+      this.send({ type: 'auth', accessToken });
+    } finally {
+      this.authInFlight = false;
+    }
   }
 
   private send(payload: Record<string, unknown>): void {

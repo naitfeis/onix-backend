@@ -31,7 +31,7 @@ export function createSecurityMiddleware(): (
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'blob:'],
         fontSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", 'wss:', 'ws:'],
         frameSrc: [
           'https://oauth.telegram.org',
           'https://telegram.org',

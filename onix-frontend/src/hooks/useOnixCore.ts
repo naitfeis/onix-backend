@@ -362,28 +362,36 @@ export function useOnixCore() {
       getRealtimeClient().disconnect();
       return;
     }
-    const token = getSharedAuthManager().getAccessToken() ?? getAccessToken();
-    if (!token) return;
     const rt = getRealtimeClient();
-    rt.connect(token);
+    const freshToken = async () => {
+      const manager = getSharedAuthManager();
+      const ensured = await manager.ensureAccessToken();
+      if (ensured) return ensured;
+      return getAccessToken();
+    };
+    rt.connect(freshToken);
     const off = rt.onMessage((msg) => {
       if (msg.type === 'chat.message') {
         const incoming = msg.message as Message;
+        if (!incoming?.id) return;
         setMessages((previous) => {
           const list = previous[msg.chatId] ?? [];
           if (list.some((row) => row.id === incoming.id)) return previous;
           return { ...previous, [msg.chatId]: [...list, incoming] };
         });
-        if (msg.unreadDelta) {
-          setStore((previous) => ({
-            ...previous,
-            chats: previous.chats.map((chat) => (
-              chat.id === msg.chatId
-                ? { ...chat, unreadCount: (chat.unreadCount ?? 0) + (msg.unreadDelta ?? 0) }
-                : chat
-            )),
-          }));
-        }
+        setStore((previous) => ({
+          ...previous,
+          chats: previous.chats.map((chat) => {
+            if (chat.id !== msg.chatId) return chat;
+            return {
+              ...chat,
+              subtitle: incoming.text,
+              unreadCount: msg.unreadDelta
+                ? (chat.unreadCount ?? 0) + msg.unreadDelta
+                : chat.unreadCount,
+            };
+          }),
+        }));
         return;
       }
       if (msg.type === 'order.updated') {
@@ -406,10 +414,13 @@ export function useOnixCore() {
         }));
       }
     });
+    // Keep token provider warm; reconnect if socket dropped auth.
     const tokenRefresh = window.setInterval(() => {
-      const next = getSharedAuthManager().getAccessToken() ?? getAccessToken();
-      if (next) rt.updateToken(next);
-    }, 50_000);
+      void freshToken().then((token) => {
+        if (!token) return;
+        if (!rt.isReady()) rt.connect(freshToken);
+      });
+    }, 45_000);
     return () => {
       off();
       window.clearInterval(tokenRefresh);
@@ -592,7 +603,18 @@ export function useOnixCore() {
   const loadMessages = useCallback(async (threadId: string) => {
     try {
       const data = await api.get<Message[]>(API_PATHS.messages(threadId));
-      setMessages(previous => ({ ...previous, [threadId]: data }));
+      setMessages((previous) => {
+        const existing = previous[threadId] ?? [];
+        // Merge: keep any optimistic/pending rows not yet on server; prefer server order.
+        const serverIds = new Set(data.map((m) => m.id));
+        const pendingOnly = existing.filter((m) => m.pending && !serverIds.has(m.id));
+        const same =
+          pendingOnly.length === 0
+          && existing.length === data.length
+          && existing.every((m, i) => m.id === data[i]?.id);
+        if (same) return previous;
+        return { ...previous, [threadId]: pendingOnly.length ? [...data, ...pendingOnly] : data };
+      });
     } catch (error) {
       setErrors(previous => ({ ...previous, [`messages-${threadId}`]: friendlyError(error) }));
     }
