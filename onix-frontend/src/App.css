@@ -1621,35 +1621,44 @@ html[data-theme="light"] .timeline li {
 }
 .app-shell--chat .viewport {
   margin: 0;
-  min-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  min-height: 0;
   max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
 }
 .app-shell--chat .screen-transition {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   min-height: 0;
-  display: block;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
 }
 .app-shell--chat .chat-layout {
   width: min(100%, var(--chat-panel-w, 100%));
-  height: var(--chat-panel-h, calc(100dvh - 200px - env(safe-area-inset-bottom)));
+  /* Preferred height, but never overflow the viewport under the current offset */
+  height: min(
+    var(--chat-panel-h, 640px),
+    calc(100% - var(--chat-panel-y, 0px))
+  );
   min-height: 360px;
   max-width: 100%;
-  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  max-height: calc(100% - var(--chat-panel-y, 0px));
   margin-top: var(--chat-panel-y, 0px);
-  margin-bottom: 24px;
+  margin-bottom: 0;
   gap: 0;
   border: var(--glass-border);
   border-radius: var(--radius-xl);
   background: var(--glass-regular-bg);
   overflow: hidden;
   box-shadow: var(--glass-shadow);
+  flex: 0 0 auto;
 }
 .chat-move-handle {
   display: none;

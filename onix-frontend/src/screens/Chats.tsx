@@ -114,9 +114,9 @@ export function Chats({
     return Math.min(raw, Math.max(CHAT_PANEL_H_MIN, chatViewportH()));
   });
   const [panelY, setPanelY] = useState(() => {
+    const vh = chatViewportH();
     const raw = readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0);
-    // Allow dropping almost to the bottom of the screen.
-    return Math.min(raw, Math.max(0, chatViewportH() - 80));
+    return Math.min(raw, Math.max(0, vh - CHAT_PANEL_H_MIN));
   });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -153,7 +153,7 @@ export function Chats({
     window.addEventListener('pointerup', onUp);
   };
 
-  /** Top handle: lower / raise the whole chat window. */
+  /** Top handle: lower / raise — window stays fully on screen (no page scroll). */
   const startPanelMove = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -165,12 +165,15 @@ export function Chats({
     document.body.classList.add('is-moving-chat');
     let latest = startOffset;
     let raf = 0;
-    // Far down: keep only ~80px of the panel top on the first screen.
-    const maxY = Math.max(0, chatViewportH() - 80);
+    const vh = chatViewportH();
+    // Can lower far: top moves down; height caps so the window never leaves the screen.
+    const maxY = Math.max(0, vh - CHAT_PANEL_H_MIN);
     const apply = (next: number) => {
       latest = next;
+      const h = Math.min(panelH, Math.max(CHAT_PANEL_H_MIN, vh - next));
       layout.style.setProperty('--chat-panel-y', `${next}px`);
       layout.style.marginTop = `${next}px`;
+      layout.style.height = `${h}px`;
     };
     const onMove = (ev: PointerEvent) => {
       const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
@@ -211,7 +214,9 @@ export function Chats({
     let latestW = startW;
     let latestH = startH;
     let raf = 0;
-    const maxH = Math.max(CHAT_PANEL_H_MIN, chatViewportH());
+    const vh = chatViewportH();
+    // Grow downward only into remaining space under current offset.
+    const maxH = Math.max(CHAT_PANEL_H_MIN, vh - panelY);
     const apply = (w: number, h: number) => {
       latestW = w;
       latestH = h;
@@ -244,6 +249,13 @@ export function Chats({
       const h = Math.round(latestH);
       setPanelW(w);
       setPanelH(h);
+      const maxY = Math.max(0, vh - h);
+      if (panelY > maxY) {
+        setPanelY(maxY);
+        try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(maxY)); } catch { /* ignore */ }
+        layout?.style.setProperty('--chat-panel-y', `${maxY}px`);
+        if (layout) layout.style.marginTop = `${maxY}px`;
+      }
       try {
         localStorage.setItem(CHAT_PANEL_W_KEY, String(w));
         localStorage.setItem(CHAT_PANEL_H_KEY, String(h));
@@ -538,6 +550,8 @@ export function Chats({
     return <Card><Skeleton lines={6} /></Card>;
   }
 
+  const fittedH = Math.min(panelH, Math.max(CHAT_PANEL_H_MIN, chatViewportH() - panelY));
+
   return <div
     className="chat-layout"
     style={{
@@ -546,7 +560,7 @@ export function Chats({
       '--chat-panel-h': `${panelH}px`,
       '--chat-panel-y': `${panelY}px`,
       width: panelW,
-      height: panelH,
+      height: fittedH,
       marginTop: panelY,
     } as CSSProperties}
   >
