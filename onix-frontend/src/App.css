@@ -1623,26 +1623,28 @@ html[data-theme="light"] .timeline li {
   margin: 0;
   min-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
   max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
-  overflow: auto;
-  display: flex;
-  align-items: flex-start;
-  justify-content: stretch;
-}
-.app-shell--chat .screen-transition {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
 }
+.app-shell--chat .screen-transition {
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: block;
+}
 .app-shell--chat .chat-layout {
   width: min(100%, var(--chat-panel-w, 100%));
-  height: min(100%, var(--chat-panel-h, calc(100dvh - 88px - env(safe-area-inset-bottom))));
+  height: var(--chat-panel-h, calc(100dvh - 200px - env(safe-area-inset-bottom)));
   min-height: 360px;
   max-width: 100%;
-  max-height: calc(100dvh - 64px - env(safe-area-inset-bottom));
+  /* Leave room below: offset pushes window down and caps height so it visibly slides */
+  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom) - var(--chat-panel-y, 0px));
   margin-top: var(--chat-panel-y, 0px);
+  margin-bottom: 12px;
   gap: 0;
   border: var(--glass-border);
   border-radius: var(--radius-xl);
@@ -1654,24 +1656,51 @@ html[data-theme="light"] .timeline li {
   display: none;
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 8;
-  width: 72px;
-  height: 14px;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  width: 100%;
+  height: 28px;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0 0 10px 10px;
-  background: color-mix(in srgb, var(--accent-violet) 35%, transparent);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: color-mix(in srgb, var(--glass-regular-bg) 70%, transparent);
   cursor: grab;
+  touch-action: none;
+}
+.chat-move-handle::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  width: 56px;
+  height: 5px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-violet) 65%, transparent);
 }
 .chat-move-handle:active {
   cursor: grabbing;
 }
-.chat-move-handle:hover,
-.chat-move-handle:focus-visible {
-  background: color-mix(in srgb, var(--accent-violet) 55%, transparent);
+.chat-move-handle:hover::after,
+.chat-move-handle:focus-visible::after {
+  background: color-mix(in srgb, var(--accent-violet) 90%, transparent);
+}
+body.is-moving-chat {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+body.is-moving-chat * {
+  cursor: inherit !important;
+}
+.app-shell--chat .conversation__head--drag {
+  cursor: grab;
+  touch-action: none;
+  padding-top: 22px;
+}
+.app-shell--chat .conversation__head--drag:active {
+  cursor: grabbing;
 }
 .app-shell--chat .conversation {
   min-height: 0;

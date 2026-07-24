@@ -32,10 +32,11 @@ function readStoredChatSize(key: string, fallback: number, min: number): number 
 }
 
 function defaultChatPanelSize(): { w: number; h: number } {
-  if (typeof window === 'undefined') return { w: 960, h: 720 };
+  if (typeof window === 'undefined') return { w: 960, h: 640 };
   return {
     w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
-    h: Math.min(860, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 120)),
+    /* Leave free space below so the window can slide down */
+    h: Math.min(760, Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 220)),
   };
 }
 
@@ -104,8 +105,16 @@ export function Chats({
   const defaults = defaultChatPanelSize();
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
-  const [panelH, setPanelH] = useState(() => readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN));
-  const [panelY, setPanelY] = useState(() => readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0));
+  const [panelH, setPanelH] = useState(() => {
+    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN);
+    const maxH = typeof window !== 'undefined' ? Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 160) : raw;
+    return Math.min(raw, maxH);
+  });
+  const [panelY, setPanelY] = useState(() => {
+    const raw = readStoredChatSize(CHAT_PANEL_Y_KEY, 0, 0);
+    const maxY = typeof window !== 'undefined' ? Math.max(0, window.innerHeight - 288) : raw;
+    return Math.min(raw, maxY);
+  });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -141,22 +150,27 @@ export function Chats({
     window.addEventListener('pointerup', onUp);
   };
 
-  const startPanelMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const startPanelMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const hit = event.target as HTMLElement | null;
+    if (hit?.closest('button, a, input, textarea, select, label')) return;
     event.preventDefault();
+    event.stopPropagation();
     const startY = event.clientY;
     const startOffset = panelY;
     const target = event.currentTarget;
     const layout = target.closest('.chat-layout') as HTMLElement | null;
-    target.setPointerCapture(event.pointerId);
-    document.body.classList.add('is-resizing-chat');
+    try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+    document.body.classList.add('is-moving-chat');
     let latest = startOffset;
     let raf = 0;
+    const chatViewport = Math.max(360, window.innerHeight - 88);
     const apply = (next: number) => {
       latest = next;
       layout?.style.setProperty('--chat-panel-y', `${next}px`);
     };
     const onMove = (ev: PointerEvent) => {
-      const maxY = Math.max(0, window.innerHeight - panelH - 48);
+      // Can slide down until only ~200px of the panel stays in view.
+      const maxY = Math.max(0, chatViewport - 200);
       const next = Math.max(0, Math.min(maxY, startOffset + (ev.clientY - startY)));
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => apply(next));
@@ -164,15 +178,17 @@ export function Chats({
     const onUp = (ev: PointerEvent) => {
       try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
       if (raf) cancelAnimationFrame(raf);
-      document.body.classList.remove('is-resizing-chat');
+      document.body.classList.remove('is-moving-chat');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       const rounded = Math.round(latest);
       setPanelY(rounded);
       try { localStorage.setItem(CHAT_PANEL_Y_KEY, String(rounded)); } catch { /* ignore */ }
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   const startPanelResize = (
@@ -200,7 +216,7 @@ export function Chats({
     };
     const onMove = (ev: PointerEvent) => {
       const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 80);
-      const maxH = Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 64);
+      const maxH = Math.max(CHAT_PANEL_H_MIN, window.innerHeight - 160 - panelY);
       const nextW = mode === 'y'
         ? startW
         : Math.max(CHAT_PANEL_W_MIN, Math.min(maxW, startW + (ev.clientX - startX)));
@@ -584,7 +600,10 @@ export function Chats({
       aria-label="Изменить ширину списка чатов"
       onPointerDown={startListResize}
     />
-    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
+    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div
+      className="conversation__head conversation__head--drag"
+      onPointerDown={startPanelMove}
+    ><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
       <button
         type="button"
         className="conversation__peer"
