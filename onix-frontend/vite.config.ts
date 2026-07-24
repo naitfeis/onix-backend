@@ -53,7 +53,9 @@ export default ({ mode }: { mode: string }) => {
       VitePWA({
         registerType: 'prompt',
         includeAssets: [
+          'favicon.ico',
           'favicon.svg',
+          'icons/favicon-16.png',
           'icons/favicon-32.png',
           'icons/apple-touch-icon.png',
           'brand/onix-mark.png',
