@@ -129,7 +129,6 @@
   flex: 0 0 auto;
   display: block;
   object-fit: contain;
-  border-radius: 7px;
 }
 .pwa-install {
   position: fixed;
@@ -153,7 +152,6 @@
   height: 40px;
   flex: 0 0 auto;
   object-fit: contain;
-  border-radius: 10px;
 }
 .pwa-install__copy {
   min-width: 0;

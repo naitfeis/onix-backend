@@ -154,7 +154,7 @@ export function BrandMark() {
     <div className="brand" aria-label="ONIX">
       <img
         className="brand__mark"
-        src="/icons/icon-192.png"
+        src="/brand/onix-mark.png"
         width={28}
         height={28}
         alt=""

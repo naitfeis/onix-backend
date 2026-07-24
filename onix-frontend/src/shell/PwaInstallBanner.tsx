@@ -11,7 +11,7 @@ export default function PwaInstallBanner() {
 
   return (
     <div className="pwa-install" role="region" aria-label="Установка ONIX">
-      <img className="pwa-install__mark" src="/icons/icon-192.png" width={40} height={40} alt="" />
+      <img className="pwa-install__mark" src="/brand/onix-mark.png" width={40} height={40} alt="" />
       <div className="pwa-install__copy">
         <strong>{title}</strong>
         <span>{body}</span>

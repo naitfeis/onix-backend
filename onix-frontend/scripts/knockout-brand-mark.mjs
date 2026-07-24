@@ -1,7 +1,9 @@
 ﻿/**
- * Knock out near-pure black background from the Onix brand mark via edge flood-fill.
- * Only pixels that are (a) near-black (low luma + low chroma) AND (b) connected to
- * the image border are keyed transparent — interior dark logo crevices are kept.
+ * Knock out near-black / near-achromatic background from the Onix brand mark
+ * via edge flood-fill. Only pixels that are (a) near-black (low luma + low chroma)
+ * OR already nearly transparent AND (b) connected to the image border are keyed
+ * transparent — interior dark logo crevices, purple rim glow, and specular
+ * highlights are kept.
  *
  * Usage:
  *   node scripts/knockout-brand-mark.mjs [source.png] [dest.png]
@@ -29,15 +31,19 @@ function chroma(r, g, b) {
 }
 
 /**
- * Near-pure black background candidate: very low luma AND low saturation.
+ * Background candidate: near-black / near-achromatic plate (or already transparent).
  * Dark purple logo body has higher chroma and is not keyed.
+ * Purple rim glow has higher luma and/or chroma and is not keyed.
  */
 function isNearBlackBg(r, g, b, a) {
-  if (a < 8) return true; // already transparent — treat as pass-through for flood
+  if (a < 8) return true;
   const L = luma(r, g, b);
   const C = chroma(r, g, b);
-  // Strict: only near-black / near-achromatic; leave purple crevices alone.
-  return L <= 18 && C <= 12;
+  // Dark plate + faint dark fringe on edges; leave purple body/glow alone.
+  if (L <= 28 && C <= 14) return true;
+  // Low-alpha achromatic haze (compressed black plate remnants).
+  if (a < 48 && L <= 40 && C <= 10) return true;
+  return false;
 }
 
 function knockoutNearBlackEdges(data, width, height) {
@@ -53,7 +59,6 @@ function knockoutNearBlackEdges(data, width, height) {
     out[o + 3] = data[o + 3];
   }
 
-  // Flood from image edges through connected near-black (or already-transparent) pixels.
   const queue = new Int32Array(n);
   let qh = 0;
   let qt = 0;
@@ -127,6 +132,17 @@ async function main() {
     );
 
   const meta = await sharp(destPath).metadata();
+  const { data: outData, info: outInfo } = await sharp(destPath)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const w = outInfo.width;
+  const h = outInfo.height;
+  const corner = (x, y) => {
+    const i = (y * w + x) * 4;
+    return `rgba(${outData[i]},${outData[i + 1]},${outData[i + 2]},${outData[i + 3]})`;
+  };
+
   console.log('[knockout] wrote', destPath);
   console.log(
     '[knockout] size',
@@ -135,6 +151,13 @@ async function main() {
     meta.channels,
     'hasAlpha',
     meta.hasAlpha,
+  );
+  console.log(
+    '[knockout] corners',
+    corner(0, 0),
+    corner(w - 1, 0),
+    corner(0, h - 1),
+    corner(w - 1, h - 1),
   );
 }
 
