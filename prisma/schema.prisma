@@ -75,7 +75,6 @@ model User {
   visibleMessages       Message[]            @relation("MessageVisibleTo")
   deletedMessages       Message[]            @relation("MessageDeletedBy")
   messageHides          MessageHide[]
-  chatAttachments       ChatAttachment[]
   blocksMade            UserBlock[]          @relation("Blocker")
   blocksReceived        UserBlock[]          @relation("Blocked")
   notifications         Notification[]
@@ -264,7 +263,6 @@ model Chat {
   orders    Order[]
   members   ChatMember[]
   messages  Message[]
-  attachments ChatAttachment[]
   tickets   SupportTicket[]
   productCreationSessions ProductCreationSession[]
 
@@ -307,57 +305,30 @@ model ChatMember {
 }
 
 model Message {
-  id              BigInt             @id @default(autoincrement())
+  id              BigInt      @id @default(autoincrement())
   chatId          String
   senderId        BigInt?
   /** When set, only this user (buyer) can read the message — used for auto-delivery secrets. */
   visibleToUserId BigInt?
-  kind            MessageKind        @default(USER)
-  contentType     MessageContentType @default(TEXT)
-  text            String             @db.VarChar(4500)
-  metadata        Json?
-  createdAt       DateTime           @default(now())
+  kind            MessageKind @default(USER)
+  text            String      @db.VarChar(4500)
+  createdAt       DateTime    @default(now())
   /** Soft global delete — row kept for admin audit. */
   deletedAt       DateTime?
   deletedById     BigInt?
-  deletedReason   String?            @db.VarChar(500)
+  deletedReason   String?     @db.VarChar(500)
   /** True when removed for everyone (not just MessageHide for one user). */
-  deletedForAll   Boolean            @default(false)
-  chat            Chat               @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender          User?              @relation(fields: [senderId], references: [id])
-  deletedBy       User?              @relation("MessageDeletedBy", fields: [deletedById], references: [id])
-  visibleTo       User?              @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
+  deletedForAll   Boolean     @default(false)
+  chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender          User?       @relation(fields: [senderId], references: [id])
+  deletedBy       User?       @relation("MessageDeletedBy", fields: [deletedById], references: [id])
+  visibleTo       User?       @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
   hides           MessageHide[]
-  attachment      ChatAttachment?
 
   @@index([chatId, createdAt]) // history: WHERE chatId ORDER BY createdAt
   // Partial USER+senderId index: migration 20260716050000. Add more only after EXPLAIN ANALYZE.
   @@index([visibleToUserId])
   @@index([deletedAt])
-}
-
-/** Chat file/image metadata — bytes live in R2 under opaque storageKey. */
-model ChatAttachment {
-  id           String           @id @default(cuid())
-  chatId       String
-  ownerId      BigInt
-  /** Set on complete — unique → idempotent complete. */
-  messageId    BigInt?          @unique
-  originalName String           @db.VarChar(255)
-  mimeType     String           @db.VarChar(100)
-  sizeBytes    Int
-  /** Opaque: chat-attachments/{chatId}/{uuid} — never client-chosen. */
-  storageKey   String           @unique @db.VarChar(512)
-  sha256       String?          @db.VarChar(64)
-  status       AttachmentStatus @default(PENDING)
-  createdAt    DateTime         @default(now())
-  chat         Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  owner        User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  message      Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
-
-  @@index([chatId, status, createdAt])
-  @@index([status, createdAt])
-  @@index([ownerId, createdAt])
 }
 
 /** Per-user hide ("удалить у себя") — message stays for peers / admin. */
@@ -1222,19 +1193,6 @@ enum ProductCreationStatus {
 enum MessageKind {
   USER
   SYSTEM
-}
-
-enum MessageContentType {
-  TEXT
-  IMAGE
-  FILE
-}
-
-enum AttachmentStatus {
-  PENDING
-  READY
-  REJECTED
-  DELETED
 }
 
 enum SupportTicketStatus {

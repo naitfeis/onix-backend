@@ -46,5 +46,11 @@
   },
   /* Компилятор зайдёт в папку, соберёт все файлы и main.ts в том числе */
   "include": ["safe-deal-platform/src/**/*"],
-  "exclude": ["node_modules", "dist", ".git"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".git",
+    "safe-deal-platform/src/chat-attachments/**/*",
+    "safe-deal-platform/src/workers/jobs/chat-attachment-cleanup.job.ts"
+  ]
 }

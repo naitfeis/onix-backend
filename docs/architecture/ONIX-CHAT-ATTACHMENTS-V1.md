@@ -1,54 +1,23 @@
-# Chat Attachments v1 — R2 setup
+# Chat Attachments v1 — NEXT STAGE (not active)
 
-## Env (Nest / Render)
+**Status:** parked. Do not enable until Cloudflare R2 is provisioned and core ONIX chat is stable.
 
-```
-R2_ACCOUNT_ID=
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
-R2_BUCKET=
-# optional override:
-# R2_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
-```
+Draft implementation lives in-repo but is **not wired**:
 
-## Cloudflare R2
+- `safe-deal-platform/src/chat-attachments/` (excluded from `tsc`)
+- `safe-deal-platform/src/workers/jobs/chat-attachment-cleanup.job.ts` (excluded)
+- Plan: `.cursor/plans/chat_attachments_v1_*.plan.md`
 
-1. Create a **private** bucket (no public access).
-2. Create an API token with Object Read & Write on that bucket.
-3. CORS (allow browser PUT from shop + local Vite):
+## Why parked
 
-```json
-[
-  {
-    "AllowedOrigins": [
-      "https://www.onixtg.shop",
-      "https://onixtg.shop",
-      "http://localhost:5173"
-    ],
-    "AllowedMethods": ["GET", "PUT", "HEAD"],
-    "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag", "Content-Length"],
-    "MaxAgeSeconds": 3600
-  }
-]
-```
+Shipping attachment schema/`include: { attachment }` without an applied migration broke `GET /chats/:id/messages` (empty thread UI while chat list still showed previews). R2 is not connected yet.
 
-## API flow
+## When re-enabling
 
-1. `POST /api/chats/:chatId/attachments/upload-intent`
-2. Client `PUT` to presigned URL (opaque key `chat-attachments/{chatId}/{uuid}`)
-3. `POST /api/chats/:chatId/attachments/:id/complete` → Message + WS `chat.message`
-4. `GET /api/chats/attachments/:id/download` → 60s presigned GET (ChatMember only)
+1. Restore Prisma models (`ChatAttachment`, `Message.contentType`) + migration
+2. Import `ChatAttachmentsModule` in `app.module` / worker
+3. Configure R2 env + private bucket CORS
+4. Re-enable FE paperclip + `sendChatAttachment`
+5. Flow: `upload-intent` → PUT R2 → `complete` (idempotent) → `chat.message` WS
 
-## Limits (v1)
-
-- FREE policy: 20 MB (PRO/ADMIN tiers reserved in code)
-- MIME: jpeg/png/webp/gif + pdf/txt
-- Cooldown: 1 s between attachment sends
-- PENDING cleanup: worker job `chat-attachment-cleanup` (stale > 1h)
-
-## Migrate
-
-```
-npx prisma migrate deploy
-```
+See plan for security (magic bytes, 20 MB FREE policy, opaque keys, PENDING cleanup).

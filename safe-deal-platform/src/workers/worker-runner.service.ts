@@ -11,7 +11,6 @@ import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
-import { ChatAttachmentCleanupJob } from './jobs/chat-attachment-cleanup.job';
 import { WorkerLockService } from './worker-lock.service';
 
 type JobDef = {
@@ -39,7 +38,6 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly ledgerReconciliation: LedgerReconciliationJob,
     private readonly paymentReconciliation: PaymentReconciliationJob,
     private readonly clawbackRecover: ClawbackRecoverJob,
-    private readonly attachmentCleanup: ChatAttachmentCleanupJob,
   ) {}
 
   onModuleInit(): void {
@@ -85,12 +83,6 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         intervalMs: Number(process.env.WORKER_CLAWBACK_RECOVER_MS ?? 60_000),
         leaseTtlMs: 120_000,
         run: () => this.clawbackRecover.run(),
-      },
-      {
-        name: 'chat-attachment-cleanup',
-        intervalMs: Number(process.env.WORKER_ATTACHMENT_CLEANUP_MS ?? 600_000),
-        leaseTtlMs: 300_000,
-        run: () => this.attachmentCleanup.run(),
       },
     ];
 

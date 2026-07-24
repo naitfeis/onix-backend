@@ -237,20 +237,12 @@ export function messageDto(message: {
   chatId: string;
   senderId: bigint | null;
   kind?: string;
-  contentType?: string | null;
   text: string;
   createdAt: Date;
   deletedAt?: Date | null;
   deletedById?: bigint | null;
   deletedReason?: string | null;
   sender: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport' | 'platformStatus'> | null;
-  attachment?: {
-    id: string;
-    mimeType: string;
-    originalName: string;
-    sizeBytes: number;
-    status: string;
-  } | null;
 }, viewerId: bigint, opts?: {
   staffViewer?: boolean;
   /** Other members' lastReadAt for receipts */
@@ -282,23 +274,10 @@ export function messageDto(message: {
     ? undefined
     : (readers.length > 0 ? 'READ' : 'SENT');
 
-  const contentType = (message.contentType === 'IMAGE' || message.contentType === 'FILE')
-    ? message.contentType
-    : 'TEXT' as const;
-  const att = message.attachment && message.attachment.status === 'READY'
-    ? {
-      id: message.attachment.id,
-      mimeType: message.attachment.mimeType,
-      originalName: message.attachment.originalName,
-      sizeBytes: message.attachment.sizeBytes,
-    }
-    : undefined;
-
   return {
     id: message.id.toString(),
     threadId: message.chatId,
     kind: system ? 'SYSTEM' as const : 'USER' as const,
-    contentType,
     sender: {
       id: system ? '0' : sender!.id.toString(),
       username: system ? 'ONIX' : publicDisplayName(sender!.displayName, formatOnixId(sender!.onixId)),
@@ -308,7 +287,6 @@ export function messageDto(message: {
     text: showOriginal ? message.text : 'Сообщение удалено',
     createdAt: message.createdAt.toISOString(),
     mine,
-    ...(att && showOriginal ? { attachment: att } : {}),
     ...(deliveryStatus ? { deliveryStatus } : {}),
     ...(deleted ? {
       deleted: true,

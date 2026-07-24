@@ -15,7 +15,7 @@ HTTP remains source of truth. WS path: `/api/realtime` (same origin).
 
 | Message | Source |
 | --- | --- |
-| `chat.message` | `POST /chats/:id/messages` or attachment `complete` — payload may include `contentType` + `attachment` |
+| `chat.message` | `POST /chats/:id/messages` commit |
 | `chat.typing` | peer typing |
 | `presence` | heartbeat + WS disconnect (broadcast) |
 | `notification` | new message / order paid |

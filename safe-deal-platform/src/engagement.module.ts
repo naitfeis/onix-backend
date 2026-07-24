@@ -381,7 +381,7 @@ export class ChatService {
       },
       orderBy: { createdAt: 'desc' },
       take,
-      include: { sender: { select: SENDER_SELECT }, attachment: true },
+      include: { sender: { select: SENDER_SELECT } },
     });
 
     await this.prisma.chatMember.updateMany({
@@ -579,13 +579,6 @@ export class ChatService {
         deletedReason: reason?.trim().slice(0, 500) || null,
       },
     });
-    const att = await this.prisma.chatAttachment.findFirst({ where: { messageId } });
-    if (att) {
-      await this.prisma.chatAttachment.update({
-        where: { id: att.id },
-        data: { status: 'DELETED' },
-      });
-    }
     await this.prisma.auditLog.create({
       data: {
         actorId: user.id,
