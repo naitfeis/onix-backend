@@ -105,6 +105,9 @@ html[data-theme="dark"] {
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --shell-max: 720px;
+  /* Desktop sidebars — defaults; App.tsx may override via inline style while resizing */
+  --sidebar-left-w: 272px;
+  --sidebar-right-w: 320px;
 
   /* Z-index scale — use these only (no magic 2100/9999) */
   --z-base: 0;
