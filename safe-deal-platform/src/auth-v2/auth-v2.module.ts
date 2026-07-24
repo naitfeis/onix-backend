@@ -1,4 +1,5 @@
 import { Module, type Type } from '@nestjs/common';
+import { AvatarsModule } from '../avatars/avatars.module';
 import { AuthOrchestrator } from './auth-orchestrator.service';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
 import { AuthV2Controller } from './auth-v2.controller';
@@ -29,6 +30,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
  * Phase 3.3: AuthRolloutService canary % + mode ladder (USE_NEW_AUTH stays false until ops gate).
  */
 @Module({
+  imports: [AvatarsModule],
   controllers: [AuthV2Controller, ...debugControllers],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },

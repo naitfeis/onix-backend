@@ -451,7 +451,7 @@ export default function App() {
               <strong>…</strong>
             ) : core.profile ? (
               <span className="user-summary identity-user" aria-label={t('balance.aria')}>
-                <UserAvatar avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
+                <UserAvatar userId={core.profile.id} avatarUrl={core.profile.avatarUrl} name={core.profile.username} online />
                 <strong>{money(core.profile.balanceCents)}</strong>
               </span>
             ) : (

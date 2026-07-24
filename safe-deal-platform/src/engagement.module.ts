@@ -17,6 +17,7 @@ import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { statusBadge } from './platform-status';
 import { publicDisplayName } from './public-username';
+import { clientAvatarUrl } from './avatars/avatar-url';
 import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 
@@ -99,7 +100,7 @@ export class ChatService {
           include: {
             user: {
               select: {
-                onixId: true, displayName: true, telegramNick: true, lastSeenAt: true, avatarUrl: true,
+                id: true, onixId: true, displayName: true, telegramNick: true, lastSeenAt: true, avatarUrl: true,
                 isAdmin: true, isSupport: true, platformStatus: true,
               },
             },
@@ -173,7 +174,9 @@ export class ChatService {
         unreadCount: unreadByChat.get(chat.id) ?? 0,
         peerOnixId: isGroup || isAi ? undefined : peerOnix,
         peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
-        ...(!isGroup && !isAi && other?.user.avatarUrl ? { peerAvatarUrl: other.user.avatarUrl } : {}),
+        ...(!isGroup && !isAi && other
+          ? { peerAvatarUrl: clientAvatarUrl(other.user.id, other.user.avatarUrl) }
+          : {}),
         ...(!isGroup && !isAi && other
           ? (() => {
             const b = statusBadge(other.user.platformStatus
@@ -233,7 +236,7 @@ export class ChatService {
       },
       take,
       select: {
-        onixId: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
+        id: true, onixId: true, displayName: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
       },
       orderBy: { id: 'asc' },
     });
@@ -244,7 +247,7 @@ export class ChatService {
       return {
         onixId,
         username: publicDisplayName(row.displayName, onixId),
-        ...(row.avatarUrl ? { avatarUrl: row.avatarUrl } : {}),
+        avatarUrl: clientAvatarUrl(row.id, row.avatarUrl),
         ...(badge ? { badge } : {}),
       };
     });
@@ -343,7 +346,7 @@ export class ChatService {
       unreadCount: 0,
       peerOnixId: peerOnix,
       peerLastOnline: target.lastSeenAt.toISOString(),
-      ...(target.avatarUrl ? { peerAvatarUrl: target.avatarUrl } : {}),
+      peerAvatarUrl: clientAvatarUrl(target.id, target.avatarUrl),
     };
   }
 
@@ -596,7 +599,7 @@ export class ChatService {
       select: {
         user: {
           select: {
-            onixId: true, telegramNick: true, displayName: true, avatarUrl: true,
+            id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true,
             isAdmin: true, isSupport: true, platformStatus: true, lastSeenAt: true, deletedAt: true,
           },
         },
@@ -614,7 +617,7 @@ export class ChatService {
           return {
             onixId,
             username: publicDisplayName(r.user.displayName, onixId),
-            avatarUrl: r.user.avatarUrl ?? undefined,
+            avatarUrl: clientAvatarUrl(r.user.id, r.user.avatarUrl),
             badge: statusBadge(r.user.platformStatus
               ?? (r.user.isAdmin ? 'ADMIN' : r.user.isSupport ? 'MODERATOR' : 'USER')),
             lastOnline: r.user.lastSeenAt.toISOString(),

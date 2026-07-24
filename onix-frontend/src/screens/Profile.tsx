@@ -306,7 +306,7 @@ export function Profile({
         ? 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'
         : 'Сумма и комиссия будут подтверждены сервером до списания.';
 
-  return <div className="stack"><Card className="profile-card"><UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+  return <div className="stack"><Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="wallet-strip">
         <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
           <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
@@ -342,7 +342,7 @@ export function Profile({
             <h2>{item.title}</h2>
             <div className="seller-row">
               <span className="user-summary">
-                <UserAvatar avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile)} />
+                <UserAvatar userId={item.seller.id} avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile)} />
                 <span>{publicAt(item.seller.username)}</span>
               </span>
               <strong>{money(item.priceCents)}</strong>

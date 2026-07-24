@@ -520,6 +520,7 @@ export function Market({
               </div>
               <div className="product-card__avatar">
                 <UserAvatar
+                  userId={product.seller.id}
                   avatarUrl={product.seller.avatarUrl}
                   name={product.seller.username}
                   size="medium"
@@ -575,7 +576,7 @@ export function Market({
             {sellerTrust.voiceVerified && <span>Голос</span>}
           </div>
         )}
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
+        <Card><div className="seller-row"><div className="user-summary"><UserAvatar userId={selected.seller.id} avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile)} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile) ? 'Online' : formatLastSeen(selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
           <div className="card-actions">
             <Button type="button" variant="secondary" onClick={async () => {
               const onixId = selected.seller.onixId;

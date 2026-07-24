@@ -2,6 +2,8 @@ import { useState } from 'react';
 
 type UserAvatarProps = {
   avatarUrl?: string;
+  /** When set, always load via same-origin proxy (ignores t.me CDN). */
+  userId?: string;
   name: string;
   size?: 'small' | 'medium';
   /**
@@ -17,20 +19,33 @@ function initials(name: string): string {
   return value.slice(0, 2).toUpperCase() || '?';
 }
 
-/** Telegram CDN often times out in RU without VPN — skip fetch, show initials. */
-function isUnreliableAvatarHost(url: string): boolean {
-  try {
-    const host = new URL(url).hostname;
-    return host === 't.me' || host.endsWith('.t.me')
-      || host === 'telegram.org' || host.endsWith('.telegram.org');
-  } catch {
-    return false;
+function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): string | undefined {
+  if (userId && /^\d+$/.test(userId)) {
+    return `/api/avatars/${userId}`;
   }
+  if (!avatarUrl) return undefined;
+  const trimmed = avatarUrl.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('/api/avatars/')) return trimmed;
+
+  try {
+    const parsed = new URL(trimmed, typeof location !== 'undefined' ? location.origin : 'https://local.test');
+    if (parsed.pathname.startsWith('/api/avatars/')) {
+      return `${parsed.pathname}${parsed.search}`;
+    }
+  } catch {
+    return undefined;
+  }
+
+  // Never hit t.me from the browser (RU timeouts).
+  return undefined;
 }
 
-export default function UserAvatar({ avatarUrl, name, size = 'small', online }: UserAvatarProps) {
+export default function UserAvatar({
+  avatarUrl, userId, name, size = 'small', online,
+}: UserAvatarProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const usableUrl = avatarUrl && !isUnreliableAvatarHost(avatarUrl) ? avatarUrl : undefined;
+  const usableUrl = resolveAvatarSrc(avatarUrl, userId);
   const showImage = Boolean(usableUrl && usableUrl !== failedUrl);
   const showPresence = online === true || online === false;
 

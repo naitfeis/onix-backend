@@ -5,6 +5,7 @@ node_modules
 /generated/prisma
 /dist
 /public/spa
+/data/avatars
 /coverage
 *.tsbuildinfo
 /ops-drills

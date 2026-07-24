@@ -151,7 +151,7 @@ export function PublicProfileModal({
   return <Modal open={Boolean(profile)} title="Профиль" onClose={onClose} size="wide">
     <div className="stack public-profile">
       <Card className="profile-card">
-        <UserAvatar avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />
+        <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />
         <div className="profile-main">
           <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge} /></h1>
           <p>{formatOnixId(profile.onixId)} · {formatLastSeen(profile.lastOnline)}</p>

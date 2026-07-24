@@ -287,8 +287,8 @@ export class SupportService {
         adminReply: true,
         repliedAt: true,
         createdAt: true,
-        reporter: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
-        target: { select: { onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
+        reporter: { select: { id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
+        target: { select: { id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true } },
       },
     });
     return rows.map((r) => ({
@@ -302,12 +302,12 @@ export class SupportService {
       reporter: {
         onixId: formatOnixId(r.reporter.onixId),
         username: publicDisplayName(r.reporter.displayName, r.reporter.onixId),
-        avatarUrl: r.reporter.avatarUrl ?? undefined,
+        avatarUrl: `/api/avatars/${r.reporter.id}`,
       },
       target: {
         onixId: formatOnixId(r.target.onixId),
         username: publicDisplayName(r.target.displayName, r.target.onixId),
-        avatarUrl: r.target.avatarUrl ?? undefined,
+        avatarUrl: `/api/avatars/${r.target.id}`,
       },
     }));
   }

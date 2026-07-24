@@ -1,4 +1,5 @@
 import { PlatformStatus, Prisma } from '@prisma/client';
+import { clientAvatarUrl } from './avatars/avatar-url';
 import { AuthUser } from './common';
 import { formatOnixId } from './onix-id';
 import { statusBadge, type PlatformStatusCode } from './platform-status';
@@ -98,7 +99,7 @@ export function sellerDto(user: PublicUser & { followers?: Array<{ followerId: b
     onixId,
     // Public label: displayName only (never Telegram @username / telegramId).
     username: publicDisplayName(user.displayName, onixId),
-    ...(user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}),
+    avatarUrl: clientAvatarUrl(user.id, user.avatarUrl),
     rating: Number(user.ratingAverage),
     reviewCount: user.ratingCount,
     salesCount: user.completedSales,
@@ -280,7 +281,7 @@ export function messageDto(message: {
     sender: {
       id: system ? '0' : sender!.id.toString(),
       username: system ? 'ONIX' : publicDisplayName(sender!.displayName, formatOnixId(sender!.onixId)),
-      ...(system ? {} : (sender!.avatarUrl ? { avatarUrl: sender!.avatarUrl } : {})),
+      ...(system ? {} : { avatarUrl: clientAvatarUrl(sender!.id, sender!.avatarUrl) }),
       ...(staffBadge ? { badge: staffBadge } : {}),
     },
     text: showOriginal ? message.text : 'Сообщение удалено',
@@ -328,7 +329,7 @@ export function reviewDto(item: {
       id: item.author.id.toString(),
       onixId,
       username: publicDisplayName(item.author.displayName, onixId),
-      ...(item.author.avatarUrl ? { avatarUrl: item.author.avatarUrl } : {}),
+      avatarUrl: clientAvatarUrl(item.author.id, item.author.avatarUrl),
       ...(badge ? { badge } : {}),
     },
     rating: item.rating,

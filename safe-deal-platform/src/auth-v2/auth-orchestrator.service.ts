@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { AvatarService } from '../avatars/avatar.service';
 import { PrismaService } from '../prisma.service';
 import { AuthPlatformError } from './auth-errors';
 import { AUTH_EVENT_PUBLISHER, AuthEventPublisher } from './auth-events';
@@ -36,6 +37,7 @@ export class AuthOrchestrator {
     private readonly sessions: SessionService,
     @Inject(AUTH_EVENT_PUBLISHER) private readonly events: AuthEventPublisher,
     @Optional() private readonly rollout?: AuthRolloutService,
+    @Optional() private readonly avatars?: AvatarService,
   ) {}
 
   async loginWithTelegram(command: LoginTelegramCommand): Promise<SessionAuthResult & {
@@ -103,6 +105,14 @@ export class AuthOrchestrator {
       sessionId: session.id,
       familyId: session.familyId,
     });
+
+    // Warm disk cache so first marketplace paint is fast (RU clients never hit t.me).
+    this.avatars?.warmFromSource(
+      user.id,
+      identity.photoUrl
+        ?? user.avatarUrl
+        ?? (user.telegramId != null ? `tg:profile:${user.telegramId.toString()}` : null),
+    );
 
     return {
       session,
