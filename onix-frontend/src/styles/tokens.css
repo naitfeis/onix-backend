@@ -15,27 +15,27 @@ html[data-theme="dark"] {
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
-  /* Vision Pro acrylic — same translucency recipe as light (frost + blur) */
-  --glass-blur: 32px;
-  --glass-blur-thin: 20px;
-  --glass-blur-regular: 32px;
-  --glass-blur-thick: 44px;
-  --glass-saturate: 150%;
+  /* Milder blur in dark too — banding through stacked glass */
+  --glass-blur: 22px;
+  --glass-blur-thin: 14px;
+  --glass-blur-regular: 22px;
+  --glass-blur-thick: 28px;
+  --glass-saturate: 130%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(120%);
 
-  --glass-bg: rgba(18, 16, 28, 0.78);
+  --glass-bg: rgba(18, 16, 28, 0.88);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(18, 16, 28, 0.7);
-  --glass-regular-bg: rgba(18, 16, 28, 0.82);
-  --glass-thick-bg: rgba(18, 16, 28, 0.88);
-  --glass-card-bg: rgba(18, 16, 28, 0.8);
+  --glass-thin-bg: rgba(18, 16, 28, 0.82);
+  --glass-regular-bg: rgba(18, 16, 28, 0.9);
+  --glass-thick-bg: rgba(18, 16, 28, 0.94);
+  --glass-card-bg: rgba(18, 16, 28, 0.9);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  --glass-inner-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1);
-  --glass-drop-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
-  --glass-shadow: var(--glass-drop-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
+  --glass-highlight: none;
+  --glass-inner-shadow: none;
+  --glass-drop-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+  --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.08);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.14);
@@ -157,27 +157,27 @@ html[data-theme="light"] {
   --surface-1: rgba(255, 255, 255, 0.42);
   --surface-2: rgba(255, 255, 255, 0.55);
 
-  /* Vision Pro light glass — translucent + strong blur */
-  --glass-blur: 32px;
-  --glass-blur-thin: 20px;
-  --glass-blur-regular: 32px;
-  --glass-blur-thick: 44px;
-  --glass-saturate: 150%;
+  /* Denser fill + milder blur — less backdrop banding / «полосы» */
+  --glass-blur: 18px;
+  --glass-blur-thin: 12px;
+  --glass-blur-regular: 18px;
+  --glass-blur-thick: 24px;
+  --glass-saturate: 120%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(135%);
+  --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(115%);
 
-  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-bg: rgba(255, 255, 255, 0.9);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.7);
-  --glass-regular-bg: rgba(255, 255, 255, 0.82);
-  --glass-thick-bg: rgba(255, 255, 255, 0.9);
-  --glass-card-bg: rgba(255, 255, 255, 0.84);
+  --glass-thin-bg: rgba(255, 255, 255, 0.86);
+  --glass-regular-bg: rgba(255, 255, 255, 0.92);
+  --glass-thick-bg: rgba(255, 255, 255, 0.96);
+  --glass-card-bg: rgba(255, 255, 255, 0.94);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.55);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  --glass-inner-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.35);
-  --glass-drop-shadow: 0 16px 48px rgba(20, 25, 35, 0.12);
-  --glass-shadow: var(--glass-drop-shadow), var(--glass-highlight), var(--glass-inner-shadow);
+  --glass-border: 1px solid rgba(20, 25, 35, 0.08);
+  --glass-highlight: none;
+  --glass-inner-shadow: none;
+  --glass-drop-shadow: 0 10px 28px rgba(20, 25, 35, 0.08);
+  --glass-shadow: var(--glass-drop-shadow);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.35);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.45);
@@ -425,6 +425,24 @@ html[data-theme="light"] .topbar::after {
 .wallet-hero,
 .widget {
   overflow: clip;
+  /* Avoid nested blur sampling that paints horizontal bands */
+  isolation: isolate;
+}
+html[data-theme="light"] .card,
+html[data-theme="light"] .widget,
+html[data-theme="light"] .product-card,
+html[data-theme="light"] .topbar,
+html[data-theme="light"] .section-head {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--glass-card-bg) !important;
+}
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .widget,
+html[data-theme="dark"] .product-card {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: var(--glass-card-bg) !important;
 }
 .cat-card {
   overflow: visible;
