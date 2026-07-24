@@ -13,6 +13,16 @@ import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
+import { RiskEngineService } from '../src/risk/risk-engine.service';
+
+function sessionService(prisma: unknown, tokens: TokenService): SessionService {
+  return new SessionService(
+    prisma as never,
+    tokens,
+    new DeviceTrustService(),
+    new RiskEngineService(prisma as never),
+  );
+}
 
 function installKeys(kid = 'p31-kid'): void {
   const pair = generateEd25519PemPair();
@@ -233,7 +243,7 @@ test('AuthGuard: Ed25519 passes when AUTH_ACCEPT_V2_ACCESS=true', async () => {
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
   };
-  const sessions = new SessionService(prisma as never, tokens, new DeviceTrustService());
+  const sessions = sessionService(prisma, tokens);
   const dual = new DualAccessService(tokens, sessions);
 
   let legacyCalled = false;
@@ -257,6 +267,7 @@ test('AuthGuard: Ed25519 passes when AUTH_ACCEPT_V2_ACCESS=true', async () => {
     isAdmin: false,
     isSupport: false,
     platformStatus: undefined,
+    sessionId: session.id,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });
@@ -273,10 +284,10 @@ test('AuthGuard: revoked session → 401', async () => {
     sessionVersion: 0,
     permissionVersion: 0,
   });
-  const sessions = new SessionService({
+  const sessions = sessionService({
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
-  } as never, tokens, new DeviceTrustService());
+  }, tokens);
   const dual = new DualAccessService(tokens, sessions);
   const guard = new AuthGuard(new Reflector(), { verifyToken: async () => assert.fail('no') } as never, dual);
   await assert.rejects(
@@ -300,10 +311,10 @@ test('AuthGuard: sessionVersion mismatch → 401', async () => {
     sessionVersion: 0,
     permissionVersion: 0,
   });
-  const sessions = new SessionService({
+  const sessions = sessionService({
     user: { findUnique: async () => user },
     session: { findUnique: async () => session },
-  } as never, tokens, new DeviceTrustService());
+  }, tokens);
   const dual = new DualAccessService(tokens, sessions);
   const guard = new AuthGuard(new Reflector(), { verifyToken: async () => assert.fail('no') } as never, dual);
   await assert.rejects(
@@ -353,10 +364,10 @@ test('DualAccessService maps Ed25519 claims to AuthUser without controller branc
   });
   const dual = new DualAccessService(
     tokens,
-    new SessionService({
+    sessionService({
       user: { findUnique: async () => user },
       session: { findUnique: async () => session },
-    } as never, tokens, new DeviceTrustService()),
+    }, tokens),
   );
   assert.equal(dual.isEdDsaAccessToken(jwt), true);
   assert.equal(dual.isAcceptEnabled(), true);
@@ -368,6 +379,7 @@ test('DualAccessService maps Ed25519 claims to AuthUser without controller branc
     isAdmin: true,
     isSupport: true,
     platformStatus: undefined,
+    sessionId: session.id,
   });
   delete process.env.AUTH_ACCEPT_V2_ACCESS;
 });

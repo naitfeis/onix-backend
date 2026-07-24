@@ -12,6 +12,7 @@ import { IdentityService } from './identity.service';
 import { RbacService } from './rbac.service';
 import { SECRETS_PROVIDER, EnvSecretsProvider } from './secrets.provider';
 import { RiskScoreService } from '../risk-score.service';
+import { RiskModule } from '../risk/risk.module';
 import { SessionService } from './session.service';
 import { DeviceTrustService } from './device-trust.service';
 import { SigningKeyService } from './signing-key.service';
@@ -31,7 +32,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
  * Phase 3.3: AuthRolloutService canary % + mode ladder (USE_NEW_AUTH stays false until ops gate).
  */
 @Module({
-  imports: [AvatarsModule],
+  imports: [AvatarsModule, RiskModule],
   controllers: [AuthV2Controller, ...debugControllers],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
@@ -64,6 +65,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
     PermissionGuard,
     RbacService,
     RiskScoreService,
+    RiskModule,
     SECRETS_PROVIDER,
     AUTH_EVENT_PUBLISHER,
   ],

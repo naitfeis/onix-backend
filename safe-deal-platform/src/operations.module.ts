@@ -26,6 +26,8 @@ import { debugEndpointsEnabled } from './debug-endpoints';
 import { buildInfo } from './build-info';
 import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
+import { RiskEngineService } from './risk/risk-engine.service';
+import { RiskModule } from './risk/risk.module';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -79,6 +81,7 @@ class OperationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly risk: RiskScoreService,
+    private readonly riskEngine: RiskEngineService,
     private readonly balance: BalanceService,
     private readonly clawbacks: ClawbackService,
     private readonly idempotency: IdempotencyService,
@@ -382,6 +385,13 @@ class OperationsService {
         'Вывод средств временно недоступен. Обратитесь в поддержку ONIX.',
       );
     }
+
+    await this.riskEngine.assertWithdrawAllowed({
+      userId: user.id,
+      amountCents: BigInt(dto.amountCents),
+      sessionId: user.sessionId,
+    });
+
     // External withdrawal is double-gated: ledger idempotencyKey + IdempotencyRecord scope.
     const result = await this.idempotency.run(
       'wallet.withdraw',
@@ -605,6 +615,6 @@ class HealthController {
 @Module({
   controllers: [AdminController, AdminRefundController, SupportOpsController, HealthController, WalletController],
   providers: [AdminGuard, SupportGuard, OperationsService],
-  imports: [EscrowModule, AuthV2Module, EconomyModule],
+  imports: [EscrowModule, AuthV2Module, EconomyModule, RiskModule],
 })
 export class OperationsModule {}

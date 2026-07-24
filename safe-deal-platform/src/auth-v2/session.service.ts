@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import type { Prisma, Session, SessionRevokeReason, User } from '@prisma/client';
 import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from '../ban-policy';
 import { PrismaService } from '../prisma.service';
+import { RiskEngineService } from '../risk/risk-engine.service';
 import { AuthPlatformError } from './auth-errors';
 import {
   DEFAULT_SESSION_RISK_SCORE,
@@ -15,6 +16,7 @@ import {
 } from './session.constants';
 import { type AccessTokenClaims, TokenService } from './token.service';
 import { DeviceTrustService } from './device-trust.service';
+import type { RiskEventDraft } from '../risk/risk-engine.types';
 
 export interface DeviceContext {
   deviceName?: string | null;
@@ -74,6 +76,7 @@ export class SessionService {
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly deviceTrust: DeviceTrustService,
+    private readonly riskEngine: RiskEngineService,
   ) {}
 
   /** Test helper — simulate grace expiry / multi-instance without shared cache. */
@@ -150,6 +153,7 @@ export class SessionService {
     fingerprintHash: string | null;
     familyId: string;
     sessionId: string;
+    riskEvents: RiskEventDraft[];
   }> {
     const rememberMe = input.rememberMe === true;
     const now = new Date();
@@ -169,10 +173,23 @@ export class SessionService {
       })
       : null;
 
+    const loginRisk = await this.riskEngine.evaluateLogin({
+      userId: user.id,
+      deviceId: fingerprintHash,
+      ipAddress: device.ipAddress,
+      country: device.country,
+      timezone: device.timezone,
+      locale: device.language,
+      trustedDevice: Boolean(trusted),
+    }, db);
+
+    const base = trusted ? TRUSTED_DEVICE_RISK_SCORE : DEFAULT_SESSION_RISK_SCORE;
+    const riskScore = Math.min(100, Math.max(base, loginRisk.riskScore));
+
     return {
       refresh: this.tokens.issueRefreshToken(),
       trusted,
-      riskScore: trusted ? TRUSTED_DEVICE_RISK_SCORE : DEFAULT_SESSION_RISK_SCORE,
+      riskScore,
       rememberMe,
       idleMs,
       now,
@@ -180,6 +197,7 @@ export class SessionService {
       fingerprintHash,
       familyId: newId(),
       sessionId: newId(),
+      riskEvents: loginRisk.events,
     };
   }
 
@@ -191,6 +209,7 @@ export class SessionService {
   ): Promise<Session> {
     const {
       refresh, trusted, riskScore, rememberMe, idleMs, now, device, fingerprintHash, familyId, sessionId,
+      riskEvents,
     } = prepared;
 
     await this.enforceSessionLimit(tx, user.id, now);
@@ -239,6 +258,10 @@ export class SessionService {
       });
     }
 
+    if (riskEvents.length > 0) {
+      await this.riskEngine.writeEvents(tx, user.id, session.id, riskEvents);
+    }
+
     await tx.authAuditLog.create({
       data: {
         userId: user.id,
@@ -253,6 +276,7 @@ export class SessionService {
           rememberMe,
           trustedDevice: Boolean(trusted),
           familyId,
+          riskScore,
         },
       },
     });

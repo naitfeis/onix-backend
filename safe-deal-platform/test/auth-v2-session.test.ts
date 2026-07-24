@@ -8,6 +8,7 @@ import { SessionService } from '../src/auth-v2/session.service';
 import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
+import { RiskEngineService } from '../src/risk/risk-engine.service';
 
 type Store = {
   users: Map<string, User>;
@@ -209,7 +210,8 @@ function buildService(store: Store): SessionService {
   const keys = new SigningKeyService(new EnvSecretsProvider());
   keys.clearCache();
   const tokens = new TokenService(keys);
-  return new SessionService(createPrismaMock(store) as never, tokens, new DeviceTrustService());
+  const prisma = createPrismaMock(store) as never;
+  return new SessionService(prisma, tokens, new DeviceTrustService(), new RiskEngineService(prisma));
 }
 
 test('SessionService createSession stores refresh hash only and returns opaque token', async () => {

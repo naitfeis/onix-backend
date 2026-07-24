@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../common';
+import { AuthPlatformError } from '../auth-v2/auth-errors';
 import { pushTelegramToChatId } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
 import { formatOnixId } from '../onix-id';
 import { createId } from '../economy/wallet/cuid';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
+import { RiskEngineService } from '../risk/risk-engine.service';
 import { helpReply } from './help-replies';
 import {
   IntentRecognizer,
@@ -37,6 +40,7 @@ export class ConversationService {
     private readonly prisma: PrismaService,
     private readonly products: ProductCreationService,
     private readonly balance: BalanceService,
+    private readonly riskEngine: RiskEngineService,
   ) {}
 
   aiPairKey(userId: bigint) {
@@ -325,6 +329,20 @@ export class ConversationService {
     const amountCents = BigInt(Math.round(amountRubles * 100));
     if (amountCents < 100n) return 'Минимальная сумма вывода — 1 ₽.';
 
+    try {
+      await this.riskEngine.assertWithdrawAllowed({
+        userId: user.id,
+        amountCents,
+        sessionId: user.sessionId,
+        payoutDestination: destination,
+      });
+    } catch (error) {
+      if (error instanceof AuthPlatformError && error.code === 'AUTH_STEP_UP_REQUIRED') {
+        return 'Для этого вывода нужно дополнительное подтверждение в приложении ONIX (step-up). Пока подтверждение недоступно — обратитесь в поддержку или выведите меньшую сумму с известного устройства.';
+      }
+      throw error;
+    }
+
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
     const railOn = enabled === '1' || enabled === 'true' || enabled === 'yes';
     const idempotencyKey = `ai-wd-${user.id}-${createId()}`.slice(0, 100);
@@ -346,6 +364,7 @@ export class ConversationService {
                 amountCents: amountCents.toString(),
                 method,
                 destination: destination.slice(0, 120),
+                destinationHash: createHash('sha256').update(destination.trim().toLowerCase()).digest('hex').slice(0, 64),
                 source: 'ONIX_AI',
                 idempotencyKey,
               },
@@ -362,6 +381,7 @@ export class ConversationService {
                 amountCents: amountCents.toString(),
                 method,
                 destination: destination.slice(0, 120),
+                destinationHash: createHash('sha256').update(destination.trim().toLowerCase()).digest('hex').slice(0, 64),
                 source: 'ONIX_AI',
                 pendingManual: true,
                 idempotencyKey,

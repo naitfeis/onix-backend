@@ -1,8 +1,7 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 1** — Session & Device Trust (with signal/HMAC corrections)  
-Principles apply to all later slices (Risk, Step-up, Financial Controls, Admin plane).  
-**Do not start Slice 2 until explicitly commanded.**
+Status: **Slice 2** — Security Events + Risk Engine (withdraw / new device+IP)  
+Principles apply to all later slices (Step-up, Financial Controls, Admin plane).
 
 ## Principles
 
@@ -92,6 +91,49 @@ Worker job: `security-ip-retention`.
 
 Aggregated risk / AbuseMarker hashes may live longer (no raw IP required).
 
+## Risk Engine (Slice 2)
+
+Separate from registration `RiskScoreService` (AbuseMarker multi-factor).
+
+```text
+RiskEngine.evaluate*(context) → RiskDecision
+  action: ALLOW | MONITOR | STEP_UP | BLOCK
+```
+
+Auth / wallet **own** mutations; the engine only scores and emits `SecurityEvent` drafts.
+
+### Factors (weights)
+
+| Factor | Weight | Notes |
+|--------|--------|--------|
+| `NEW_DEVICE` | 40 | deviceId not in prior sessions / not TrustedDevice |
+| `NEW_IP` | 25 | IP not seen on prior sessions |
+| `NEW_COUNTRY` | 20 | country hop |
+| `LARGE_AMOUNT` | 30 | ≥ `RISK_WITHDRAW_LARGE_CENTS` (default 5_000_000 = 50_000 ₽) |
+| `NEW_PAYOUT_DEST` | 25 | new destination vs prior withdraw audits |
+| `HIGH_SESSION_RISK` | 15 | session.riskScore ≥ 40 |
+| `CONTEXT_SHIFT` | 5 | timezone/locale change — **never sole STEP_UP** |
+
+Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCORE` (50).
+
+### Login
+
+- New device / IP / country → **MONITOR** only (`SESSION_ANOMALY` / `IMPOSSIBLE_TRAVEL`), raise `Session.riskScore`.
+- No auto logout / no STEP_UP on login in Slice 2 (ADR-021).
+
+### Withdraw (`POST /wallet/withdrawals` + AI withdraw)
+
+- Evaluate factors → write `SecurityEvent` on MONITOR / STEP_UP.
+- **STEP_UP** → `AUTH_STEP_UP_REQUIRED` (403) stub until Slice 3 MFA.
+- Soft rollout: `RISK_STEP_UP_ENFORCE=false` demotes STEP_UP → MONITOR.
+
+| Env | Default | Meaning |
+|-----|---------|---------|
+| `RISK_WITHDRAW_LARGE_CENTS` | `5000000` | Large withdrawal threshold |
+| `RISK_MONITOR_SCORE` | `25` | MONITOR floor |
+| `RISK_STEP_UP_SCORE` | `50` | STEP_UP floor |
+| `RISK_STEP_UP_ENFORCE` | `true` | Enforce stub step-up |
+
 ## Stack (target)
 
 ```text
@@ -101,9 +143,9 @@ ONIX Identity → Session & Device Trust → Security Events
 
 | Slice | Scope |
 |-------|--------|
-| **1** | Device HMAC (stable-ish only), strip invasive fingerprints, TTL defaults, IP retention |
-| 2 | Risk on withdraw / new device+IP (uses context signals separately) — **wait for command** |
-| 3 | Step-up (Telegram confirm / MFA) |
+| 1 | Device HMAC (stable-ish only), strip invasive fingerprints, TTL defaults, IP retention |
+| **2** | Risk Engine on withdraw / new device+IP; MONITOR on login; STEP_UP stub |
+| 3 | Step-up (Telegram confirm / MFA) — wires `MfaChallenge` |
 | 4 | Ledger actor/source/correlationId + velocity |
 | 5 | KMS / key rotation hygiene |
 | 6 | Separate Admin Control Plane |
@@ -115,3 +157,4 @@ ONIX Identity → Session & Device Trust → Security Events
 - Phone scraping
 - Storing tokens in audit payloads
 - Binding production device HMAC to `JWT_SECRET`
+- Full MFA UI in Slice 2 (stub error only)

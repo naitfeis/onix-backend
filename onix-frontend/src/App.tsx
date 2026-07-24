@@ -307,7 +307,7 @@ export default function App() {
 
   const onAuthenticated = () => {
     setBanNotice(undefined);
-    core.refreshAll();
+    void core.refreshAll();
   };
   const openDirectChat = async (onixId: string) => {
     const thread = await core.startChat(onixId);
@@ -479,7 +479,7 @@ export default function App() {
             onFocusProductHandled={() => setFocusProductId(null)}
             openDirectChat={openDirectChat}
             openProductCard={openProductCard}
-            openDealChat={(chatId) => {
+            openDealChat={(chatId: string) => {
               setFocusChatId(chatId);
               switchTo('chat');
             }}
@@ -492,7 +492,7 @@ export default function App() {
             setToast={setToast}
             focusDealId={focusDealId}
             onFocusDealHandled={() => setFocusDealId(null)}
-            openDealChat={(chatId) => {
+            openDealChat={(chatId: string) => {
               setFocusChatId(chatId);
               switchTo('chat');
             }}
@@ -515,7 +515,7 @@ export default function App() {
             openProductCard={openProductCard}
             openTopup={openWalletTopup}
             onTopupConsumed={() => setOpenWalletTopup(false)}
-            openDealChat={(chatId) => {
+            openDealChat={(chatId: string) => {
               setFocusChatId(chatId);
               switchTo('chat');
             }}

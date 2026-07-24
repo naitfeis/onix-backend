@@ -16,6 +16,7 @@ import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
+import { RiskEngineService } from '../src/risk/risk-engine.service';
 
 function installKeys(): void {
   const pair = generateEd25519PemPair();
@@ -71,9 +72,13 @@ function createSessionPrisma(store: Store) {
         store.sessions.set(data.id, { ...data });
         return store.sessions.get(data.id)!;
       },
-      findMany: async ({ where }: { where: { userId: bigint; revokedAt: null } }) => (
+      findMany: async ({ where }: { where: { userId: bigint; revokedAt?: null } }) => (
         [...store.sessions.values()]
-          .filter((s) => s.userId === where.userId && s.revokedAt === null)
+          .filter((s) => {
+            if (s.userId !== where.userId) return false;
+            if (where.revokedAt === null && s.revokedAt != null) return false;
+            return true;
+          })
           .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
       ),
       update: async ({ where, data }: { where: { id: string }; data: Partial<Session> }) => {
@@ -120,9 +125,10 @@ function buildOrchestrator(store: Store): AuthOrchestrator {
   const keys = new SigningKeyService(new EnvSecretsProvider());
   keys.clearCache();
   const tokens = new TokenService(keys);
-  const sessions = new SessionService(createSessionPrisma(store) as never, tokens, new DeviceTrustService());
+  const prisma = createSessionPrisma(store) as never;
+  const sessions = new SessionService(prisma, tokens, new DeviceTrustService(), new RiskEngineService(prisma));
   return new AuthOrchestrator(
-    createSessionPrisma(store) as never,
+    prisma,
     {} as never,
     {} as never,
     sessions,

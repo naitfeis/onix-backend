@@ -20,6 +20,8 @@ export interface AuthUser {
   isSupport: boolean;
   /** Canonical RBAC source when present — prefer over boolean flags for staff UI. */
   platformStatus?: PlatformStatus;
+  /** Present for EdDSA / v2 access tokens — used by Risk Engine. */
+  sessionId?: string;
 }
 
 /** Admin or dedicated SUPPORT agent. */

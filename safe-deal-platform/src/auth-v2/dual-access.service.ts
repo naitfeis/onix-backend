@@ -35,7 +35,7 @@ export class DualAccessService {
    */
   async verifyEd25519AccessToken(token: string): Promise<AuthUser> {
     const claims = this.tokens.verifyAccessToken(token);
-    const { user } = await this.sessions.validateAccessClaims(claims);
+    const { user, session } = await this.sessions.validateAccessClaims(claims);
     return {
       id: user.id,
       telegramId: user.telegramId,
@@ -43,6 +43,7 @@ export class DualAccessService {
       isAdmin: user.isAdmin,
       isSupport: user.isSupport || resolveIsSupport(user.telegramId, user.isAdmin),
       platformStatus: user.platformStatus,
+      sessionId: session.id,
     };
   }
 }
