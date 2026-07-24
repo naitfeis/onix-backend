@@ -166,16 +166,28 @@ test('e2e: cancel vs complete — cancel wins when status still PAYMENT_HOLD', (
   m.assertInvariants();
 });
 
-test('e2e: refund vs payout — post-complete refund clawbacks seller', () => {
+test('e2e: post-complete refund with short seller balance → clawback debt', () => {
   const m = new LedgerModel();
   m.ensureUser('buyer', { balanceCents: 5_000_00n });
-  m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 5_000_00n });
-  m.purchase('o-rpay', 'buyer', 'seller', 2_000_00n, 1_900_00n, 'rpay');
-  m.complete('o-rpay');
-  assert.equal(m.getUser('seller').balanceCents, 1_900_00n);
-  m.refund('o-rpay');
+  m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 10_000_00n });
+  m.purchase('o-short', 'buyer', 'seller', 2_000_00n, 1_900_00n, 'short-1');
+  m.complete('o-short');
+  // Seller spends payout before refund.
+  m.debit('seller', 1_500_00n, 'WITHDRAWAL', 'spend-1');
+  assert.equal(m.getUser('seller').balanceCents, 400_00n);
+  m.refund('o-short');
   assert.equal(m.getUser('buyer').balanceCents, 5_000_00n);
   assert.equal(m.getUser('seller').balanceCents, 0n);
+  const cb = m.getClawback('o-short');
+  assert.ok(cb);
+  assert.equal(cb!.amountCents, 1_900_00n);
+  assert.equal(cb!.recoveredCents, 400_00n);
+  assert.equal(cb!.status, 'PARTIAL');
+  // Later top-up recovers remainder.
+  m.credit('seller', 2_000_00n, 'DEPOSIT', 'top-1');
+  assert.equal(m.recoverClawback('o-short'), 1_500_00n);
+  assert.equal(m.getClawback('o-short')!.status, 'RECOVERED');
+  assert.equal(m.getUser('seller').balanceCents, 500_00n);
   m.assertInvariants();
 });
 

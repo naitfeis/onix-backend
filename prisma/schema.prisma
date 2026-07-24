@@ -60,6 +60,7 @@ model User {
   ledgerEntries         LedgerEntry[]
   depositLedgerEntries  DepositLedgerEntry[]
   depositLocks          DepositLock[]
+  orderClawbacks        OrderClawback[]
   paymentIntents        PaymentIntent[]
   trustHistory          TrustHistoryEvent[]
   verifications         SellerVerification[]
@@ -174,6 +175,7 @@ model Order {
   transitions    OrderTransition[]
   ledgerEntries  LedgerEntry[]
   depositLocks   DepositLock[]
+  clawback       OrderClawback?
   /** Personal pair chat shared across all deals between buyer and seller. */
   chatId         String?
   chat           Chat?              @relation(fields: [chatId], references: [id])
@@ -186,6 +188,38 @@ model Order {
   @@index([buyerId, createdAt])
   @@index([sellerId, createdAt])
   @@index([chatId, createdAt])
+}
+
+/**
+ * Post-COMPLETED refund obligation when seller balance cannot cover full clawback.
+ * Ledger never goes negative — remaining debt lives here until recovered/waived.
+ */
+model OrderClawback {
+  id              String         @id @default(cuid())
+  orderId         BigInt         @unique
+  sellerId        BigInt
+  /** Total payout that must be recovered from seller. */
+  amountCents     BigInt
+  /** Already recovered via ledger ADMIN_ADJUSTMENT debits. */
+  recoveredCents  BigInt         @default(0)
+  status          ClawbackStatus @default(OPEN)
+  reason          String?        @db.VarChar(1000)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seller User  @relation(fields: [sellerId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([status, updatedAt])
+}
+
+/** Pool-safe job lease (advisory-lock equivalent under Prisma connection pooling). */
+model WorkerJobLease {
+  jobName     String   @id @db.VarChar(64)
+  holderId    String   @db.VarChar(64)
+  lockedUntil DateTime
+  updatedAt   DateTime @updatedAt
 }
 
 model OrderTransition {
@@ -1193,6 +1227,13 @@ enum OrderStatus {
   CANCELED
   DISPUTE
   REFUNDED
+}
+
+enum ClawbackStatus {
+  OPEN
+  PARTIAL
+  RECOVERED
+  WAIVED
 }
 
 enum LedgerEntryType {

@@ -15,6 +15,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
+import { ClawbackService } from './economy/wallet/clawback.service';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -79,6 +80,7 @@ class OperationsService {
     private readonly prisma: PrismaService,
     private readonly risk: RiskScoreService,
     private readonly balance: BalanceService,
+    private readonly clawbacks: ClawbackService,
     private readonly idempotency: IdempotencyService,
   ) {}
 
@@ -386,6 +388,13 @@ class OperationsService {
       dto.idempotencyKey,
       { userId: user.id.toString(), amountCents: dto.amountCents },
       () => this.prisma.$transaction(async (tx) => {
+        // Open clawbacks consume available balance before any payout rail debit.
+        await this.clawbacks.recoverAllForSeller(tx, user.id);
+        if (await this.clawbacks.hasOpenDebt(tx, user.id)) {
+          throw new BadRequestException(
+            'Вывод недоступен: есть непогашенный clawback по возврату сделки. Пополните баланс или обратитесь в поддержку.',
+          );
+        }
         const amount = BigInt(dto.amountCents);
         const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
           idempotencyKey: dto.idempotencyKey,

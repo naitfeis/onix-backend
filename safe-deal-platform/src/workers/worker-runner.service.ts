@@ -10,10 +10,14 @@ import { IdempotencyCleanupJob } from './jobs/idempotency-cleanup.job';
 import { PaymentIntentExpireJob } from './jobs/payment-intent-expire.job';
 import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
+import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
+import { WorkerLockService } from './worker-lock.service';
 
 type JobDef = {
   name: string;
   intervalMs: number;
+  /** Lease TTL — must exceed worst-case job runtime. */
+  leaseTtlMs: number;
   run: () => Promise<number>;
 };
 
@@ -26,12 +30,14 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
     private readonly errors: ErrorTrackingService,
+    private readonly locks: WorkerLockService,
     private readonly depositUnlock: DepositUnlockJob,
     private readonly trustRecompute: TrustRecomputeJob,
     private readonly idempotencyCleanup: IdempotencyCleanupJob,
     private readonly paymentExpire: PaymentIntentExpireJob,
     private readonly ledgerReconciliation: LedgerReconciliationJob,
     private readonly paymentReconciliation: PaymentReconciliationJob,
+    private readonly clawbackRecover: ClawbackRecoverJob,
   ) {}
 
   onModuleInit(): void {
@@ -39,38 +45,49 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
       {
         name: 'deposit-unlock',
         intervalMs: Number(process.env.WORKER_DEPOSIT_UNLOCK_MS ?? 60_000),
+        leaseTtlMs: 120_000,
         run: () => this.depositUnlock.run(),
       },
       {
         name: 'trust-recompute',
         intervalMs: Number(process.env.WORKER_TRUST_RECOMPUTE_MS ?? 120_000),
+        leaseTtlMs: 180_000,
         run: () => this.trustRecompute.run(),
       },
       {
         name: 'idempotency-cleanup',
         intervalMs: Number(process.env.WORKER_IDEMPOTENCY_CLEANUP_MS ?? 300_000),
+        leaseTtlMs: 300_000,
         run: () => this.idempotencyCleanup.run(),
       },
       {
         name: 'payment-intent-expire',
         intervalMs: Number(process.env.WORKER_PAYMENT_EXPIRE_MS ?? 600_000),
+        leaseTtlMs: 300_000,
         run: () => this.paymentExpire.run(),
       },
       {
         name: 'ledger-reconciliation',
         intervalMs: Number(process.env.WORKER_LEDGER_RECONCILE_MS ?? 900_000),
+        leaseTtlMs: 600_000,
         run: () => this.ledgerReconciliation.run(),
       },
       {
         name: 'payment-reconciliation',
         intervalMs: Number(process.env.WORKER_PAYMENT_RECONCILE_MS ?? 300_000),
+        leaseTtlMs: 300_000,
         run: () => this.paymentReconciliation.run(),
+      },
+      {
+        name: 'clawback-recover',
+        intervalMs: Number(process.env.WORKER_CLAWBACK_RECOVER_MS ?? 60_000),
+        leaseTtlMs: 120_000,
+        run: () => this.clawbackRecover.run(),
       },
     ];
 
     for (const job of jobs) {
       const interval = Number.isFinite(job.intervalMs) && job.intervalMs >= 5_000 ? job.intervalMs : 60_000;
-      // Stagger first run so cold start does not stampede DB.
       const delay = 2_000 + Math.floor(Math.random() * 3_000);
       const starter = setTimeout(() => {
         void this.execute(job);
@@ -99,7 +116,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
       data: { jobName: job.name },
     });
     try {
-      const processed = await job.run();
+      const processed = await this.locks.withLease(job.name, job.leaseTtlMs, () => job.run());
       const durationMs = Date.now() - started;
       await this.prisma.workerJobRun.update({
         where: { id: run.id },
@@ -107,7 +124,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
           finishedAt: new Date(),
           ok: true,
           processed,
-          metadata: { durationMs } as Prisma.InputJsonValue,
+          metadata: { durationMs, leased: true } as Prisma.InputJsonValue,
         },
       });
       this.metrics.recordWorkerJob(job.name, processed, true, durationMs);

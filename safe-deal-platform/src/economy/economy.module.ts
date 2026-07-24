@@ -8,6 +8,7 @@ import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
 import { VerificationService } from './verification/verification.service';
 import { BalanceService } from './wallet/balance.service';
+import { ClawbackService } from './wallet/clawback.service';
 import { DepositService } from './wallet/deposit.service';
 import { LockService } from './wallet/lock.service';
 import { WalletEconomyService } from './wallet/wallet-economy.service';
@@ -18,6 +19,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
     ManualPaymentProvider,
     PaymentsService,
     BalanceService,
+    ClawbackService,
     DepositService,
     LockService,
     WalletEconomyService,
@@ -29,6 +31,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
   ],
   exports: [
     BalanceService,
+    ClawbackService,
     DepositService,
     LockService,
     TrustService,

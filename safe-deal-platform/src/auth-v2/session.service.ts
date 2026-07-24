@@ -59,7 +59,10 @@ type RotationGraceEntry = {
 
 @Injectable()
 export class SessionService {
-  /** In-process idempotency for concurrent refresh (same previous token). */
+  /** In-process idempotency for concurrent refresh (same previous token).
+   * Scale-out gate: WEB_CONCURRENCY > 1 or multi-instance → shared store required
+   * (see ops-gates.ts). Single-node Render: in-memory grace is intentional.
+   */
   private readonly rotationGraceCache = new Map<string, RotationGraceEntry>();
 
   constructor(

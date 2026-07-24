@@ -66,6 +66,14 @@ export class LedgerModel {
     payoutCents: bigint;
     status: 'PAYMENT_HOLD' | 'COMPLETED' | 'REFUNDED' | 'CANCELED';
   }>();
+  /** Off-ledger seller debt after partial post-complete clawback. */
+  private readonly clawbacks = new Map<string, {
+    orderId: string;
+    sellerId: string;
+    amountCents: bigint;
+    recoveredCents: bigint;
+    status: 'OPEN' | 'PARTIAL' | 'RECOVERED' | 'WAIVED';
+  }>();
 
   ensureProduct(
     productId: string,
@@ -268,10 +276,57 @@ export class LedgerModel {
     if (!order) throw new MonetaryInvariantError('order missing');
     if (order.status === 'REFUNDED' || order.status === 'CANCELED') return;
     if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
-      this.debit(order.sellerId, order.payoutCents, 'ADMIN_ADJUSTMENT', `order:${orderId}:clawback`);
+      this.clawbackSellerPayout(orderId, order.sellerId, order.payoutCents);
     }
     this.credit(order.buyerId, order.totalAmountCents, 'REFUND', `order:${orderId}:refund`);
     order.status = order.status === 'COMPLETED' ? 'REFUNDED' : 'CANCELED';
+  }
+
+  /**
+   * Debit only available seller balance; remainder → clawback debt (never negative balance).
+   */
+  clawbackSellerPayout(orderId: string, sellerId: string, payoutCents: bigint): void {
+    if (this.clawbacks.has(orderId)) return;
+    const seller = this.ensureUser(sellerId);
+    const take = seller.balanceCents < payoutCents ? seller.balanceCents : payoutCents;
+    if (take > 0n) {
+      this.debit(sellerId, take, 'ADMIN_ADJUSTMENT', `order:${orderId}:clawback`);
+    }
+    const recovered = take;
+    const status = recovered <= 0n
+      ? 'OPEN' as const
+      : recovered >= payoutCents
+        ? 'RECOVERED' as const
+        : 'PARTIAL' as const;
+    this.clawbacks.set(orderId, {
+      orderId,
+      sellerId,
+      amountCents: payoutCents,
+      recoveredCents: recovered,
+      status,
+    });
+  }
+
+  getClawback(orderId: string) {
+    return this.clawbacks.get(orderId);
+  }
+
+  /** Recover OPEN/PARTIAL clawback from available balance (mirrors worker). */
+  recoverClawback(orderId: string): bigint {
+    const row = this.clawbacks.get(orderId);
+    if (!row || row.status === 'RECOVERED' || row.status === 'WAIVED') return 0n;
+    const left = row.amountCents - row.recoveredCents;
+    if (left <= 0n) {
+      row.status = 'RECOVERED';
+      return 0n;
+    }
+    const seller = this.ensureUser(row.sellerId);
+    const take = seller.balanceCents < left ? seller.balanceCents : left;
+    if (take <= 0n) return 0n;
+    this.debit(row.sellerId, take, 'ADMIN_ADJUSTMENT', `order:${orderId}:clawback:r${row.recoveredCents}`);
+    row.recoveredCents += take;
+    row.status = row.recoveredCents >= row.amountCents ? 'RECOVERED' : 'PARTIAL';
+    return take;
   }
 
   /** Assert all monetary invariants for every user. */

@@ -11,6 +11,7 @@ import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
+import { ClawbackService } from './economy/wallet/clawback.service';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { buildLightDisputeCard, invalidateArbitrationContextCache } from './dispute-card';
@@ -47,12 +48,15 @@ const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializ
  *   PAYMENT_HOLD | DELIVERING | DISPUTE → REFUNDED (admin)
  *
  * Money: buyer debit on purchase (PURCHASE_HOLD); seller credit only on COMPLETED (SALE_PAYOUT).
+ * PAYMENT_HOLD → CANCELED: buyer or support only (seller cannot cancel).
+ * COMPLETED → REFUNDED: debit available seller balance; remainder → OrderClawback (never negative ledger).
  */
 @Injectable()
 export class EscrowService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly balance: BalanceService,
+    private readonly clawbacks: ClawbackService,
     private readonly locks: LockService,
   ) {}
 
@@ -403,6 +407,12 @@ export class EscrowService {
   }
 
   async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Сделка не найдена.');
+    const support = canActAsSupport(user);
+    if (!support && order.buyerId !== user.id) {
+      throw new BadRequestException('Отменить заказ на этапе оплаты может только покупатель или поддержка.');
+    }
     return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
   }
 
@@ -521,14 +531,14 @@ export class EscrowService {
         throw new ConflictException('Возврат невозможен в текущем статусе.');
       }
 
-      // After COMPLETED payout already left escrow → clawback from seller then credit buyer.
+      // After COMPLETED payout left escrow → clawback available balance; remainder → OrderClawback.
+      // Buyer always receives full refund; BalanceService never goes negative.
       if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
-        await this.balance.debit(tx, order.sellerId, order.payoutCents, 'ADMIN_ADJUSTMENT', {
-          idempotencyKey: `order:${id}:clawback`,
+        await this.clawbacks.clawbackOnRefund(tx, {
           orderId: id,
-          description: sellerInitiated
-            ? 'Возврат после COMPLETED (продавец)'
-            : 'Возврат после COMPLETED (поддержка)',
+          sellerId: order.sellerId,
+          payoutCents: order.payoutCents,
+          reason,
         });
       }
 

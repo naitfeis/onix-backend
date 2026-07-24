@@ -45,7 +45,7 @@ const dumpPath = resolve(outDir, `onix-drill-${stamp}.dump`);
 const EXPECTED_RELATIONS = ['User', 'Order', 'Product', '_prisma_migrations'] as const;
 const CORE_TABLES = [
   'User', 'LedgerEntry', 'DepositLedgerEntry', 'DepositLock',
-  'Order', 'PaymentIntent', 'AuditLog', 'IdempotencyRecord',
+  'Order', 'OrderClawback', 'PaymentIntent', 'AuditLog', 'IdempotencyRecord',
 ] as const;
 
 type UrlDiag = {
