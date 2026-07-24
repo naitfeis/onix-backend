@@ -166,6 +166,13 @@ export class MarketplaceService {
     const searchCat = query.search && !query.category
       ? matchProductCategory(query.search)
       : undefined;
+    const lotFromSearch = (() => {
+      if (!query.search) return undefined;
+      const m = query.search.trim().match(/^ONIXLOT-(\d+)$/i);
+      if (!m) return undefined;
+      const n = Number(m[1]);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })();
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       ...(query.category ? { category: query.category } : {}),
@@ -176,6 +183,7 @@ export class MarketplaceService {
           { seller: { displayName: { contains: query.search, mode: 'insensitive' } } },
           { seller: { onixId: { in: onixIdLookupCandidates(query.search) } } },
           ...(searchCat ? [{ category: searchCat }] : []),
+          ...(lotFromSearch != null ? [{ lotNumber: lotFromSearch }] : []),
         ],
       } : {}),
       ...((query.minPriceCents || query.maxPriceCents) ? {

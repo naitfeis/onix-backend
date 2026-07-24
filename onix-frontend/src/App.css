@@ -523,7 +523,7 @@ html[data-theme="dark"] .button--secondary {
 }
 .product-card {
   padding: 0;
-  overflow: clip;
+  overflow: hidden;
   min-height: 0;
   width: 100%;
   max-width: none;
@@ -556,15 +556,18 @@ html[data-theme="dark"] .button--secondary {
 }
 .product-card__media {
   position: relative;
-  aspect-ratio: 16 / 10;
+  width: 100%;
+  min-width: 100%;
+  box-sizing: border-box;
+  /* Fixed height — avoid aspect-ratio + max-height shrinking width (white stripe on the right) */
+  height: 118px;
   min-height: 96px;
-  max-height: 140px;
   display: grid;
   place-items: center;
   background:
     radial-gradient(circle at 30% 20%, rgba(139, 127, 245, 0.28), transparent 55%),
     radial-gradient(circle at 80% 70%, rgba(63, 191, 143, 0.16), transparent 50%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+    linear-gradient(160deg, color-mix(in srgb, var(--accent-violet) 12%, transparent), color-mix(in srgb, var(--accent-mint) 8%, transparent));
   overflow: hidden;
 }
 .product-card__media img {
