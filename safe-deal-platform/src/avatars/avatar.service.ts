@@ -228,11 +228,15 @@ export class AvatarService {
       });
       if (!response.ok) return null;
 
-      const contentType = (response.headers.get('content-type') ?? 'image/jpeg').split(';')[0]!.trim();
-      if (!contentType.startsWith('image/')) return null;
-
       const buffer = Buffer.from(await response.arrayBuffer());
       if (buffer.length === 0 || buffer.length > MAX_BYTES) return null;
+
+      // t.me often 302→telesco.pe; sniff magic if Content-Type is wrong/missing.
+      let contentType = (response.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+      if (!contentType.startsWith('image/')) {
+        contentType = sniffImageContentType(buffer) ?? '';
+      }
+      if (!contentType.startsWith('image/')) return null;
       return { buffer, contentType };
     } catch (error) {
       this.logger.warn(`avatar fetch failed: ${error instanceof Error ? error.message : error}`);
@@ -253,4 +257,33 @@ export class AvatarService {
 
 function botProfileMarker(telegramId: bigint): string {
   return `tg:profile:${telegramId.toString()}`;
+}
+
+function sniffImageContentType(buffer: Buffer): string | null {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 8
+    && buffer[0] === 0x89
+    && buffer[1] === 0x50
+    && buffer[2] === 0x4e
+    && buffer[3] === 0x47
+  ) {
+    return 'image/png';
+  }
+  if (
+    buffer.length >= 12
+    && buffer.toString('ascii', 0, 4) === 'RIFF'
+    && buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (buffer.length >= 6) {
+    const head = buffer.toString('ascii', 0, 6);
+    if (head === 'GIF87a' || head === 'GIF89a') return 'image/gif';
+  }
+  const asText = buffer.subarray(0, Math.min(buffer.length, 256)).toString('utf8').trimStart();
+  if (asText.startsWith('<svg') || asText.startsWith('<?xml')) return 'image/svg+xml';
+  return null;
 }
