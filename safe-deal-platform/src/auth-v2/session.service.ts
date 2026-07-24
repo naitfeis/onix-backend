@@ -7,6 +7,7 @@ import { AuthPlatformError } from './auth-errors';
 import {
   DEFAULT_SESSION_RISK_SCORE,
   MAX_SESSIONS_PER_USER,
+  refreshReuseGraceMs,
   SESSION_ABSOLUTE_TTL_MS,
   SESSION_IDLE_TTL_MS,
   SESSION_REMEMBER_IDLE_TTL_MS,
@@ -50,12 +51,26 @@ export interface SessionAuthResult {
   trustedDevice: boolean;
 }
 
+type RotationGraceEntry = {
+  presentedHash: string;
+  result: SessionAuthResult;
+  cachedAt: number;
+};
+
 @Injectable()
 export class SessionService {
+  /** In-process idempotency for concurrent refresh (same previous token). */
+  private readonly rotationGraceCache = new Map<string, RotationGraceEntry>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
   ) {}
+
+  /** Test helper — simulate grace expiry / multi-instance without shared cache. */
+  clearRotationGraceCache(): void {
+    this.rotationGraceCache.clear();
+  }
 
   async createSession(input: CreateSessionInput): Promise<SessionAuthResult> {
     const found = await this.prisma.user.findUnique({ where: { id: input.userId } });
@@ -414,6 +429,10 @@ export class SessionService {
     });
     if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb1) / 1e6;
     if (reused) {
+      // Multi-tab / parallel refresh: both sent the same cookie before Set-Cookie landed.
+      const grace = await this.waitForGraceRotation(reused.id, presentedHash);
+      if (grace) return grace;
+
       await this.handleRefreshReuse(reused, presentedHash, device);
       throw new AuthPlatformError('AUTH_REFRESH_REUSED', 'Refresh token reuse detected.');
     }
@@ -556,66 +575,80 @@ export class SessionService {
     if (timing) timing.tokenMs += Number(process.hrtime.bigint() - tTok0) / 1e6;
 
     const tDb1 = process.hrtime.bigint();
-    const rotated = await this.prisma.$transaction(async (tx) => {
-      const cas = await tx.session.updateMany({
-        where: {
-          id: session.id,
-          refreshTokenHash: presentedHash,
-          revokedAt: null,
-        },
-        data: {
-          previousRefreshHash: presentedHash,
-          refreshTokenHash: nextRefresh.hash,
-          refreshGeneration: { increment: 1 },
-          lockVersion: { increment: 1 },
-          lastSeenAt: now,
-          refreshExpiresAt: new Date(now.getTime() + idleMs),
-          ipAddress: device?.ipAddress ?? session.ipAddress,
-          country: device?.country ?? session.country,
-          userAgent: device?.userAgent ?? session.userAgent,
-          fingerprintHash: device?.fingerprintHash ?? session.fingerprintHash,
-        },
-      });
-
-      if (cas.count !== 1) {
-        throw new AuthPlatformError(
-          'AUTH_INVALID_TOKEN',
-          'Concurrent refresh lost the CAS race; retry with the latest refresh token.',
-          { reason: 'concurrent_refresh' },
-        );
-      }
-
-      const updated = await tx.session.findUniqueOrThrow({ where: { id: session.id } });
-
-      if (updated.fingerprintHash) {
-        await tx.trustedDevice.updateMany({
+    let rotated: Session;
+    try {
+      rotated = await this.prisma.$transaction(async (tx) => {
+        const cas = await tx.session.updateMany({
           where: {
-            userId: updated.userId,
-            fingerprintHash: updated.fingerprintHash,
+            id: session.id,
+            refreshTokenHash: presentedHash,
             revokedAt: null,
           },
-          data: { lastSeenAt: now },
-        });
-      }
-
-      await tx.authAuditLog.create({
-        data: {
-          userId: updated.userId,
-          sessionId: updated.id,
-          action: 'REFRESH',
-          ipAddress: updated.ipAddress,
-          country: updated.country,
-          userAgent: updated.userAgent,
-          fingerprint: updated.fingerprintHash,
-          metadata: {
-            refreshGeneration: updated.refreshGeneration,
-            familyId: updated.familyId,
+          data: {
+            previousRefreshHash: presentedHash,
+            refreshTokenHash: nextRefresh.hash,
+            refreshGeneration: { increment: 1 },
+            lockVersion: { increment: 1 },
+            lastSeenAt: now,
+            refreshExpiresAt: new Date(now.getTime() + idleMs),
+            ipAddress: device?.ipAddress ?? session.ipAddress,
+            country: device?.country ?? session.country,
+            userAgent: device?.userAgent ?? session.userAgent,
+            fingerprintHash: device?.fingerprintHash ?? session.fingerprintHash,
           },
-        },
-      });
+        });
 
-      return updated;
-    });
+        if (cas.count !== 1) {
+          throw new AuthPlatformError(
+            'AUTH_INVALID_TOKEN',
+            'Concurrent refresh lost the CAS race; retry with the latest refresh token.',
+            { reason: 'concurrent_refresh' },
+          );
+        }
+
+        const updated = await tx.session.findUniqueOrThrow({ where: { id: session.id } });
+
+        if (updated.fingerprintHash) {
+          await tx.trustedDevice.updateMany({
+            where: {
+              userId: updated.userId,
+              fingerprintHash: updated.fingerprintHash,
+              revokedAt: null,
+            },
+            data: { lastSeenAt: now },
+          });
+        }
+
+        await tx.authAuditLog.create({
+          data: {
+            userId: updated.userId,
+            sessionId: updated.id,
+            action: 'REFRESH',
+            ipAddress: updated.ipAddress,
+            country: updated.country,
+            userAgent: updated.userAgent,
+            fingerprint: updated.fingerprintHash,
+            metadata: {
+              refreshGeneration: updated.refreshGeneration,
+              familyId: updated.familyId,
+            },
+          },
+        });
+
+        return updated;
+      });
+    } catch (error) {
+      if (
+        error instanceof AuthPlatformError
+        && error.code === 'AUTH_INVALID_TOKEN'
+        && (error.details as { reason?: string } | undefined)?.reason === 'concurrent_refresh'
+      ) {
+        // Winner may still be minting access — wait briefly for grace cache.
+        const grace = await this.waitForGraceRotation(session.id, presentedHash);
+        if (grace) return grace;
+      }
+      throw error;
+    }
     if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb1) / 1e6;
 
     const tTok1 = process.hrtime.bigint();
@@ -631,7 +664,7 @@ export class SessionService {
     const trustedDevice = await this.isTrustedDevice(user.id, rotated.fingerprintHash);
     if (timing) timing.dbMs += Number(process.hrtime.bigint() - tDb2) / 1e6;
 
-    return {
+    const result: SessionAuthResult = {
       session: rotated,
       user: {
         id: user.id,
@@ -645,6 +678,57 @@ export class SessionService {
       refreshToken: nextRefresh.token,
       trustedDevice,
     };
+    this.rememberGraceRotation(session.id, presentedHash, result);
+    return result;
+  }
+
+  private rememberGraceRotation(
+    sessionId: string,
+    presentedHash: string,
+    result: SessionAuthResult,
+  ): void {
+    this.rotationGraceCache.set(sessionId, {
+      presentedHash,
+      result,
+      cachedAt: Date.now(),
+    });
+    if (this.rotationGraceCache.size > 500) {
+      const cutoff = Date.now() - refreshReuseGraceMs();
+      for (const [id, entry] of this.rotationGraceCache) {
+        if (entry.cachedAt < cutoff) this.rotationGraceCache.delete(id);
+      }
+    }
+  }
+
+  private takeGraceRotation(
+    sessionId: string,
+    presentedHash: string,
+  ): SessionAuthResult | null {
+    const entry = this.rotationGraceCache.get(sessionId);
+    if (!entry) return null;
+    if (entry.presentedHash !== presentedHash) return null;
+    if (Date.now() - entry.cachedAt > refreshReuseGraceMs()) {
+      this.rotationGraceCache.delete(sessionId);
+      return null;
+    }
+    return entry.result;
+  }
+
+  /** Poll grace cache — winner often finishes minting access a few ms after CAS. */
+  private async waitForGraceRotation(
+    sessionId: string,
+    presentedHash: string,
+    attempts = 10,
+    delayMs = 20,
+  ): Promise<SessionAuthResult | null> {
+    for (let i = 0; i < attempts; i += 1) {
+      const hit = this.takeGraceRotation(sessionId, presentedHash);
+      if (hit) return hit;
+      if (i + 1 < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    return null;
   }
 
   private async handleRefreshReuse(

@@ -64,12 +64,27 @@ export type RefreshTransport = (input: {
   init: RequestInit;
 }) => Promise<Response>;
 
+const REFRESH_LOCK_NAME = 'onix-v2-auth-refresh';
+
 /**
  * POST /api/v2/auth/refresh — cookie + CSRF.
+ * Cross-tab Web Lock so two tabs do not rotate the same cookie in parallel.
  * Used by AuthManager; injectable for tests / mocks.
  */
 export async function postAuthV2Refresh(
   transport: RefreshTransport = defaultTransport,
+): Promise<RefreshSuccess> {
+  const locks = typeof navigator !== 'undefined'
+    ? (navigator as Navigator & { locks?: LockManager }).locks
+    : undefined;
+  if (locks?.request) {
+    return locks.request(REFRESH_LOCK_NAME, () => executeAuthV2Refresh(transport));
+  }
+  return executeAuthV2Refresh(transport);
+}
+
+async function executeAuthV2Refresh(
+  transport: RefreshTransport,
 ): Promise<RefreshSuccess> {
   const url = buildApiUrl('/api/v2/auth/refresh');
   const headers = new Headers({

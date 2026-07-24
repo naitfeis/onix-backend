@@ -276,6 +276,28 @@ test('SessionService rotateRefresh performs CAS rotation and keeps family id', a
   assert.equal(store.audits.filter((a) => a.action === 'REFRESH').length, 1);
 });
 
+test('SessionService concurrent previous-token refresh returns grace copy (no revoke)', async () => {
+  const store: Store = {
+    users: new Map([['7', baseUser()]]),
+    sessions: new Map(),
+    trusted: new Map(),
+    audits: [],
+    securityEvents: [],
+  };
+  const service = buildService(store);
+  const created = await service.createSession({ userId: 7n });
+  const oldRefresh = created.refreshToken;
+  const first = await service.rotateRefresh(oldRefresh);
+  const second = await service.rotateRefresh(oldRefresh);
+
+  assert.equal(second.refreshToken, first.refreshToken);
+  assert.equal(second.accessToken, first.accessToken);
+  const session = [...store.sessions.values()][0];
+  assert.equal(session.revokedAt, null);
+  assert.equal(store.securityEvents.length, 0);
+  assert.equal(store.users.get('7')!.sessionVersion, 0);
+});
+
 test('SessionService detects refresh reuse and revokes family with SecurityEvent', async () => {
   const store: Store = {
     users: new Map([['7', baseUser()]]),
@@ -288,6 +310,8 @@ test('SessionService detects refresh reuse and revokes family with SecurityEvent
   const created = await service.createSession({ userId: 7n });
   const oldRefresh = created.refreshToken;
   await service.rotateRefresh(oldRefresh);
+  // Outside grace (or other instance without shared cache) → real theft signal.
+  service.clearRotationGraceCache();
 
   await assert.rejects(
     () => service.rotateRefresh(oldRefresh),

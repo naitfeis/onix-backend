@@ -107,8 +107,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const status = error instanceof HttpException ? error.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     if (status >= 500) {
       this.errors?.capture(error, { requestId, route, userId, level: 'error' });
-    } else if (status !== 404) {
-      // Client errors: structured warn only (no error-tracking / 404 noise).
+    } else if (status !== 404 && status !== 401 && status !== 403) {
+      // 401/403 are expected (guest / expired) — access log already records status.
+      // Other 4xx: structured warn without error-tracking noise.
       structuredLog.warn(formatErrorForLog(error), { requestId, userId, route, status });
     }
 

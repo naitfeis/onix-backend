@@ -143,7 +143,16 @@ export class AuthManager {
           && !this.disposed
           && isDefinitiveAuthRefreshFailure(error)
         ) {
-          this.clearSession('refresh-failed');
+          // Multi-tab race: peer may have won refresh and broadcast token-updated.
+          if (isRefreshRaceCandidate(error)) {
+            const peerToken = await this.waitForPeerAccessToken(450);
+            if (peerToken && generation === this.sessionGeneration && !this.disposed) {
+              return peerToken;
+            }
+          }
+          if (generation === this.sessionGeneration && !this.disposed) {
+            this.clearSession('refresh-failed');
+          }
         }
         throw error;
       } finally {
@@ -240,6 +249,25 @@ export class AuthManager {
     }
   }
 
+  /** Await peer BroadcastChannel token-updated (concurrent refresh loser). */
+  private waitForPeerAccessToken(timeoutMs: number): Promise<string | null> {
+    if (this.getAccessToken() && !this.isAccessExpired()) {
+      return Promise.resolve(this.getAccessToken());
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        unsub();
+        resolve(null);
+      }, timeoutMs);
+      const unsub = this.broadcast.subscribe((event) => {
+        if (event.type !== 'token-updated') return;
+        clearTimeout(timer);
+        unsub();
+        resolve(event.accessToken);
+      });
+    });
+  }
+
   /**
    * delay = max(minProactiveIntervalMs, expiresAtMs - now - proactiveSkewMs)
    * Each setSession/token-updated first clearTimeout(previous), then schedules one new timer.
@@ -282,4 +310,11 @@ function isUnauthorizedStatus(error: unknown): boolean {
     && 'status' in error
     && Number((error as { status: unknown }).status) === 401,
   );
+}
+
+/** Failures that often mean "sibling tab won the refresh race", not true logout. */
+function isRefreshRaceCandidate(error: unknown): boolean {
+  if (!(error instanceof RefreshError)) return false;
+  const code = error.code ?? '';
+  return code === 'AUTH_REFRESH_REUSED' || code === 'AUTH_INVALID_TOKEN';
 }
