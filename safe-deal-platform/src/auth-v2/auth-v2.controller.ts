@@ -48,7 +48,7 @@ export class AuthV2Controller {
         ...body.device,
         userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
         // Never trust client-supplied device.ipAddress.
-        ipAddress: clientIp,
+        ipAddress: clientIp ?? undefined,
       },
     });
 
@@ -102,7 +102,7 @@ export class AuthV2Controller {
     const result = await this.orchestrator.refresh(refreshToken, {
       ...body.device,
       userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
-      ipAddress: clientIp,
+      ipAddress: clientIp ?? undefined,
     }, timing);
 
     res.setHeader('Set-Cookie', buildRefreshCookieHeader(result.refreshToken, result.refreshMaxAgeSeconds));

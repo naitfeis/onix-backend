@@ -39,7 +39,7 @@ export class BotLoginController {
     const started = await this.challenges.start({
       loginSessionId: existing,
       browserFingerprintHash: body?.browserFingerprintHash,
-      createdIp: clientIp,
+      createdIp: clientIp ?? undefined,
       createdUserAgent: headerString(headers, 'user-agent'),
     });
 
@@ -98,7 +98,7 @@ export class BotLoginController {
         ...(body.device as object),
         userAgent: headerString(headers, 'user-agent'),
         // Server-resolved only — ignore any client-supplied device.ipAddress.
-        ipAddress: clientIp,
+        ipAddress: clientIp ?? undefined,
       },
     });
 
@@ -141,7 +141,7 @@ export class BotLoginController {
       rememberMe: body.rememberMe,
       device: {
         userAgent: headerString(headers, 'user-agent'),
-        ipAddress: clientIp,
+        ipAddress: clientIp ?? undefined,
       },
     });
 
