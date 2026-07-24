@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Server as HttpServer, IncomingMessage } from 'node:http';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { PrismaService } from '../prisma.service';
 import { resolveCorsOrigins } from '../security-headers';
 import { publicDisplayName } from '../public-username';
@@ -118,7 +118,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     return allowed.includes(origin);
   }
 
-  private async onMessage(state: SocketState, raw: WebSocket.RawData): Promise<void> {
+  private async onMessage(state: SocketState, raw: RawData): Promise<void> {
     let msg: RealtimeClientMessage;
     try {
       msg = JSON.parse(String(raw)) as RealtimeClientMessage;
