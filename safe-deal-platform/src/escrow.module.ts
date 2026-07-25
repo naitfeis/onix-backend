@@ -12,6 +12,8 @@ import { pushTelegramToChatId } from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
+import { saleKindFromSubcategory } from './economy/wallet/fund-provenance';
+import type { LedgerWriteMeta } from './economy/wallet/ledger-write.types';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { RealtimeBus } from './realtime/realtime-bus.service';
@@ -434,13 +436,20 @@ export class EscrowService {
       if (!existingPayout) {
         // 0 ₽ orders: skip ledger credit (BalanceService rejects amount ≤ 0).
         if (order.payoutCents > 0n) {
-          await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', {
+          const productForProvenance = await tx.product.findUniqueOrThrow({
+            where: { id: order.productId },
+            select: { subcategory: true },
+          });
+          const payoutMeta: LedgerWriteMeta = {
             idempotencyKey: `order:${id}:payout`,
             orderId: id,
             description: opts.requireBuyer ? 'Выплата продавцу' : 'Выплата продавцу (поддержка)',
             actorUserId: actor.id,
             source: 'SYSTEM',
-          });
+            fundKind: 'SALE_PROCEEDS',
+            saleKind: saleKindFromSubcategory(productForProvenance.subcategory),
+          };
+          await this.balance.credit(tx, order.sellerId, order.payoutCents, 'SALE_PAYOUT', payoutMeta);
         }
         // Paid sales only count toward public completedSales (anti-farming on free lots).
         if (order.totalAmountCents > 0n) {
@@ -623,13 +632,15 @@ export class EscrowService {
 
       const ledgerKey = `order:${id}:${target.toLowerCase()}`;
       if (order.totalAmountCents > 0n) {
-        await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', {
+        const refundMeta: LedgerWriteMeta = {
           idempotencyKey: ledgerKey,
           orderId: id,
           description: 'Возврат покупателю',
           actorUserId: actor.id,
           source: 'SYSTEM',
-        });
+          fundKind: 'USER_OWNED',
+        };
+        await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', refundMeta);
       }
       // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.
       if (order.status !== 'COMPLETED') {

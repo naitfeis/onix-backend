@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma.service';
 import { requireUserByOnixId } from '../../onix-id-lookup';
 import { BalanceService } from './balance.service';
 import { DepositService } from './deposit.service';
+import type { LedgerWriteMeta } from './ledger-write.types';
 import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
 import { assertNoTrustScore, buildPublicTrustCard } from '../trust/trust-card';
@@ -142,12 +143,14 @@ export class WalletEconomyService {
         idempotencyKey,
         description: 'Вывод залога на баланс',
       });
-      await this.balance.credit(tx, user.id, amount, 'DEPOSIT_RETURN', {
+      const returnMeta: LedgerWriteMeta = {
         idempotencyKey: `bal:${idempotencyKey}`,
         description: 'Возврат из залога',
         actorUserId: user.id,
         source: 'USER',
-      });
+        fundKind: 'USER_OWNED',
+      };
+      await this.balance.credit(tx, user.id, amount, 'DEPOSIT_RETURN', returnMeta);
       await this.trust.appendHistory(tx, user.id, 'DEPOSIT_CHANGED', {
         deltaCents: (-amount).toString(),
         reason: 'WITHDRAW_TO_BALANCE',

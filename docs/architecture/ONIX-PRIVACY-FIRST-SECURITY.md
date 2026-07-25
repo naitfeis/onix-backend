@@ -1,6 +1,6 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 4** — Financial Controls (ledger actor/source/correlationId + withdraw velocity)  
+Status: **Slice 4.1** — Withdrawal provenance + 7-day ACCOUNT-sale protection  
 Principles apply to all later slices (KMS hygiene, Admin plane).
 
 ## Principles
@@ -147,38 +147,67 @@ Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCO
 | `RISK_STEP_UP_ENFORCE` | `true` | Enforce step-up |
 | `MFA_CHALLENGE_TTL_MS` | `600000` | Telegram MFA challenge TTL (1–60 min) |
 
-## Financial Controls (Slice 4)
+## Financial Controls (Slice 4 + 4.1)
 
-Every main-wallet `LedgerEntry` records provenance (no tokens/secrets):
+Every main-wallet `LedgerEntry` records mutation provenance (no tokens/secrets):
 
 | Field | Meaning |
 |-------|---------|
 | `actorUserId` | Who initiated (self / admin); null for pure system/provider |
 | `source` | `USER` \| `ADMIN` \| `SYSTEM` \| `WORKER` \| `PAYMENT_PROVIDER` \| `AI` |
 | `correlationId` | `X-Request-Id` or worker-minted id |
+| `fundKind` | `USER_OWNED` \| `SALE_PROCEEDS` \| `SYSTEM` (Slice 4.1) |
+| `saleKind` | `ACCOUNT` \| `OTHER` when `fundKind=SALE_PROCEEDS` |
 
 Writes go only through `BalanceService.credit` / `debit`.
 
-### Withdraw velocity
+### Allocation policy (own-funds-first)
 
-Checked **before** risk/MFA on `POST /wallet/withdrawals` and AI withdraw:
+Single wallet balance — no lot-level tracing. On withdraw, funds are allocated:
 
-| Tier | When | Default max count / window | Default max sum |
-|------|------|----------------------------|-----------------|
-| `new` | account age < `WITHDRAW_VELOCITY_NEW_ACCOUNT_DAYS` (7) | 1 / 24h | 50_000 ₽ |
-| `trusted` | else | 5 / 24h | 200_000 ₽ |
+```text
+USER_OWNED → OTHER sale proceeds → ACCOUNT sale proceeds
+```
+
+So a new user with 500 ₽ deposit + 20k ₽ ACCOUNT sale can withdraw 500 ₽ from owned funds without hitting ACCOUNT protection.
+
+`ACCOUNT` = product subcategory ending in `_ACCOUNTS` (domain catalog).
+
+### New-account rules (age < 7 days from `User.createdAt`)
+
+| Portion of withdraw | Rule |
+|---------------------|------|
+| `USER_OWNED` | Allowed (normal risk/MFA/clawback still apply) |
+| `ACCOUNT` sale | **Hard block** until `protectionUntil = createdAt + 7d` |
+| `OTHER` sale | Rolling 24h: max **5** withdraws / **50_000 ₽** (soft via `WITHDRAW_VELOCITY_ENFORCE`) |
+
+User-facing ACCOUNT block message (no internal enums):
+
+> Средства от продажи аккаунта проходят дополнительную проверку безопасности. Вывод станет доступен после завершения периода защиты.
+
+Age ≥ 7 days: special Slice 4.1 restrictions end; normal Risk + MFA + clawback remain.
+
+### Yellow security flag (future admin)
+
+Domain resolver: `WithdrawVelocityService.resolveAccountSaleProtectionFlag(userId)` →
+
+```text
+code: ACCOUNT_SALE_FUNDS_UNDER_PROTECTION
+severity: YELLOW
+```
+
+Meaning: security-review signal — not fraud, not ban, not a risk verdict. Derived from User + LedgerEntry; no `FinancialAuditEvent` table. Admin UI is Slice 6.
 
 | Env | Default |
 |-----|---------|
 | `WITHDRAW_VELOCITY_WINDOW_MS` | `86400000` |
 | `WITHDRAW_VELOCITY_NEW_ACCOUNT_DAYS` | `7` |
-| `WITHDRAW_VELOCITY_NEW_MAX_COUNT` | `1` |
-| `WITHDRAW_VELOCITY_NEW_MAX_CENTS` | `5000000` |
-| `WITHDRAW_VELOCITY_TRUSTED_MAX_COUNT` | `5` |
-| `WITHDRAW_VELOCITY_TRUSTED_MAX_CENTS` | `20000000` |
-| `WITHDRAW_VELOCITY_ENFORCE` | `true` (`false` → log + allow) |
+| `ACCOUNT_SALE_WITHDRAWAL_BLOCK_UNTIL_ACCOUNT_AGE_DAYS` | same 7 (optional override) |
+| `WITHDRAW_VELOCITY_NEW_MAX_COUNT` | `5` (OTHER sale) |
+| `WITHDRAW_VELOCITY_NEW_MAX_CENTS` | `5000000` (OTHER sale) |
+| `WITHDRAW_VELOCITY_ENFORCE` | `true` (OTHER soft only; ACCOUNT hard) |
 
-Order: `WITHDRAWALS_ENABLED` → velocity → risk/MFA → debit.
+Order: `WITHDRAWALS_ENABLED` → risk/MFA → **idempotency.run** → Serializable TX (`User FOR UPDATE` + provenance guard + clawback + debit).
 
 ## Stack (target)
 
@@ -192,7 +221,8 @@ ONIX Identity → Session & Device Trust → Security Events
 | 1 | Device HMAC (stable-ish only), strip invasive fingerprints, TTL defaults, IP retention |
 | 2 | Risk Engine on withdraw / new device+IP; MONITOR on login; STEP_UP stub |
 | **3** | Telegram MFA step-up (`MfaChallenge` + bot confirm + FE poll/retry) |
-| **4** | Ledger actor/source/correlationId + withdraw velocity |
+| **4** | Ledger actor/source/correlationId |
+| **4.1** | Fund provenance; ACCOUNT 7-day hard protect; OTHER sale velocity; YELLOW flag resolver |
 | 5 | KMS / key rotation hygiene |
 | 6 | Separate Admin Control Plane |
 

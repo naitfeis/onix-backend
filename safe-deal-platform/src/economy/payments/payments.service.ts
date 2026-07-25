@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
 import type { PaymentProvider, ProviderWebhookVerification } from './payment-provider';
 import { BalanceService } from '../wallet/balance.service';
+import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
 import { DepositService } from '../wallet/deposit.service';
 import { TrustService } from '../trust/trust.service';
 
@@ -244,12 +245,14 @@ export class PaymentsService {
 
       // Credit ONLY intent.amountCents from DB via ledger idempotency key.
       if (intent.wallet === 'MAIN') {
-        await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', {
+        const depositMeta: LedgerWriteMeta = {
           idempotencyKey: `payment:${intent.id}:main`,
           description: `Пополнение основного баланса (${intent.provider})`,
           actorUserId: intent.userId,
           source: 'PAYMENT_PROVIDER',
-        });
+          fundKind: 'USER_OWNED',
+        };
+        await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', depositMeta);
       } else {
         await this.deposit.creditAvailable(tx, intent.userId, intent.amountCents, 'TOPUP', {
           idempotencyKey: `payment:${intent.id}:deposit`,

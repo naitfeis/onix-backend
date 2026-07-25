@@ -1,6 +1,20 @@
 -- Slice 4: LedgerEntry actor / source / correlationId + velocity index
 
-CREATE TYPE "LedgerSource" AS ENUM ('USER', 'ADMIN', 'SYSTEM', 'WORKER', 'PAYMENT_PROVIDER', 'AI');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'LedgerSource'
+  ) THEN
+    CREATE TYPE "LedgerSource" AS ENUM (
+      'USER',
+      'ADMIN',
+      'SYSTEM',
+      'WORKER',
+      'PAYMENT_PROVIDER',
+      'AI'
+    );
+  END IF;
+END $$;
 
 ALTER TABLE "LedgerEntry"
   ADD COLUMN IF NOT EXISTS "actorUserId" BIGINT,

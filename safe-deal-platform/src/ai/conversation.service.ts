@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../common';
@@ -6,6 +6,7 @@ import { AuthPlatformError } from '../auth-v2/auth-errors';
 import { pushTelegramToChatId } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
 import { resolveCorrelationId } from '../economy/wallet/correlation-id';
+import type { WithdrawAssertInput } from '../economy/wallet/ledger-write.types';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
 import { formatOnixId } from '../onix-id';
 import { createId } from '../economy/wallet/cuid';
@@ -333,18 +334,6 @@ export class ConversationService {
     if (amountCents < 100n) return 'Минимальная сумма вывода — 1 ₽.';
 
     try {
-      await this.withdrawVelocity.assertAllowed({
-        userId: user.id,
-        amountCents,
-      });
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        return error.message;
-      }
-      throw error;
-    }
-
-    try {
       await this.riskEngine.assertWithdrawAllowed({
         userId: user.id,
         amountCents,
@@ -380,6 +369,14 @@ export class ConversationService {
     try {
       await this.prisma.$transaction(async (tx) => {
         if (railOn) {
+          const assertInput: WithdrawAssertInput = {
+            userId: user.id,
+            amountCents,
+            db: tx,
+            lockUser: true,
+            excludeIdempotencyKey: idempotencyKey,
+          };
+          await this.withdrawVelocity.assertAllowed(assertInput);
           const entry = await this.balance.debit(tx, user.id, amountCents, 'WITHDRAWAL', {
             idempotencyKey,
             description: `Вывод через ONIX AI (${method})`,

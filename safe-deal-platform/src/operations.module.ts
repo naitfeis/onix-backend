@@ -17,6 +17,7 @@ import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { resolveCorrelationId } from './economy/wallet/correlation-id';
+import type { LedgerWriteMeta, WithdrawAssertInput } from './economy/wallet/ledger-write.types';
 import { WithdrawVelocityService } from './economy/wallet/withdraw-velocity';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
@@ -98,21 +99,26 @@ class OperationsService {
     return this.prisma.$transaction(async (tx) => {
       const target = await tx.user.findUniqueOrThrow({ where: { id: resolved.id } });
       const amount = BigInt(dto.amountCents);
+      const creditMeta: LedgerWriteMeta = {
+        idempotencyKey: dto.idempotencyKey,
+        description: dto.reason,
+        actorUserId: actor.id,
+        source: 'ADMIN',
+        correlationId: corr,
+        fundKind: 'USER_OWNED',
+      };
+      const debitMeta: LedgerWriteMeta = {
+        idempotencyKey: dto.idempotencyKey,
+        description: dto.reason,
+        actorUserId: actor.id,
+        source: 'ADMIN',
+        correlationId: corr,
+      };
       const entry = amount >= 0n
-        ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', {
-          idempotencyKey: dto.idempotencyKey,
-          description: dto.reason,
-          actorUserId: actor.id,
-          source: 'ADMIN',
-          correlationId: corr,
-        })
+        ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', creditMeta)
         : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', {
-          idempotencyKey: dto.idempotencyKey,
-          description: dto.reason,
+          ...debitMeta,
           allowNegative: true,
-          actorUserId: actor.id,
-          source: 'ADMIN',
-          correlationId: corr,
         });
       await tx.auditLog.create({
         data: {
@@ -402,11 +408,7 @@ class OperationsService {
     const corr = correlationId ?? resolveCorrelationId();
     const amount = BigInt(dto.amountCents);
 
-    await this.withdrawVelocity.assertAllowed({
-      userId: user.id,
-      amountCents: amount,
-    });
-
+    // Risk/MFA before money move (outside TX — may create MfaChallenge / wait for Telegram).
     await this.riskEngine.assertWithdrawAllowed({
       userId: user.id,
       amountCents: amount,
@@ -414,12 +416,22 @@ class OperationsService {
       stepUpChallengeId: dto.stepUpChallengeId,
     });
 
-    // External withdrawal is double-gated: ledger idempotencyKey + IdempotencyRecord scope.
+    // Idempotency first: completed retries return without velocity/debit.
+    // Velocity runs inside the Serializable TX under User FOR UPDATE (no parallel bypass).
     const result = await this.idempotency.run(
       'wallet.withdraw',
       dto.idempotencyKey,
       { userId: user.id.toString(), amountCents: dto.amountCents },
       () => this.prisma.$transaction(async (tx) => {
+        const assertInput: WithdrawAssertInput = {
+          userId: user.id,
+          amountCents: amount,
+          db: tx,
+          lockUser: true,
+          excludeIdempotencyKey: dto.idempotencyKey,
+        };
+        await this.withdrawVelocity.assertAllowed(assertInput);
+
         // Open clawbacks consume available balance before any payout rail debit.
         await this.clawbacks.recoverAllForSeller(tx, user.id);
         if (await this.clawbacks.hasOpenDebt(tx, user.id)) {

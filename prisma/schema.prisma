@@ -252,6 +252,10 @@ model LedgerEntry {
   source            LedgerSource    @default(SYSTEM)
   /** X-Request-Id or worker-generated correlation id — never tokens. */
   correlationId     String?         @db.VarChar(64)
+  /** Slice 4.1 — economic provenance for withdraw rules. */
+  fundKind          LedgerFundKind  @default(SYSTEM)
+  /** Set when fundKind = SALE_PROCEEDS (ACCOUNT vs OTHER digital goods). */
+  saleKind          LedgerSaleKind?
   createdAt         DateTime        @default(now())
   user              User            @relation(fields: [userId], references: [id])
   order             Order?          @relation(fields: [orderId], references: [id])
@@ -259,6 +263,7 @@ model LedgerEntry {
 
   @@index([userId, createdAt])
   @@index([userId, type, createdAt])
+  @@index([userId, fundKind, createdAt])
 }
 
 model Chat {
@@ -1272,6 +1277,19 @@ enum LedgerSource {
   WORKER
   PAYMENT_PROVIDER
   AI
+}
+
+/** Slice 4.1 — economic provenance of credited funds. */
+enum LedgerFundKind {
+  USER_OWNED
+  SALE_PROCEEDS
+  SYSTEM
+}
+
+/** Slice 4.1 — sale subcategory class for SALE_PROCEEDS. */
+enum LedgerSaleKind {
+  ACCOUNT
+  OTHER
 }
 
 enum NotificationType {

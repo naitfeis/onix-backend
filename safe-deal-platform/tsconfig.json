@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "../dist",
+    "baseUrl": "..",
+    "paths": {
+      "@app/*": ["safe-deal-platform/src/*"],
+      "@config/*": ["safe-deal-platform/src/config/*"]
+    }
+  },
+  "include": ["./src/**/*"],
+  "exclude": [
+    "**/node_modules/**",
+    "**/chat-attachments/**",
+    "**/workers/jobs/chat-attachment-cleanup.job.ts"
+  ]
+}

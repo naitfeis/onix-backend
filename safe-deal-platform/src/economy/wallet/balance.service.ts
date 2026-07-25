@@ -1,19 +1,20 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type LedgerSource } from '@prisma/client';
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
-import type { LedgerSource } from '@prisma/client';
 import { MetricsService } from '../../observability/metrics.service';
 import { logMoneyEvent } from '../../observability/money-event';
+import type {
+  LedgerFundKindMeta,
+  LedgerSaleKindMeta,
+  LedgerWriteMeta,
+} from './ledger-write.types';
 
 export type Tx = Prisma.TransactionClient;
 
-export type LedgerWriteMeta = {
-  idempotencyKey: string;
-  orderId?: bigint;
-  description?: string;
-  actorUserId?: bigint | null;
-  source?: LedgerSource;
-  correlationId?: string | null;
-};
+export type {
+  LedgerFundKindMeta,
+  LedgerSaleKindMeta,
+  LedgerWriteMeta,
+} from './ledger-write.types';
 
 /**
  * Sole path for main wallet (User.balanceCents) mutations.
@@ -36,11 +37,15 @@ export class BalanceService {
     actorUserId?: bigint | null;
     source: LedgerSource;
     correlationId?: string | null;
+    fundKind: LedgerFundKindMeta;
+    saleKind?: LedgerSaleKindMeta | null;
   } {
     return {
       actorUserId: opts.actorUserId ?? null,
       source: opts.source ?? 'SYSTEM',
       correlationId: opts.correlationId?.slice(0, 64) ?? null,
+      fundKind: opts.fundKind ?? 'SYSTEM',
+      saleKind: opts.saleKind ?? null,
     };
   }
 
@@ -88,6 +93,7 @@ export class BalanceService {
         amount: amountCents.toString(),
         ledgerType: type,
         source: enrich.source,
+        fundKind: enrich.fundKind,
         ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
       });
       return entry;
@@ -148,6 +154,7 @@ export class BalanceService {
           amount: amountCents.toString(),
           ledgerType: type,
           source: enrich.source,
+          fundKind: enrich.fundKind,
           ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
         });
         return entry;
@@ -181,6 +188,7 @@ export class BalanceService {
           amount: amountCents.toString(),
           ledgerType: type,
           source: enrich.source,
+          fundKind: enrich.fundKind,
           ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
         },
       );
