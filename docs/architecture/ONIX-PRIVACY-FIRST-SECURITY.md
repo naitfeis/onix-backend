@@ -120,7 +120,7 @@ Auth / wallet **own** mutations; the engine only scores and emits `SecurityEvent
 | `NEW_DEVICE` | 40 | deviceId not in prior sessions / not TrustedDevice |
 | `NEW_IP` | 25 | IP not seen on prior sessions |
 | `NEW_COUNTRY` | 20 | country hop |
-| `LARGE_AMOUNT` | 30 | ≥ `RISK_WITHDRAW_LARGE_CENTS` (default 5_000_000 = 50_000 ₽) |
+| `LARGE_AMOUNT` | 50 | ≥ `RISK_WITHDRAW_LARGE_CENTS` (default 5_000_000 = 50_000 ₽); alone forces STEP_UP |
 | `NEW_PAYOUT_DEST` | 25 | new destination vs prior withdraw audits |
 | `HIGH_SESSION_RISK` | 15 | session.riskScore ≥ 40 |
 | `CONTEXT_SHIFT` | 5 | timezone/locale change — **never sole STEP_UP** |

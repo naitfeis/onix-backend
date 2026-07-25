@@ -35,6 +35,15 @@ test('NEW_DEVICE + NEW_IP reaches STEP_UP', () => {
   assert.equal(decideAction(score, factors), 'STEP_UP');
 });
 
+test('LARGE_AMOUNT alone reaches STEP_UP (Slice 3 withdraw gate)', () => {
+  const factors: RiskFactor[] = ['LARGE_AMOUNT'];
+  const score = scoreFactors(factors);
+  assert.equal(score, RISK_WEIGHT.LARGE_AMOUNT);
+  assert.ok(score >= 50);
+  assert.equal(decideAction(score, factors), 'STEP_UP');
+  assert.equal(applyStepUpPolicy('STEP_UP'), 'STEP_UP');
+});
+
 test('RISK_STEP_UP_ENFORCE=false demotes STEP_UP to MONITOR', () => {
   const prev = process.env.RISK_STEP_UP_ENFORCE;
   process.env.RISK_STEP_UP_ENFORCE = 'false';

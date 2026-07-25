@@ -5,7 +5,8 @@ export const RISK_WEIGHT: Record<RiskFactor, number> = {
   NEW_DEVICE: 40,
   NEW_IP: 25,
   NEW_COUNTRY: 20,
-  LARGE_AMOUNT: 30,
+  /** Alone must reach STEP_UP (≥ RISK_STEP_UP_SCORE default 50). */
+  LARGE_AMOUNT: 50,
   NEW_PAYOUT_DEST: 25,
   HIGH_SESSION_RISK: 15,
   /** Timezone/locale shift — context only, never sole STEP_UP driver. */
