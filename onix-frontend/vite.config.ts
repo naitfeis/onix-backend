@@ -72,8 +72,8 @@ export default ({ mode }: { mode: string }) => {
           scope: '/',
           display: 'standalone',
           orientation: 'any',
-          background_color: '#241b38',
-          theme_color: '#241b38',
+          background_color: '#202020',
+          theme_color: '#202020',
           categories: ['shopping', 'finance'],
           icons: [
             {

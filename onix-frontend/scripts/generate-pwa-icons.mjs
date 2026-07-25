@@ -1,12 +1,5 @@
 ﻿/**
- * PWA / shell icons from brand mark.
- *
- * - Favicons: logo only on true transparent canvas.
- * - Manifest `any` / `maskable`: logo on a branded rounded plate with
- *   transparent pixels *outside* the squircle. Windows fills transparent
- *   icon areas with manifest `background_color`; a flat black fill looks
- *   like a broken square — the plate matches theme so the shortcut looks
- *   intentional. Pure desktop alpha without a plate is not supported by Edge.
+ * PWA / shell icons — geometric ONIX X on true transparent canvases (no plate).
  *
  * Usage: node scripts/generate-pwa-icons.mjs
  */
@@ -22,17 +15,14 @@ const publicDir = join(root, 'public');
 mkdirSync(outDir, { recursive: true });
 
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
-/** Match vite PWA theme / Windows plate fill. */
-const PLATE = { r: 0x24, g: 0x1b, b: 0x38, alpha: 1 };
 
-const FAVICON_RATIO = 0.94;
-const ANY_LOGO_RATIO = 0.72;
-const MASKABLE_LOGO_RATIO = 0.62;
-const SQUIRCLE_INSET = 0.06;
+/** Standard / any: almost full-bleed figure. Maskable: safe zone for OS masks. */
+const STANDARD = 0.94;
+const MASKABLE = 0.7;
 
-async function logoBuffer(size, logoRatio) {
+async function makeIcon(size, logoRatio, outPath) {
   const logoSize = Math.round(size * logoRatio);
-  return sharp(src)
+  const logo = await sharp(src)
     .resize(logoSize, logoSize, {
       fit: 'contain',
       background: TRANSPARENT,
@@ -40,13 +30,10 @@ async function logoBuffer(size, logoRatio) {
     .ensureAlpha()
     .png()
     .toBuffer();
-}
 
-async function makeTransparentIcon(size, logoRatio, outPath) {
-  const logo = await logoBuffer(size, logoRatio);
   const meta = await sharp(logo).metadata();
-  const lw = meta.width ?? Math.round(size * logoRatio);
-  const lh = meta.height ?? Math.round(size * logoRatio);
+  const lw = meta.width ?? logoSize;
+  const lh = meta.height ?? logoSize;
   const left = Math.round((size - lw) / 2);
   const top = Math.round((size - lh) / 2);
 
@@ -63,42 +50,7 @@ async function makeTransparentIcon(size, logoRatio, outPath) {
     .toFile(outPath);
 }
 
-/** Rounded square (squircle-ish via SVG) plate + centered logo; outside = alpha 0. */
-async function makePlatedIcon(size, logoRatio, outPath) {
-  const inset = Math.round(size * SQUIRCLE_INSET);
-  const box = size - inset * 2;
-  const radius = Math.round(box * 0.22);
-  const svg = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}">` +
-      `<rect x="${inset}" y="${inset}" width="${box}" height="${box}" rx="${radius}" ry="${radius}" ` +
-      `fill="rgb(${PLATE.r},${PLATE.g},${PLATE.b})"/>` +
-      `</svg>`,
-  );
-
-  const plate = await sharp(svg).ensureAlpha().png().toBuffer();
-  const logo = await logoBuffer(size, logoRatio);
-  const meta = await sharp(logo).metadata();
-  const lw = meta.width ?? Math.round(size * logoRatio);
-  const lh = meta.height ?? Math.round(size * logoRatio);
-  const left = Math.round((size - lw) / 2);
-  const top = Math.round((size - lh) / 2);
-
-  await sharp({
-    create: {
-      width: size,
-      height: size,
-      channels: 4,
-      background: TRANSPARENT,
-    },
-  })
-    .composite([
-      { input: plate, left: 0, top: 0 },
-      { input: logo, left, top },
-    ])
-    .png()
-    .toFile(outPath);
-}
-
+/** Minimal ICO container wrapping a single PNG (Windows Vista+ / Chromium). */
 function pngToIco(png) {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0);
@@ -106,8 +58,8 @@ function pngToIco(png) {
   header.writeUInt16LE(1, 4);
 
   const entry = Buffer.alloc(16);
-  entry.writeUInt8(32, 0);
-  entry.writeUInt8(32, 1);
+  entry.writeUInt8(32, 0); // width
+  entry.writeUInt8(32, 1); // height
   entry.writeUInt8(0, 2);
   entry.writeUInt8(0, 3);
   entry.writeUInt16LE(1, 4);
@@ -118,41 +70,14 @@ function pngToIco(png) {
   return Buffer.concat([header, entry, png]);
 }
 
-function luma01(r, g, b) {
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-}
+await makeIcon(192, STANDARD, join(outDir, 'onix-any-192.png'));
+await makeIcon(512, STANDARD, join(outDir, 'onix-any-512.png'));
+await makeIcon(512, MASKABLE, join(outDir, 'onix-maskable-512.png'));
+await makeIcon(180, STANDARD, join(outDir, 'onix-apple-180.png'));
+await makeIcon(32, STANDARD, join(outDir, 'onix-fav-32.png'));
+await makeIcon(16, STANDARD, join(outDir, 'onix-fav-16.png'));
 
-function sat01(r, g, b) {
-  const mx = Math.max(r, g, b);
-  if (mx <= 0) return 0;
-  return (mx - Math.min(r, g, b)) / mx;
-}
-
-async function verifyTransparentCorners(label, path) {
-  const { data, info } = await sharp(path).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const w = info.width;
-  const h = info.height;
-  const px = (x, y) => {
-    const i = (y * w + x) * 4;
-    return { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] };
-  };
-  const corners = [px(0, 0), px(w - 1, 0), px(0, h - 1), px(w - 1, h - 1)];
-  const okCorners = corners.every((c) => c.a === 0);
-  console.log(
-    `[pwa-icons] ${label} corners`,
-    corners.map((c) => `rgba(${c.r},${c.g},${c.b},${c.a})`).join(' '),
-  );
-  console.log(`[pwa-icons] ${label} verifyCornersAlpha0`, okCorners);
-  return okCorners;
-}
-
-await makePlatedIcon(192, ANY_LOGO_RATIO, join(outDir, 'onix-any-192.png'));
-await makePlatedIcon(512, ANY_LOGO_RATIO, join(outDir, 'onix-any-512.png'));
-await makePlatedIcon(512, MASKABLE_LOGO_RATIO, join(outDir, 'onix-maskable-512.png'));
-await makeTransparentIcon(180, FAVICON_RATIO, join(outDir, 'onix-apple-180.png'));
-await makeTransparentIcon(32, FAVICON_RATIO, join(outDir, 'onix-fav-32.png'));
-await makeTransparentIcon(16, FAVICON_RATIO, join(outDir, 'onix-fav-16.png'));
-
+// Legacy filenames for old links / cached manifests
 copyFileSync(join(outDir, 'onix-any-192.png'), join(outDir, 'icon-192.png'));
 copyFileSync(join(outDir, 'onix-any-512.png'), join(outDir, 'icon-512.png'));
 copyFileSync(join(outDir, 'onix-maskable-512.png'), join(outDir, 'icon-maskable-512.png'));
@@ -171,35 +96,55 @@ writeFileSync(
 
 copyFileSync(join(outDir, 'onix-fav-32.png'), join(publicDir, 'favicon-32.png'));
 
-console.log('[pwa-icons] wrote icons ->', outDir);
-console.log('[pwa-icons] plated any/maskable; transparent favicons');
+function luma01(r, g, b) {
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
 
-let allOk = true;
-allOk = (await verifyTransparentCorners('onix-any-512', join(outDir, 'onix-any-512.png'))) && allOk;
-allOk = (await verifyTransparentCorners('onix-any-192', join(outDir, 'onix-any-192.png'))) && allOk;
-allOk = (await verifyTransparentCorners('onix-fav-32', join(outDir, 'onix-fav-32.png'))) && allOk;
+function sat01(r, g, b) {
+  const mx = Math.max(r, g, b);
+  if (mx <= 0) return 0;
+  return (mx - Math.min(r, g, b)) / mx;
+}
 
-// Favicon must not keep an opaque black plate in the outer ring.
-{
-  const { data, info } = await sharp(join(outDir, 'onix-fav-32.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+async function verifyIcon(label, path) {
+  const { data, info } = await sharp(path).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const w = info.width;
   const h = info.height;
+  const px = (x, y) => {
+    const i = (y * w + x) * 4;
+    return { r: data[i], g: data[i + 1], b: data[i + 2], a: data[i + 3] };
+  };
+  const corners = [px(0, 0), px(w - 1, 0), px(0, h - 1), px(w - 1, h - 1)];
+  const ring = 8;
   let opaqueNearBlackPlate = 0;
-  const ring = 3;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const inRing = x < ring || y < ring || x >= w - ring || y >= h - ring;
       if (!inRing) continue;
-      const i = (y * w + x) * 4;
-      const a = data[i + 3];
-      if (a < 128) continue;
-      const L = luma01(data[i], data[i + 1], data[i + 2]);
-      const s = sat01(data[i], data[i + 1], data[i + 2]);
+      const p = px(x, y);
+      if (p.a < 128) continue;
+      const L = luma01(p.r, p.g, p.b);
+      const s = sat01(p.r, p.g, p.b);
+      // Near-black plate: dark + low sat (logo purple must not match)
       if (L <= 0.14 && s < 0.22) opaqueNearBlackPlate++;
     }
   }
-  console.log('[pwa-icons] onix-fav-32 outerRing opaqueNearBlackPlate', opaqueNearBlackPlate);
-  if (opaqueNearBlackPlate > 0) allOk = false;
+  const okCorners = corners.every((c) => c.a === 0);
+  console.log(
+    `[pwa-icons] ${label} corners`,
+    corners.map((c) => `rgba(${c.r},${c.g},${c.b},${c.a})`).join(' '),
+  );
+  console.log(`[pwa-icons] ${label} outer8px opaqueNearBlackPlate`, opaqueNearBlackPlate);
+  console.log(`[pwa-icons] ${label} verifyCornersAlpha0`, okCorners);
+  return okCorners && opaqueNearBlackPlate === 0;
 }
 
+console.log('[pwa-icons] wrote icons ->', outDir);
+console.log('[pwa-icons] logoRatio standard', STANDARD, 'maskable', MASKABLE);
+console.log('[pwa-icons] no plate — figure only on transparent canvas');
+
+let allOk = true;
+allOk = (await verifyIcon('onix-any-512', join(outDir, 'onix-any-512.png'))) && allOk;
+allOk = (await verifyIcon('onix-any-192', join(outDir, 'onix-any-192.png'))) && allOk;
+allOk = (await verifyIcon('onix-maskable-512', join(outDir, 'onix-maskable-512.png'))) && allOk;
 if (!allOk) process.exitCode = 1;
