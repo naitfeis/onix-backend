@@ -24,7 +24,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   const pickCategory = (category: string) => {
     const nextSubs = catalog[category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
     setDraft({ ...draft, category, subcategory: nextSubs[0] });
-    setCatsOpen(false);
   };
   return <div className="stack narrow">
     <Card><form className="form" onSubmit={submit}>

@@ -410,6 +410,8 @@ export const API_PATHS = {
   reviews: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/reviews`,
   reviewCreate: (orderId: string) => `/api/orders/${encodeURIComponent(orderId)}/reviews`,
   walletWithdraw: '/api/wallet/withdrawals',
+  mfaStatus: (challengeId: string) =>
+    `/api/v2/auth/mfa/status?challengeId=${encodeURIComponent(challengeId)}`,
   walletDeposit: '/api/wallet/deposit',
   walletDepositLedger: '/api/wallet/deposit/ledger',
   walletDepositLocks: '/api/wallet/deposit/locks',

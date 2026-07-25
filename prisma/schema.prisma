@@ -984,12 +984,18 @@ model MfaChallenge {
   userId    BigInt
   sessionId String?
   method    MfaMethod
+  /** PENDING | CONFIRMED | CONSUMED | CANCELED | EXPIRED | FAILED */
   status    String    @db.VarChar(32)
+  /** e.g. WITHDRAW — binds challenge to a high-risk action */
+  purpose   String    @default("WITHDRAW") @db.VarChar(64)
+  /** Non-secret context (amountCents, score) — never tokens */
+  metadata  Json?
   expiresAt DateTime
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
+  @@index([status, expiresAt])
 }
 
 model SigningKey {

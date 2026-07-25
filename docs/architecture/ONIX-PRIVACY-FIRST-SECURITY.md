@@ -135,7 +135,8 @@ Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCO
 ### Withdraw (`POST /wallet/withdrawals` + AI withdraw)
 
 - Evaluate factors → write `SecurityEvent` on MONITOR / STEP_UP.
-- **STEP_UP** → `AUTH_STEP_UP_REQUIRED` (403) stub until Slice 3 MFA.
+- **STEP_UP** → create `MfaChallenge` (TELEGRAM), notify bot, return `AUTH_STEP_UP_REQUIRED` with `challengeId` + deep links.
+- Client confirms in Telegram (`confirm_mfa:` / `/start mfa_<id>`), polls `GET /api/v2/auth/mfa/status`, retries withdraw with `stepUpChallengeId`.
 - Soft rollout: `RISK_STEP_UP_ENFORCE=false` demotes STEP_UP → MONITOR.
 
 | Env | Default | Meaning |
@@ -143,7 +144,8 @@ Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCO
 | `RISK_WITHDRAW_LARGE_CENTS` | `5000000` | Large withdrawal threshold |
 | `RISK_MONITOR_SCORE` | `25` | MONITOR floor |
 | `RISK_STEP_UP_SCORE` | `50` | STEP_UP floor |
-| `RISK_STEP_UP_ENFORCE` | `true` | Enforce stub step-up |
+| `RISK_STEP_UP_ENFORCE` | `true` | Enforce step-up |
+| `MFA_CHALLENGE_TTL_MS` | `600000` | Telegram MFA challenge TTL (1–60 min) |
 
 ## Stack (target)
 
@@ -155,8 +157,8 @@ ONIX Identity → Session & Device Trust → Security Events
 | Slice | Scope |
 |-------|--------|
 | 1 | Device HMAC (stable-ish only), strip invasive fingerprints, TTL defaults, IP retention |
-| **2** | Risk Engine on withdraw / new device+IP; MONITOR on login; STEP_UP stub |
-| 3 | Step-up (Telegram confirm / MFA) — wires `MfaChallenge` |
+| 2 | Risk Engine on withdraw / new device+IP; MONITOR on login; STEP_UP stub |
+| **3** | Telegram MFA step-up (`MfaChallenge` + bot confirm + FE poll/retry) |
 | 4 | Ledger actor/source/correlationId + velocity |
 | 5 | KMS / key rotation hygiene |
 | 6 | Separate Admin Control Plane |
@@ -168,4 +170,4 @@ ONIX Identity → Session & Device Trust → Security Events
 - Phone scraping
 - Storing tokens in audit payloads
 - Binding production device HMAC to `JWT_SECRET`
-- Full MFA UI in Slice 2 (stub error only)
+- TOTP / Passkey / Email MFA factors (schema ready; runtime = Telegram only in Slice 3)

@@ -52,4 +52,6 @@ export type WithdrawRiskInput = {
   payoutDestination?: string | null;
   ipAddress?: string | null;
   country?: string | null;
+  /** Slice 3 — CONFIRMED Telegram MFA challenge to consume. */
+  stepUpChallengeId?: string | null;
 };

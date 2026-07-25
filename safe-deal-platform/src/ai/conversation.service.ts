@@ -338,7 +338,21 @@ export class ConversationService {
       });
     } catch (error) {
       if (error instanceof AuthPlatformError && error.code === 'AUTH_STEP_UP_REQUIRED') {
-        return 'Для этого вывода нужно дополнительное подтверждение в приложении ONIX (step-up). Пока подтверждение недоступно — обратитесь в поддержку или выведите меньшую сумму с известного устройства.';
+        const details = error.details as {
+          webDeepLink?: string;
+          challengeId?: string;
+          delivery?: string;
+        } | undefined;
+        const link = details?.webDeepLink;
+        if (link) {
+          return [
+            'Для этого вывода нужно подтверждение в Telegram.',
+            `Откройте бота: ${link}`,
+            'Нажмите «Подтвердить», затем напишите сюда «подтвердил» или повторите вывод.',
+            details?.challengeId ? `(код: ${details.challengeId})` : '',
+          ].filter(Boolean).join('\n');
+        }
+        return 'Для этого вывода нужно подтверждение в Telegram. Откройте бота ONIX, подтвердите вывод и повторите запрос.';
       }
       throw error;
     }

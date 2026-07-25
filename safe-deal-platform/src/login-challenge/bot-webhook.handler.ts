@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, Logger, Post } from '@nestjs/common';
 import { Public } from '../common';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { MfaStepUpService } from '../mfa/mfa-step-up.service';
 import {
   answerTelegramCallback,
   editTelegramMessage,
@@ -37,18 +38,17 @@ type TelegramUpdate = {
 };
 
 /**
- * Telegram Bot webhook — LoginChallenge UX only.
- * Confirm calls existing LoginChallengeService.confirmFromBot.
- * Session is issued later by Website complete (unchanged).
- *
- * Diagnostics: every hop logs with prefix [Bot] so ops can locate the first broken link.
+ * Telegram Bot webhook — LoginChallenge UX + MFA step-up (Slice 3).
  */
 @Public()
 @Controller('telegram')
 export class BotWebhookHandler {
   private readonly logger = new Logger(BotWebhookHandler.name);
 
-  constructor(private readonly challenges: LoginChallengeService) {}
+  constructor(
+    private readonly challenges: LoginChallengeService,
+    private readonly mfa: MfaStepUpService,
+  ) {}
 
   @Post('webhook')
   async handle(
@@ -79,41 +79,111 @@ export class BotWebhookHandler {
 
       if (!start.startsWith('/start ')) {
         this.logger.warn(JSON.stringify({
-          msg: '[Bot] /start format not matched — expected "/start login_<challengeId>"',
+          msg: '[Bot] /start format not matched — expected "/start login_<id>" or "/start mfa_<id>"',
           rawText: start,
-          note: 'Chain breaks HERE if Telegram sent /start@BotName or payload-less /start',
         }));
         return { ok: true, ignored: true, reason: 'start_format' };
       }
 
+      const payload = start.slice('/start '.length).trim();
+      if (payload.startsWith('mfa_')) {
+        return this.onStartMfa(update, payload.slice('mfa_'.length));
+      }
       return this.onStartLogin(update);
     }
 
     const data = update.callback_query?.data;
     if (data?.startsWith('confirm_login:')) {
-      this.logger.log(JSON.stringify({
-        msg: '[Bot] callback received',
-        kind: 'confirm',
-        challengeId: data.slice('confirm_login:'.length),
-        telegramId: update.callback_query?.from?.id ?? null,
-        messageId: update.callback_query?.message?.message_id ?? null,
-      }));
       return this.onConfirm(update, data.slice('confirm_login:'.length));
     }
     if (data?.startsWith('cancel_login:')) {
-      this.logger.log(JSON.stringify({
-        msg: '[Bot] callback received',
-        kind: 'cancel',
-        challengeId: data.slice('cancel_login:'.length),
-        telegramId: update.callback_query?.from?.id ?? null,
-      }));
       return this.onCancel(update, data.slice('cancel_login:'.length));
+    }
+    if (data?.startsWith('confirm_mfa:')) {
+      return this.onConfirmMfa(update, data.slice('confirm_mfa:'.length));
+    }
+    if (data?.startsWith('cancel_mfa:')) {
+      return this.onCancelMfa(update, data.slice('cancel_mfa:'.length));
     }
 
     this.logger.log(JSON.stringify({
-      msg: '[Bot] update ignored (no /start login_ / confirm / cancel)',
+      msg: '[Bot] update ignored',
       updateId: update?.update_id ?? null,
     }));
+    return { ok: true };
+  }
+
+  private async onStartMfa(update: TelegramUpdate, challengeId: string) {
+    const from = update.message?.from;
+    const chatId = update.message?.chat?.id;
+    if (!from || chatId == null || !challengeId) {
+      return { ok: true, ignored: true };
+    }
+    try {
+      await this.mfa.presentChallengeToTelegram(challengeId, BigInt(from.id), chatId);
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] mfa present failed',
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      await sendTelegramMessage({
+        chatId,
+        text: 'Не удалось открыть подтверждение. Запросите вывод ещё раз в ONIX.',
+      });
+    }
+    return { ok: true };
+  }
+
+  private async onConfirmMfa(update: TelegramUpdate, challengeId: string) {
+    const cb = update.callback_query;
+    const from = cb?.from;
+    const chatId = cb?.message?.chat?.id;
+    if (!from || chatId == null) return { ok: true };
+    if (cb?.id) await answerTelegramCallback(cb.id);
+    try {
+      await this.mfa.confirmFromBot(challengeId, BigInt(from.id));
+      if (cb?.message?.message_id != null) {
+        await editTelegramMessage({
+          chatId,
+          messageId: cb.message.message_id,
+          text: '✅ Вывод подтверждён. Вернитесь в ONIX и нажмите «Повторить вывод».',
+        });
+      } else {
+        await sendTelegramMessage({
+          chatId,
+          text: '✅ Вывод подтверждён. Вернитесь в ONIX и повторите запрос.',
+        });
+      }
+    } catch (error) {
+      const msg = error instanceof AuthPlatformError
+        ? error.message
+        : 'Не удалось подтвердить.';
+      await sendTelegramMessage({ chatId, text: `⚠️ ${msg}` });
+    }
+    return { ok: true };
+  }
+
+  private async onCancelMfa(update: TelegramUpdate, challengeId: string) {
+    const cb = update.callback_query;
+    const from = cb?.from;
+    const chatId = cb?.message?.chat?.id;
+    if (!from || chatId == null) return { ok: true };
+    if (cb?.id) await answerTelegramCallback(cb.id);
+    try {
+      await this.mfa.cancelFromBot(challengeId, BigInt(from.id));
+      if (cb?.message?.message_id != null) {
+        await editTelegramMessage({
+          chatId,
+          messageId: cb.message.message_id,
+          text: '❌ Вывод отклонён.',
+        });
+      }
+    } catch (error) {
+      const msg = error instanceof AuthPlatformError
+        ? error.message
+        : 'Не удалось отклонить.';
+      await sendTelegramMessage({ chatId, text: `⚠️ ${msg}` });
+    }
     return { ok: true };
   }
 

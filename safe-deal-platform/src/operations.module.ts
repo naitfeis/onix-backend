@@ -49,6 +49,8 @@ class RefundDto { @IsOptional() @IsString() @MaxLength(1000) reason?: string; }
 class WithdrawalDto {
   @IsString() @Matches(/^[1-9]\d*$/) amountCents!: string;
   @IsString() @Length(16, 100) idempotencyKey!: string;
+  /** Slice 3 — CONFIRMED Telegram MFA challenge id */
+  @IsOptional() @IsString() @Length(8, 64) stepUpChallengeId?: string;
 }
 class PlatformStatusDto {
   @IsEnum(PlatformStatus) status!: PlatformStatus;
@@ -390,6 +392,7 @@ class OperationsService {
       userId: user.id,
       amountCents: BigInt(dto.amountCents),
       sessionId: user.sessionId,
+      stepUpChallengeId: dto.stepUpChallengeId,
     });
 
     // External withdrawal is double-gated: ledger idempotencyKey + IdempotencyRecord scope.

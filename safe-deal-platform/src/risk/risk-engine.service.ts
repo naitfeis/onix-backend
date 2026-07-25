@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { MfaStepUpService } from '../mfa/mfa-step-up.service';
 import { PrismaService } from '../prisma.service';
 import {
   applyStepUpPolicy,
@@ -24,12 +25,14 @@ const HIGH_SESSION_RISK = 40;
 const HISTORY_LIMIT = 30;
 
 /**
- * Slice 2 Risk Engine — withdraw + new device/IP.
- * Does not live inside AuthService; Auth/Operations call evaluate* and apply decisions.
+ * Risk Engine — withdraw + new device/IP (Slice 2) + Telegram MFA step-up (Slice 3).
  */
 @Injectable()
 export class RiskEngineService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly mfa?: MfaStepUpService,
+  ) {}
 
   /**
    * Score a new session before persist. Emits event drafts for the caller to write
@@ -297,7 +300,8 @@ export class RiskEngineService {
   }
 
   /**
-   * Gate withdraw: MONITOR allows + records; STEP_UP throws AUTH_STEP_UP_REQUIRED (Slice 3 fills MFA).
+   * Gate withdraw: MONITOR allows + records; STEP_UP issues Telegram MFA (Slice 3)
+   * or accepts a CONFIRMED stepUpChallengeId.
    */
   async assertWithdrawAllowed(input: WithdrawRiskInput, db: Db = this.prisma): Promise<RiskDecision> {
     const result = await this.evaluateWithdraw(input, db);
@@ -305,6 +309,44 @@ export class RiskEngineService {
       await this.writeEvents(db, input.userId, input.sessionId, result.events);
     }
     if (result.action === 'STEP_UP') {
+      if (input.stepUpChallengeId?.trim() && this.mfa) {
+        await this.mfa.consumeConfirmed({
+          challengeId: input.stepUpChallengeId.trim(),
+          userId: input.userId,
+          sessionId: input.sessionId,
+          purpose: 'WITHDRAW',
+          db,
+        });
+        return {
+          action: 'ALLOW',
+          score: result.score,
+          factors: result.factors,
+          reason: 'step_up_passed',
+        };
+      }
+      if (this.mfa && !input.stepUpChallengeId?.trim()) {
+        const issued = await this.mfa.issueWithdrawChallenge({
+          userId: input.userId,
+          sessionId: input.sessionId,
+          amountCents: input.amountCents,
+          score: result.score,
+          factors: result.factors,
+        });
+        throw new AuthPlatformError(
+          'AUTH_STEP_UP_REQUIRED',
+          'Подтвердите вывод в Telegram, затем повторите запрос.',
+          {
+            factors: result.factors,
+            score: result.score,
+            reason: result.reason,
+            challengeId: issued.challengeId,
+            expiresAt: issued.expiresAt,
+            deepLink: issued.deepLink,
+            webDeepLink: issued.webDeepLink,
+            delivery: issued.delivery,
+          },
+        );
+      }
       throw new AuthPlatformError(
         'AUTH_STEP_UP_REQUIRED',
         'Для этого вывода требуется дополнительное подтверждение.',

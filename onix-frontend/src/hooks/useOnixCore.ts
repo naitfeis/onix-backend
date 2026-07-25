@@ -794,8 +794,12 @@ export function useOnixCore() {
     api.post(API_PATHS.supportComplete(dealId), { ...(reason ? { reason } : {}) }),
   () => void load('deals', API_PATHS.orders)), [load, run]);
 
-  const withdraw = useCallback((amountRubles: number) => run('withdraw', () =>
-    api.post(API_PATHS.walletWithdraw, { amountCents: cents(amountRubles), idempotencyKey: crypto.randomUUID() }), loadProfile), [loadProfile, run]);
+  const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => run('withdraw', () =>
+    api.post(API_PATHS.walletWithdraw, {
+      amountCents: cents(amountRubles),
+      idempotencyKey: crypto.randomUUID(),
+      ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
+    }), loadProfile), [loadProfile, run]);
 
   const submitReview = useCallback((dealId: string, rating: number, text: string) => run('review', () =>
     api.post<Review>(API_PATHS.reviewCreate(dealId), { rating, text: text.trim() }), () => {

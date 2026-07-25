@@ -30,8 +30,8 @@ export function largeWithdrawCents(): bigint {
 }
 
 /**
- * When false, STEP_UP demotes to MONITOR (soft rollout until Slice 3 MFA).
- * Default true — high-risk withdraws require step-up stub.
+ * When false, STEP_UP demotes to MONITOR (soft rollout).
+ * Default true — high-risk withdraws require Telegram MFA (Slice 3).
  */
 export function stepUpEnforceEnabled(): boolean {
   const raw = (process.env.RISK_STEP_UP_ENFORCE ?? 'true').trim().toLowerCase();

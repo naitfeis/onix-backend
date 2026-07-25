@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
-import { api, friendlyError, money } from '../api/client';
+import { api, ApiError, friendlyError, money } from '../api/client';
 import {
   API_PATHS, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
@@ -18,6 +18,13 @@ const SupportQueue = lazy(() => import('./SupportQueue'));
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
 
 type MoneyModal = 'MAIN_TOPUP' | 'MAIN_WITHDRAW' | 'DEPOSIT_FUND' | 'DEPOSIT_WITHDRAW' | null;
+
+type StepUpState = {
+  challengeId: string;
+  webDeepLink?: string;
+  expiresAt?: string;
+  amountRubles: number;
+};
 
 function rublesToCents(rubles: number): number {
   return Math.round(rubles * 100);
@@ -133,6 +140,8 @@ export function Profile({
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [stepUp, setStepUp] = useState<StepUpState | null>(null);
+  const [stepUpStatus, setStepUpStatus] = useState<string>('PENDING');
   const showWebsiteLogout = useMemo(() => !isTelegramMiniApp(), []);
   const PAGE = 15;
   const profile = core.profile;
@@ -235,6 +244,39 @@ export function Profile({
     onTopupConsumed?.();
   }, [openTopup, core.profile, onTopupConsumed]);
 
+  useEffect(() => {
+    if (!stepUp) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const row = await api.get<{ status: string }>(API_PATHS.mfaStatus(stepUp.challengeId));
+        if (cancelled) return;
+        setStepUpStatus(row.status);
+      } catch {
+        /* keep polling */
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [stepUp]);
+
+  const completeWithdraw = async (rubles: number, stepUpChallengeId?: string) => {
+    await api.post(API_PATHS.walletWithdraw, {
+      amountCents: String(rublesToCents(rubles)),
+      idempotencyKey: crypto.randomUUID(),
+      ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
+    });
+    await core.loadProfile();
+    setToast('Заявка на вывод создана.');
+    setMoneyModal(null);
+    setAmount('');
+    setStepUp(null);
+  };
+
   const submitMoney = async () => {
     const rubles = Number(amount);
     if (!moneyModal || !(rubles >= 1)) return;
@@ -243,8 +285,30 @@ export function Profile({
       const amountCents = rublesToCents(rubles);
       const key = crypto.randomUUID();
       if (moneyModal === 'MAIN_WITHDRAW') {
-        if (!(await core.withdraw(rubles))) return;
-        setToast('Заявка на вывод создана.');
+        try {
+          await completeWithdraw(rubles);
+        } catch (error) {
+          if (error instanceof ApiError && error.code === 'AUTH_STEP_UP_REQUIRED') {
+            const details = error.details as {
+              challengeId?: string;
+              webDeepLink?: string;
+              expiresAt?: string;
+            } | undefined;
+            if (details?.challengeId) {
+              setStepUp({
+                challengeId: details.challengeId,
+                webDeepLink: details.webDeepLink,
+                expiresAt: details.expiresAt,
+                amountRubles: rubles,
+              });
+              setStepUpStatus('PENDING');
+              setToast('Подтвердите вывод в Telegram.');
+              return;
+            }
+          }
+          throw error;
+        }
+        return;
       } else if (moneyModal === 'MAIN_TOPUP') {
         const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
           wallet: 'MAIN',
@@ -273,6 +337,18 @@ export function Profile({
       } else {
         setToast(message);
       }
+    } finally {
+      setMoneyBusy(false);
+    }
+  };
+
+  const retryWithdrawAfterStepUp = async () => {
+    if (!stepUp) return;
+    setMoneyBusy(true);
+    try {
+      await completeWithdraw(stepUp.amountRubles, stepUp.challengeId);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Не удалось завершить вывод.');
     } finally {
       setMoneyBusy(false);
     }
@@ -493,6 +569,36 @@ export function Profile({
             disabled={Number(amount) < 1}
             onClick={() => void submitMoney()}
           >Продолжить</Button>
+        </div>
+      </div>
+    </Modal>
+    <Modal
+      open={Boolean(stepUp)}
+      title="Подтверждение вывода"
+      onClose={() => { setStepUp(null); setStepUpStatus('PENDING'); }}
+    >
+      <div className="stack compact">
+        <p className="muted">
+          Для этого вывода нужно подтверждение в Telegram.
+          {stepUpStatus === 'CONFIRMED'
+            ? ' Подтверждение получено — нажмите «Повторить вывод».'
+            : ' Откройте бота и нажмите «Подтвердить».'}
+        </p>
+        {stepUp?.webDeepLink && stepUpStatus !== 'CONFIRMED' && (
+          <Button
+            variant="secondary"
+            onClick={() => window.open(stepUp.webDeepLink, '_blank', 'noopener,noreferrer')}
+          >Открыть Telegram</Button>
+        )}
+        <p className="muted">Статус: {stepUpStatus}</p>
+        <div className="modal__actions">
+          <Button variant="secondary" onClick={() => setStepUp(null)}>Отмена</Button>
+          <Button
+            variant="violet"
+            busy={moneyBusy}
+            disabled={stepUpStatus !== 'CONFIRMED'}
+            onClick={() => void retryWithdrawAfterStepUp()}
+          >Повторить вывод</Button>
         </div>
       </div>
     </Modal>
