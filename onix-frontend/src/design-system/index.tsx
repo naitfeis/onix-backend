@@ -1,11 +1,17 @@
 import {
+  Children,
+  isValidElement,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
   type ButtonHTMLAttributes,
+  type ChangeEvent,
   type HTMLAttributes,
   type InputHTMLAttributes,
   type MouseEvent as ReactMouseEvent,
+  type ReactElement,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
@@ -44,8 +50,108 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className="control control--area" {...props} />;
 }
 
-export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={['control', className].filter(Boolean).join(' ')} {...props} />;
+type SelectOption = { value: string; label: string; disabled?: boolean };
+
+function readSelectOptions(children: ReactNode): SelectOption[] {
+  const list: SelectOption[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return;
+    const el = child as ReactElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>;
+    if (el.type !== 'option') return;
+    list.push({
+      value: String(el.props.value ?? ''),
+      label: String(el.props.children ?? ''),
+      disabled: Boolean(el.props.disabled),
+    });
+  });
+  return list;
+}
+
+/** Custom listbox — avoids Windows native <select> white popup with invisible (white-on-white) options. */
+export function Select({
+  className = '',
+  children,
+  value,
+  defaultValue,
+  onChange,
+  disabled,
+  id,
+  name,
+  'aria-label': ariaLabel,
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  const options = useMemo(() => readSelectOptions(children), [children]);
+  const isControlled = value !== undefined;
+  const [uncontrolled, setUncontrolled] = useState(String(defaultValue ?? options[0]?.value ?? ''));
+  const current = String(isControlled ? value : uncontrolled);
+  const selected = options.find((o) => o.value === current) ?? options[0];
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const commit = (next: string) => {
+    if (!isControlled) setUncontrolled(next);
+    onChange?.({
+      target: { value: next, name: name ?? '', type: 'select-one' },
+      currentTarget: { value: next, name: name ?? '', type: 'select-one' },
+    } as ChangeEvent<HTMLSelectElement>);
+    setOpen(false);
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className={['select-menu', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
+      data-disabled={disabled ? 'true' : undefined}
+    >
+      <button
+        type="button"
+        id={id}
+        className="control select-menu__trigger"
+        disabled={disabled}
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
+      >
+        <span className="select-menu__value">{selected?.label ?? ''}</span>
+      </button>
+      {open && (
+        <ul id={listId} className="select-menu__list" role="listbox" aria-label={ariaLabel}>
+          {options.map((opt) => (
+            <li key={opt.value} role="presentation">
+              <button
+                type="button"
+                role="option"
+                className={`select-menu__option${opt.value === current ? ' is-active' : ''}`}
+                aria-selected={opt.value === current}
+                disabled={opt.disabled}
+                onClick={() => commit(opt.value)}
+              >
+                {opt.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export function Skeleton({ lines = 3 }: { lines?: number }) {

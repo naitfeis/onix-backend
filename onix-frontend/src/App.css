@@ -311,6 +311,8 @@
   overflow-wrap: break-word;
   word-break: normal;
   white-space: normal;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
 }
 .auth-notice strong {
   color: var(--text);
@@ -370,10 +372,12 @@
 .viewport {
   padding-top: 16px;
   background: transparent;
-  overflow-x: visible;
+  overflow-x: clip;
   overflow-y: visible;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
   /* No perspective / transform here — they break backdrop-filter vs fixed scene */
 }
 .screen-transition {
@@ -381,6 +385,9 @@
   min-height: 0;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
+  /* Do not clip — select-menu dropdown must paint below the trigger */
+  overflow: visible;
 }
 @keyframes page-turn {
   from { opacity: 0; }
@@ -613,10 +620,15 @@ html[data-theme="dark"] .button--secondary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   justify-content: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 @media (min-width: 1100px) {
   .product-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* Drop columns when the center rail is squeezed by sidebars */
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
     gap: 16px;
   }
 }
@@ -1012,6 +1024,7 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
   touch-action: auto;
   scroll-snap-type: none;
   scrollbar-width: none;
+  box-sizing: border-box;
 }
 .cat-row::-webkit-scrollbar {
   display: none;
@@ -1020,9 +1033,19 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
   width: 100%;
   min-width: 0;
 }
-@media (max-width: 559px) {
+@media (max-width: 719px) {
+  .cat-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 720px) and (max-width: 1099px) {
   .cat-row {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 559px) {
+  .cat-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 .cat-scroll-slider {
@@ -1124,6 +1147,9 @@ html[data-theme="light"] .cat-card.active {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  writing-mode: horizontal-tb;
   color: var(--text-primary);
 }
 .cat-card__count {
@@ -1639,16 +1665,110 @@ select.control {
   background-position: right 14px center;
   background-size: 12px 8px;
   cursor: pointer;
+  /* Native popup inherits control color; force readable options if a raw <select> remains */
+  color-scheme: dark;
+  overflow: visible;
 }
 html[data-theme="light"] select.control {
+  color-scheme: light;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23161420' stroke-opacity='0.45' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
 select.control:focus {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23FFFFFF' stroke-opacity='0.85' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
 }
+select.control option {
+  color: #141820;
+  background: #fff;
+}
+html[data-theme="dark"] select.control option {
+  color: #f2f2f5;
+  background: #1c1a26;
+}
+
+/* Custom Select (design-system) — themed listbox, no OS white overlay */
+.select-menu {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  z-index: 2;
+}
+.select-menu.is-open { z-index: 40; }
+.select-menu__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23FFFFFF' stroke-opacity='0.55' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
+}
+html[data-theme="light"] .select-menu__trigger {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23161420' stroke-opacity='0.45' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+.select-menu__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-menu__list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 18px;
+  background: var(--glass-card-bg, rgba(18, 16, 28, 0.96));
+  border: var(--glass-border);
+  box-shadow: var(--glass-drop-shadow, 0 12px 36px rgba(0, 0, 0, 0.32));
+  max-height: min(280px, 50dvh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-theme="light"] .select-menu__list {
+  background: #fff;
+  border-color: rgba(20, 24, 32, 0.12);
+  box-shadow: 0 12px 32px rgba(20, 24, 32, 0.14);
+}
+.select-menu__option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+.select-menu__option:hover,
+.select-menu__option:focus-visible {
+  background: var(--nav-hover-bg, rgba(255, 255, 255, 0.08));
+  outline: none;
+}
+.select-menu__option.is-active {
+  background: color-mix(in srgb, var(--accent-violet) 22%, transparent);
+  font-weight: 600;
+}
+html[data-theme="light"] .select-menu__option.is-active {
+  background: color-mix(in srgb, var(--accent-violet) 16%, #fff);
+}
 .search-row { display: grid; grid-template-columns: 1fr; gap: 8px; align-items: stretch; }
 .search-row .control,
-.search-row select.control { border-radius: 26px !important; }
+.search-row select.control,
+.search-row .select-menu__trigger { border-radius: 26px !important; }
+.search-row .select-menu { min-width: 0; }
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -2674,7 +2794,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .app-shell { padding-inline: 20px; }
   .app-shell--chat { padding-inline: 0; }
   .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px); }
-  .search-row select.control {
+  .search-row select.control,
+  .search-row .select-menu__trigger {
     border-radius: 26px !important;
     height: 48px;
   }
@@ -3314,23 +3435,39 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-left.desktop-only { display: flex; }
   .app-shell > .topbar,
   .app-shell > .bottom-nav { display: none; }
+  .app-shell > .viewport {
+    grid-column: 2;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
   .sidebar-left {
+    grid-column: 1;
     position: sticky;
     top: 20px;
+    width: 72px;
+    max-width: 72px;
+    min-width: 72px;
     height: calc(100dvh - 40px);
-    padding: 14px 10px;
+    padding: 14px 8px;
     border-radius: var(--radius-xl);
     overflow: hidden;
     isolation: isolate;
     contain: paint;
+    box-sizing: border-box;
   }
   .sidebar-left .brand__text,
   .sidebar-nav button span:not(.icon),
   .sidebar-cats,
-  .sidebar-divider { display: none; }
-  .sidebar-nav button {
+  .sidebar-divider,
+  .sidebar-theme span { display: none !important; }
+  .sidebar-nav button,
+  .sidebar-theme {
     justify-content: center;
     padding: 0;
+    width: 44px;
+    max-width: 44px;
+    margin-inline: auto;
     background: transparent !important;
     border: 0 !important;
     box-shadow: none !important;
@@ -3351,7 +3488,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 
   /* Auth banner must span both columns — otherwise it sits in the 72px rail
      and word-break turns "Войдите…" into a vertical glyph stack. */
-  .app-shell--auth > .auth-notice {
+  .app-shell--auth > .auth-notice,
+  .app-shell > .auth-notice {
     grid-column: 1 / -1;
     grid-row: 1;
     margin: 0 0 4px;

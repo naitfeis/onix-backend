@@ -375,6 +375,13 @@ html[data-theme="light"] .topbar::after {
   overflow: visible;
 }
 
+/* Select listbox trigger must not clip the chevron / focus ring */
+.select-menu,
+.select-menu__trigger,
+.control.select-menu__trigger {
+  overflow: visible;
+}
+
 /* cat chips: allow 2-line labels — do not clip */
 .cat-card {
   overflow: visible;
