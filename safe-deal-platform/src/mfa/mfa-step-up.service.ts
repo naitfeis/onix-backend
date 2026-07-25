@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AuthProvider, MfaMethod, Prisma } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import {

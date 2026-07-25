@@ -58,7 +58,7 @@ describe('ONIX AI EntityExtractor', () => {
       'Количество 50',
       'Описание Передача обменом',
       'Категория Steam',
-      'Подкатегория Валюта',
+      'Подкатегория Пополнение',
     ].join('\n'));
     assert.equal(got.title, 'PUBG Mobile');
     assert.equal(got.priceRubles, 300);
@@ -73,7 +73,7 @@ describe('ONIX AI EntityExtractor', () => {
     assert.equal(got.title, 'PUBG лот');
     assert.equal(got.priceRubles, 500);
     assert.equal(got.quantity, 10);
-    assert.equal(got.category, 'OTHER');
+    assert.equal(got.category, 'PUBG');
     assert.ok(got.subcategory);
   });
 });
