@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",
-    "icons:pwa": "node scripts/generate-pwa-icons.mjs"
+    "icons:pwa": "node scripts/generate-pwa-icons.mjs",
+    "icons:knockout": "node scripts/knockout-brand-mark.mjs",
+    "icons:all": "npm run icons:knockout && npm run icons:pwa"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.2.8",
