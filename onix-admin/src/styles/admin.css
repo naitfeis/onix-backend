@@ -1,0 +1,50 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e0f12;
+  --panel: #171a21;
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.55);
+  --line: rgba(255, 255, 255, 0.12);
+  --accent: #5b8def;
+  --yellow: #e8b93e;
+  --danger: #c45b5b;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+
+.admin-shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100dvh; }
+.admin-nav { border-right: 1px solid var(--line); padding: 1.25rem 1rem; background: #12151b; }
+.admin-nav h1 { font-size: 1rem; margin: 0 0 1rem; letter-spacing: 0.04em; }
+.admin-nav button {
+  display: block; width: 100%; text-align: left; margin: 0 0 0.35rem;
+  background: transparent; border: 1px solid transparent; color: var(--text);
+  padding: 0.55rem 0.7rem; border-radius: 8px; cursor: pointer;
+}
+.admin-nav button.active, .admin-nav button:hover { background: rgba(91, 141, 239, 0.12); border-color: rgba(91, 141, 239, 0.35); }
+.admin-main { padding: 1.25rem 1.5rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+.panel h2 { margin: 0 0 0.75rem; font-size: 1.05rem; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.stat strong { display: block; font-size: 1.4rem; margin-top: 0.25rem; }
+.flag { border-left: 3px solid var(--yellow); padding: 0.75rem 0.9rem; margin-bottom: 0.6rem; background: rgba(232, 185, 62, 0.08); }
+.row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; margin-bottom: 0.75rem; }
+label { display: grid; gap: 0.3rem; font-size: 0.85rem; color: var(--muted); }
+input, select {
+  background: #0e1117; border: 1px solid var(--line); color: var(--text);
+  border-radius: 8px; padding: 0.55rem 0.7rem; min-width: 220px;
+}
+button.primary {
+  background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+  padding: 0.6rem 1rem; cursor: pointer; font-weight: 600;
+}
+button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 0.5rem 0.8rem; cursor: pointer; }
+.error { color: var(--danger); margin: 0.5rem 0; }
+.login-wrap { min-height: 100dvh; display: grid; place-items: center; padding: 1rem; }
+.login-card { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1.25rem; }
+.login-card h1 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.45rem 0.35rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }

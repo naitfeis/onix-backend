@@ -98,7 +98,7 @@ export default ({ mode }: { mode: string }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/ws(?:\/|$)/],
+          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/ws(?:\/|$)/, /^\/admin(?:\/|$)/],
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
           runtimeCaching: [
             {

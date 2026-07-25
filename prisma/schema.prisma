@@ -1299,3 +1299,68 @@ enum NotificationType {
   NEW_REVIEW
   SYSTEM
 }
+
+/** Slice 6 — separate admin plane roles (not customer PlatformStatus). */
+enum AdminRole {
+  SUPER_ADMIN
+  SECURITY_ADMIN
+  SUPPORT_ADMIN
+  FINANCE_ADMIN
+}
+
+model AdminUser {
+  id            BigInt             @id @default(autoincrement())
+  email         String             @unique @db.VarChar(191)
+  passwordHash  String             @db.VarChar(255)
+  role          AdminRole
+  /** Optional Telegram id for MFA code delivery via bot. */
+  telegramId    BigInt?            @unique
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  lastLoginAt   DateTime?
+  sessions      AdminSession[]
+  mfaChallenges AdminMfaChallenge[]
+  actionLogs    AdminActionLog[]
+}
+
+model AdminSession {
+  id               String     @id @default(cuid())
+  adminUserId      BigInt
+  refreshTokenHash String     @unique @db.VarChar(64)
+  ipHash           String?    @db.VarChar(64)
+  userAgent        String?    @db.VarChar(512)
+  createdAt        DateTime   @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  adminUser        AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, revokedAt])
+  @@index([expiresAt])
+}
+
+model AdminMfaChallenge {
+  id          String     @id @default(cuid())
+  adminUserId BigInt
+  codeHash    String     @db.VarChar(64)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+  adminUser   AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, expiresAt])
+}
+
+model AdminActionLog {
+  id           BigInt    @id @default(autoincrement())
+  adminUserId  BigInt
+  action       String    @db.VarChar(64)
+  targetType   String?   @db.VarChar(64)
+  targetId     String?   @db.VarChar(64)
+  /** Non-secret context only — never passwords/tokens/PEM. */
+  metadataJson Json?
+  createdAt    DateTime  @default(now())
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt])
+  @@index([action, createdAt])
+}

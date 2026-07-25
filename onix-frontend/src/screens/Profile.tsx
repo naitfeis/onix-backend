@@ -13,9 +13,13 @@ import { validateDraft } from '../utils/productValidation';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
 
-const Admin = lazy(() => import('./Admin'));
 const SupportQueue = lazy(() => import('./SupportQueue'));
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
+
+function openAdminControlPlane() {
+  const url = `${window.location.origin}/admin/`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 type MoneyModal = 'MAIN_TOPUP' | 'MAIN_WITHDRAW' | 'DEPOSIT_FUND' | 'DEPOSIT_WITHDRAW' | null;
 
@@ -121,7 +125,7 @@ export function Profile({
   openTopup?: boolean;
   onTopupConsumed?: () => void;
 }) {
-  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'>('overview');
+  const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support'>('overview');
   const [moneyOpen, setMoneyOpen] = useState(false);
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
@@ -360,10 +364,9 @@ export function Profile({
   const isStaff = status === 'ADMIN' || status === 'SUPER_ADMIN' || status === 'MODERATOR' || profile.isAdmin;
   const isAdmin = status === 'ADMIN' || status === 'SUPER_ADMIN' || profile.isAdmin
     || profile.roles.includes('ADMIN') || profile.roles.includes('SUPER_ADMIN');
-  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support' | 'admin'> = [
+  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support'> = [
     'overview', 'listings', 'favorites', 'reviews', 'analytics',
     ...(isStaff ? (['support'] as const) : []),
-    ...(isAdmin ? (['admin'] as const) : []),
   ];
   const openAuthorProfile = async (onixId: string) => {
     try {
@@ -433,8 +436,13 @@ export function Profile({
         }}
       />
     )}
-    <div className="chips profile-tabs">{profileSections.map(item =>
-      <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА', admin: 'ADMIN' })[item]}</button>)}</div>
+    <div className="chips profile-tabs">
+      {profileSections.map(item =>
+        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА' })[item]}</button>)}
+      {isAdmin && (
+        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>ADMIN</button>
+      )}
+    </div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
       <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
       {historyHasMore && (
@@ -504,11 +512,6 @@ export function Profile({
           openDirectChat={openDirectChat}
           openUserProfile={(onixId) => void openAuthorProfile(onixId)}
         />
-      </Suspense>
-    )}
-    {section === 'admin' && isAdmin && (
-      <Suspense fallback={<Card><Skeleton lines={4} /></Card>}>
-        <Admin core={core} setToast={setToast} />
       </Suspense>
     )}
     <PublicProfileModal

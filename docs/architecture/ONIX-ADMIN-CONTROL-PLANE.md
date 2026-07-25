@@ -1,80 +1,67 @@
 # ONIX Admin Control Plane (Slice 6)
 
-First cut of a **logical** admin control plane on the existing API host.  
-A separate `admin.onix.gg` SPA is a later follow-up — not required for this slice.
+Separate **admin control plane**: own auth (`AdminUser` / `AdminSession` / MFA), own JWT (`typ=admin_access`, `aud=onix-admin`), and a dedicated SPA at **`/admin/`**.
 
-## Goals
+Customer Profile **ADMIN** opens that app — it is not a tab inside the marketplace SPA.
 
-1. Expose **security-review flags** (YELLOW) derived from ledger provenance — no `FinancialAuditEvent` table.
-2. Harden dangerous `/api/admin/*` (and support refund) paths with optional **IP allowlist**.
-3. Keep RBAC: `isAdmin` / `canActAsSupport` / SUPER_ADMIN rules unchanged.
+## Apps
 
-## Non-goals (this slice)
+| Surface | Path | Auth |
+|---------|------|------|
+| Customer marketplace | `/` | Customer JWT (`aud=onix-web`) |
+| Security Ops Console | `/admin/` | Admin JWT + `__Host-onix_admin_rt` |
 
-- Separate admin frontend host / DNS cutover
-- Full security case management UI
-- Auto-ban from YELLOW flags (YELLOW ≠ fraud)
-- Vault/KMS (Slice 5 hygiene remains ENV)
+## Bootstrap
 
-## Security flags
+When `AdminUser` table is empty:
 
-| Code | Severity | Meaning |
-|------|----------|---------|
-| `ACCOUNT_SALE_FUNDS_UNDER_PROTECTION` | `YELLOW` | New account (&lt;7d) still holds restricted ACCOUNT sale proceeds |
+```env
+ADMIN_BOOTSTRAP_EMAIL=ops@example.com
+ADMIN_BOOTSTRAP_PASSWORD=at-least-12-chars
+ADMIN_MFA_DEBUG=true   # returns MFA code in login response (non-prod or explicit)
+```
 
-Source of truth: `WithdrawVelocityService.resolveAccountSaleProtectionFlag` (User + LedgerEntry).
+Optional: `ADMIN_IP_ALLOWLIST` on admin auth + legacy customer-admin ops.
 
-### API
+## Auth API
 
 ```http
-GET /api/admin/users/:onixId/security-flags
-Authorization: Bearer <admin access>
+POST /api/admin/auth/login     { email, password } → { mfaRequired, challengeId, debugCode? }
+POST /api/admin/auth/mfa       { challengeId, code } → { accessToken, admin } + refresh cookie
+POST /api/admin/auth/logout
+GET  /api/admin/auth/me
+GET  /api/admin/me
 ```
 
-Response:
+Customer tokens are rejected (`AdminAccessGuard`).
 
-```json
-{
-  "onixId": "ONIX-7",
-  "userId": "7",
-  "flags": [
-    {
-      "code": "ACCOUNT_SALE_FUNDS_UNDER_PROTECTION",
-      "severity": "YELLOW",
-      "userId": "7",
-      "accountAgeDays": 2,
-      "restrictedAccountSaleCents": "2000000",
-      "protectionUntil": "2026-08-01T00:00:00.000Z"
-    }
-  ]
-}
+## Security Ops APIs
+
+```http
+GET /api/admin/dashboard
+GET /api/admin/security-flags
+GET /api/admin/users/:id
+GET /api/admin/withdrawals
+GET /api/admin/risk/events
 ```
 
-Empty `flags` = no active review signals.
+All require admin access token. Actions are written to `AdminActionLog`.
 
-## IP allowlist
+## Legacy customer-admin routes
 
-| Env | Meaning |
-|-----|---------|
-| `ADMIN_IP_ALLOWLIST` | Comma-separated client IPs (after CDN resolution). Empty = **not enforced** (local/dev). |
+`POST /api/admin/users/.../ban|status|balance|sell-ban` and product moderation still use **customer** admin JWT (`isAdmin`). They remain for marketplace staff until migrated into this plane.
 
-When non-empty, `resolveClientIp` must match an entry or the request gets **403**.
+## Local dev
 
-Applies to:
+```bash
+npm run start:dev
+npm run dev --prefix onix-admin   # http://localhost:5174/admin/ (proxies /api)
+```
 
-- `AdminGuard` routes (`/api/admin/users/...` balance, ban, status, sell-ban, security-flags)
-- `SupportGuard` ops refund/complete under `/api/support` and `/api/admin/orders/.../refund`
-
-Production recommendation: set allowlist to office/VPN egress IPs. Startup inventory reports the env as optional (`present` / `missing`).
+Prod build: `npm run build:web` syncs customer → `public/spa` and admin → `public/spa/admin`.
 
 ## Threat model notes
 
-- Allowlist is defense-in-depth on top of session RBAC — not a substitute for MFA/session revoke.
-- Client-supplied `device.ipAddress` is never trusted (existing `resolveClientIp`).
-- YELLOW flags are **review signals**; staff decide manually.
-
-## Follow-ups
-
-- Dedicated `admin.onix.gg` origin + stricter cookie/CORS
-- Step-up MFA on balance adjust / ban
-- Queue of all YELLOW users (batch scan) for ops dashboards
+- Separate cookies / JWT audience from customer plane
+- Allowlist is defense-in-depth, not a substitute for MFA
+- YELLOW flags are review signals; staff decide manually

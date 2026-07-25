@@ -31,6 +31,9 @@ const SECRET_SPECS: readonly SecretSpec[] = [
   { name: 'BOT_TOKEN', required: true, domain: 'telegram' },
   { name: 'TELEGRAM_WEBHOOK_SECRET', required: false, domain: 'telegram' },
   { name: 'ADMIN_IP_ALLOWLIST', required: false, domain: 'admin' },
+  { name: 'ADMIN_BOOTSTRAP_EMAIL', required: false, domain: 'admin' },
+  { name: 'ADMIN_BOOTSTRAP_PASSWORD', required: false, domain: 'admin' },
+  { name: 'ADMIN_MFA_DEBUG', required: false, domain: 'admin' },
 ];
 
 type EnvMap = Record<string, string | undefined>;

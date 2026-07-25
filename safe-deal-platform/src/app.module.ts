@@ -17,6 +17,7 @@ import { SupportModule } from './support.module';
 import { EconomyModule } from './economy/economy.module';
 
 import { AvatarsModule } from './avatars/avatars.module';
+import { AdminModule } from './admin/admin.module';
 import { LoginChallengeModule } from './login-challenge/login-challenge.module';
 import { MfaModule } from './mfa/mfa.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -30,7 +31,8 @@ import { spaServeModules } from './spa-static';
     IdempotencyModule,
     RealtimeModule,
     AvatarsModule,
-    AuthModule, AuthV2Module, LoginChallengeModule, MfaModule, ProfilesModule, MarketplaceModule, SocialModule,
+    AuthModule, AuthV2Module, LoginChallengeModule, MfaModule, AdminModule,
+    ProfilesModule, MarketplaceModule, SocialModule,
     EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule, AiModule,
   ],
   providers: [

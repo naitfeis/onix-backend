@@ -1,6 +1,6 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 6** — Admin Control Plane (flags API + IP allowlist)  
+Status: **Slice 6** — separate Admin Control Plane (`/admin/` Security Ops Console + AdminUser auth)  
 Principles apply to later dedicated admin host cutovers.
 
 ## Principles
