@@ -1,7 +1,7 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 2** — Security Events + Risk Engine (withdraw / new device+IP)  
-Principles apply to all later slices (Step-up, Financial Controls, Admin plane).
+Status: **Slice 4** — Financial Controls (ledger actor/source/correlationId + withdraw velocity)  
+Principles apply to all later slices (KMS hygiene, Admin plane).
 
 ## Principles
 
@@ -147,6 +147,39 @@ Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCO
 | `RISK_STEP_UP_ENFORCE` | `true` | Enforce step-up |
 | `MFA_CHALLENGE_TTL_MS` | `600000` | Telegram MFA challenge TTL (1–60 min) |
 
+## Financial Controls (Slice 4)
+
+Every main-wallet `LedgerEntry` records provenance (no tokens/secrets):
+
+| Field | Meaning |
+|-------|---------|
+| `actorUserId` | Who initiated (self / admin); null for pure system/provider |
+| `source` | `USER` \| `ADMIN` \| `SYSTEM` \| `WORKER` \| `PAYMENT_PROVIDER` \| `AI` |
+| `correlationId` | `X-Request-Id` or worker-minted id |
+
+Writes go only through `BalanceService.credit` / `debit`.
+
+### Withdraw velocity
+
+Checked **before** risk/MFA on `POST /wallet/withdrawals` and AI withdraw:
+
+| Tier | When | Default max count / window | Default max sum |
+|------|------|----------------------------|-----------------|
+| `new` | account age < `WITHDRAW_VELOCITY_NEW_ACCOUNT_DAYS` (7) | 1 / 24h | 50_000 ₽ |
+| `trusted` | else | 5 / 24h | 200_000 ₽ |
+
+| Env | Default |
+|-----|---------|
+| `WITHDRAW_VELOCITY_WINDOW_MS` | `86400000` |
+| `WITHDRAW_VELOCITY_NEW_ACCOUNT_DAYS` | `7` |
+| `WITHDRAW_VELOCITY_NEW_MAX_COUNT` | `1` |
+| `WITHDRAW_VELOCITY_NEW_MAX_CENTS` | `5000000` |
+| `WITHDRAW_VELOCITY_TRUSTED_MAX_COUNT` | `5` |
+| `WITHDRAW_VELOCITY_TRUSTED_MAX_CENTS` | `20000000` |
+| `WITHDRAW_VELOCITY_ENFORCE` | `true` (`false` → log + allow) |
+
+Order: `WITHDRAWALS_ENABLED` → velocity → risk/MFA → debit.
+
 ## Stack (target)
 
 ```text
@@ -159,7 +192,7 @@ ONIX Identity → Session & Device Trust → Security Events
 | 1 | Device HMAC (stable-ish only), strip invasive fingerprints, TTL defaults, IP retention |
 | 2 | Risk Engine on withdraw / new device+IP; MONITOR on login; STEP_UP stub |
 | **3** | Telegram MFA step-up (`MfaChallenge` + bot confirm + FE poll/retry) |
-| 4 | Ledger actor/source/correlationId + velocity |
+| **4** | Ledger actor/source/correlationId + withdraw velocity |
 | 5 | KMS / key rotation hygiene |
 | 6 | Separate Admin Control Plane |
 

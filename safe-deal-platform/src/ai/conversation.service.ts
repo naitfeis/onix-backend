@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { AuthUser } from '../common';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import { pushTelegramToChatId } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
+import { resolveCorrelationId } from '../economy/wallet/correlation-id';
+import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
 import { formatOnixId } from '../onix-id';
 import { createId } from '../economy/wallet/cuid';
 import { PrismaService } from '../prisma.service';
@@ -41,6 +43,7 @@ export class ConversationService {
     private readonly products: ProductCreationService,
     private readonly balance: BalanceService,
     private readonly riskEngine: RiskEngineService,
+    private readonly withdrawVelocity: WithdrawVelocityService,
   ) {}
 
   aiPairKey(userId: bigint) {
@@ -330,6 +333,18 @@ export class ConversationService {
     if (amountCents < 100n) return 'Минимальная сумма вывода — 1 ₽.';
 
     try {
+      await this.withdrawVelocity.assertAllowed({
+        userId: user.id,
+        amountCents,
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        return error.message;
+      }
+      throw error;
+    }
+
+    try {
       await this.riskEngine.assertWithdrawAllowed({
         userId: user.id,
         amountCents,
@@ -360,6 +375,7 @@ export class ConversationService {
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
     const railOn = enabled === '1' || enabled === 'true' || enabled === 'yes';
     const idempotencyKey = `ai-wd-${user.id}-${createId()}`.slice(0, 100);
+    const corr = resolveCorrelationId();
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -367,6 +383,9 @@ export class ConversationService {
           const entry = await this.balance.debit(tx, user.id, amountCents, 'WITHDRAWAL', {
             idempotencyKey,
             description: `Вывод через ONIX AI (${method})`,
+            actorUserId: user.id,
+            source: 'AI',
+            correlationId: corr,
           });
           await tx.auditLog.create({
             data: {
@@ -381,6 +400,7 @@ export class ConversationService {
                 destinationHash: createHash('sha256').update(destination.trim().toLowerCase()).digest('hex').slice(0, 64),
                 source: 'ONIX_AI',
                 idempotencyKey,
+                correlationId: corr,
               },
             },
           });
@@ -399,6 +419,7 @@ export class ConversationService {
                 source: 'ONIX_AI',
                 pendingManual: true,
                 idempotencyKey,
+                correlationId: corr,
               },
             },
           });

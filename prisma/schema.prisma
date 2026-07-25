@@ -58,6 +58,7 @@ model User {
   buyerOrders           Order[]              @relation("Buyer")
   sellerOrders          Order[]              @relation("Seller")
   ledgerEntries         LedgerEntry[]
+  ledgerEntriesAsActor  LedgerEntry[]        @relation("LedgerActor")
   depositLedgerEntries  DepositLedgerEntry[]
   depositLocks          DepositLock[]
   orderClawbacks        OrderClawback[]
@@ -245,11 +246,19 @@ model LedgerEntry {
   balanceAfterCents BigInt
   idempotencyKey    String          @unique @db.VarChar(120)
   description       String?         @db.VarChar(500)
+  /** Who initiated the mutation (self, admin, or null for pure system/provider). */
+  actorUserId       BigInt?
+  /** Origin of the money movement (Slice 4 Financial Controls). */
+  source            LedgerSource    @default(SYSTEM)
+  /** X-Request-Id or worker-generated correlation id — never tokens. */
+  correlationId     String?         @db.VarChar(64)
   createdAt         DateTime        @default(now())
   user              User            @relation(fields: [userId], references: [id])
   order             Order?          @relation(fields: [orderId], references: [id])
+  actor             User?           @relation("LedgerActor", fields: [actorUserId], references: [id])
 
   @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
 }
 
 model Chat {
@@ -1253,6 +1262,16 @@ enum LedgerEntryType {
   DEPOSIT_FUND
   /** Deposit wallet → main balance */
   DEPOSIT_RETURN
+}
+
+/** Slice 4 — who/what originated a ledger write. */
+enum LedgerSource {
+  USER
+  ADMIN
+  SYSTEM
+  WORKER
+  PAYMENT_PROVIDER
+  AI
 }
 
 enum NotificationType {

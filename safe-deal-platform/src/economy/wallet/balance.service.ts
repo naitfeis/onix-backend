@@ -1,9 +1,19 @@
 import { Prisma } from '@prisma/client';
 import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import type { LedgerSource } from '@prisma/client';
 import { MetricsService } from '../../observability/metrics.service';
 import { logMoneyEvent } from '../../observability/money-event';
 
 export type Tx = Prisma.TransactionClient;
+
+export type LedgerWriteMeta = {
+  idempotencyKey: string;
+  orderId?: bigint;
+  description?: string;
+  actorUserId?: bigint | null;
+  source?: LedgerSource;
+  correlationId?: string | null;
+};
 
 /**
  * Sole path for main wallet (User.balanceCents) mutations.
@@ -22,18 +32,27 @@ export class BalanceService {
     return user.balanceCents;
   }
 
+  private enrichData(opts: LedgerWriteMeta): {
+    actorUserId?: bigint | null;
+    source: LedgerSource;
+    correlationId?: string | null;
+  } {
+    return {
+      actorUserId: opts.actorUserId ?? null,
+      source: opts.source ?? 'SYSTEM',
+      correlationId: opts.correlationId?.slice(0, 64) ?? null,
+    };
+  }
+
   async credit(
     tx: Tx,
     userId: bigint,
     amountCents: bigint,
     type: 'DEPOSIT' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_RETURN',
-    opts: {
-      idempotencyKey: string;
-      orderId?: bigint;
-      description?: string;
-    },
+    opts: LedgerWriteMeta,
   ) {
     if (amountCents <= 0n) throw new BadRequestException('Сумма зачисления должна быть положительной.');
+    const enrich = this.enrichData(opts);
     try {
       const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
       if (existing) {
@@ -57,6 +76,7 @@ export class BalanceService {
           balanceAfterCents: user.balanceCents,
           idempotencyKey: opts.idempotencyKey,
           description: opts.description,
+          ...enrich,
         },
       });
       this.metrics?.recordMoneyOp(`credit:${type}`, true);
@@ -67,6 +87,8 @@ export class BalanceService {
         userId: userId.toString(),
         amount: amountCents.toString(),
         ledgerType: type,
+        source: enrich.source,
+        ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
       });
       return entry;
     } catch (err) {
@@ -82,15 +104,13 @@ export class BalanceService {
     userId: bigint,
     amountCents: bigint,
     type: 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND',
-    opts: {
-      idempotencyKey: string;
-      orderId?: bigint;
-      description?: string;
+    opts: LedgerWriteMeta & {
       /** When true, ADMIN_ADJUSTMENT may go negative only if explicit (never for purchase/withdraw). */
       allowNegative?: boolean;
     },
   ) {
     if (amountCents <= 0n) throw new BadRequestException('Сумма списания должна быть положительной.');
+    const enrich = this.enrichData(opts);
     try {
       const existing = await tx.ledgerEntry.findUnique({ where: { idempotencyKey: opts.idempotencyKey } });
       if (existing) {
@@ -116,6 +136,7 @@ export class BalanceService {
             balanceAfterCents: user.balanceCents,
             idempotencyKey: opts.idempotencyKey,
             description: opts.description,
+            ...enrich,
           },
         });
         this.metrics?.recordMoneyOp(`debit:${type}`, true);
@@ -126,6 +147,8 @@ export class BalanceService {
           userId: userId.toString(),
           amount: amountCents.toString(),
           ledgerType: type,
+          source: enrich.source,
+          ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
         });
         return entry;
       }
@@ -144,6 +167,7 @@ export class BalanceService {
           balanceAfterCents: user.balanceCents,
           idempotencyKey: opts.idempotencyKey,
           description: opts.description,
+          ...enrich,
         },
       });
       this.metrics?.recordMoneyOp(`debit:${type}`, true);
@@ -156,6 +180,8 @@ export class BalanceService {
           userId: userId.toString(),
           amount: amountCents.toString(),
           ledgerType: type,
+          source: enrich.source,
+          ...(enrich.correlationId ? { requestId: enrich.correlationId } : {}),
         },
       );
       return entry;

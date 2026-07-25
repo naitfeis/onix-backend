@@ -56,6 +56,7 @@ export class ClawbackService {
         idempotencyKey: `order:${opts.orderId}:clawback`,
         orderId: opts.orderId,
         description: 'Clawback после COMPLETED (доступный баланс)',
+        source: 'SYSTEM',
       });
     }
 
@@ -119,6 +120,7 @@ export class ClawbackService {
       idempotencyKey: `order:${row.orderId}:clawback:r${row.recoveredCents}`,
       orderId: row.orderId,
       description: 'Clawback recovery',
+      source: 'WORKER',
     });
 
     const status = this.statusFor(row.amountCents, nextRecovered);

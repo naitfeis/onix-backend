@@ -16,6 +16,8 @@ import { EscrowModule, EscrowService } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
+import { resolveCorrelationId } from './economy/wallet/correlation-id';
+import { WithdrawVelocityService } from './economy/wallet/withdraw-velocity';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -87,10 +89,12 @@ class OperationsService {
     private readonly balance: BalanceService,
     private readonly clawbacks: ClawbackService,
     private readonly idempotency: IdempotencyService,
+    private readonly withdrawVelocity: WithdrawVelocityService,
   ) {}
 
-  async adjust(actor: AuthUser, onixId: string, dto: BalanceDto) {
+  async adjust(actor: AuthUser, onixId: string, dto: BalanceDto, correlationId?: string) {
     const resolved = await requireUserByOnixId(this.prisma, onixId);
+    const corr = correlationId ?? resolveCorrelationId();
     return this.prisma.$transaction(async (tx) => {
       const target = await tx.user.findUniqueOrThrow({ where: { id: resolved.id } });
       const amount = BigInt(dto.amountCents);
@@ -98,11 +102,17 @@ class OperationsService {
         ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', {
           idempotencyKey: dto.idempotencyKey,
           description: dto.reason,
+          actorUserId: actor.id,
+          source: 'ADMIN',
+          correlationId: corr,
         })
         : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', {
           idempotencyKey: dto.idempotencyKey,
           description: dto.reason,
           allowNegative: true,
+          actorUserId: actor.id,
+          source: 'ADMIN',
+          correlationId: corr,
         });
       await tx.auditLog.create({
         data: {
@@ -113,6 +123,7 @@ class OperationsService {
             idempotencyKey: dto.idempotencyKey,
             previousBalanceCents: target.balanceCents.toString(),
             actorOnixId: formatOnixId(actor.onixId),
+            correlationId: corr,
             ...(dto.reason ? { reason: dto.reason } : {}),
           },
         },
@@ -379,7 +390,7 @@ class OperationsService {
     return { onixId: displayId, sellBanned: false as const };
   }
 
-  async withdraw(user: AuthUser, dto: WithdrawalDto) {
+  async withdraw(user: AuthUser, dto: WithdrawalDto, correlationId?: string) {
     // Stage 1: no external payout rail — keep debit disabled until WITHDRAWALS_ENABLED=true.
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
     if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') {
@@ -388,9 +399,17 @@ class OperationsService {
       );
     }
 
+    const corr = correlationId ?? resolveCorrelationId();
+    const amount = BigInt(dto.amountCents);
+
+    await this.withdrawVelocity.assertAllowed({
+      userId: user.id,
+      amountCents: amount,
+    });
+
     await this.riskEngine.assertWithdrawAllowed({
       userId: user.id,
-      amountCents: BigInt(dto.amountCents),
+      amountCents: amount,
       sessionId: user.sessionId,
       stepUpChallengeId: dto.stepUpChallengeId,
     });
@@ -408,10 +427,12 @@ class OperationsService {
             'Вывод недоступен: есть непогашенный clawback по возврату сделки. Пополните баланс или обратитесь в поддержку.',
           );
         }
-        const amount = BigInt(dto.amountCents);
         const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
           idempotencyKey: dto.idempotencyKey,
           description: 'Заявка пользователя на вывод средств',
+          actorUserId: user.id,
+          source: 'USER',
+          correlationId: corr,
         });
         await tx.auditLog.create({
           data: {
@@ -419,7 +440,11 @@ class OperationsService {
             action: 'WALLET_WITHDRAWAL_REQUEST',
             entity: 'LedgerEntry',
             entityId: entry.id.toString(),
-            metadata: { amountCents: dto.amountCents, idempotencyKey: dto.idempotencyKey },
+            metadata: {
+              amountCents: dto.amountCents,
+              idempotencyKey: dto.idempotencyKey,
+              correlationId: corr,
+            },
           },
         });
         return {
@@ -439,8 +464,8 @@ class OperationsService {
 class WalletController {
   constructor(private readonly service: OperationsService) {}
   @Post('withdrawals')
-  withdraw(@CurrentUser() user: AuthUser, @Body() dto: WithdrawalDto) {
-    return this.service.withdraw(user, dto);
+  withdraw(@CurrentUser() user: AuthUser, @Body() dto: WithdrawalDto, @Req() req: Request) {
+    return this.service.withdraw(user, dto, resolveCorrelationId(req));
   }
 }
 
@@ -449,8 +474,13 @@ class WalletController {
 class AdminController {
   constructor(private readonly service: OperationsService) {}
   @Post('users/:onixId/balance')
-  balance(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BalanceDto) {
-    return this.service.adjust(actor, id, dto);
+  balance(
+    @CurrentUser() actor: AuthUser,
+    @Param('onixId') id: string,
+    @Body() dto: BalanceDto,
+    @Req() req: Request,
+  ) {
+    return this.service.adjust(actor, id, dto, resolveCorrelationId(req));
   }
   @Patch('users/:onixId/ban')
   ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {

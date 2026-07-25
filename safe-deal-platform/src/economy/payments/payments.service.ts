@@ -247,6 +247,8 @@ export class PaymentsService {
         await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', {
           idempotencyKey: `payment:${intent.id}:main`,
           description: `Пополнение основного баланса (${intent.provider})`,
+          actorUserId: intent.userId,
+          source: 'PAYMENT_PROVIDER',
         });
       } else {
         await this.deposit.creditAvailable(tx, intent.userId, intent.amountCents, 'TOPUP', {

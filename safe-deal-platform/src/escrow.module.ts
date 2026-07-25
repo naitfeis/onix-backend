@@ -168,6 +168,8 @@ export class EscrowService {
         await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
           idempotencyKey: `order:${key}:hold`,
           description: 'Оплата в Escrow',
+          actorUserId: user.id,
+          source: 'SYSTEM',
         });
       }
       // One personal chat per buyer↔seller pair — never create a new chat per deal.
@@ -436,6 +438,8 @@ export class EscrowService {
             idempotencyKey: `order:${id}:payout`,
             orderId: id,
             description: opts.requireBuyer ? 'Выплата продавцу' : 'Выплата продавцу (поддержка)',
+            actorUserId: actor.id,
+            source: 'SYSTEM',
           });
         }
         // Paid sales only count toward public completedSales (anti-farming on free lots).
@@ -623,6 +627,8 @@ export class EscrowService {
           idempotencyKey: ledgerKey,
           orderId: id,
           description: 'Возврат покупателю',
+          actorUserId: actor.id,
+          source: 'SYSTEM',
         });
       }
       // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.

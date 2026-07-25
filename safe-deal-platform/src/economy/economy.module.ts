@@ -12,6 +12,7 @@ import { ClawbackService } from './wallet/clawback.service';
 import { DepositService } from './wallet/deposit.service';
 import { LockService } from './wallet/lock.service';
 import { WalletEconomyService } from './wallet/wallet-economy.service';
+import { WithdrawVelocityService } from './wallet/withdraw-velocity';
 
 @Module({
   controllers: [EconomyController, AdminEconomyController],
@@ -23,6 +24,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
     DepositService,
     LockService,
     WalletEconomyService,
+    WithdrawVelocityService,
     TrustService,
     VerificationService,
     ProSubscriptionService,
@@ -40,6 +42,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
     ProSubscriptionService,
     AnalyticsFoundationService,
     SellerAnalyticsService,
+    WithdrawVelocityService,
   ],
 })
 export class EconomyModule {}

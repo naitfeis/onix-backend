@@ -95,6 +95,8 @@ export class WalletEconomyService {
       await this.balance.debit(tx, user.id, amount, 'DEPOSIT_FUND', {
         idempotencyKey: `bal:${idempotencyKey}`,
         description: 'Перевод в залог',
+        actorUserId: user.id,
+        source: 'USER',
       });
       const entry = await this.deposit.creditAvailable(tx, user.id, amount, 'TOPUP', {
         idempotencyKey,
@@ -143,6 +145,8 @@ export class WalletEconomyService {
       await this.balance.credit(tx, user.id, amount, 'DEPOSIT_RETURN', {
         idempotencyKey: `bal:${idempotencyKey}`,
         description: 'Возврат из залога',
+        actorUserId: user.id,
+        source: 'USER',
       });
       await this.trust.appendHistory(tx, user.id, 'DEPOSIT_CHANGED', {
         deltaCents: (-amount).toString(),
