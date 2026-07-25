@@ -370,6 +370,11 @@ html[data-theme="light"] .topbar::after {
   border-radius: var(--radius-card);
 }
 
+/* Auth banner: allow wrapped actions; do not clip the Telegram button */
+.auth-notice {
+  overflow: visible;
+}
+
 /* cat chips: allow 2-line labels — do not clip */
 .cat-card {
   overflow: visible;

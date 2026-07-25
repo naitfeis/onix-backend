@@ -290,14 +290,32 @@
   flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   font-size: 13px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   /* glass: tokens.css */
 }
-.auth-notice > div { display: grid; gap: 4px; min-width: 0; flex: 1 1 180px; }
-.auth-notice span, .auth-notice strong { color: var(--muted); overflow-wrap: anywhere; word-break: break-word; }
-.auth-notice strong { color: var(--text); font-family: var(--font-display), sans-serif; }
+.auth-notice > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+/* Never shatter Cyrillic into a vertical glyph column in a narrow grid cell */
+.auth-notice span,
+.auth-notice strong {
+  color: var(--muted);
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+}
+.auth-notice strong {
+  color: var(--text);
+  font-family: var(--font-display), sans-serif;
+}
 .ban-notice__row { display: block; }
 .deal-card--focus { outline: 2px solid var(--accent, #3d7eff); outline-offset: 2px; }
 .dispute-card {
@@ -3330,6 +3348,24 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-right { display: none; }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
   .product-card { width: 100%; max-width: none; }
+
+  /* Auth banner must span both columns — otherwise it sits in the 72px rail
+     and word-break turns "Войдите…" into a vertical glyph stack. */
+  .app-shell--auth > .auth-notice {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin: 0 0 4px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .app-shell--auth > .sidebar-left,
+  .app-shell--auth > .viewport {
+    grid-row: 2;
+  }
+  .app-shell--auth > .viewport {
+    grid-column: 2;
+    min-width: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
