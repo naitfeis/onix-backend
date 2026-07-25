@@ -13,10 +13,12 @@ import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthRequest, AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
+import { isAdminIpAllowed, parseAdminIpAllowlist } from './admin/admin-ip-allowlist';
 import { AuthModule, AuthService } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
+import { resolveClientIp } from './http/client-ip';
 import { onixIdLookupCandidates } from './onix-id';
 import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
@@ -599,8 +601,13 @@ export class MarketplaceController {
 @Injectable()
 class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    if (!context.switchToHttp().getRequest<AuthRequest>().user?.isAdmin) {
+    const req = context.switchToHttp().getRequest<AuthRequest>();
+    if (!req.user?.isAdmin) {
       throw new ForbiddenException('Требуются права администратора ONIX.');
+    }
+    const allowlist = parseAdminIpAllowlist();
+    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
+      throw new ForbiddenException('Доступ к admin API с этого IP запрещён.');
     }
     return true;
   }

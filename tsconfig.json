@@ -4,6 +4,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["esnext"],
+    "types": ["node"],
 
     /* Строгая типизация */
     "strict": true,

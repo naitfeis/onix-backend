@@ -852,6 +852,26 @@ export function useOnixCore() {
   const setUserStatus = useCallback((userId: string, status: PlatformStatus) =>
     run('admin-status', () => api.patch(API_PATHS.adminStatus(userId), { status })), [run]);
 
+  const loadSecurityFlags = useCallback(async (onixId: string) => {
+    try {
+      return await api.get<{
+        onixId: string;
+        userId: string;
+        flags: Array<{
+          code: string;
+          severity: string;
+          userId: string;
+          accountAgeDays: number;
+          restrictedAccountSaleCents: string;
+          protectionUntil: string;
+        }>;
+      }>(API_PATHS.adminSecurityFlags(onixId));
+    } catch (error) {
+      notify('error');
+      throw error;
+    }
+  }, []);
+
   /** Website / PWA only — revoke session and return to AuthGate. Hidden in Telegram Mini App. */
   const signOut = useCallback(async () => {
     if (isTelegramMiniApp()) return;
@@ -891,7 +911,7 @@ export function useOnixCore() {
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
-    markNotificationRead, adminAction, setUserStatus, reportUser, signOut,
+    markNotificationRead, adminAction, setUserStatus, loadSecurityFlags, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
   };
 }

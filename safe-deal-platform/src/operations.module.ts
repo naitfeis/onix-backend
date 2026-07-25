@@ -12,6 +12,7 @@ import { hostname as osHostname } from 'node:os';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } from './ban-policy';
 import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
+import { isAdminIpAllowed, parseAdminIpAllowlist } from './admin/admin-ip-allowlist';
 import { EscrowModule, EscrowService } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
@@ -19,6 +20,7 @@ import { ClawbackService } from './economy/wallet/clawback.service';
 import { resolveCorrelationId } from './economy/wallet/correlation-id';
 import type { LedgerWriteMeta, WithdrawAssertInput } from './economy/wallet/ledger-write.types';
 import { WithdrawVelocityService } from './economy/wallet/withdraw-velocity';
+import { resolveClientIp } from './http/client-ip';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -62,8 +64,13 @@ class PlatformStatusDto {
 @Injectable()
 class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    if (!context.switchToHttp().getRequest<AuthRequest>().user?.isAdmin) {
+    const req = context.switchToHttp().getRequest<AuthRequest>();
+    if (!req.user?.isAdmin) {
       throw new ForbiddenException('Требуются права администратора ONIX.');
+    }
+    const allowlist = parseAdminIpAllowlist();
+    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
+      throw new ForbiddenException('Доступ к admin API с этого IP запрещён.');
     }
     return true;
   }
@@ -73,9 +80,14 @@ class AdminGuard implements CanActivate {
 @Injectable()
 class SupportGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const user = context.switchToHttp().getRequest<AuthRequest>().user;
+    const req = context.switchToHttp().getRequest<AuthRequest>();
+    const user = req.user;
     if (!user || !canActAsSupport(user)) {
       throw new ForbiddenException('Требуются права поддержки ONIX.');
+    }
+    const allowlist = parseAdminIpAllowlist();
+    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
+      throw new ForbiddenException('Доступ к support/admin ops с этого IP запрещён.');
     }
     return true;
   }
@@ -396,6 +408,17 @@ class OperationsService {
     return { onixId: displayId, sellBanned: false as const };
   }
 
+  /** Slice 6 — security-review flags for admin plane (YELLOW, not ban). */
+  async securityFlags(onixId: string) {
+    const resolved = await requireUserByOnixId(this.prisma, onixId);
+    const yellow = await this.withdrawVelocity.resolveAccountSaleProtectionFlag(resolved.id);
+    return {
+      onixId: formatOnixId(resolved.onixId),
+      userId: resolved.id.toString(),
+      flags: yellow ? [yellow] : [],
+    };
+  }
+
   async withdraw(user: AuthUser, dto: WithdrawalDto, correlationId?: string) {
     // Stage 1: no external payout rail — keep debit disabled until WITHDRAWALS_ENABLED=true.
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
@@ -505,6 +528,13 @@ class AdminController {
   @Patch('users/:onixId/sell-ban')
   sellBan(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: SellBanDto) {
     return this.service.setSellBan(actor, id, dto.banned, dto.comment);
+  }
+
+  /** Slice 6 — YELLOW security-review flags (ledger provenance). */
+  @Get('users/:onixId/security-flags')
+  @Header('Cache-Control', 'no-store')
+  securityFlags(@Param('onixId') id: string) {
+    return this.service.securityFlags(id);
   }
 }
 

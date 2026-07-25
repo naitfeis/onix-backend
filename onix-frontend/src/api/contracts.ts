@@ -438,6 +438,7 @@ export const API_PATHS = {
   subcategories: '/api/products/catalog/subcategories',
   adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
   adminStatus: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/status`,
+  adminSecurityFlags: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/security-flags`,
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
   /** @status FUTURE — AI chat entry is via Chats list, not this path. */
   aiChat: '/api/ai/chat',

@@ -1,15 +1,23 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "../dist",
+    "noEmit": true,
+    "types": ["node"],
     "baseUrl": "..",
     "paths": {
       "@app/*": ["safe-deal-platform/src/*"],
       "@config/*": ["safe-deal-platform/src/config/*"]
     }
   },
-  "include": ["./src/**/*"],
+  "include": [
+    "./src/**/*",
+    "./test/secrets-hygiene.slice5.test.ts",
+    "./test/safe-error-log.test.ts",
+    "./test/device-trust-privacy.test.ts",
+    "./test/admin-plane.slice6.test.ts"
+  ],
   "exclude": [
     "**/node_modules/**",
     "**/chat-attachments/**",

@@ -1,7 +1,7 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 5** — KMS / key rotation hygiene  
-Principles apply to all later slices (Admin plane).
+Status: **Slice 6** — Admin Control Plane (flags API + IP allowlist)  
+Principles apply to later dedicated admin host cutovers.
 
 ## Principles
 
@@ -224,7 +224,19 @@ ONIX Identity → Session & Device Trust → Security Events
 | **4** | Ledger actor/source/correlationId |
 | **4.1** | Fund provenance; ACCOUNT 7-day hard protect; OTHER sale velocity; YELLOW flag resolver |
 | **5** | Key rotation runbook; secret redaction; startup inventory (ENV — Vault/KMS later) |
-| 6 | Separate Admin Control Plane |
+| **6** | Admin security-flags API (YELLOW); optional `ADMIN_IP_ALLOWLIST` on admin/support ops |
+
+## Admin Control Plane (Slice 6)
+
+Logical admin plane on the main API (separate `admin.onix.gg` SPA later).
+
+| Deliverable | Location |
+|-------------|----------|
+| Architecture + API contract | [ONIX-ADMIN-CONTROL-PLANE.md](./ONIX-ADMIN-CONTROL-PLANE.md) |
+| YELLOW flag HTTP expose | `GET /api/admin/users/:onixId/security-flags` |
+| Optional admin IP allowlist | `ADMIN_IP_ALLOWLIST` + `admin-ip-allowlist.ts` |
+
+YELLOW = security-review only — not ban, not risk verdict. Still derived from LedgerEntry provenance.
 
 ## KMS hygiene (Slice 5)
 

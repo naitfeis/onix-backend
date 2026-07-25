@@ -36,7 +36,7 @@ test('redactSecrets strips PRODUCT_DELIVERY_KEY values', () => {
 
 test('assessSecrets reports names only — never embeds env values', () => {
   const secret = 'must-never-appear-in-inventory-output-xyz';
-  const env: NodeJS.ProcessEnv = {
+  const env: Record<string, string | undefined> = {
     NODE_ENV: 'production',
     AUTH_ED25519_CURRENT_KID: 'kid-1',
     AUTH_ED25519_CURRENT_PRIVATE_PEM: secret,

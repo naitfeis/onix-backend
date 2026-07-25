@@ -10,7 +10,7 @@ export type SecretInventoryItem = {
   status: SecretInventoryStatus;
   /** When true, production (or always) should treat missing as operator attention. */
   required: boolean;
-  domain: 'ed25519' | 'device' | 'legacy_jwt' | 'delivery' | 'telegram' | 'optional_rotation';
+  domain: 'ed25519' | 'device' | 'legacy_jwt' | 'delivery' | 'telegram' | 'optional_rotation' | 'admin';
 };
 
 type SecretSpec = {
@@ -30,9 +30,12 @@ const SECRET_SPECS: readonly SecretSpec[] = [
   { name: 'PRODUCT_DELIVERY_KEY', required: false, domain: 'delivery' },
   { name: 'BOT_TOKEN', required: true, domain: 'telegram' },
   { name: 'TELEGRAM_WEBHOOK_SECRET', required: false, domain: 'telegram' },
+  { name: 'ADMIN_IP_ALLOWLIST', required: false, domain: 'admin' },
 ];
 
-function isPresent(name: string, env: NodeJS.ProcessEnv = process.env): boolean {
+type EnvMap = Record<string, string | undefined>;
+
+function isPresent(name: string, env: EnvMap = process.env): boolean {
   const value = env[name];
   return value !== undefined && value.trim() !== '';
 }
@@ -45,7 +48,7 @@ function isRequired(spec: SecretSpec, nodeEnv: string | undefined): boolean {
 
 /** Assess configured secrets — names and status only. */
 export function assessSecrets(
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvMap = process.env,
   nodeEnv: string | undefined = env.NODE_ENV,
 ): SecretInventoryItem[] {
   return SECRET_SPECS.map((spec) => ({

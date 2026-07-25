@@ -3,8 +3,18 @@ import {
   ADMIN_ASSIGNABLE_STATUS_OPTIONS, BAN_REASON_OPTIONS, PLATFORM_STATUS_OPTIONS,
   type BanReasonCode, type PlatformStatus,
 } from '../api/contracts';
+import { friendlyError } from '../api/client';
 import { Button, Card, Confirm, Field, Input, Select, Textarea } from '../design-system';
 import type { Core } from './types';
+
+type SecurityFlag = {
+  code: string;
+  severity: string;
+  userId: string;
+  accountAgeDays: number;
+  restrictedAccountSaleCents: string;
+  protectionUntil: string;
+};
 
 export function Admin({ core, setToast }: { core: Core; setToast: (text: string) => void }) {
   const [userId, setUserId] = useState('');
@@ -15,12 +25,65 @@ export function Admin({ core, setToast }: { core: Core; setToast: (text: string)
   const [confirmUnban, setConfirmUnban] = useState(false);
   const [status, setStatus] = useState<PlatformStatus>('USER');
   const [confirmStatus, setConfirmStatus] = useState(false);
+  const [flagsBusy, setFlagsBusy] = useState(false);
+  const [flags, setFlags] = useState<SecurityFlag[] | null>(null);
+  const [flagsOnixId, setFlagsOnixId] = useState<string | null>(null);
   const reasonOption = BAN_REASON_OPTIONS.find(item => item.value === reason);
   const banReady = Boolean(userId.trim() && reason && comment.trim() && (reason !== 'OTHER' || Number(durationDays) > 0));
   const isSuperAdmin = core.profile?.status === 'SUPER_ADMIN';
   const statusOptions = isSuperAdmin ? PLATFORM_STATUS_OPTIONS : ADMIN_ASSIGNABLE_STATUS_OPTIONS;
+
+  const loadFlags = async () => {
+    const id = userId.trim();
+    if (!id) return;
+    setFlagsBusy(true);
+    setFlags(null);
+    setFlagsOnixId(null);
+    try {
+      const data = await core.loadSecurityFlags(id);
+      setFlags(data.flags);
+      setFlagsOnixId(data.onixId);
+    } catch (error) {
+      setToast(friendlyError(error));
+    } finally {
+      setFlagsBusy(false);
+    }
+  };
+
   return (
     <div className="stack compact">
+      <Card className="admin-card">
+        <h2>Security flags</h2>
+        <p className="muted">
+          Жёлтые сигналы проверки (не бан). Сейчас: защита средств от продажи аккаунта у новых пользователей.
+        </p>
+        <Field label="ONIX ID пользователя">
+          <Input value={userId} onChange={event => setUserId(event.target.value)} placeholder="ONIX-7 или 7" />
+        </Field>
+        <div className="card-actions">
+          <Button disabled={!userId.trim() || flagsBusy} onClick={() => void loadFlags()}>
+            {flagsBusy ? 'Загрузка…' : 'Проверить флаги'}
+          </Button>
+        </div>
+        {flags && (
+          <div className="stack compact" style={{ marginTop: '0.75rem' }}>
+            {flags.length === 0 ? (
+              <p className="muted">Активных флагов нет{flagsOnixId ? ` (${flagsOnixId})` : ''}.</p>
+            ) : (
+              flags.map((flag) => (
+                <div key={flag.code} className="stack compact">
+                  <strong>{flag.severity}: {flag.code}</strong>
+                  <p className="muted">
+                    Возраст аккаунта: {flag.accountAgeDays} дн. · ограниченно ACCOUNT:{' '}
+                    {(Number(flag.restrictedAccountSaleCents) / 100).toLocaleString('ru-RU')} ₽ · до{' '}
+                    {new Date(flag.protectionUntil).toLocaleString('ru-RU')}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </Card>
       <Card className="admin-card">
         <h2>Статусы</h2>
         <p className="muted">

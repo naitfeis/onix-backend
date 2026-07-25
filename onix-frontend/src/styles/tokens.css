@@ -108,6 +108,12 @@ html[data-theme="dark"] {
   /* Desktop sidebars — defaults; App.tsx may override via inline style while resizing */
   --sidebar-left-w: 272px;
   --sidebar-right-w: 320px;
+  /* Chat desktop layout — Chats.tsx may override while resizing */
+  --chat-list-w: 280px;
+  --chat-panel-w: 100%;
+  --chat-panel-h: 70vh;
+  /* Elevated surface behind avatar presence ring */
+  --bg-elevated: rgba(18, 16, 28, 0.95);
 
   /* Z-index scale — use these only (no magic 2100/9999) */
   --z-base: 0;
@@ -152,6 +158,7 @@ html[data-theme="light"] {
   --text-caption: rgba(20, 24, 32, 0.45);
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
+  --bg-elevated: rgba(232, 238, 246, 0.98);
 
   --surface-0: #d8e2ef;
   --surface-1: rgba(255, 255, 255, 0.42);
