@@ -542,6 +542,7 @@ export function Chats({
         >
           <span className="thread-peer">
             <UserAvatar
+              userId={chat.kind === 'AI' ? undefined : chat.peerUserId}
               avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
               name={chat.title}
               online={chat.kind === 'GROUP' || chat.kind === 'AI' || !chat.peerOnixId
@@ -591,6 +592,7 @@ export function Chats({
       >
         {(thread.peerAvatarUrl !== undefined || thread.title) ? (
           <UserAvatar
+            userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
             avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
             name={thread.title}
             online={thread.kind === 'GROUP' || thread.kind === 'AI' || !thread.peerOnixId

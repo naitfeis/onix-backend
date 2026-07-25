@@ -68,7 +68,22 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found.');
     }
 
-    const meta = await this.ensureCached(userId, sourceUrl);
+    let meta = await this.ensureCached(userId, sourceUrl);
+
+    // Widget photo_url / t.me CDN links expire; fall back to Bot API profile photos.
+    if (!meta && user.telegramId != null) {
+      const marker = botProfileMarker(user.telegramId);
+      if (sourceUrl !== marker) {
+        meta = await this.ensureCached(userId, marker);
+        if (meta) {
+          await this.prisma.user.update({
+            where: { id: userId },
+            data: { avatarUrl: marker },
+          }).catch(() => undefined);
+        }
+      }
+    }
+
     if (!meta) {
       this.negativeUntil.set(key, Date.now() + NEGATIVE_TTL_MS);
       throw new NotFoundException('Avatar not found.');
@@ -174,19 +189,30 @@ export class AvatarService {
     const token = process.env.BOT_TOKEN?.trim();
     if (!token) return null;
 
+    const userId = telegramApiUserId(telegramId);
+
     try {
       const photosRes = await fetch(`https://api.telegram.org/bot${token}/getUserProfilePhotos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: Number(telegramId), limit: 1 }),
+        body: JSON.stringify({ user_id: userId, limit: 1 }),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const photosJson = await photosRes.json() as {
         ok?: boolean;
+        description?: string;
         result?: { photos?: Array<Array<{ file_id: string; file_size?: number }>> };
       };
       const sizes = photosJson.result?.photos?.[0];
-      if (!photosJson.ok || !sizes?.length) return null;
+      if (!photosJson.ok || !sizes?.length) {
+        // Users who started the bot often expose chat photo even when profile album is empty/private.
+        const viaChat = await this.resolvePhotoFileUrlViaGetChat(token, userId);
+        if (viaChat) return viaChat;
+        this.logger.warn(
+          `bot avatar photos empty user=${telegramId.toString()} ok=${String(photosJson.ok)} ${photosJson.description ?? ''}`,
+        );
+        return null;
+      }
       const best = sizes[sizes.length - 1]!;
 
       const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile`, {
@@ -204,6 +230,43 @@ export class AvatarService {
       return `https://api.telegram.org/file/bot${token}/${filePath}`;
     } catch (error) {
       this.logger.warn(`bot avatar resolve failed: ${error instanceof Error ? error.message : error}`);
+      return null;
+    }
+  }
+
+  /** Fallback when getUserProfilePhotos is empty — works after /start with the bot. */
+  private async resolvePhotoFileUrlViaGetChat(
+    token: string,
+    userId: number | string,
+  ): Promise<string | null> {
+    try {
+      const chatRes = await fetch(`https://api.telegram.org/bot${token}/getChat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: userId }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      const chatJson = await chatRes.json() as {
+        ok?: boolean;
+        result?: { photo?: { big_file_id?: string; small_file_id?: string } };
+      };
+      const fileId = chatJson.result?.photo?.big_file_id ?? chatJson.result?.photo?.small_file_id;
+      if (!chatJson.ok || !fileId) return null;
+
+      const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: fileId }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      const fileJson = await fileRes.json() as {
+        ok?: boolean;
+        result?: { file_path?: string };
+      };
+      const filePath = fileJson.result?.file_path;
+      if (!fileJson.ok || !filePath) return null;
+      return `https://api.telegram.org/file/bot${token}/${filePath}`;
+    } catch {
       return null;
     }
   }
@@ -281,6 +344,12 @@ export class AvatarService {
 
 function botProfileMarker(telegramId: bigint): string {
   return `tg:profile:${telegramId.toString()}`;
+}
+
+/** Bot API user_id — keep precision for large Telegram ids. */
+function telegramApiUserId(id: bigint): number | string {
+  if (id <= BigInt(Number.MAX_SAFE_INTEGER)) return Number(id);
+  return id.toString();
 }
 
 function safeUrlForLog(url: string): string {

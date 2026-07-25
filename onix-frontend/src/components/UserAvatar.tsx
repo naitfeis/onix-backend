@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { buildApiUrl, resolveApiBase } from '../auth/apiConfig';
 
 type UserAvatarProps = {
   avatarUrl?: string;
@@ -19,25 +20,28 @@ function initials(name: string): string {
   return value.slice(0, 2).toUpperCase() || '?';
 }
 
-function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): string | undefined {
-  if (userId && /^\d+$/.test(userId)) {
-    return `/api/avatars/${userId}`;
-  }
+function extractAvatarUserId(avatarUrl: string | undefined, userId?: string): string | undefined {
+  if (userId && /^\d+$/.test(userId)) return userId;
   if (!avatarUrl) return undefined;
   const trimmed = avatarUrl.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith('/api/avatars/')) return trimmed;
-
+  const relative = trimmed.match(/^\/api\/avatars\/(\d+)(?:\?|$)/);
+  if (relative) return relative[1];
   try {
     const parsed = new URL(trimmed, typeof location !== 'undefined' ? location.origin : 'https://local.test');
-    if (parsed.pathname.startsWith('/api/avatars/')) {
-      return `${parsed.pathname}${parsed.search}`;
-    }
+    const fromPath = parsed.pathname.match(/^\/api\/avatars\/(\d+)$/);
+    if (fromPath) return fromPath[1];
   } catch {
-    return undefined;
+    /* ignore */
   }
+  return undefined;
+}
 
-  // Never hit t.me from the browser (RU timeouts).
+function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): string | undefined {
+  const id = extractAvatarUserId(avatarUrl, userId);
+  if (id) {
+    // Same-origin relative path (Vercel rewrite / Vite proxy → API).
+    return buildApiUrl(`/api/avatars/${id}`, resolveApiBase());
+  }
   return undefined;
 }
 

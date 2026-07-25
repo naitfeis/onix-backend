@@ -253,6 +253,8 @@ export class BotWebhookHandler {
         username: from.username,
         firstName: from.first_name,
         lastName: from.last_name,
+        // Bot updates never include photo_url — AvatarService pulls via Bot API using tg:profile.
+        photoUrl: `tg:profile:${from.id}`,
       });
 
       this.logger.log(JSON.stringify({

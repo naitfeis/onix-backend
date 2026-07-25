@@ -6,7 +6,7 @@ import {
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { IconStar } from '../components/NavIcons';
-import { Button, Card, Confirm, Input, Modal, Select, Skeleton, StateView } from '../design-system';
+import { Button, Card, Confirm, Input, Modal, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
@@ -39,6 +39,16 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
 
+const SORT_OPTIONS = [
+  { value: 'new', label: 'Сначала новые', server: 'newest' as const },
+  { value: 'price', label: 'Сначала дешевле', server: 'price_asc' as const },
+  { value: 'price_desc', label: 'Сначала дороже', server: 'price_desc' as const },
+] as const;
+
+function toServerSort(sort: string) {
+  return SORT_OPTIONS.find((o) => o.value === sort)?.server ?? 'newest';
+}
+
 function formatCatCount(n: number): string {
   if (n <= 0) return '';
   if (n > 99) return '99+';
@@ -67,6 +77,7 @@ export function Market({
   const [category, setCategory] = useState('Все');
   const [subcategory, setSubcategory] = useState('');
   const [sort, setSort] = useState('new');
+  const [sortOpen, setSortOpen] = useState(false);
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
@@ -208,7 +219,6 @@ export function Market({
     const timer = window.setTimeout(() => {
       setMarketState('loading');
       setOffset(0);
-      const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
       const q = query.trim();
       const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
       void core.listProducts({
@@ -217,7 +227,7 @@ export function Market({
         search: searchCat ? undefined : (q || undefined),
         category: category === 'Все' ? searchCat : category,
         subcategory: subcategory || undefined,
-        sort: serverSort,
+        sort: toServerSort(sort),
         limit: PAGE,
         offset: 0,
       }, controller.signal).then((data) => {
@@ -240,7 +250,6 @@ export function Market({
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     const next = offset + PAGE;
-    const serverSort = sort === 'price' ? 'price_asc' as const : sort === 'rating' ? 'rating' as const : 'newest' as const;
     try {
       const q = query.trim();
       const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
@@ -248,7 +257,7 @@ export function Market({
         search: searchCat ? undefined : (q || undefined),
         category: category === 'Все' ? searchCat : category,
         subcategory: subcategory || undefined,
-        sort: serverSort,
+        sort: toServerSort(sort),
         limit: PAGE,
         offset: next,
       });
@@ -522,11 +531,34 @@ export function Market({
         placeholder="Товар, продавец, ONIX ID или ONIXLOT"
         aria-label="Поиск"
       />
-      <Select value={sort} onChange={event => setSort(event.target.value)} aria-label="Сортировка">
-        <option value="new">Сначала новые</option>
-        <option value="price">Сначала дешевле</option>
-        <option value="rating">По рейтингу</option>
-      </Select>
+      <div className="sort-picker">
+        <button
+          type="button"
+          className={`control category-toggle${sortOpen ? ' is-open' : ''}`}
+          aria-expanded={sortOpen}
+          aria-controls="market-sort-list"
+          aria-label="Сортировка"
+          onClick={() => setSortOpen((open) => !open)}
+        >
+          <span>{SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Сначала новые'}</span>
+        </button>
+        {sortOpen && (
+          <div id="market-sort-list" className="chips category-picker sort-picker__list" role="list" aria-label="Варианты сортировки">
+            {SORT_OPTIONS.map((item) => (
+              <button
+                type="button"
+                role="listitem"
+                key={item.value}
+                className={sort === item.value ? 'active' : ''}
+                onClick={() => {
+                  setSort(item.value);
+                  setSortOpen(false);
+                }}
+              >{item.label}</button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
 
     {marketSubs.length > 0 && (

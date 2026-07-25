@@ -177,7 +177,10 @@ export class ChatService {
         peerOnixId: isGroup || isAi ? undefined : peerOnix,
         peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
         ...(!isGroup && !isAi && other
-          ? { peerAvatarUrl: clientAvatarUrl(other.user.id, other.user.avatarUrl) }
+          ? {
+            peerAvatarUrl: clientAvatarUrl(other.user.id, other.user.avatarUrl),
+            peerUserId: other.user.id.toString(),
+          }
           : {}),
         ...(!isGroup && !isAi && other
           ? (() => {
@@ -349,6 +352,7 @@ export class ChatService {
       peerOnixId: peerOnix,
       peerLastOnline: target.lastSeenAt.toISOString(),
       peerAvatarUrl: clientAvatarUrl(target.id, target.avatarUrl),
+      peerUserId: target.id.toString(),
     };
   }
 

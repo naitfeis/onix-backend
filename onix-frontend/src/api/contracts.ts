@@ -100,6 +100,7 @@ export interface ChatThread {
   peerOnixId?: string;
   peerLastOnline?: string;
   peerAvatarUrl?: string;
+  peerUserId?: string;
   peerBadge?: PlatformStatus;
   orderCard?: OrderCard;
 }
