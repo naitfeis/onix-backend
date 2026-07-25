@@ -1,7 +1,7 @@
 # ONIX Privacy-first Fintech Security
 
-Status: **Slice 4.1** — Withdrawal provenance + 7-day ACCOUNT-sale protection  
-Principles apply to all later slices (KMS hygiene, Admin plane).
+Status: **Slice 5** — KMS / key rotation hygiene  
+Principles apply to all later slices (Admin plane).
 
 ## Principles
 
@@ -223,8 +223,20 @@ ONIX Identity → Session & Device Trust → Security Events
 | **3** | Telegram MFA step-up (`MfaChallenge` + bot confirm + FE poll/retry) |
 | **4** | Ledger actor/source/correlationId |
 | **4.1** | Fund provenance; ACCOUNT 7-day hard protect; OTHER sale velocity; YELLOW flag resolver |
-| 5 | KMS / key rotation hygiene |
+| **5** | Key rotation runbook; secret redaction; startup inventory (ENV — Vault/KMS later) |
 | 6 | Separate Admin Control Plane |
+
+## KMS hygiene (Slice 5)
+
+Secrets stay in ENV via `SecretsProvider` (ADR-023). No Vault/AWS KMS adapter in this slice.
+
+| Deliverable | Location |
+|-------------|----------|
+| Rotation runbook (Ed25519 CURRENT→PREVIOUS, DEVICE_HMAC, delivery key caveats) | [ONIX-KEY-ROTATION-RUNBOOK.md](./ONIX-KEY-ROTATION-RUNBOOK.md) |
+| Log redaction for PEM / HMAC / JWT / delivery keys | `safe-error-log.ts` |
+| Startup inventory: secret **names** present/missing only | `secrets-inventory.ts` |
+
+Security domains must stay separate: `AUTH_ED25519_*` ≠ `DEVICE_HMAC_SECRET` ≠ `JWT_SECRET` ≠ `PRODUCT_DELIVERY_KEY`.
 
 ## Explicit non-goals
 

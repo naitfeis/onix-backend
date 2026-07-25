@@ -9,6 +9,7 @@ import { authSessionPathMiddleware } from './auth-v2/auth-session-path.middlewar
 import { buildInfo } from './build-info';
 import { ApiEnvelopeInterceptor } from './common';
 import { loadEnvFiles, logProductDeliveryKeyStatus } from './env';
+import { logSecretsInventory } from './auth-v2/secrets-inventory';
 import { registerHealthEndpoint } from './health';
 import { createMetricsMiddleware } from './observability/metrics.middleware';
 import { MetricsService } from './observability/metrics.service';
@@ -34,6 +35,10 @@ async function bootstrap(): Promise<void> {
   process.env.OTEL_SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? 'onix-api';
 
   logProductDeliveryKeyStatus({
+    log: (m) => structuredLog.info(m),
+    warn: (m) => structuredLog.warn(m),
+  });
+  logSecretsInventory({
     log: (m) => structuredLog.info(m),
     warn: (m) => structuredLog.warn(m),
   });
