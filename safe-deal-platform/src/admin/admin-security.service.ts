@@ -117,7 +117,7 @@ export class AdminSecurityService {
           createdAt: true,
           ipAddress: true,
           country: true,
-          metadata: true,
+          payload: true,
         },
       }),
       this.prisma.order.findMany({
@@ -239,7 +239,7 @@ export class AdminSecurityService {
         createdAt: true,
         ipAddress: true,
         country: true,
-        metadata: true,
+        payload: true,
       },
     });
     return events.map((e) => ({

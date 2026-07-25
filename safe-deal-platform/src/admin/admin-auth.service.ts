@@ -1,8 +1,10 @@
 import {
-  BadRequestException, Injectable, Logger, OnModuleInit, UnauthorizedException,
+  BadRequestException, Injectable, Logger, OnModuleInit, ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { createId } from '../economy/wallet/cuid';
+import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
 import {
@@ -25,6 +27,21 @@ export class AdminAuthService implements OnModuleInit {
     const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
     const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
     if (!email || !password) return;
+    const telegramIdRaw = process.env.ADMIN_BOOTSTRAP_TELEGRAM_ID?.trim();
+    const telegramId = telegramIdRaw && /^\d+$/.test(telegramIdRaw)
+      ? BigInt(telegramIdRaw)
+      : undefined;
+    const existing = await this.prisma.adminUser.findUnique({ where: { email } });
+    if (existing) {
+      if (telegramId && existing.telegramId === null) {
+        await this.prisma.adminUser.update({
+          where: { id: existing.id },
+          data: { telegramId },
+        });
+        this.logger.log('admin_bootstrap_telegram_bound');
+      }
+      return;
+    }
     const count = await this.prisma.adminUser.count();
     if (count > 0) return;
     if (password.length < 12) {
@@ -36,6 +53,7 @@ export class AdminAuthService implements OnModuleInit {
         email,
         passwordHash: hashPassword(password),
         role: AdminRole.SUPER_ADMIN,
+        telegramId,
       },
     });
     this.logger.log('admin_bootstrap_created');
@@ -55,6 +73,12 @@ export class AdminAuthService implements OnModuleInit {
 
     const code = mintMfaCode();
     const challengeId = createId();
+    const debug =
+      process.env.NODE_ENV !== 'production'
+      || (process.env.ADMIN_MFA_DEBUG ?? '').trim().toLowerCase() === 'true';
+    if (!admin.telegramId && !debug) {
+      throw new ServiceUnavailableException('Для admin MFA не настроен Telegram ID.');
+    }
     await this.prisma.adminMfaChallenge.create({
       data: {
         id: challengeId,
@@ -63,6 +87,23 @@ export class AdminAuthService implements OnModuleInit {
         expiresAt: new Date(Date.now() + MFA_TTL_MS),
       },
     });
+    if (admin.telegramId) {
+      const sent = await sendTelegramMessage({
+        chatId: admin.telegramId.toString(),
+        text: `ONIX Admin MFA code: ${code}\n\nCode expires in ${Math.ceil(MFA_TTL_MS / 60_000)} minutes. If you did not request this, do not share the code.`,
+      });
+      if (!sent.ok && !debug) {
+        await this.prisma.adminMfaChallenge.delete({ where: { id: challengeId } });
+        this.logger.error(JSON.stringify({
+          msg: 'admin_mfa_delivery_failed',
+          challengeId,
+          adminUserId: admin.id.toString(),
+          statusCode: sent.statusCode ?? null,
+          errorCode: sent.errorCode ?? null,
+        }));
+        throw new ServiceUnavailableException('Не удалось доставить admin MFA-код.');
+      }
+    }
     await this.prisma.adminActionLog.create({
       data: {
         adminUserId: admin.id,
@@ -70,10 +111,6 @@ export class AdminAuthService implements OnModuleInit {
         metadataJson: { challengeId },
       },
     });
-
-    const debug =
-      process.env.NODE_ENV !== 'production'
-      || (process.env.ADMIN_MFA_DEBUG ?? '').trim().toLowerCase() === 'true';
 
     this.logger.log(JSON.stringify({
       msg: 'admin_mfa_challenge_created',

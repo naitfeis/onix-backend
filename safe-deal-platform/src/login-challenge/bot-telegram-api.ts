@@ -67,7 +67,7 @@ async function telegramApi(method: string, body: Record<string, unknown>): Promi
 }
 
 export async function sendTelegramMessage(input: {
-  chatId: number;
+  chatId: number | string;
   text: string;
   parseMode?: 'HTML';
   replyMarkup?: InlineKeyboard;

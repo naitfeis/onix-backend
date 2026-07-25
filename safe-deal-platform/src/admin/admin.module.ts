@@ -4,7 +4,7 @@ import { EconomyModule } from '../economy/economy.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminPlaneController } from './admin.controller';
-import { AdminAccessGuard } from './admin.guard';
+import { AdminAccessGuard, AdminRoleGuard } from './admin.guard';
 import { AdminSecurityService } from './admin-security.service';
 import { AdminSessionService } from './admin-session.service';
 import { AdminTokenService } from './admin-token.service';
@@ -18,6 +18,7 @@ import { AdminTokenService } from './admin-token.service';
     AdminAuthService,
     AdminSecurityService,
     AdminAccessGuard,
+    AdminRoleGuard,
   ],
   exports: [AdminSessionService, AdminAuthService, AdminSecurityService],
 })

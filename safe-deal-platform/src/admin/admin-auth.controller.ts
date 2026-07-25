@@ -1,5 +1,6 @@
 import {
-  Body, Controller, ForbiddenException, Get, Header, HttpCode, Post, Req, Res, UseGuards,
+  Body, Controller, ForbiddenException, Get, Header, HttpCode, Post, Req, Res,
+  UnauthorizedException, UseGuards,
 } from '@nestjs/common';
 import { IsEmail, IsString, Length, MaxLength } from 'class-validator';
 import type { Request, Response } from 'express';
@@ -68,6 +69,37 @@ export class AdminAuthController {
     return {
       accessToken: result.accessToken,
       admin: result.admin,
+    };
+  }
+
+  @Public()
+  @Post('refresh')
+  @HttpCode(200)
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    this.assertIp(req);
+    const refreshToken = readAdminRefreshTokenFromCookie(req.headers.cookie);
+    if (!refreshToken) {
+      throw new UnauthorizedException('Требуется admin refresh-сессия.');
+    }
+    const result = await this.sessions.refreshSession({
+      refreshToken,
+      ip: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] ?? null,
+    });
+    res.setHeader(
+      'Set-Cookie',
+      buildAdminRefreshCookieHeader(result.refreshToken, result.maxAgeSeconds),
+    );
+    return {
+      accessToken: result.accessToken,
+      admin: {
+        id: result.actor.id.toString(),
+        email: result.actor.email,
+        role: result.actor.role,
+      },
     };
   }
 

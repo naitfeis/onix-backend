@@ -4,6 +4,7 @@ node_modules
 
 /generated/prisma
 /dist
+/onix-admin/dist
 /public/spa
 /data/avatars
 /coverage

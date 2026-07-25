@@ -33,6 +33,7 @@ const SECRET_SPECS: readonly SecretSpec[] = [
   { name: 'ADMIN_IP_ALLOWLIST', required: false, domain: 'admin' },
   { name: 'ADMIN_BOOTSTRAP_EMAIL', required: false, domain: 'admin' },
   { name: 'ADMIN_BOOTSTRAP_PASSWORD', required: false, domain: 'admin' },
+  { name: 'ADMIN_BOOTSTRAP_TELEGRAM_ID', required: false, domain: 'admin' },
   { name: 'ADMIN_MFA_DEBUG', required: false, domain: 'admin' },
 ];
 

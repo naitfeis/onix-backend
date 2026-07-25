@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import type { AdminRole, Prisma } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import { createId } from '../economy/wallet/cuid';
@@ -80,6 +80,74 @@ export class AdminSessionService {
       role: session.adminUser.role,
       sessionId: session.id,
     };
+  }
+
+  async refreshSession(input: {
+    refreshToken: string;
+    ip?: string | null;
+    userAgent?: string | null;
+  }): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    actor: AdminActor;
+    maxAgeSeconds: number;
+  }> {
+    const oldHash = this.tokens.hashRefreshToken(input.refreshToken);
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.adminSession.findUnique({
+        where: { refreshTokenHash: oldHash },
+        include: { adminUser: true },
+      });
+      if (!session || session.revokedAt || session.expiresAt.getTime() <= Date.now()) {
+        throw new UnauthorizedException('Admin refresh session is expired or revoked.');
+      }
+
+      const next = this.tokens.issueRefreshToken();
+      const rotated = await tx.adminSession.updateMany({
+        where: {
+          id: session.id,
+          refreshTokenHash: oldHash,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: {
+          refreshTokenHash: next.hash,
+          ipHash: hashIp(input.ip),
+          userAgent: input.userAgent?.slice(0, 512) ?? session.userAgent,
+        },
+      });
+      if (rotated.count !== 1) {
+        throw new UnauthorizedException('Admin refresh token was already rotated.');
+      }
+
+      const actor: AdminActor = {
+        id: session.adminUser.id,
+        email: session.adminUser.email,
+        role: session.adminUser.role,
+        sessionId: session.id,
+      };
+      const accessToken = this.tokens.issueAccessToken({
+        adminUserId: actor.id,
+        sessionId: actor.sessionId,
+        role: actor.role,
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_SESSION_REFRESH',
+          metadataJson: { sessionId: actor.sessionId },
+        },
+      });
+      return {
+        accessToken,
+        refreshToken: next.token,
+        actor,
+        maxAgeSeconds: Math.max(
+          0,
+          Math.floor((session.expiresAt.getTime() - Date.now()) / 1000),
+        ),
+      };
+    });
   }
 
   async revokeSession(sessionId: string): Promise<void> {

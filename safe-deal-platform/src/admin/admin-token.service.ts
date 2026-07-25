@@ -1,10 +1,9 @@
 import {
   createHash, randomBytes, sign, verify, type KeyObject,
 } from 'crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { AdminRole } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
-import { SECRETS_PROVIDER, type SecretsProvider } from '../auth-v2/secrets.provider';
 import { SigningKeyService } from '../auth-v2/signing-key.service';
 
 export const ADMIN_ACCESS_TYP = 'admin_access';
@@ -25,10 +24,7 @@ export type AdminAccessClaims = {
 
 @Injectable()
 export class AdminTokenService {
-  constructor(
-    private readonly signingKeys: SigningKeyService,
-    @Inject(SECRETS_PROVIDER) private readonly secrets: SecretsProvider,
-  ) {}
+  constructor(private readonly signingKeys: SigningKeyService) {}
 
   issueAccessToken(input: { adminUserId: bigint; sessionId: string; role: AdminRole }): string {
     const key = this.signingKeys.getCurrentForSigning();

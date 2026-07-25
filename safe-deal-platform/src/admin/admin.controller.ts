@@ -1,8 +1,11 @@
 import {
   Controller, Get, Header, NotFoundException, Param, Query, UseGuards,
 } from '@nestjs/common';
+import { AdminRole } from '@prisma/client';
 import { Public } from '../common';
-import { AdminAccessGuard, CurrentAdmin } from './admin.guard';
+import {
+  AdminAccessGuard, AdminRoleGuard, AdminRoles, CurrentAdmin,
+} from './admin.guard';
 import type { AdminActor } from './admin-session.service';
 import { AdminSecurityService } from './admin-security.service';
 
@@ -36,6 +39,8 @@ export class AdminPlaneController {
 
   @Get('security-flags')
   @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
   async securityFlags(
     @CurrentAdmin() admin: AdminActor,
     @Query('limit') limit?: string,
@@ -51,6 +56,8 @@ export class AdminPlaneController {
 
   @Get('users/:id')
   @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
   async user(
     @CurrentAdmin() admin: AdminActor,
     @Param('id') id: string,
@@ -66,6 +73,8 @@ export class AdminPlaneController {
 
   @Get('withdrawals')
   @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
   async withdrawals(
     @CurrentAdmin() admin: AdminActor,
     @Query('limit') limit?: string,
@@ -81,6 +90,8 @@ export class AdminPlaneController {
 
   @Get('risk/events')
   @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
   async riskEvents(
     @CurrentAdmin() admin: AdminActor,
     @Query('limit') limit?: string,

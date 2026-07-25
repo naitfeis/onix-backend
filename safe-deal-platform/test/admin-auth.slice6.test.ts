@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { ExecutionContext } from '@nestjs/common';
 import {
   hashMfaCode, hashPassword, mintMfaCode, verifyPassword,
 } from '../src/admin/admin-crypto';
@@ -11,6 +12,7 @@ import {
   buildAdminRefreshCookieHeader,
   readAdminRefreshTokenFromCookie,
 } from '../src/admin/admin-cookie';
+import { AdminRoleGuard } from '../src/admin/admin.guard';
 
 test('admin password hash verifies', () => {
   const stored = hashPassword('correct-horse-battery');
@@ -44,4 +46,30 @@ test('admin refresh cookie is separate from customer cookie name', () => {
     if (prev === undefined) delete process.env.AUTH_COOKIE_SECURE;
     else process.env.AUTH_COOKIE_SECURE = prev;
   }
+});
+
+test('admin role guard permits only configured admin roles', () => {
+  const guard = new AdminRoleGuard({
+    getAllAndOverride: () => ['SECURITY_ADMIN'],
+  } as never);
+  const contextFor = (role: string) => ({
+    getHandler: () => function handler() {},
+    getClass: () => class TestController {},
+    switchToHttp: () => ({
+      getRequest: () => ({
+        admin: {
+          id: 1n,
+          email: 'ops@example.com',
+          role,
+          sessionId: 'session-1',
+        },
+      }),
+    }),
+  } as unknown as ExecutionContext);
+
+  assert.equal(guard.canActivate(contextFor('SECURITY_ADMIN')), true);
+  assert.throws(
+    () => guard.canActivate(contextFor('SUPPORT_ADMIN')),
+    /Недостаточно прав admin-роли/,
+  );
 });

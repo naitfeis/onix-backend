@@ -18,7 +18,18 @@ export function App() {
   useEffect(() => {
     const token = getAdminToken();
     if (!token) {
-      setBooting(false);
+      void adminApi<{ accessToken: string; admin: AdminMe }>('/api/admin/auth/refresh', {
+        method: 'POST',
+      })
+        .then((result) => {
+          setAdminToken(result.accessToken);
+          setAdmin(result.admin);
+        })
+        .catch(() => {
+          clearAdminToken();
+          setAdmin(null);
+        })
+        .finally(() => setBooting(false));
       return;
     }
     void adminApi<AdminMe>('/api/admin/me')

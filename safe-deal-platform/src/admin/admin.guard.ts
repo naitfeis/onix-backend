@@ -1,6 +1,9 @@
 import {
-  CanActivate, createParamDecorator, ExecutionContext, Injectable, UnauthorizedException,
+  CanActivate, createParamDecorator, ExecutionContext, ForbiddenException, Injectable,
+  SetMetadata, UnauthorizedException,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import type { AdminRole } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import type { AdminActor } from './admin-session.service';
 import { AdminSessionService } from './admin-session.service';
@@ -17,6 +20,9 @@ export const CurrentAdmin = createParamDecorator(
     return req.admin;
   },
 );
+
+const ADMIN_ROLES_KEY = 'admin_roles';
+export const AdminRoles = (...roles: AdminRole[]) => SetMetadata(ADMIN_ROLES_KEY, roles);
 
 /**
  * Accepts only admin_access JWTs. Customer tokens (typ=access / aud=onix-web) are rejected.
@@ -42,5 +48,23 @@ export class AdminAccessGuard implements CanActivate {
       }
       throw error;
     }
+  }
+}
+
+@Injectable()
+export class AdminRoleGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const required = this.reflector.getAllAndOverride<AdminRole[]>(ADMIN_ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!required?.length) return true;
+    const req = context.switchToHttp().getRequest<AdminAuthRequest>();
+    if (!req.admin || !required.includes(req.admin.role)) {
+      throw new ForbiddenException('Недостаточно прав admin-роли.');
+    }
+    return true;
   }
 }
