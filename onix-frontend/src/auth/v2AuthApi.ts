@@ -223,6 +223,11 @@ export type AuthV2SessionProbe =
   | { ok: false; reason: 'guest'; status: number; code?: string }
   | { ok: false; reason: 'network'; error: unknown };
 
+export type RefreshCookieProbe =
+  | { ok: true }
+  | { ok: false; reason: 'guest'; status: number; code?: string }
+  | { ok: false; reason: 'network'; error: unknown };
+
 function errorStatus(error: unknown): number | undefined {
   if (error && typeof error === 'object' && 'status' in error) {
     const status = (error as { status: unknown }).status;
@@ -237,6 +242,43 @@ function errorCode(error: unknown): string | undefined {
     if (typeof code === 'string') return code;
   }
   return undefined;
+}
+
+/**
+ * Fast website bootstrap probe: cookie parsing only, no DB lookup.
+ * The following refresh request performs the authoritative session validation
+ * and token rotation, avoiding two sequential database round-trips.
+ */
+export async function probeRefreshCookiePresence(
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<RefreshCookieProbe> {
+  try {
+    const url = `${apiBase}/api/session-probe`;
+    const init: RequestInit = {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    };
+    const response = fetchImpl === fetch
+      ? await resilientFetch(url, {
+        ...init,
+        timeoutMs: 1_500,
+        maxRetries: 1,
+      })
+      : await fetchImpl(url, init);
+    const data = await readEnvelope<{ cookiePresent: boolean }>(response);
+    return data.cookiePresent
+      ? { ok: true }
+      : { ok: false, reason: 'guest', status: 401, code: 'AUTH_REFRESH_MISSING' };
+  } catch (error) {
+    const status = errorStatus(error);
+    const code = errorCode(error);
+    if (status === 401 || status === 403 || code === 'AUTH_REFRESH_MISSING') {
+      return { ok: false, reason: 'guest', status: status ?? 401, code };
+    }
+    return { ok: false, reason: 'network', error };
+  }
 }
 
 /**

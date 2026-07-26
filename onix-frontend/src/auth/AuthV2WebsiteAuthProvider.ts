@@ -12,7 +12,7 @@ import {
   getAuthV2Me,
   postAuthV2Login,
   postAuthV2Logout,
-  probeAuthV2Session,
+  probeRefreshCookiePresence,
   type AuthV2Fetch,
   type AuthV2MeData,
 } from './v2AuthApi';
@@ -58,7 +58,7 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
 
   async restoreSession(): Promise<boolean> {
     // Cookie probe first — 401/guest must never call POST /refresh.
-    const probe = await probeAuthV2Session(this.fetchImpl, this.apiBase);
+    const probe = await probeRefreshCookiePresence(this.fetchImpl, this.apiBase);
     if (probe.ok === false) {
       this.cachedUser = null;
       if (probe.reason === 'network') {

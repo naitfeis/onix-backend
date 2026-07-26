@@ -43,15 +43,17 @@ export class ProfilesService {
    * Does NOT return internal trustScore.
    */
   async getMe(user: AuthUser) {
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { lastSeenAt: new Date() },
-    });
-
-    const dueLock = await this.prisma.depositLock.findFirst({
-      where: { userId: user.id, status: 'ACTIVE', unlockAt: { lte: new Date() } },
-      select: { id: true },
-    });
+    const now = new Date();
+    const [, dueLock] = await Promise.all([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastSeenAt: now },
+      }),
+      this.prisma.depositLock.findFirst({
+        where: { userId: user.id, status: 'ACTIVE', unlockAt: { lte: now } },
+        select: { id: true },
+      }),
+    ]);
     if (dueLock) {
       await this.prisma.$transaction(async (tx) => {
         await this.locks.releaseExpiredForUser(tx, user.id);

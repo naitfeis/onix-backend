@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
-import { getSharedAuthManager, getWebsiteAuthProvider, probeAuthV2Session } from '../auth';
+import {
+  getSharedAuthManager, getWebsiteAuthProvider, probeRefreshCookiePresence,
+} from '../auth';
 import {
   ensureTelegramMiniAppReady,
   isTelegramMiniApp,
@@ -54,7 +56,7 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     return { status: 'authenticated', mode: 'website' };
   }
 
-  const probe = await bootstrapPhase('session-check', () => probeAuthV2Session());
+  const probe = await bootstrapPhase('session-check', () => probeRefreshCookiePresence());
   markBootstrapPhase('telegram', 0);
 
   if (probe.ok === false) {
@@ -122,8 +124,12 @@ function warmSecondaryCollections(
   void bootstrapPhase('orders', () => load('deals', API_PATHS.orders));
   void bootstrapPhase('chats', () => load('chats', API_PATHS.chats));
   if (profile) {
-    void load('reviews', API_PATHS.reviews(profile.onixId));
-    void load('notifications', API_PATHS.notifications);
+    // Keep the small Render/Neon pool free for orders/chats immediately after
+    // auth. Reviews and notifications are below-the-fold background data.
+    window.setTimeout(() => {
+      void load('reviews', API_PATHS.reviews(profile.onixId));
+      void load('notifications', API_PATHS.notifications);
+    }, 750);
   }
 }
 
@@ -347,7 +353,9 @@ export function useOnixCore() {
         /* ignore — offline / guest */
       }
     };
-    void beat();
+    // getMe() already touched lastSeenAt. Avoid an immediate duplicate write
+    // competing with chats/orders on the small production DB pool.
+    const initialBeat = window.setTimeout(() => { void beat(); }, 10_000);
     const id = window.setInterval(() => { void beat(); }, 45_000);
     const onVis = () => {
       if (document.hidden) return;
@@ -367,6 +375,7 @@ export function useOnixCore() {
     window.addEventListener('focus', onVis);
     return () => {
       cancelled = true;
+      window.clearTimeout(initialBeat);
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('focus', onVis);

@@ -15,6 +15,9 @@ type UserAvatarProps = {
   online?: boolean;
 };
 
+/** Avoid repeating known-missing avatar requests across component remounts. */
+const failedAvatarUrls = new Set<string>();
+
 function initials(name: string): string {
   const value = name.replace(/^@/, '').trim();
   return value.slice(0, 2).toUpperCase() || '?';
@@ -48,9 +51,13 @@ function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): strin
 export default function UserAvatar({
   avatarUrl, userId, name, size = 'small', online,
 }: UserAvatarProps) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const usableUrl = resolveAvatarSrc(avatarUrl, userId);
-  const showImage = Boolean(usableUrl && usableUrl !== failedUrl);
+  const [failedUrl, setFailedUrl] = useState<string | null>(
+    () => (usableUrl && failedAvatarUrls.has(usableUrl) ? usableUrl : null),
+  );
+  const showImage = Boolean(
+    usableUrl && usableUrl !== failedUrl && !failedAvatarUrls.has(usableUrl),
+  );
   const showPresence = online === true || online === false;
 
   return (
@@ -70,7 +77,10 @@ export default function UserAvatar({
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
-            onError={() => setFailedUrl(usableUrl ?? null)}
+            onError={() => {
+              if (usableUrl) failedAvatarUrls.add(usableUrl);
+              setFailedUrl(usableUrl ?? null);
+            }}
           />
           : <span aria-hidden="true">{initials(name)}</span>}
       </span>

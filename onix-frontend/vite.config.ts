@@ -129,8 +129,9 @@ export default ({ mode }: { mode: string }) => {
       cssCodeSplit: true,
       modulePreload: {
         resolveDependencies: (_filename, deps) => {
-          // Preload only framework for initial navigation — screens fetch on demand.
-          return deps.filter((dep) => dep.includes('framework'));
+          // Framework and screen-shared helpers are required by the initial
+          // shell. Preload both so `shared` is not discovered after main JS.
+          return deps.filter((dep) => dep.includes('framework') || dep.includes('shared'));
         },
       },
       rollupOptions: {

@@ -46,6 +46,7 @@ export {
   AuthV2ApiError,
   getAuthV2Me,
   getAuthV2Session,
+  probeRefreshCookiePresence,
   probeAuthV2Session,
   postAuthV2Login,
   postAuthV2Logout,
