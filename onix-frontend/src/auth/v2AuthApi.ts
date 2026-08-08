@@ -263,8 +263,8 @@ export async function probeRefreshCookiePresence(
     const response = fetchImpl === fetch
       ? await resilientFetch(url, {
         ...init,
-        timeoutMs: 1_500,
-        maxRetries: 1,
+        timeoutMs: 5_000,
+        maxRetries: 2,
       })
       : await fetchImpl(url, init);
     const data = await readEnvelope<{ cookiePresent: boolean }>(response);

@@ -63,7 +63,19 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     // Explicit: never POST /refresh after session 401/guest/network.
     markBootstrapPhase('refresh', 0);
     markBootstrapPhase('cookie-check', 0);
-    if (probe.reason === 'network') return { status: 'network' };
+    if (probe.reason === 'network') {
+      // A slow probe after app restart must not turn a valid persistent cookie into guest.
+      // The refresh endpoint is authoritative and resilientFetch retries transient failures.
+      try {
+        await bootstrapPhase('refresh', () => manager.refreshAccessToken());
+        return manager.getAccessToken()
+          ? { status: 'authenticated', mode: 'website' }
+          : { status: 'network' };
+      } catch (error) {
+        if (isTransientRefreshFailure(error)) return { status: 'network' };
+        return { status: 'guest' };
+      }
+    }
     return { status: 'guest' };
   }
 
