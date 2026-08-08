@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminApi, clearAdminToken, getAdminToken, setAdminToken } from './api/client';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -10,6 +10,7 @@ import { OrdersScreen } from './screens/OrdersScreen';
 import { AuditLogScreen } from './screens/AuditLogScreen';
 
 type AdminMe = { id: string; email: string; role: string; sessionId?: string };
+function adminRoleLabel(role: string) { return role === 'SUPER_ADMIN' ? 'FOUNDER' : role; }
 type Screen = 'dashboard' | 'orders' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk';
 
 export function App() {
@@ -63,7 +64,7 @@ export function App() {
     <div className="admin-shell">
       <nav className="admin-nav">
         <h1>ONIX Admin</h1>
-        <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{admin.role}</p>
+        <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{adminRoleLabel(admin.role)}</p>
         <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Dashboard</button>
         <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Deals</button>
         <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Audit Log</button>

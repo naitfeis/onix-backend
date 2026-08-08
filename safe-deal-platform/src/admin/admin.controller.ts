@@ -1,5 +1,5 @@
 ﻿import {
-  Controller, Get, Header, NotFoundException, Param, Query, UseGuards,
+  Body, Controller, Get, Header, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Public } from '../common';
@@ -71,6 +71,33 @@ export class AdminPlaneController {
     return data;
   }
 
+  @Patch('users/:id/ban')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  banUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason: string; comment: string; durationDays?: number }) {
+    return this.security.banUser(admin, id, body);
+  }
+
+  @Patch('users/:id/sell-ban')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  sellBanUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { comment: string; banned: boolean }) {
+    return this.security.sellBanUser(admin, id, body);
+  }
+
+  @Patch('users/:id/role')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  setUserRole(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { role: string }) {
+    return this.security.setUserRole(admin, id, body.role);
+  }
+
+  @Post('users/:id/balance')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  adjustUserBalance(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { amountCents: string; reason: string; idempotencyKey: string }) {
+    return this.security.adjustUserBalance(admin, id, body);
+  }
   @Get('orders')
   @Header('Cache-Control', 'no-store')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)

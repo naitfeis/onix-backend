@@ -54,3 +54,6 @@ th { color: var(--muted); font-weight: 500; }
 .link-button { background: transparent; color: var(--accent); border: 0; padding: 0; cursor: pointer; }
 code { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 @media (max-width: 760px) { .admin-shell { grid-template-columns: 1fr; } .admin-nav { border-right: 0; border-bottom: 1px solid var(--line); } .admin-main { padding: 0.75rem; overflow-x: auto; } }
+.admin-actions { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 10px; }
+textarea { background: #0e1117; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 0.55rem 0.7rem; min-height: 80px; min-width: 320px; }
+button.danger { background: var(--danger); color: #fff; border: 0; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; font-weight: 600; }

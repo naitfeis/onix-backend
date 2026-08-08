@@ -1,6 +1,8 @@
-﻿import { Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
+import { BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
+import { BalanceService } from '../economy/wallet/balance.service';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
 import { formatOnixId } from '../onix-id';
 import { PrismaService } from '../prisma.service';
@@ -11,6 +13,7 @@ export class AdminSecurityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly withdrawVelocity: WithdrawVelocityService,
+    private readonly balance: BalanceService,
   ) {}
 
   async dashboard() {
@@ -66,7 +69,7 @@ export class AdminSecurityService {
     const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
     const user = await this.prisma.user.findFirst({
       where: asBig
-        ? { OR: [{ id: asBig }, { onixId: stripped }] }
+        ? { OR: [{ id: asBig }, { telegramId: asBig }, { onixId: stripped }] }
         : { onixId: stripped },
     });
     if (!user) return null;
@@ -135,6 +138,16 @@ export class AdminSecurityService {
       }),
     ]);
 
+    const [purchases, chats] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { buyerId: user.id }, orderBy: { createdAt: 'desc' }, take: 50,
+        select: { id: true, status: true, totalAmountCents: true, createdAt: true, product: { select: { title: true } }, seller: { select: { onixId: true } } },
+      }),
+      this.prisma.chat.findMany({
+        where: { members: { some: { userId: user.id } } }, orderBy: { updatedAt: 'desc' }, take: 50,
+        select: { id: true, kind: true, title: true, updatedAt: true, members: { select: { userId: true } }, messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { text: true, createdAt: true } } },
+      }),
+    ]);
     const yellow = await this.withdrawVelocity.resolveAccountSaleProtectionFlag(user.id);
 
     return {
@@ -177,7 +190,80 @@ export class AdminSecurityService {
         payoutCents: o.payoutCents.toString(),
         createdAt: o.createdAt.toISOString(),
       })),
+      purchases: purchases.map((o) => ({ ...o, id: o.id.toString(), totalAmountCents: o.totalAmountCents.toString(), createdAt: o.createdAt.toISOString(), seller: { onixId: formatOnixId(o.seller.onixId) } })),
+      chats: chats.map((c) => ({ ...c, updatedAt: c.updatedAt.toISOString(), memberIds: c.members.map((m) => m.userId.toString()), lastMessage: c.messages[0] ? { ...c.messages[0], createdAt: c.messages[0].createdAt.toISOString() } : null })),
     };
+  }
+
+  private async resolveTarget(onixIdOrId: string) {
+    const stripped = onixIdOrId.replace(/^ONIX-/i, '');
+    const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
+    const user = await this.prisma.user.findFirst({
+      where: asBig ? { OR: [{ id: asBig }, { telegramId: asBig }, { onixId: stripped }] } : { onixId: stripped },
+    });
+    if (!user) throw new BadRequestException('???????????? ?? ??????.');
+    return user;
+  }
+
+  async banUser(actor: AdminActor, targetId: string, input: { reason: string; comment: string; durationDays?: number }) {
+    const target = await this.resolveTarget(targetId);
+    if (!input.comment?.trim()) throw new BadRequestException('??????? ????? ??????? ??????????.');
+    const reason = input.reason as 'MISCONDUCT' | 'THIRD_PARTY_ADS' | 'OFF_PLATFORM_DEAL' | 'FRAUD' | 'OTHER';
+    if (!Object.prototype.hasOwnProperty.call(BAN_REASON_LABELS, reason)) throw new BadRequestException('???????????? ??????? ??????????.');
+    const days = banDurationDays(reason, input.durationDays);
+    const now = new Date();
+    const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86_400_000);
+    const user = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({ where: { id: target.id }, data: { deletedAt: now, banReason: reason, banComment: input.comment.trim().slice(0, 1000), bannedAt: now, bannedUntil, sessionVersion: { increment: 1 } } });
+      await tx.session.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt: now, revokeReason: 'ADMIN' } });
+      await tx.adminActionLog.create({ data: { adminUserId: actor.id, action: 'ADMIN_USER_BAN', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), reason, reasonLabel: BAN_REASON_LABELS[reason], comment: input.comment.trim().slice(0, 1000), bannedUntil: bannedUntil?.toISOString() ?? null } } });
+      return updated;
+    });
+    return { onixId: formatOnixId(user.onixId), banned: true, bannedUntil: user.bannedUntil?.toISOString() ?? null };
+  }
+
+  async sellBanUser(actor: AdminActor, targetId: string, input: { comment: string; banned: boolean }) {
+    const target = await this.resolveTarget(targetId);
+    if (input.banned && !input.comment?.trim()) throw new BadRequestException('??????? ??????? ??????? ??????.');
+    const now = input.banned ? new Date() : null;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({ where: { id: target.id }, data: { sellBannedAt: now } });
+      let archived = 0;
+      if (input.banned) {
+        const changed = await tx.product.updateMany({ where: { sellerId: target.id, status: 'ACTIVE' }, data: { status: 'ARCHIVED' } });
+        archived = changed.count;
+      }
+      await tx.adminActionLog.create({ data: { adminUserId: actor.id, action: input.banned ? 'ADMIN_USER_SELL_BAN' : 'ADMIN_USER_SELL_UNBAN', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), comment: input.comment?.trim().slice(0, 1000) ?? null, archived } } });
+      return updated;
+    });
+    return { onixId: formatOnixId(result.onixId), sellBanned: Boolean(result.sellBannedAt) };
+  }
+
+  async setUserRole(actor: AdminActor, targetId: string, role: string) {
+    if (actor.role !== 'SUPER_ADMIN') throw new ForbiddenException('?????? ?????????? ????? ????????? ????.');
+    const allowed = ['USER', 'VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP'];
+    if (!allowed.includes(role)) throw new BadRequestException('???????????? ????.');
+    const target = await this.resolveTarget(targetId);
+    if (target.id === actor.id && role !== 'SUPER_ADMIN') throw new BadRequestException('?????? ????? ???? ?????????? ? ???????? ????????.');
+    const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
+    const isSupport = isAdmin || role === 'MODERATOR';
+    const updated = await this.prisma.user.update({ where: { id: target.id }, data: { platformStatus: role as any, isAdmin, isSupport, permissionVersion: { increment: 1 } } });
+    await this.prisma.adminActionLog.create({ data: { adminUserId: actor.id, action: 'ADMIN_USER_ROLE_CHANGED', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), from: target.platformStatus, to: role } } });
+    return { onixId: formatOnixId(updated.onixId), role: updated.platformStatus };
+  }
+
+  async adjustUserBalance(actor: AdminActor, targetId: string, input: { amountCents: string; reason: string; idempotencyKey: string }) {
+    if (actor.role !== 'SUPER_ADMIN' && actor.role !== 'FINANCE_ADMIN') throw new ForbiddenException('???????????? ???? ??? ????????? ???????.');
+    const target = await this.resolveTarget(targetId);
+    const amount = BigInt(input.amountCents);
+    if (amount === 0n) throw new BadRequestException('????? ?? ????? ???? ????? ????.');
+    const entry = await this.prisma.$transaction(async (tx) => {
+      const meta = { idempotencyKey: input.idempotencyKey, description: input.reason?.trim().slice(0, 500), actorUserId: target.id, source: 'ADMIN' as const, fundKind: 'USER_OWNED' as const };
+      const ledger = amount > 0n ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', meta) : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', { ...meta, allowNegative: true });
+      await tx.adminActionLog.create({ data: { adminUserId: actor.id, action: 'ADMIN_BALANCE_ADJUST', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), amountCents: input.amountCents, reason: input.reason?.trim().slice(0, 500) } } });
+      return ledger;
+    });
+    return { ledgerId: entry.id.toString(), amountCents: entry.amountCents.toString() };
   }
 
   async listOrders(opts?: { limit?: number; status?: string }) {
