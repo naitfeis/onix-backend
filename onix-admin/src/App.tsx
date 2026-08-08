@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { adminApi, clearAdminToken, getAdminToken, setAdminToken } from './api/client';
 import { LoginScreen } from './screens/LoginScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -6,9 +6,11 @@ import { SecurityFlagsScreen } from './screens/SecurityFlagsScreen';
 import { WithdrawalsScreen } from './screens/WithdrawalsScreen';
 import { UserInvestigateScreen } from './screens/UserInvestigateScreen';
 import { RiskEventsScreen } from './screens/RiskEventsScreen';
+import { OrdersScreen } from './screens/OrdersScreen';
+import { AuditLogScreen } from './screens/AuditLogScreen';
 
 type AdminMe = { id: string; email: string; role: string; sessionId?: string };
-type Screen = 'dashboard' | 'flags' | 'withdrawals' | 'users' | 'risk';
+type Screen = 'dashboard' | 'orders' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk';
 
 export function App() {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
@@ -42,7 +44,7 @@ export function App() {
   }, []);
 
   if (booting) {
-    return <div className="login-wrap"><p className="muted">Loading…</p></div>;
+    return <div className="login-wrap"><p className="muted">LoadingвЂ¦</p></div>;
   }
 
   if (!admin) {
@@ -63,6 +65,8 @@ export function App() {
         <h1>ONIX Admin</h1>
         <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{admin.role}</p>
         <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Dashboard</button>
+        <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Deals</button>
+        <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Audit Log</button>
         <button type="button" className={screen === 'flags' ? 'active' : ''} onClick={() => setScreen('flags')}>Security Alerts</button>
         <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Withdrawals</button>
         <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>User Investigate</button>
@@ -83,6 +87,8 @@ export function App() {
       </nav>
       <main className="admin-main">
         {screen === 'dashboard' && <DashboardScreen />}
+        {screen === 'orders' && <OrdersScreen />}
+        {screen === 'audit' && <AuditLogScreen />}
         {screen === 'flags' && <SecurityFlagsScreen />}
         {screen === 'withdrawals' && <WithdrawalsScreen />}
         {screen === 'users' && <UserInvestigateScreen />}

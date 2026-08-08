@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
@@ -180,6 +180,76 @@ export class AdminSecurityService {
     };
   }
 
+  async listOrders(opts?: { limit?: number; status?: string }) {
+    const take = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
+    const status = opts?.status && ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED', 'CANCELED', 'REFUNDED'].includes(opts.status)
+      ? opts.status as Prisma.OrderWhereInput['status']
+      : undefined;
+    const rows = await this.prisma.order.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true, status: true, totalAmountCents: true, feeCents: true, payoutCents: true,
+        quantity: true, disputeReason: true, createdAt: true, updatedAt: true,
+        buyer: { select: { onixId: true, telegramId: true, displayName: true } },
+        seller: { select: { onixId: true, telegramId: true, displayName: true } },
+        product: { select: { id: true, title: true, status: true } },
+        transitions: { orderBy: { createdAt: 'desc' }, take: 1, select: { from: true, to: true, actorId: true, reason: true, createdAt: true } },
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      id: row.id.toString(),
+      totalAmountCents: row.totalAmountCents.toString(),
+      feeCents: row.feeCents.toString(),
+      payoutCents: row.payoutCents.toString(),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      buyer: { ...row.buyer, telegramId: row.buyer.telegramId.toString(), onixId: formatOnixId(row.buyer.onixId) },
+      seller: { ...row.seller, telegramId: row.seller.telegramId.toString(), onixId: formatOnixId(row.seller.onixId) },
+      transitions: row.transitions.map((t) => ({ ...t, actorId: t.actorId?.toString() ?? null, createdAt: t.createdAt.toISOString() })),
+    }));
+  }
+
+  async getOrderInvestigation(id: string) {
+    const orderId = /^\\d+$/.test(id) ? BigInt(id) : null;
+    if (!orderId) return null;
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        buyer: { select: { id: true, onixId: true, telegramId: true, displayName: true } },
+        seller: { select: { id: true, onixId: true, telegramId: true, displayName: true } },
+        product: { select: { id: true, title: true, description: true, status: true, priceCents: true, quantity: true } },
+        transitions: { orderBy: { createdAt: 'asc' } },
+        supportTickets: { orderBy: { createdAt: 'asc' }, select: { id: true, status: true, openedById: true, createdAt: true, closedAt: true } },
+        chat: { select: { id: true, messages: { orderBy: { createdAt: 'asc' }, take: 500, select: { id: true, senderId: true, kind: true, text: true, deletedAt: true, createdAt: true } } } },
+      },
+    });
+    if (!order) return null;
+    return {
+      ...order,
+      id: order.id.toString(), productId: order.productId.toString(), buyerId: order.buyerId.toString(), sellerId: order.sellerId.toString(),
+      totalAmountCents: order.totalAmountCents.toString(), feeCents: order.feeCents.toString(), payoutCents: order.payoutCents.toString(),
+      createdAt: order.createdAt.toISOString(), updatedAt: order.updatedAt.toISOString(), canceledAt: order.canceledAt?.toISOString() ?? null, completedAt: order.completedAt?.toISOString() ?? null,
+      buyer: { ...order.buyer, id: order.buyer.id.toString(), telegramId: order.buyer.telegramId.toString(), onixId: formatOnixId(order.buyer.onixId) },
+      seller: { ...order.seller, id: order.seller.id.toString(), telegramId: order.seller.telegramId.toString(), onixId: formatOnixId(order.seller.onixId) },
+      product: { ...order.product, priceCents: order.product.priceCents.toString() },
+      transitions: order.transitions.map((t) => ({ ...t, id: t.id.toString(), orderId: t.orderId.toString(), actorId: t.actorId?.toString() ?? null, createdAt: t.createdAt.toISOString() })),
+      supportTickets: order.supportTickets.map((t) => ({ ...t, openedById: t.openedById.toString(), createdAt: t.createdAt.toISOString(), closedAt: t.closedAt?.toISOString() ?? null })),
+      chat: order.chat ? { id: order.chat.id, messages: order.chat.messages.map((m) => ({ ...m, id: m.id.toString(), senderId: m.senderId?.toString() ?? null, createdAt: m.createdAt.toISOString(), deletedAt: m.deletedAt?.toISOString() ?? null })) } : null,
+    };
+  }
+
+  async listAdminAudit(opts?: { limit?: number; action?: string }) {
+    const take = Math.min(Math.max(opts?.limit ?? 100, 1), 500);
+    const rows = await this.prisma.adminActionLog.findMany({
+      where: opts?.action ? { action: opts.action.slice(0, 64) } : undefined,
+      orderBy: { createdAt: 'desc' }, take,
+      include: { adminUser: { select: { email: true, role: true } } },
+    });
+    return rows.map((row) => ({ ...row, id: row.id.toString(), adminUserId: row.adminUserId.toString(), createdAt: row.createdAt.toISOString() }));
+  }
   async listWithdrawals(opts?: { limit?: number }) {
     const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
     const rows = await this.prisma.ledgerEntry.findMany({

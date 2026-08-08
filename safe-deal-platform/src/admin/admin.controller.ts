@@ -1,4 +1,4 @@
-import {
+﻿import {
   Controller, Get, Header, NotFoundException, Param, Query, UseGuards,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
@@ -63,7 +63,7 @@ export class AdminPlaneController {
     @Param('id') id: string,
   ) {
     const data = await this.security.getUserInvestigation(id);
-    if (!data) throw new NotFoundException('Пользователь не найден.');
+    if (!data) throw new NotFoundException('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.');
     await this.security.logAction(admin, 'ADMIN_VIEW_USER', {
       type: 'User',
       id: data.profile.id,
@@ -71,6 +71,40 @@ export class AdminPlaneController {
     return data;
   }
 
+  @Get('orders')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async orders(
+    @CurrentAdmin() admin: AdminActor,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    const orders = await this.security.listOrders({ limit: limit ? Number(limit) : 50, status });
+    await this.security.logAction(admin, 'ADMIN_LIST_ORDERS', { metadata: { count: orders.length, status: status ?? 'ALL' } });
+    return { orders };
+  }
+
+  @Get('orders/:id')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async order(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    const order = await this.security.getOrderInvestigation(id);
+    if (!order) throw new NotFoundException('Сделка не найдена.');
+    await this.security.logAction(admin, 'ADMIN_VIEW_ORDER', { type: 'Order', id: order.id });
+    return order;
+  }
+
+  @Get('audit-log')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async auditLog(@CurrentAdmin() admin: AdminActor, @Query('limit') limit?: string, @Query('action') action?: string) {
+    const logs = await this.security.listAdminAudit({ limit: limit ? Number(limit) : 100, action });
+    await this.security.logAction(admin, 'ADMIN_LIST_AUDIT_LOG', { metadata: { count: logs.length, action: action ?? 'ALL' } });
+    return { logs };
+  }
   @Get('withdrawals')
   @Header('Cache-Control', 'no-store')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.FINANCE_ADMIN)
