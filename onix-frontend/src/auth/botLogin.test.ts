@@ -74,6 +74,13 @@ describe('waitAndCompleteBotLogin', () => {
     await expect(pending).rejects.toMatchObject({ code: 'ABORTED' });
   });
 
+  it('maps empty API body to AUTH_API_EMPTY_RESPONSE (static site without /api)', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('', { status: 200 }));
+    await expect(completeBotLogin('ch-empty')).rejects.toMatchObject({
+      code: 'AUTH_API_EMPTY_RESPONSE',
+    });
+  });
+
   it('completeBotLogin stores access in AuthManager memory only', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ accessToken: 'mem-token', expiresIn: 600 }),

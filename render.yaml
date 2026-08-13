@@ -1,5 +1,7 @@
-# ONIX — API + website shell on one Render web service (no Vercel).
-# www.onixtg.shop → this service (custom domain). Cookies stay same-origin (__Host-).
+# ONIX — API + website shell on ONE Render web service (onix-api).
+# Do NOT point www at a separate Render Static Site (onix-frontend): it has no /api,
+# so Telegram login returns empty body → "Unexpected end of JSON input".
+# www.onixtg.shop → onix-api custom domain (SPA+API same origin, __Host- cookies).
 #
 # Critical: migrate runs in preDeploy (separate one-shot), NOT in startCommand.
 # startCommand must be a single Node process (no npm wrapper, no migrate&&start).

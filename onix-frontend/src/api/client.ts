@@ -68,12 +68,18 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
 
   const url = apiUrl(path);
   const method = (options.method ?? 'GET').toUpperCase();
-  // Public GET catalog: one timeout retry (RU rewrite hangs); auth POSTs stay fail-fast on timeout.
+  // Only public catalog gets a timeout retry (RU hang). Orders/chats/etc. fail at 8s —
+  // a second 8s wait made secondary bootstrap look like ~16s AbortError storms.
+  const pathOnly = path.split('?')[0] ?? path;
+  const catalogGet = method === 'GET'
+    && !options.signal
+    && (pathOnly === '/api/products' || pathOnly.startsWith('/api/products/')
+      || pathOnly.includes('/catalog/'));
   const response = await resilientFetch(url, {
     ...options,
     headers,
     credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
-    maxTimeoutRetries: method === 'GET' && !options.signal ? 1 : 0,
+    maxTimeoutRetries: catalogGet ? 1 : 0,
   });
   let payload: ApiEnvelope<T> | undefined;
   try {

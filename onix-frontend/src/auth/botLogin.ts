@@ -34,7 +34,23 @@ export class BotLoginError extends Error {
 type Envelope<T> = { success: boolean; data: T; error?: { code?: string; message?: string; details?: unknown }; message?: string };
 
 async function readData<T>(response: Response): Promise<T> {
-  const payload = await response.json() as Envelope<T>;
+  const raw = await response.text();
+  if (!raw.trim()) {
+    throw new BotLoginError(
+      `API вернул пустой ответ (${response.status}). `
+      + 'www должен указывать на onix-api (SPA+API) или на прокси с /api → Nest — не на отдельный Static Site.',
+      'AUTH_API_EMPTY_RESPONSE',
+    );
+  }
+  let payload: Envelope<T>;
+  try {
+    payload = JSON.parse(raw) as Envelope<T>;
+  } catch {
+    throw new BotLoginError(
+      `API вернул не JSON (${response.status}). Проверьте, что /api идёт на Nest, а не на статику.`,
+      'AUTH_API_NOT_JSON',
+    );
+  }
   if (!response.ok || !payload.success) {
     const msg = payload.error?.message || payload.message || 'Login challenge failed.';
     throw new BotLoginError(

@@ -265,8 +265,8 @@ export function useOnixCore() {
       }
 
       if (boot.status === 'network') {
-        // Transient refresh failure — keep HttpOnly cookie; show guest shell; one soft retry.
-        // Soft retry uses the same AuthManager single-flight (no parallel refresh storm).
+        // Transient refresh failure — keep HttpOnly cookie; show guest shell; soft retries.
+        // Same AuthManager single-flight (no parallel refresh storm).
         setProfile(null);
         setStates((previous) => ({
           ...previous,
@@ -278,25 +278,32 @@ export function useOnixCore() {
         }));
         setErrors((previous) => ({
           ...previous,
-          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
+          profile: 'Нет связи с сервером. Сессия ONIX сохранена — подождите или обновите страницу.',
         }));
         printBootstrapSummary('bootstrap-network');
         markAppReady('bootstrap-settled');
         void catalogReady;
         void (async () => {
-          await new Promise((r) => setTimeout(r, 2_500));
-          const manager = getSharedAuthManager();
-          if (manager.getAccessToken() && !manager.isAccessExpired()) {
+          // RU CF path often succeeds on a later attempt after the first hung socket.
+          const delaysMs = [1_200, 2_500, 5_000, 8_000];
+          for (const wait of delaysMs) {
+            await new Promise((r) => setTimeout(r, wait));
+            const manager = getSharedAuthManager();
+            if (manager.getAccessToken() && !manager.isAccessExpired()) {
+              const current = await loadProfile();
+              setErrors((previous) => ({ ...previous, profile: undefined }));
+              void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+              warmSecondaryCollections(current, load);
+              return;
+            }
+            const again = await restoreWebsiteSession();
+            if (again.status !== 'authenticated') continue;
             const current = await loadProfile();
+            setErrors((previous) => ({ ...previous, profile: undefined }));
             void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
             warmSecondaryCollections(current, load);
             return;
           }
-          const again = await restoreWebsiteSession();
-          if (again.status !== 'authenticated') return;
-          const current = await loadProfile();
-          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
-          warmSecondaryCollections(current, load);
         })();
         return;
       }

@@ -103,30 +103,10 @@ export default ({ mode }: { mode: string }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          runtimeCaching: [
-            {
-              // Auth must never be cached or failed by a stale SW. NetworkOnly only.
-              urlPattern: ({ url }) => (
-                url.pathname === '/api/v2/auth/refresh'
-                || url.pathname === '/api/v2/auth/session'
-                || url.pathname === '/api/v2/auth/me'
-                || url.pathname === '/api/v2/auth/login'
-                || url.pathname === '/api/v2/auth/logout'
-                || url.pathname.startsWith('/api/v2/auth/')
-              ),
-              handler: 'NetworkOnly',
-              method: 'GET',
-            },
-            {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api/v2/auth/'),
-              handler: 'NetworkOnly',
-              method: 'POST',
-            },
-            {
-              urlPattern: ({ url }) => url.pathname.startsWith('/api') || url.pathname.startsWith('/ws'),
-              handler: 'NetworkOnly',
-            },
-          ],
+          // Do NOT register /api|/ws in runtimeCaching. NetworkOnly + hung RU sockets
+          // produced Workbox `no-response` (uncatched) and doubled failed fetches.
+          // Unmatched requests bypass the SW strategy → browser fetch only.
+          runtimeCaching: [],
         },
         devOptions: {
           enabled: false,

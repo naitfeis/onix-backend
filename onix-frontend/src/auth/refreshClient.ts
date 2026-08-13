@@ -140,12 +140,18 @@ async function executeAuthV2Refresh(
   return { accessToken, expiresIn };
 }
 
-/** Cookie refresh on RU → CF → Vercel → Render; keep cookie, never treat timeout as logout. */
-export const AUTH_REFRESH_TIMEOUT_MS = 18_000;
+/**
+ * Cap hung RU→CF→Render sockets so bootstrap does not sit ~30s.
+ * Fast connection-reset retries stay enabled; timeout itself is not retried here —
+ * useOnixCore soft-retries after showing the shell.
+ */
+export const AUTH_REFRESH_TIMEOUT_MS = 7_000;
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
-  // Refresh is cookie+CSRF same-origin; allow more time on slow RU paths.
-  // Retry connection-reset once (not full-timeout aborts). Keep maxRetries low so
-  // a hung path cannot look like parallel refresh storms in DevTools.
-  return resilientFetch(url, { ...init, timeoutMs: AUTH_REFRESH_TIMEOUT_MS, maxRetries: 1 });
+  return resilientFetch(url, {
+    ...init,
+    timeoutMs: AUTH_REFRESH_TIMEOUT_MS,
+    maxRetries: 2,
+    maxTimeoutRetries: 0,
+  });
 }
