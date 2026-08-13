@@ -318,6 +318,17 @@
   color: var(--text);
   font-family: var(--font-display), sans-serif;
 }
+.auth-notice__legal {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  max-width: 28rem;
+}
+.auth-notice__legal a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .ban-notice__row { display: block; }
 .deal-card--focus { outline: 2px solid var(--accent, #3d7eff); outline-offset: 2px; }
 .dispute-card {

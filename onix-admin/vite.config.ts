@@ -20,6 +20,7 @@ export default ({ mode }: { mode: string }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
+      sourcemap: false,
       target: 'es2020',
     },
   });

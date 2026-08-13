@@ -40,10 +40,9 @@ export function spaServeModules(): DynamicModule[] {
           if (
             base.endsWith('index.html')
             || base.endsWith('sw.js')
-            || base.endsWith('sw.js.map')
             || base.endsWith('registerSW.js')
             || base.endsWith('manifest.webmanifest')
-            || /\/workbox-[^/]+\.js(?:\.map)?$/.test(base)
+            || /\/workbox-[^/]+\.js$/.test(base)
           ) {
             res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
             return;

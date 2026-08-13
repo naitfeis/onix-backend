@@ -130,6 +130,9 @@ export function Market({
     product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null
   );
 
+  /** One view ping per product per browser tab — kills StrictMode/focus re-open spam → 429. */
+  const viewedIdsRef = useRef<Set<string>>(new Set());
+
   const openProduct = async (product: Product) => {
     setSelected(product);
     setDetailReady(false);
@@ -143,7 +146,8 @@ export function Market({
       setSelected(full);
       setDetailReady(true);
       if (trust) setSellerTrust(trust);
-      if (core.profile) {
+      if (core.profile && !viewedIdsRef.current.has(full.id)) {
+        viewedIdsRef.current.add(full.id);
         void api.post(API_PATHS.productView(full.id), {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
         }).catch(() => { /* ignore view errors */ });

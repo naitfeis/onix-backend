@@ -98,12 +98,16 @@ export default ({ mode }: { mode: string }) => {
         },
         workbox: {
           navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/ws(?:\/|$)/, /^\/admin(?:\/|$)/],
-          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
+          navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/admin(?:\/|$)/],
+          // Precache shell only — do NOT pull every @fontsource subset (greek/cyrillic/…).
+          // Fonts load on demand via CSS @font-face, not via SW precache.
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+          globIgnores: ['**/*.{woff,woff2,ttf,otf,eot}', '**/*.map'],
+          sourcemap: false,
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          // Do NOT register /api|/ws in runtimeCaching. NetworkOnly + hung RU sockets
+          // Do NOT register /api in runtimeCaching. NetworkOnly + hung RU sockets
           // produced Workbox `no-response` (uncatched) and doubled failed fetches.
           // Unmatched requests bypass the SW strategy → browser fetch only.
           runtimeCaching: [],
@@ -117,8 +121,8 @@ export default ({ mode }: { mode: string }) => {
     server: {
       port: Number(env.VITE_DEV_PORT) || 5173,
       proxy: {
+        // Covers HTTP /api/* and WebSocket /api/realtime (ws: true on apiProxyConfig).
         '/api': apiProxyConfig,
-        '/ws': apiProxyConfig,
       },
     },
 
@@ -126,6 +130,8 @@ export default ({ mode }: { mode: string }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
+      // Never ship browser source maps in production — IP / competitor scrape risk.
+      sourcemap: false,
       target: 'es2020',
       cssCodeSplit: true,
       modulePreload: {

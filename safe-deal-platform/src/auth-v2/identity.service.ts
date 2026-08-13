@@ -16,7 +16,29 @@ export class IdentityService {
     identity: VerifiedTelegramIdentity,
     device?: RiskDeviceInput | null,
   ): Promise<User> {
+    // Canonical lookup: User.telegramId. Secondary: IdentityLink (guards against
+    // split-brain if a future Google/link path writes IdentityLink first).
     let existing = await tx.user.findUnique({ where: { telegramId: identity.telegramId } });
+    if (!existing && isDualWriteIdentityEnabled()) {
+      const link = await tx.identityLink.findFirst({
+        where: {
+          provider: 'TELEGRAM',
+          providerUserId: identity.telegramId.toString(),
+          deletedAt: null,
+        },
+        include: { user: true },
+      });
+      if (link?.user && !link.user.deletedAt) {
+        // Same Telegram factor already belongs to an account — never mint a duplicate.
+        existing = link.user;
+        if (link.user.telegramId !== identity.telegramId) {
+          throw new AuthPlatformError(
+            'AUTH_IDENTITY_CONFLICT',
+            'This Telegram account is already linked to another ONIX profile.',
+          );
+        }
+      }
+    }
     if (existing?.deletedAt) {
       if (!isBanActive(existing)) {
         existing = await tx.user.update({ where: { id: existing.id }, data: { ...BAN_CLEAR_DATA } });
@@ -91,13 +113,24 @@ export class IdentityService {
     }
 
     if (isDualWriteIdentityEnabled()) {
-      await dualWriteTelegramIdentity(tx, {
-        userId: user.id,
-        telegramId: user.telegramId,
-        username: identity.username !== undefined ? identity.username : user.telegramNick,
-        displayName: user.displayName,
-        avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
-      });
+      try {
+        await dualWriteTelegramIdentity(tx, {
+          userId: user.id,
+          telegramId: user.telegramId,
+          username: identity.username !== undefined ? identity.username : user.telegramNick,
+          displayName: user.displayName,
+          avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.includes('AUTH_IDENTITY_CONFLICT')) {
+          throw new AuthPlatformError(
+            'AUTH_IDENTITY_CONFLICT',
+            'This Telegram account is already linked to another ONIX profile.',
+          );
+        }
+        throw error;
+      }
     }
 
     await tx.identityHistory.create({

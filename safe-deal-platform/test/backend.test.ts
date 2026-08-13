@@ -364,3 +364,17 @@ test('P1: unique provider+providerUserId key is stable across users collision pa
   assert.equal(links.rows.size, 1);
   assert.equal(links.rows.get('TELEGRAM:42')?.userId, 1n);
 });
+
+test('P1: dual-write refuses reassigning an active Telegram link to another user', async () => {
+  const links = identityLinkStore();
+  await dualWriteTelegramIdentity({ identityLink: links.api } as never, {
+    userId: 1n, telegramId: 42n,
+  });
+  await assert.rejects(
+    () => dualWriteTelegramIdentity({ identityLink: links.api } as never, {
+      userId: 99n, telegramId: 42n,
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('AUTH_IDENTITY_CONFLICT'),
+  );
+  assert.equal(links.rows.get('TELEGRAM:42')?.userId, 1n);
+});

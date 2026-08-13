@@ -22,6 +22,7 @@ import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
+import { sanitizeReviewText } from './sanitize-user-text';
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
 class MessageDto { @IsString() @Length(1, 2000) text!: string; }
 class MessagesQuery {
@@ -791,13 +792,14 @@ export class ReviewService {
         if (existing) {
           throw new ConflictException('Отзыв по этой сделке уже оставлен.');
         }
+        const cleanText = sanitizeReviewText(dto.text);
         const review = await tx.review.create({
           data: {
             orderId,
             authorId: user.id,
             subjectId,
             rating: dto.rating,
-            ...(dto.text !== undefined ? { text: dto.text } : {}),
+            ...(cleanText !== undefined ? { text: cleanText } : {}),
           },
         });
         const aggregate = await tx.review.aggregate({

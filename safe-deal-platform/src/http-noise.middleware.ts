@@ -64,6 +64,8 @@ function isScannerPath(path: string): boolean {
     || path.endsWith('.env')
     || path.endsWith('.pem')
     || path.endsWith('.key')
+    // Production must never expose JS/CSS source maps (IP / competitor scrape).
+    || path.endsWith('.map')
   ) {
     return true;
   }

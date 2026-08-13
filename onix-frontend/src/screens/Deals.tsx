@@ -47,7 +47,9 @@ export function Deals({
       return;
     }
     skipBootstrappedAll.current = false;
-    void core.listDeals(listQuery);
+    const controller = new AbortController();
+    void core.listDeals(listQuery, controller.signal);
+    return () => controller.abort();
   }, [core.listDeals, core.profile, dealFilter]);
   useEffect(() => {
     if (!focusDealId) return;

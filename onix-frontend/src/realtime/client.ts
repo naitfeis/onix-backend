@@ -54,6 +54,7 @@ export class RealtimeClient {
     this.tokenProvider = getAccessToken;
     this.intentionalClose = false;
     this.bindVisibility();
+    this.clearReconnectTimer();
     this.open();
   }
 
@@ -61,12 +62,17 @@ export class RealtimeClient {
     this.intentionalClose = true;
     this.ready = false;
     this.unbindVisibility();
-    if (this.reconnectTimer != null) window.clearTimeout(this.reconnectTimer);
-    if (this.pingTimer != null) window.clearInterval(this.pingTimer);
-    this.reconnectTimer = null;
-    this.pingTimer = null;
-    this.ws?.close(1000, 'client disconnect');
+    this.clearReconnectTimer();
+    this.clearPingTimer();
+    const socket = this.ws;
     this.ws = null;
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try { socket.close(1000, 'client disconnect'); } catch { /* ignore */ }
+    }
   }
 
   onMessage(listener: Listener): () => void {
@@ -93,16 +99,25 @@ export class RealtimeClient {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
-    const ws = new WebSocket(realtimeUrl());
+    this.clearReconnectTimer();
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(realtimeUrl());
+    } catch {
+      this.scheduleReconnect();
+      return;
+    }
     this.ws = ws;
     this.ready = false;
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       this.attempt = 0;
       void this.authenticate();
-      if (this.pingTimer != null) window.clearInterval(this.pingTimer);
+      this.clearPingTimer();
       this.pingTimer = window.setInterval(() => this.send({ type: 'ping' }), 20_000);
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return;
       try {
         const msg = JSON.parse(String(ev.data)) as RealtimeInbound;
         if (msg.type === 'ready') {
@@ -122,18 +137,26 @@ export class RealtimeClient {
       }
     };
     ws.onclose = () => {
-      if (this.pingTimer != null) window.clearInterval(this.pingTimer);
-      this.pingTimer = null;
-      this.ws = null;
+      if (this.ws === ws) this.ws = null;
+      this.clearPingTimer();
       this.ready = false;
       if (this.intentionalClose) return;
-      const delay = Math.min(30_000, 500 * (2 ** this.attempt) + Math.random() * 300);
-      this.attempt += 1;
-      this.reconnectTimer = window.setTimeout(() => this.open(), delay);
+      this.scheduleReconnect();
     };
     ws.onerror = () => {
       /* onclose will reconnect */
     };
+  }
+
+  private scheduleReconnect(): void {
+    if (this.intentionalClose || this.reconnectTimer != null) return;
+    // Exponential backoff capped at 30s — never give up (mobile background kills WS).
+    const delay = Math.min(30_000, 500 * (2 ** Math.min(this.attempt, 6)) + Math.random() * 400);
+    this.attempt += 1;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      this.open();
+    }, delay);
   }
 
   private async authenticate(): Promise<void> {
@@ -150,8 +173,24 @@ export class RealtimeClient {
 
   private onVisibility = (): void => {
     if (document.hidden || this.intentionalClose) return;
-    if (!this.isReady()) this.open();
-    else this.send({ type: 'ping' });
+    if (!this.isReady()) {
+      this.clearReconnectTimer();
+      this.open();
+    } else {
+      this.send({ type: 'ping' });
+    }
+  };
+
+  private onOnline = (): void => {
+    if (this.intentionalClose) return;
+    this.clearReconnectTimer();
+    this.attempt = 0;
+    this.open();
+  };
+
+  private onPageShow = (ev: PageTransitionEvent): void => {
+    // bfcache restore after mobile Safari / Chrome tab freeze.
+    if (ev.persisted) this.onVisibility();
   };
 
   private bindVisibility(): void {
@@ -159,6 +198,8 @@ export class RealtimeClient {
     this.visibilityBound = true;
     document.addEventListener('visibilitychange', this.onVisibility);
     window.addEventListener('focus', this.onVisibility);
+    window.addEventListener('online', this.onOnline);
+    window.addEventListener('pageshow', this.onPageShow);
   }
 
   private unbindVisibility(): void {
@@ -166,6 +207,20 @@ export class RealtimeClient {
     this.visibilityBound = false;
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('focus', this.onVisibility);
+    window.removeEventListener('online', this.onOnline);
+    window.removeEventListener('pageshow', this.onPageShow);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer == null) return;
+    window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+  }
+
+  private clearPingTimer(): void {
+    if (this.pingTimer == null) return;
+    window.clearInterval(this.pingTimer);
+    this.pingTimer = null;
   }
 
   private send(payload: Record<string, unknown>): void {

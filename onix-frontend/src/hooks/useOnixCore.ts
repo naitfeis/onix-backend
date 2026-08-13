@@ -830,15 +830,17 @@ export function useOnixCore() {
     }));
   }, []);
 
-  const listDeals = useCallback(async (query: OrderListQuery = {}) => {
+  const listDeals = useCallback(async (query: OrderListQuery = {}, signal?: AbortSignal) => {
     setStates(previous => ({ ...previous, deals: 'loading' }));
     try {
-      const data = await api.get<Deal[]>(API_PATHS.ordersList(query));
+      const data = await api.get<Deal[]>(API_PATHS.ordersList(query), signal);
+      if (signal?.aborted) return null;
       setStore(previous => ({ ...previous, deals: data }));
       setErrors(previous => ({ ...previous, deals: undefined }));
       setStates(previous => ({ ...previous, deals: 'success' }));
       return data;
     } catch (error) {
+      if (signal?.aborted) return null;
       setErrors(previous => ({ ...previous, deals: friendlyError(error) }));
       setStates(previous => ({ ...previous, deals: 'error' }));
       return null;

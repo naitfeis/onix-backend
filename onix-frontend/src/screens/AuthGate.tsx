@@ -146,6 +146,11 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     </Button>
     {hint && <small>{hint}</small>}
     {error && <small>{error}</small>}
+    <p className="auth-notice__legal muted">
+      Входя, вы соглашаетесь с{' '}
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer">политикой конфиденциальности</a>
+      {' '}и обработкой данных Telegram / сессии для работы маркетплейса.
+    </p>
   </div>;
 }
 
@@ -189,6 +194,14 @@ function TelegramLogin({ onBan }: { onBan?: (ban: BanInfo) => void }) {
     };
   }, [bot, onBan]);
   if (!bot) return <span>Настройте VITE_TELEGRAM_BOT_USERNAME</span>;
-  return <div><div ref={hostRef} />{ban && <small>{formatBanRemaining(ban)}</small>}{error && <small>{error}</small>}</div>;
+  return <div>
+    <div ref={hostRef} />
+    {ban && <small>{formatBanRemaining(ban)}</small>}
+    {error && <small>{error}</small>}
+    <p className="auth-notice__legal muted">
+      Входя, вы соглашаетесь с{' '}
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer">политикой конфиденциальности</a>.
+    </p>
+  </div>;
 }
 export default AuthNotice;

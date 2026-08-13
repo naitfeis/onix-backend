@@ -237,6 +237,7 @@ test('AuthService miniApp response contract unchanged when dual-issue runs', asy
       update: async () => persisted,
     },
     identityLink: {
+      findUnique: async () => null,
       upsert: async () => ({}),
     },
   };
@@ -285,7 +286,10 @@ test('AuthService miniApp does not call dual-issue when orchestrator absent (uni
       findUnique: async () => persisted,
       update: async () => persisted,
     },
-    identityLink: { upsert: async () => ({}) },
+    identityLink: {
+      findUnique: async () => null,
+      upsert: async () => ({}),
+    },
   };
   const auth = new AuthService(prisma as never);
   const result = await auth.miniApp(miniAppInitData({
