@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
-  getSharedAuthManager, getWebsiteAuthProvider, probeRefreshCookiePresence,
+  getSharedAuthManager, getWebsiteAuthProvider,
 } from '../auth';
 import {
   ensureTelegramMiniAppReady,
@@ -43,7 +43,8 @@ const notify = (kind: 'success' | 'error') => {
 
 /**
  * Website: public catalog first (never blocked by session).
- * Session cookie probe is the only restore gate — 401/guest never calls refresh.
+ * Authoritative restore: POST /api/v2/auth/refresh only (no /session-probe).
+ * 401/missing cookie → guest; transient network → network (keep cookie).
  * Telegram SDK is not used on website bootstrap.
  */
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
@@ -56,40 +57,20 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     return { status: 'authenticated', mode: 'website' };
   }
 
-  const probe = await bootstrapPhase('session-check', () => probeRefreshCookiePresence());
   markBootstrapPhase('telegram', 0);
-
-  if (probe.ok === false) {
-    // Explicit: never POST /refresh after session 401/guest/network.
-    markBootstrapPhase('refresh', 0);
-    markBootstrapPhase('cookie-check', 0);
-    if (probe.reason === 'network') {
-      // A slow probe after app restart must not turn a valid persistent cookie into guest.
-      // The refresh endpoint is authoritative and resilientFetch retries transient failures.
-      try {
-        await bootstrapPhase('refresh', () => manager.refreshAccessToken());
-        return manager.getAccessToken()
-          ? { status: 'authenticated', mode: 'website' }
-          : { status: 'network' };
-      } catch (error) {
-        if (isTransientRefreshFailure(error)) return { status: 'network' };
-        return { status: 'guest' };
-      }
-    }
-    return { status: 'guest' };
-  }
-
-  markBootstrapPhase('cookie-check', 1);
-
-  // Refresh only after successful session cookie probe (or explicit login elsewhere).
+  // No cookie-probe hop: production disables /api/session-probe (404 → false "network"
+  // → refresh storms / rotation races). Refresh cookie is the source of truth.
+  markBootstrapPhase('session-check', 0);
   try {
     await bootstrapPhase('refresh', () => manager.refreshAccessToken());
     if (manager.getAccessToken()) {
+      markBootstrapPhase('cookie-check', 1);
       return { status: 'authenticated', mode: 'website' };
     }
-    markBootstrapPhase('refresh', 0);
+    markBootstrapPhase('cookie-check', 0);
     return { status: 'guest' };
   } catch (error) {
+    markBootstrapPhase('cookie-check', 0);
     if (isTransientRefreshFailure(error)) return { status: 'network' };
     return { status: 'guest' };
   }
@@ -284,8 +265,8 @@ export function useOnixCore() {
       }
 
       if (boot.status === 'network') {
-        // Session probe timed out (Render cold start / rewrite blip) while catalog
-        // may already be fine — show guest market, re-probe once in background.
+        // Transient refresh failure — keep HttpOnly cookie; show guest shell; one soft retry.
+        // Soft retry uses the same AuthManager single-flight (no parallel refresh storm).
         setProfile(null);
         setStates((previous) => ({
           ...previous,
@@ -297,13 +278,20 @@ export function useOnixCore() {
         }));
         setErrors((previous) => ({
           ...previous,
-          profile: 'Войдите через Telegram, чтобы продолжить.',
+          profile: 'Нет связи с сервером. Сессия ONIX сохранена — обновите страницу.',
         }));
         printBootstrapSummary('bootstrap-network');
         markAppReady('bootstrap-settled');
         void catalogReady;
         void (async () => {
-          await new Promise((r) => setTimeout(r, 2_000));
+          await new Promise((r) => setTimeout(r, 2_500));
+          const manager = getSharedAuthManager();
+          if (manager.getAccessToken() && !manager.isAccessExpired()) {
+            const current = await loadProfile();
+            void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+            warmSecondaryCollections(current, load);
+            return;
+          }
           const again = await restoreWebsiteSession();
           if (again.status !== 'authenticated') return;
           const current = await loadProfile();

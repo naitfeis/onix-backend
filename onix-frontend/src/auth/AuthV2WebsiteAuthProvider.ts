@@ -12,7 +12,6 @@ import {
   getAuthV2Me,
   postAuthV2Login,
   postAuthV2Logout,
-  probeRefreshCookiePresence,
   type AuthV2Fetch,
   type AuthV2MeData,
 } from './v2AuthApi';
@@ -57,27 +56,18 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
   }
 
   async restoreSession(): Promise<boolean> {
-    // Cookie probe first — 401/guest must never call POST /refresh.
-    const probe = await probeRefreshCookiePresence(this.fetchImpl, this.apiBase);
-    if (probe.ok === false) {
-      this.cachedUser = null;
-      if (probe.reason === 'network') {
-        return Boolean(this.manager.getAccessToken());
-      }
-      return false;
-    }
-
-    const restored = await this.manager.restoreSession();
-    if (!restored) {
-      this.cachedUser = null;
-      return false;
-    }
+    // Authoritative path only: refresh cookie → access → /me.
+    // Do not call /api/session-probe (disabled in production → 404 → false network → races).
     try {
+      const restored = await this.manager.restoreSession();
+      if (!restored) {
+        this.cachedUser = null;
+        return false;
+      }
       const me = await this.fetchMeOrThrow();
       this.cachedUser = toWebsiteUser(me);
       return true;
     } catch (error) {
-      // Network blip must not force re-auth — cookie/session may still be valid.
       if (isTransientRefreshFailure(error) || (error instanceof AuthV2ApiError && error.status >= 500)) {
         this.cachedUser = null;
         return Boolean(this.manager.getAccessToken());

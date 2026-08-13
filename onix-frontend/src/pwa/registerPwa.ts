@@ -15,6 +15,10 @@ export function registerPwa(opts?: {
 
   const updateSW = registerSW({
     immediate: true,
+    onRegisteredSW(_swUrl, registration) {
+      // Pull updates so stale SW (old auth interceptors) do not linger after deploy.
+      void registration?.update();
+    },
     onNeedRefresh() {
       opts?.onNeedRefresh?.(() => {
         void updateSW(true);
