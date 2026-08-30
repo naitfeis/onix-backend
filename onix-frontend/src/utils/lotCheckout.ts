@@ -1,10 +1,25 @@
-export type LotPayMethod = 'BALANCE' | 'SBP' | 'CARD';
+export type LotPayMethod = 'BALANCE' | 'SBP' | 'CARD' | 'CRYPTO';
 
 export const LOT_PAY_FEE_BPS: Record<LotPayMethod, number> = {
   BALANCE: 0,
   SBP: 100,
   CARD: 400,
+  CRYPTO: 0,
 };
+
+export const LOT_PAY_METHODS: LotPayMethod[] = ['BALANCE', 'SBP', 'CARD', 'CRYPTO'];
+
+export function lotPayMethodMeta(method: LotPayMethod): {
+  title: string;
+  hint: string;
+  icon: string;
+  live: boolean;
+} {
+  if (method === 'SBP') return { title: 'СБП', hint: 'Сбор 1% с остатка', icon: '⚡', live: true };
+  if (method === 'CARD') return { title: 'Банковская карта', hint: 'Сбор 4% с остатка', icon: '💳', live: true };
+  if (method === 'CRYPTO') return { title: 'Криптовалюта', hint: 'Тестовый способ', icon: '◎', live: false };
+  return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: '◆', live: true };
+}
 
 export function parseCents(value: string | number | null | undefined): number {
   const n = typeof value === 'number' ? value : Number(value ?? 0);
@@ -34,9 +49,7 @@ export function quoteLotCheckout(priceCents: number, balanceCents: number, metho
 }
 
 export function lotPayMethodLabel(method: LotPayMethod): string {
-  if (method === 'SBP') return 'СБП';
-  if (method === 'CARD') return 'Банковская карта';
-  return 'Баланс ONIX';
+  return lotPayMethodMeta(method).title;
 }
 
 /** Lot name for checkout. Empty title falls back to the short description. */
