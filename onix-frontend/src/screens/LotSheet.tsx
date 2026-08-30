@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { money } from '../api/client';
 import {
   CATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Product, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card } from '../design-system';
+import { popModal, pushModal } from '../design-system/modalStack';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
@@ -37,22 +39,25 @@ export function LotSheet({
   onToggleFollow: () => void;
 }) {
   const [payHint, setPayHint] = useState(true);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
   const balance = core.profile?.balanceCents ?? '0';
   const lot = product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null;
   const canBuy = product.status === 'ACTIVE';
   const present = sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId));
 
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    document.body.classList.add('modal-open');
+    const { id } = pushModal(() => onBackRef.current());
+    document.body.classList.add('lot-sheet-open');
     return () => {
-      document.body.style.overflow = prev;
-      document.body.classList.remove('modal-open');
+      popModal(id);
+      document.body.classList.remove('lot-sheet-open');
     };
   }, []);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div className="lot-sheet" role="dialog" aria-modal="true" aria-label={product.title}>
       <div className="lot-sheet__bar">
         <Button type="button" variant="secondary" onClick={onBack}>Назад</Button>
@@ -129,6 +134,7 @@ export function LotSheet({
           >Купить</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

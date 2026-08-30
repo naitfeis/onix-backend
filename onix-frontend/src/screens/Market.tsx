@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, money, friendlyError } from '../api/client';
+import { api, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  sellerIsPresent, type Product, type PublicProfile, type TrustCard,
+  type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
-import UserAvatar from '../components/UserAvatar';
-import { IconStar } from '../components/NavIcons';
 import { Button, Card, Input, Skeleton, StateView } from '../design-system';
 import { LotSheet } from './LotSheet';
+import { ProductLotCard } from './ProductLotCard';
 import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import { matchCategorySearch } from '../utils/matchCategorySearch';
@@ -74,15 +73,6 @@ function formatCatCount(n: number): string {
   return String(n);
 }
 
-function reviewCountLabel(n: number): string {
-  const abs = Math.abs(n) % 100;
-  const last = abs % 10;
-  if (abs > 10 && abs < 20) return `${n} отзывов`;
-  if (last === 1) return `${n} отзыв`;
-  if (last >= 2 && last <= 4) return `${n} отзыва`;
-  return `${n} отзывов`;
-}
-
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
   externalCategory, onExternalCategoryConsumed,
@@ -118,15 +108,11 @@ export function Market({
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
-  const [catVisibleCount, setCatVisibleCount] = useState(11);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
-  /** ALL + 11 categories = 12 tiles → 4×3 on desktop, 3×4 on mobile. */
-  const CAT_PAGE_SIZE = 11;
-  const catsFullyOpen = catVisibleCount >= CATEGORIES.length;
-  const visibleCats = catsFullyOpen ? CATEGORIES : CATEGORIES.slice(0, CAT_PAGE_SIZE);
+  const visibleCats = CATEGORIES;
   const greetName = core.profile ? publicAt(core.profile.username) : 'гость';
   const heroSlides = [
     {
@@ -151,10 +137,6 @@ export function Market({
       action: 'create' as const,
     },
   ];
-
-  const lotLabel = (product: Product) => (
-    product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null
-  );
 
   /** One view ping per product per browser tab — kills StrictMode/focus re-open spam → 429. */
   const viewedIdsRef = useRef<Set<string>>(new Set());
@@ -202,10 +184,6 @@ export function Market({
     if (!externalCategory || externalCategory === t('market.all')) return;
     setCategory(externalCategory);
     setSubcategory('');
-    const idx = CATEGORIES.indexOf(externalCategory as typeof CATEGORIES[number]);
-    if (idx >= 0) {
-      setCatVisibleCount((n) => Math.max(n, Math.min(CATEGORIES.length, idx + 1)));
-    }
     onExternalCategoryConsumed?.();
   }, [externalCategory, onExternalCategoryConsumed]);
 
@@ -544,8 +522,8 @@ export function Market({
                     <img
                       src={image}
                       alt=""
-                      width={44}
-                      height={44}
+                      width={56}
+                      height={56}
                       loading="lazy"
                       decoding="async"
                       fetchPriority="low"
@@ -564,27 +542,6 @@ export function Market({
           );
         })}
       </div>
-      {CATEGORIES.length > CAT_PAGE_SIZE && (
-        <button
-          type="button"
-          className="cat-more"
-          aria-expanded={catsFullyOpen}
-          onClick={() => {
-            if (catsFullyOpen) {
-              const collapsing = CATEGORIES.slice(CAT_PAGE_SIZE);
-              if (category !== t('market.all') && collapsing.includes(category as typeof CATEGORIES[number])) {
-                setCategory(t('market.all'));
-                setSubcategory('');
-              }
-              setCatVisibleCount(CAT_PAGE_SIZE);
-              return;
-            }
-            setCatVisibleCount(CATEGORIES.length);
-          }}
-        >
-          {catsFullyOpen ? 'Скрыть' : 'Показать всё'}
-        </button>
-      )}
     </div>
 
     <div className="search-row desktop-search">
@@ -598,7 +555,6 @@ export function Market({
           if (matched) {
             setCategory(matched);
             setSubcategory('');
-            setCatVisibleCount(CATEGORIES.length);
           }
         }}
         placeholder={t('market.search')}
@@ -673,64 +629,18 @@ export function Market({
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
       marketState === 'error' ? <StateView title={t('market.unavailable')} text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>{t('common.retry')}</Button>} /> :
       items.length === 0 ? <StateView title={t('market.emptyTitle')} text={t('market.emptyText')} action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
-      <div className="product-grid product-grid--compact">{items.map(product => {
-        const rating = product.seller.rating.toFixed(1);
-        const showFounder = product.seller.badge === 'SUPER_ADMIN';
-        return (
-          <Card key={product.id} interactive className="product-card product-card--compact">
-            <div className="product-card__media">
-              <button
-                type="button"
-                className="product-card__media-hit"
-                onClick={() => void openProduct(product)}
-                aria-label={`Открыть ${product.title}`}
-              />
-              <div className="product-card__badges">
-                <div className="product-card__rating">
-                  <span className="product-card__rating-score"><IconStar /> {rating}</span>
-                  <span className="product-card__rating-count">{reviewCountLabel(product.seller.reviewCount)}</span>
-                </div>
-                {showFounder && <span className="pill-super">Основатель</span>}
-              </div>
-              <div className="product-card__seller-float">
-                <div className="product-card__avatar">
-                <UserAvatar
-                  userId={product.seller.id}
-                  avatarUrl={product.seller.avatarUrl}
-                  name={product.seller.username}
-                  size="medium"
-                  online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
-                />
-                </div>
-                <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
-              </div>
-              <button
-                type="button"
-                className={`favorite ${product.favorite ? 'active' : ''}`}
-                onClick={() => {
-                  setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
-                  void core.toggleFavorite(product);
-                }}
-                aria-label={product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
-              >♥</button>
-            </div>
-            <button type="button" className="product-main product-main--body" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
-              <div className="product-card__body">
-                <h2>{product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title}</h2>
-                <p className="product-card__meta">
-                  {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category}
-                  {lotLabel(product) ? ` · ${lotLabel(product)}` : ''}
-                </p>
-              </div>
-            </button>
-            <div className="product-card__footer product-card__footer--bar">
-              <span className="product-card__warranty">{product.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
-              <strong className="product-card__price">{money(product.priceCents)}</strong>
-              <button type="button" className="button button--buy product-card__buy" onClick={() => void openProduct(product)}>{t('market.buy')}</button>
-            </div>
-          </Card>
-        );
-      })}</div>}
+      <div className="product-grid product-grid--compact">{items.map(product => (
+        <ProductLotCard
+          key={product.id}
+          product={product}
+          core={core}
+          onOpen={() => void openProduct(product)}
+          onFavorite={() => {
+            setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
+            void core.toggleFavorite(product);
+          }}
+        />
+      ))}</div>}
     {marketState === 'success' && hasMore && (
       <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>{t('common.showMore')}</Button>
     )}

@@ -11,6 +11,7 @@ import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
 import type { Core, Screen } from './types';
+import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
 import { t } from '../i18n';
 
@@ -480,18 +481,21 @@ export function Profile({
     {section === 'listings' && (listingsState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       listingsState === 'error' ? <StateView title="Не удалось загрузить товары" text="Обновите вкладку или войдите снова." /> :
       ownProducts.length === 0 ? <StateView title="У вас нет товаров" text="Создайте первый лот — он появится здесь." action={<Button onClick={() => switchTo('create')}>Создать лот</Button>} /> :
-      <><div className="product-grid">{ownProducts.map(item => (
-        <Card key={item.id}>
-          <h2>{item.title}</h2>
-          {item.lotNumber != null && <p className="onixlot-id">ONIXLOT-{item.lotNumber}</p>}
-          <div className="listing-meta">
-            <ListingViews count={item.viewCount ?? 0} />
-            <span><b>{money(item.priceCents)}</b></span>
-          </div>
-          <div className="seller-row">
-            <Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button>
-          </div>
-        </Card>
+      <><div className="product-grid product-grid--compact">{ownProducts.map(item => (
+        <ProductLotCard
+          key={item.id}
+          product={item}
+          core={core}
+          onOpen={() => setEditing(item)}
+          footer={(
+            <div className="product-card__footer product-card__footer--bar">
+              <span className="product-card__warranty">{item.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
+              <ListingViews count={item.viewCount ?? 0} />
+              <strong className="product-card__price">{money(item.priceCents)}</strong>
+              <Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button>
+            </div>
+          )}
+        />
       ))}</div>
       {listingsHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>

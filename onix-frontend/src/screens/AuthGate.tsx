@@ -111,7 +111,7 @@ function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => 
 function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const [error, setError] = useState('');
   const hostRef = useRef<HTMLDivElement>(null);
-  const clientId = (import.meta as { env?: { VITE_GOOGLE_CLIENT_ID?: string } }).env?.VITE_GOOGLE_CLIENT_ID;
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
   useEffect(() => {
     if (!clientId || !hostRef.current) return;
     const host = hostRef.current;
@@ -151,7 +151,7 @@ function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => 
     return () => { script.remove(); host.replaceChildren(); };
   }, [clientId, onAuthenticated, onBan]);
   if (!clientId) {
-    return <p className="muted">Чтобы включить Google, задайте VITE_GOOGLE_CLIENT_ID.</p>;
+    return null;
   }
   return <div>
     <div ref={hostRef} />

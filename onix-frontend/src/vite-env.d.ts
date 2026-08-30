@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_TELEGRAM_BOT_USERNAME?: string;
   readonly VITE_WEBSITE_AUTH_MODE?: string;
   readonly VITE_WEBSITE_LOGIN_PROVIDER?: string;
+  readonly VITE_GOOGLE_CLIENT_ID?: string;
 }
 
 interface ImportMeta {
