@@ -101,6 +101,7 @@ export function Chats({
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
   const [aiFaqs, setAiFaqs] = useState<Array<{ id: string; title: string }>>([]);
+  const [aiFaqsOpen, setAiFaqsOpen] = useState(true);
   const defaults = defaultChatPanelSize();
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
@@ -564,7 +565,7 @@ export function Chats({
                 )}
             />
             <span>
-              <b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
+              <b title={chat.title}>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
               <small>
                 {chat.kind === 'AI' ? (chat.subtitle || 'Помощник ONIX') : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
               </small>
@@ -614,7 +615,7 @@ export function Chats({
           />
         ) : null}
         <div>
-          <b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
+          <b title={thread.title}>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
           <small>
             {thread.kind === 'GROUP'
               ? 'Группа'
@@ -748,28 +749,43 @@ export function Chats({
           ↓ {t('chat.newMessages')} ({pendingNewCount})
         </button>
       )}
-      </div>
       {thread.kind === 'AI' && aiFaqs.length > 0 && (
-        <div className="chips ai-faq" role="list" aria-label="Популярные вопросы">
-          {aiFaqs.map((faq) => (
-            <button
-              type="button"
-              role="listitem"
-              key={faq.id}
-              onClick={async () => {
-                try {
-                  unlockSounds();
-                  await api.post(API_PATHS.aiMessages, { faqId: faq.id, text: faq.title });
-                  if (!getRealtimeClient().isReady()) playSound('notify');
-                  await loadMessages(thread.id);
-                } catch (error) {
-                  setToast(friendlyError(error));
-                }
-              }}
-            >{faq.title}</button>
-          ))}
+        <div className={`ai-actions${aiFaqsOpen ? ' is-open' : ''}`}>
+          <button
+            type="button"
+            className="ai-actions__toggle"
+            aria-expanded={aiFaqsOpen}
+            onClick={() => setAiFaqsOpen((open) => !open)}
+          >
+            Вопросы помощника
+            <span className="ai-actions__chevron" aria-hidden="true">{aiFaqsOpen ? '▼' : '▲'}</span>
+          </button>
+          {aiFaqsOpen && (
+            <div className="ai-quick-replies" role="list" aria-label="Популярные вопросы">
+              {aiFaqs.map((faq) => (
+                <button
+                  type="button"
+                  className="ai-quick-replies__btn"
+                  role="listitem"
+                  key={faq.id}
+                  onClick={async () => {
+                    try {
+                      unlockSounds();
+                      await api.post(API_PATHS.aiMessages, { faqId: faq.id, text: faq.title });
+                      if (!getRealtimeClient().isReady()) playSound('notify');
+                      await loadMessages(thread.id);
+                      setAiFaqsOpen(false);
+                    } catch (error) {
+                      setToast(friendlyError(error));
+                    }
+                  }}
+                >{faq.title}</button>
+              ))}
+            </div>
+          )}
         </div>
       )}
+      </div>
       <form className="composer" onSubmit={async event => {
         event.preventDefault();
         if (thread.kind === 'AI') {

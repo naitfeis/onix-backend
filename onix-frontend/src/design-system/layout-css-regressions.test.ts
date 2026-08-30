@@ -36,6 +36,15 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('keeps AI helper questions as a hideable overlay above the transcript', () => {
+    expect(appCss).toMatch(
+      /\.ai-actions\s*\{[^}]*position:\s*absolute;/s,
+    );
+    expect(appCss).toMatch(
+      /\.ai-actions\s*\{[^}]*z-index:\s*8;/s,
+    );
+  });
+
   it('uses the deeper semantic accent behind unread counts', () => {
     expect(appCss).toMatch(
       /\.thread em, \.nav-count\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,

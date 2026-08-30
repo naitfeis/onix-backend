@@ -42,6 +42,8 @@ const LEFT_DEFAULT = 272;
 const RIGHT_MIN = 64;
 const RIGHT_DEFAULT = 320;
 const RIGHT_ICONS_AT = 88;
+/** Below this, the right rail shows icon-only — never a crushed widget column. */
+const RIGHT_CONTENT_MIN = 240;
 /** Keep below LEFT_MIN so left never enters icon-only mode via resize. */
 const LEFT_ICONS_AT = 200;
 const DESKTOP_MAIN_MIN = 520;
@@ -125,6 +127,28 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
+function snapRightWidth(width: number): number {
+  if (width < RIGHT_CONTENT_MIN) {
+    return width <= (RIGHT_ICONS_AT + RIGHT_CONTENT_MIN) / 2 ? RIGHT_MIN : RIGHT_CONTENT_MIN;
+  }
+  return width;
+}
+
+function clampSidebarWidths(shellWidth: number, left: number, right: number, showRight: boolean): { left: number; right: number } {
+  let nextLeft = Math.max(LEFT_MIN, left);
+  let nextRight = right <= RIGHT_ICONS_AT ? RIGHT_MIN : Math.max(right, RIGHT_CONTENT_MIN);
+  if (!showRight) return { left: nextLeft, right: nextRight };
+  const budget = Math.max(LEFT_MIN + RIGHT_MIN, shellWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS);
+  if (nextLeft + nextRight > budget) {
+    nextRight = Math.max(RIGHT_MIN, budget - nextLeft);
+    if (nextRight < RIGHT_CONTENT_MIN) nextRight = RIGHT_MIN;
+  }
+  if (nextLeft + nextRight > budget) {
+    nextLeft = Math.max(LEFT_MIN, budget - nextRight);
+  }
+  return { left: nextLeft, right: nextRight };
+}
+
 const THEME_KEY = 'onix-theme';
 type ThemeMode = 'dark' | 'light';
 
@@ -195,9 +219,28 @@ export default function App() {
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
   const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
   const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
+  const [shellWidth, setShellWidth] = useState(() => (
+    typeof window === 'undefined' ? 1440 : window.innerWidth
+  ));
 
-  const leftIcons = leftW <= LEFT_ICONS_AT;
-  const rightIcons = rightW <= RIGHT_ICONS_AT;
+  useEffect(() => {
+    const sync = () => setShellWidth(window.innerWidth);
+    sync();
+    window.addEventListener('resize', sync);
+    window.visualViewport?.addEventListener('resize', sync);
+    return () => {
+      window.removeEventListener('resize', sync);
+      window.visualViewport?.removeEventListener('resize', sync);
+    };
+  }, []);
+
+  const showRightRail = screen === 'market' && shellWidth >= 1280;
+  const rails = useMemo(
+    () => clampSidebarWidths(shellWidth, leftW, rightW, showRightRail),
+    [shellWidth, leftW, rightW, showRightRail],
+  );
+  const leftIcons = rails.left <= LEFT_ICONS_AT;
+  const rightIcons = rails.right <= RIGHT_ICONS_AT;
   const miniApp = useMemo(() => isTelegramMiniApp(), []);
 
   useEffect(() => {
@@ -209,7 +252,7 @@ export default function App() {
   const startResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startW = side === 'left' ? leftW : rightW;
+    const startW = side === 'left' ? rails.left : rails.right;
     const target = event.currentTarget;
     const shell = target.closest('.app-shell') as HTMLElement | null;
     target.setPointerCapture(event.pointerId);
@@ -246,7 +289,7 @@ export default function App() {
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
       const shellWidth = shell?.clientWidth || window.innerWidth;
-      const otherWidth = side === 'left' ? rightW : leftW;
+      const otherWidth = side === 'left' ? rails.right : rails.left;
       const available = shellWidth - otherWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS;
       const max = Math.max(
         side === 'left' ? LEFT_MIN : RIGHT_MIN,
@@ -255,11 +298,12 @@ export default function App() {
           side === 'left' ? Math.floor(shellWidth * 0.45) : Math.floor(shellWidth * 0.4),
         ),
       );
-      const next = clamp(
+      const raw = clamp(
         side === 'left' ? startW + dx : startW - dx,
         side === 'left' ? LEFT_MIN : RIGHT_MIN,
         max,
       );
+      const next = side === 'right' ? snapRightWidth(raw) : raw;
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => applyWidth(next));
     };
@@ -270,7 +314,7 @@ export default function App() {
       document.body.classList.remove('is-resizing-sidebar');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      const rounded = Math.round(latest);
+      const rounded = Math.round(side === 'right' ? snapRightWidth(latest) : latest);
       if (side === 'left') {
         setLeftW(rounded);
         try { localStorage.setItem(LEFT_W_KEY, String(rounded)); } catch { /* ignore */ }
@@ -282,7 +326,7 @@ export default function App() {
 
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
-  }, [leftIcons, leftW, rightIcons, rightW]);
+  }, [leftIcons, rails.left, rails.right, rightIcons]);
 
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
@@ -393,8 +437,8 @@ export default function App() {
       className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
       style={{
         '--header-blur': headerBlur,
-        '--sidebar-left-w': `${leftW}px`,
-        '--sidebar-right-w': `${rightW}px`,
+        '--sidebar-left-w': `${rails.left}px`,
+        '--sidebar-right-w': `${rails.right}px`,
       } as CSSProperties}
     >
     <a className="skip-link" href="#content">К содержимому</a>
