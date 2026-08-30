@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, money, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type TrustCard,
+  sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { IconStar } from '../components/NavIcons';
@@ -84,7 +84,7 @@ function reviewCountLabel(n: number): string {
 }
 
 export function Market({
-  core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
+  core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
   externalCategory, onExternalCategoryConsumed,
 }: {
   core: Core;
@@ -93,7 +93,7 @@ export function Market({
   focusProductId: string | null;
   onFocusProductHandled: () => void;
   openDirectChat: (onixId: string) => Promise<boolean>;
-  openProductCard: (productId: string) => void;
+  openProductCard?: (productId: string) => void;
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
