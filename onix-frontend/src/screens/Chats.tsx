@@ -99,6 +99,7 @@ export function Chats({
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
+  const [aiFaqs, setAiFaqs] = useState<Array<{ id: string; title: string }>>([]);
   const defaults = defaultChatPanelSize();
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
   const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
@@ -224,6 +225,15 @@ export function Chats({
       setToast(friendlyError(error));
     }
   };
+
+  useEffect(() => {
+    void api.get<{ id: string; faqs?: Array<{ id: string; title: string }> }>(API_PATHS.aiChat)
+      .then((chat) => {
+        if (chat.faqs) setAiFaqs(chat.faqs);
+        void refreshChats();
+      })
+      .catch(() => { /* AI optional */ });
+  }, [refreshChats]);
 
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
@@ -549,7 +559,7 @@ export function Chats({
             <span>
               <b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
               <small>
-                {chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
+                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник ONIX') : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
               </small>
             </span>
           </span>
@@ -728,8 +738,37 @@ export function Chats({
         </button>
       )}
       </div>
+      {thread.kind === 'AI' && aiFaqs.length > 0 && (
+        <div className="chips ai-faq" role="list" aria-label="Популярные вопросы">
+          {aiFaqs.map((faq) => (
+            <button
+              type="button"
+              role="listitem"
+              key={faq.id}
+              onClick={async () => {
+                try {
+                  await api.post(API_PATHS.aiMessages, { faqId: faq.id, text: faq.title });
+                  await loadMessages(thread.id);
+                } catch (error) {
+                  setToast(friendlyError(error));
+                }
+              }}
+            >{faq.title}</button>
+          ))}
+        </div>
+      )}
       <form className="composer" onSubmit={async event => {
         event.preventDefault();
+        if (thread.kind === 'AI') {
+          try {
+            await api.post(API_PATHS.aiMessages, { text });
+            setText('');
+            await loadMessages(thread.id);
+          } catch (error) {
+            setToast(friendlyError(error));
+          }
+          return;
+        }
         if (await sendMessage(thread.id, text)) {
           setText('');
         }

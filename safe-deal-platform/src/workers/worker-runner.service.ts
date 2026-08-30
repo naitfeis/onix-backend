@@ -12,6 +12,7 @@ import { LedgerReconciliationJob } from './jobs/ledger-reconciliation.job';
 import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
 import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
+import { ShadowListingJob } from './jobs/shadow-listing.job';
 import { WorkerLockService } from './worker-lock.service';
 
 type JobDef = {
@@ -40,6 +41,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly paymentReconciliation: PaymentReconciliationJob,
     private readonly clawbackRecover: ClawbackRecoverJob,
     private readonly securityIpRetention: SecurityIpRetentionJob,
+    private readonly shadowListing: ShadowListingJob,
   ) {}
 
   onModuleInit(): void {
@@ -91,6 +93,12 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         intervalMs: Number(process.env.WORKER_SECURITY_IP_RETENTION_MS ?? 3_600_000),
         leaseTtlMs: 600_000,
         run: () => this.securityIpRetention.run(),
+      },
+      {
+        name: 'shadow-listing',
+        intervalMs: Number(process.env.WORKER_SHADOW_LISTING_MS ?? 300_000),
+        leaseTtlMs: 180_000,
+        run: () => this.shadowListing.run(),
       },
     ];
 

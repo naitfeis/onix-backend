@@ -1,0 +1,12 @@
+export const PLATFORM_VIDEO_RULE =
+  'Продавцу рекомендуется вести видеозапись с момента выдачи заказа покупателю — это защищает обе стороны в спорных ситуациях.';
+
+export const BUYER_PAYMENT_WARNING =
+  'Не подтверждайте заказ до передачи вам товара продавцом и ведите видеозапись, чтобы избежать спорных ситуаций.';
+
+export const ROBLOX_RECO_SUBCATEGORIES = [
+  'ROBLOX_ROBUX',
+  'ROBLOX_ACCOUNTS',
+  'ROBLOX_ITEMS',
+  'ROBLOX_OTHER',
+] as const;

@@ -583,6 +583,8 @@ export function useOnixCore() {
       ...(draft.autoDeliver && draft.deliveryText?.trim()
         ? { deliveryText: draft.deliveryText.trim() }
         : {}),
+      warrantyHours: draft.warrantyHours ?? 10,
+      acceptedRules: true,
     }), () => void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }))), [load, run]);
 
   const updateProduct = useCallback((id: string, draft: ProductDraft) => run('product-form', () =>

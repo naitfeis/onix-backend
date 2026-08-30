@@ -81,12 +81,14 @@ export const productListSelect = {
   autoDeliver: true,
   createdAt: true,
   sellerId: true,
+  warrantyHours: true,
 } as const;
 
 /** Single product / owner edit — includes description. */
 export const productDetailSelect = {
   ...productListSelect,
   description: true,
+  shadowBannedAt: true,
 } as const;
 
 export const dealProductSelect = {

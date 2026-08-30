@@ -5,6 +5,7 @@ import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { ApiExceptionFilter } from './common';
 import { CoordinationModule } from './coordination/coordination.module';
 import { DatabaseModule } from './database.module';
+import { AiModule } from './ai/ai.module';
 import { EngagementModule } from './engagement.module';
 import { EscrowModule } from './escrow.module';
 import { IdempotencyModule } from './idempotency/idempotency.module';
@@ -34,7 +35,7 @@ import { spaServeModules } from './spa-static';
     AvatarsModule,
     AuthModule, AuthV2Module, LoginChallengeModule, MfaModule, AdminModule,
     ProfilesModule, MarketplaceModule, SocialModule,
-    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule,
+    EscrowModule, EngagementModule, AiModule, SupportModule, OperationsModule, EconomyModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

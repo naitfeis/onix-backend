@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id                BigInt    @id @default(autoincrement())
-  telegramId        BigInt    @unique
+  telegramId        BigInt?   @unique
   onixId            String    @unique @db.VarChar(20)
   telegramNick      String?   @db.VarChar(64)
   firstName         String?   @db.VarChar(120)
@@ -112,6 +112,10 @@ model Product {
   sellerId           BigInt
   publishedAt        DateTime            @default(now())
   expiresAt          DateTime
+  /** Escrow hold after completion, hours. Default 10. Range 5..720 (30 days). */
+  warrantyHours      Int                 @default(10)
+  /** Hidden from catalog while seller is offline 3+ days. Not a public ban. */
+  shadowBannedAt     DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -126,6 +130,8 @@ model Product {
   @@index([title])
   @@index([status, createdAt])
   @@index([status, priceCents])
+  @@index([status, shadowBannedAt, createdAt])
+  @@index([warrantyHours])
 }
 
 model Favorite {
@@ -345,6 +351,8 @@ model UserReport {
   createdAt  DateTime  @default(now())
   closedAt   DateTime?
   closedById BigInt?
+  reviewId   BigInt?
+  review     Review?   @relation(fields: [reviewId], references: [id])
   reporter   User      @relation("ReportAuthor", fields: [reporterId], references: [id], onDelete: Cascade)
   target     User      @relation("ReportTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
@@ -352,6 +360,7 @@ model UserReport {
   @@index([reporterId, createdAt])
   @@index([closedAt, createdAt])
   @@index([kind, closedAt, createdAt])
+  @@index([reviewId])
 }
 
 model SupportTicket {
@@ -396,19 +405,23 @@ model Notification {
 }
 
 model Review {
-  id        BigInt   @id @default(autoincrement())
-  orderId   BigInt
-  authorId  BigInt
-  subjectId BigInt
-  rating    Int
-  text      String?  @db.VarChar(1000)
-  createdAt DateTime @default(now())
-  order     Order    @relation(fields: [orderId], references: [id])
-  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id])
-  subject   User     @relation("ReviewSubject", fields: [subjectId], references: [id])
+  id           BigInt    @id @default(autoincrement())
+  orderId      BigInt
+  authorId     BigInt
+  subjectId    BigInt
+  rating       Int
+  text         String?   @db.VarChar(1000)
+  hiddenAt     DateTime?
+  hiddenReason String?   @db.VarChar(20)
+  createdAt    DateTime  @default(now())
+  order        Order     @relation(fields: [orderId], references: [id])
+  author       User      @relation("ReviewAuthor", fields: [authorId], references: [id])
+  subject      User      @relation("ReviewSubject", fields: [subjectId], references: [id])
+  reports      UserReport[]
 
   @@unique([orderId, authorId])
   @@index([subjectId, createdAt])
+  @@index([subjectId, hiddenAt])
 }
 
 model AuditLog {
@@ -1163,6 +1176,7 @@ enum BanReason {
   THIRD_PARTY_ADS
   OFF_PLATFORM_DEAL
   FRAUD
+  SELLER_NO_RESPONSE
   OTHER
 }
 

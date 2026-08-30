@@ -864,6 +864,14 @@ html[data-theme="light"] .product-card__rating-count {
 .product-card__footer--bar {
   padding: 0 12px 12px;
   margin-top: 0;
+  flex-wrap: wrap;
+}
+.product-card__warranty {
+  flex: 1 1 100%;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-secondary);
 }
 .product-card__price {
   font-family: var(--font-body), sans-serif;
@@ -1077,12 +1085,11 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
   background: rgba(20, 24, 32, 0.12);
 }
 .cat-row {
-  display: grid;
-  grid-template-columns: repeat(4, max-content);
-  justify-content: space-between;
-  justify-items: center;
-  grid-auto-rows: auto;
-  gap: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 0;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -1099,22 +1106,27 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 .cat-card {
   width: auto;
-  min-width: 72px;
-  max-width: 96px;
+  min-width: 56px;
+  max-width: 68px;
+  margin: 0;
+  padding: 0;
 }
 @media (max-width: 719px) {
   .cat-row {
-    grid-template-columns: repeat(3, max-content);
+    display: flex;
+    gap: 0;
   }
 }
 @media (min-width: 720px) {
   .cat-row {
-    grid-template-columns: repeat(4, max-content);
+    display: flex;
+    gap: 0;
   }
 }
 @media (max-width: 559px) {
   .cat-row {
-    grid-template-columns: repeat(3, max-content);
+    display: flex;
+    gap: 0;
   }
 }
 .cat-scroll-slider {
@@ -2725,6 +2737,70 @@ html[data-theme="dark"] .stats b { color: #fff; }
   content: none !important;
   display: none !important;
 }
+.lot-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 40);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  overflow: hidden;
+}
+.lot-sheet__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.lot-sheet__body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lot-sheet__hero h1 { margin: 0 0 8px; font-size: 22px; }
+.lot-sheet__price { font-size: 28px; }
+.lot-sheet__warranty {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.lot-sheet__buy {
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.lot-sheet__warn {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.lot-sheet__pay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.lot-sheet__pay small { display: block; color: var(--text-secondary); font-size: 11px; }
+.scroll-top {
+  position: fixed;
+  right: 16px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 18px;
+}
 .modal__panel--wide {
   width: min(100%, 640px);
   max-height: min(
@@ -3333,7 +3409,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     margin: 12px auto;
     background: rgba(255, 255, 255, 0.12);
   }
-  .sidebar-cats { display: grid; gap: 4px; width: 100%; max-width: 100%; min-width: 0; }
+  .sidebar-cats { display: grid; gap: 0; width: 100%; max-width: 100%; min-width: 0; }
   .sidebar-cats button {
     height: 40px;
     width: 100%;
@@ -3591,11 +3667,10 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .live-pill { flex: 1 1 0; min-width: 0; }
   .live-pill:last-child { flex: 0 0 140px; max-width: 140px; }
   .cat-row {
-    display: grid;
-    grid-template-columns: repeat(4, max-content);
-    justify-content: space-between;
-    justify-items: center;
-    gap: 10px 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0;
     overflow: visible;
     margin: 0;
     padding: 0;
@@ -3611,9 +3686,10 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .cat-card {
     flex: none;
     width: auto;
-    min-width: 72px;
-    max-width: 96px;
+    min-width: 56px;
+    max-width: 68px;
     height: auto;
+    margin: 0;
   }
   .product-grid {
     grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));

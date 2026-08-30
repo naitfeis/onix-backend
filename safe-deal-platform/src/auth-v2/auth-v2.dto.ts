@@ -49,6 +49,22 @@ export class LoginDto {
   device?: DeviceInfoDto;
 }
 
+export class GoogleLoginDto {
+  @IsString() @MaxLength(4096) idToken!: string;
+  @IsOptional() @IsBoolean() rememberMe?: boolean;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DeviceInfoDto)
+  device?: DeviceInfoDto;
+}
+
+export class LinkTelegramDto {
+  @ValidateNested()
+  @Type(() => TelegramLoginBodyDto)
+  @IsObject()
+  telegram!: TelegramLoginBodyDto;
+}
+
 export class RefreshDto {
   @IsOptional()
   @ValidateNested()

@@ -225,6 +225,13 @@ export class AdminPlaneController {
     return this.security.replyReport(admin, id, body.text);
   }
 
+  @Post('support/reports/:id/uphold-appeal')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  upholdAppeal(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    return this.security.upholdReviewAppeal(admin, id);
+  }
+
   @Post('support/reports/:id/close')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
   @UseGuards(AdminRoleGuard)

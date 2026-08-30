@@ -100,8 +100,63 @@ export function AuthNotice({
 
 function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const provider = getWebsiteLoginProvider();
-  if (provider === 'widget') return <TelegramLogin onBan={onBan} />;
-  return <BotTelegramLogin onAuthenticated={onAuthenticated} onBan={onBan} />;
+  return (
+    <div className="stack compact">
+      {provider === 'widget' ? <TelegramLogin onBan={onBan} /> : <BotTelegramLogin onAuthenticated={onAuthenticated} onBan={onBan} />}
+      <GoogleLoginButton onAuthenticated={onAuthenticated} onBan={onBan} />
+    </div>
+  );
+}
+
+function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
+  const [error, setError] = useState('');
+  const hostRef = useRef<HTMLDivElement>(null);
+  const clientId = (import.meta as { env?: { VITE_GOOGLE_CLIENT_ID?: string } }).env?.VITE_GOOGLE_CLIENT_ID;
+  useEffect(() => {
+    if (!clientId || !hostRef.current) return;
+    const host = hostRef.current;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => {
+      const google = (window as unknown as { google?: { accounts?: { id?: {
+        initialize: (opts: Record<string, unknown>) => void;
+        renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void;
+      } } } }).google;
+      if (!google?.accounts?.id) return;
+      google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response: { credential?: string }) => {
+          if (!response.credential) return;
+          try {
+            const auth = getWebsiteAuthProvider() as { loginWithGoogle?: (token: string) => Promise<void> };
+            if (auth.loginWithGoogle) {
+              await auth.loginWithGoogle(response.credential);
+            } else {
+              setError('Google вход доступен только в режиме auth_v2.');
+              return;
+            }
+            onAuthenticated();
+            location.reload();
+          } catch (err) {
+            const ban = extractBanFromError(err);
+            if (ban) onBan?.(ban);
+            setError('Google вход не выполнен.');
+          }
+        },
+      });
+      google.accounts.id.renderButton(host, { theme: 'outline', size: 'large', text: 'signin_with', width: 280 });
+    };
+    document.head.appendChild(script);
+    return () => { script.remove(); host.replaceChildren(); };
+  }, [clientId, onAuthenticated, onBan]);
+  if (!clientId) {
+    return <p className="muted">Чтобы включить Google, задайте VITE_GOOGLE_CLIENT_ID.</p>;
+  }
+  return <div>
+    <div ref={hostRef} />
+    {error && <small>{error}</small>}
+  </div>;
 }
 
 function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {

@@ -13,6 +13,7 @@ import { formatOnixId } from '../onix-id';
 import { flagsFromPlatformStatus, isPlatformStatus } from '../platform-status';
 import { PrismaService } from '../prisma.service';
 import type { AdminActor } from './admin-session.service';
+import { recomputeSellerRating } from '../marketplace/review-aggregate';
 
 const ALLOWED_PLATFORM_STATUS_TRANSITIONS: Readonly<Record<PlatformStatus, ReadonlySet<PlatformStatus>>> = {
   USER: new Set(['VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP']),
@@ -565,17 +566,51 @@ export class AdminSecurityService {
       orderBy: { createdAt: 'desc' },
       take: 100,
       select: {
-        id: true, kind: true, reason: true, comment: true, createdAt: true,
+        id: true, kind: true, reason: true, comment: true, createdAt: true, reviewId: true,
         reporter: { select: { onixId: true, displayName: true } },
         target: { select: { onixId: true, displayName: true } },
       },
     });
     return rows.map((row) => ({
       ...row,
+      reviewId: row.reviewId?.toString() ?? null,
       createdAt: row.createdAt.toISOString(),
       reporter: { onixId: formatOnixId(row.reporter.onixId), username: row.reporter.displayName },
       target: { onixId: formatOnixId(row.target.onixId), username: row.target.displayName },
     }));
+  }
+
+  async upholdReviewAppeal(actor: AdminActor, reportId: string) {
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Жалоба не найдена.');
+    if (report.kind !== 'REVIEW_APPEAL' || !report.reviewId) {
+      throw new BadRequestException('Это не обжалование отзыва.');
+    }
+    if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
+    await this.prisma.$transaction(async (tx) => {
+      const review = await tx.review.findUnique({ where: { id: report.reviewId! } });
+      if (review && !review.hiddenAt) {
+        await tx.review.update({
+          where: { id: review.id },
+          data: { hiddenAt: new Date(), hiddenReason: 'APPEAL' },
+        });
+        await recomputeSellerRating(tx as never, review.subjectId, { floorPrevious: true });
+      }
+      await tx.userReport.update({
+        where: { id: reportId },
+        data: { closedAt: new Date(), adminReply: 'Обжалование подтверждено, отзыв скрыт.' },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_REVIEW_APPEAL_UPHOLD',
+          targetType: 'UserReport',
+          targetId: reportId,
+          metadataJson: { reviewId: report.reviewId.toString() },
+        },
+      });
+    });
+    return { id: reportId, upheld: true as const, closed: true as const };
   }
 
   async closeReport(actor: AdminActor, reportId: string, reason?: string) {

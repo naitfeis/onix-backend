@@ -10,12 +10,13 @@ describe('validateDraft', () => {
       quantity: 1,
       category: 'Steam',
       subcategory: 'Инвентарь',
+      acceptedRules: true,
     })).toEqual([]);
   });
 
   it('rejects unsafe bounds and incomplete fields', () => {
     const errors = validateDraft({
-      title: 'x', description: '', priceRubles: '50001', quantity: 0, category: 'Другое', subcategory: '',
+      title: 'x', description: '', priceRubles: '50001', quantity: 0, category: 'Другое', subcategory: '', acceptedRules: true,
     });
     expect(errors).toHaveLength(3);
   });
@@ -28,6 +29,7 @@ describe('validateDraft', () => {
       quantity: 1,
       category: 'Roblox',
       subcategory: 'ROBLOX_ROBUX',
+      acceptedRules: true,
     })).toEqual([]);
   });
 
@@ -39,6 +41,7 @@ describe('validateDraft', () => {
       quantity: 1,
       category: 'Roblox',
       subcategory: 'ROBLOX_ROBUX',
+      acceptedRules: true,
     });
     expect(errors.some((e) => e.includes('Цена'))).toBe(true);
   });

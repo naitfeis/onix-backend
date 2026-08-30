@@ -10,6 +10,7 @@ import type {
 import {
   AuthV2ApiError,
   getAuthV2Me,
+  postAuthV2Google,
   postAuthV2Login,
   postAuthV2Logout,
   type AuthV2Fetch,
@@ -96,6 +97,23 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
 
     this.manager.setSession(login.accessToken, login.expiresIn);
 
+    try {
+      const me = await this.fetchMeOrThrow();
+      this.cachedUser = toWebsiteUser(me);
+    } catch (error) {
+      this.manager.clearSession('force-reauth');
+      this.cachedUser = null;
+      throw error;
+    }
+  }
+
+  async loginWithGoogle(idToken: string): Promise<void> {
+    const login = await postAuthV2Google(
+      { idToken, rememberMe: true, },
+      this.fetchImpl,
+      this.apiBase,
+    );
+    this.manager.setSession(login.accessToken, login.expiresIn);
     try {
       const me = await this.fetchMeOrThrow();
       this.cachedUser = toWebsiteUser(me);

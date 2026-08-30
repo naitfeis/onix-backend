@@ -50,7 +50,7 @@ export class FavoritesService {
   /** Same Product DTO as Marketplace — purchase opens via GET /products/:id → EscrowService.purchase. */
   async favorites(user: AuthUser) {
     const rows = await this.prisma.favorite.findMany({
-      where: { userId: user.id, product: { status: 'ACTIVE' } },
+      where: { userId: user.id, product: { status: 'ACTIVE', shadowBannedAt: null } },
       select: {
         product: {
           select: {

@@ -24,12 +24,12 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('keeps market categories stretching across the center in four columns', () => {
+  it('keeps market categories packed edge to edge without column air', () => {
     expect(appCss).toMatch(
-      /\.cat-row\s*\{[^}]*grid-template-columns:\s*repeat\(4, max-content\)/s,
+      /\.cat-row\s*\{[^}]*display:\s*flex;/s,
     );
     expect(appCss).toMatch(
-      /\.cat-row\s*\{[^}]*justify-content:\s*space-between;/s,
+      /\.cat-row\s*\{[^}]*gap:\s*0;/s,
     );
     expect(appCss).toMatch(
       /\.market-hero \.button--violet\s*\{[^}]*box-shadow:\s*none;/s,

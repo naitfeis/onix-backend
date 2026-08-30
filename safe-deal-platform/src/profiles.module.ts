@@ -70,6 +70,7 @@ export class ProfilesService {
           trustLevel: true, createdAt: true,
           ratingAverage: true, ratingCount: true, completedSales: true,
           lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
+          telegramId: true, sellBannedAt: true,
           _count: { select: { followers: true } },
           sellerSubscription: { select: { status: true, endsAt: true } },
         },
@@ -88,8 +89,11 @@ export class ProfilesService {
     );
     const depositTotal = profile.depositAvailableCents + profile.depositLockedCents;
     const base = profileDto(profile, ledger);
+    const hasTelegram = profile.telegramId != null;
     return {
       ...base,
+      canSell: hasTelegram && !profile.sellBannedAt,
+      hasTelegram,
       deposit: {
         availableCents: profile.depositAvailableCents.toString(),
         lockedCents: profile.depositLockedCents.toString(),
@@ -121,15 +125,20 @@ export class ProfilesService {
         _count: { select: { followers: true } },
         followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
         products: {
-          where: { status: 'ACTIVE' },
+          where: {
+            status: 'ACTIVE',
+            ...(viewer.id === resolved.id ? {} : { shadowBannedAt: null }),
+          },
           orderBy: { createdAt: 'desc' },
           take: 30,
           select: {
             id: true, title: true, description: true, priceCents: true, category: true,
             subcategory: true, status: true, createdAt: true, quantity: true,
+            warrantyHours: true, lotNumber: true,
           },
         },
         reviewsReceived: {
+          where: { hiddenAt: null },
           orderBy: { createdAt: 'desc' },
           take: 50,
           include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
@@ -156,6 +165,8 @@ export class ProfilesService {
         status: p.status,
         quantity: p.quantity,
         createdAt: p.createdAt.toISOString(),
+        warrantyHours: p.warrantyHours,
+        ...(p.lotNumber != null ? { lotNumber: p.lotNumber } : {}),
       })),
       reviews: profile.reviewsReceived.map(reviewDto),
     };
@@ -175,6 +186,10 @@ export class ProfilesService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: now },
+    });
+    await this.prisma.product.updateMany({
+      where: { sellerId: user.id, shadowBannedAt: { not: null }, status: 'ACTIVE' },
+      data: { shadowBannedAt: null },
     });
     const lastOnline = now.toISOString();
     const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`

@@ -27,6 +27,9 @@ import {
 import { assertRateLimit } from './rate-limit';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
+import { ROBLOX_RECO_SUBCATEGORIES } from './marketplace/platform-rules';
+import { reliabilityScore } from './marketplace/reliability';
+import { clampWarrantyHours, WARRANTY_DEFAULT_HOURS } from './marketplace/warranty';
 
 function toBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -55,6 +58,8 @@ class ProductDto {
   @IsString({ message: 'required when autoDeliver=true' })
   @Length(1, 4000, { message: 'required when autoDeliver=true' })
   deliveryText?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(5) @Max(720) warrantyHours?: number;
+  @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() acceptedRules?: boolean;
 }
 
 class UpdateProductDto {
@@ -73,6 +78,7 @@ class UpdateProductDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(10000) quantity?: number;
   @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
   @IsOptional() @IsString() @MaxLength(4000) deliveryText?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(5) @Max(720) warrantyHours?: number;
 }
 
 class ProductQuery {
@@ -88,7 +94,7 @@ class ProductQuery {
   @IsOptional() @IsEnum(ProductSubcategory) subcategory?: ProductSubcategory;
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
-  @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating']) sort: string = 'newest';
+  @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating', 'warranty', 'reliability']) sort: string = 'newest';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 30;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
@@ -174,6 +180,7 @@ export class MarketplaceService {
     })();
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
+      shadowBannedAt: null,
       ...(query.category ? { category: query.category } : {}),
       ...(query.subcategory ? { subcategory: query.subcategory } : {}),
       ...(query.search ? {
@@ -192,14 +199,21 @@ export class MarketplaceService {
         },
       } : {}),
     };
-    const orderBy: Prisma.ProductOrderByWithRelationInput =
+    const orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] =
       query.sort === 'price_asc' ? { priceCents: 'asc' } :
       query.sort === 'price_desc' ? { priceCents: 'desc' } :
-      query.sort === 'rating' ? { seller: { ratingAverage: 'desc' } } :
+      query.sort === 'rating' ? [{ seller: { ratingAverage: 'desc' } }, { seller: { ratingCount: 'desc' } }] :
+      query.sort === 'warranty' ? { warrantyHours: 'desc' } :
+      query.sort === 'reliability' ? [
+        { seller: { ratingAverage: 'desc' } },
+        { seller: { ratingCount: 'desc' } },
+        { warrantyHours: 'desc' },
+        { seller: { completedSales: 'desc' } },
+      ] :
       { createdAt: 'desc' };
     // Lean catalog: no description, no view counts, no followers COUNT / Follow probe.
     // Single round-trip via relationLoadStrategy join (avoids parallel client.query on adapter-pg).
-    const products = await this.prisma.product.findMany({
+    let products = await this.prisma.product.findMany({
       relationLoadStrategy: 'join',
       where, orderBy, take: query.limit, skip: query.offset,
       select: {
@@ -210,6 +224,9 @@ export class MarketplaceService {
           : {}),
       },
     });
+    if (viewerId != null && query.offset === 0) {
+      products = await this.prioritizeRecommendations(viewerId, products, query.limit);
+    }
     return products.map((product) => productDto(
       {
         ...product,
@@ -238,7 +255,12 @@ export class MarketplaceService {
       },
     });
     if (!product) throw new NotFoundException('Товар не найден.');
-    if (product.status !== ProductStatus.ACTIVE && (viewerId == null || product.sellerId !== viewerId)) {
+    const shadowHidden = Boolean((product as { shadowBannedAt?: Date | null }).shadowBannedAt)
+      && (viewerId == null || product.sellerId !== viewerId);
+    if (
+      (product.status !== ProductStatus.ACTIVE && (viewerId == null || product.sellerId !== viewerId))
+      || shadowHidden
+    ) {
       throw new NotFoundException('Товар не найден.');
     }
     const viewCounts = await this.ownerViewCounts(viewerId, [product]);
@@ -310,10 +332,16 @@ export class MarketplaceService {
   async create(user: AuthUser, dto: ProductDto) {
     const seller = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { sellBannedAt: true },
+      select: { sellBannedAt: true, telegramId: true },
     });
     if (seller?.sellBannedAt) {
       throw new BadRequestException('Продажа товаров запрещена администратором.');
+    }
+    if (!seller?.telegramId) {
+      throw new BadRequestException('Чтобы продавать, привяжите Telegram к аккаунту.');
+    }
+    if (dto.acceptedRules !== true) {
+      throw fieldBadRequest('acceptedRules', 'Нужно согласиться с правилами платформы.');
     }
     try {
       assertSubcategoryForCategory(dto.category, dto.subcategory);
@@ -326,13 +354,14 @@ export class MarketplaceService {
       throw fieldBadRequest('priceCents', (e as Error).message);
     }
     const secret = deliveryFields(dto);
-    const { deliveryText: _omit, autoDeliver: _a, ...rest } = dto;
+    const { deliveryText: _omit, autoDeliver: _a, acceptedRules: _rules, warrantyHours, ...rest } = dto;
     const product = await this.prisma.product.create({
       data: {
         ...rest,
         priceCents: BigInt(dto.priceCents),
         sellerId: user.id,
         expiresAt: new Date(Date.now() + 30 * 86400_000),
+        warrantyHours: clampWarrantyHours(warrantyHours ?? WARRANTY_DEFAULT_HOURS),
         ...secret,
       },
     });
@@ -376,7 +405,7 @@ export class MarketplaceService {
     } catch (e) {
       throw fieldBadRequest('subcategory', (e as Error).message);
     }
-    const { priceCents, deliveryText, autoDeliver, ...data } = dto;
+    const { priceCents, deliveryText, autoDeliver, warrantyHours, ...data } = dto;
     if (priceCents) {
       try {
         assertListingPrice(BigInt(priceCents), subcategory);
@@ -387,6 +416,7 @@ export class MarketplaceService {
     const patch: Prisma.ProductUpdateInput = {
       ...data,
       ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
+      ...(warrantyHours !== undefined ? { warrantyHours: clampWarrantyHours(warrantyHours) } : {}),
     };
     if (autoDeliver !== undefined || deliveryText !== undefined) {
       if (item.deliveryConsumedAt) {
@@ -448,6 +478,41 @@ export class MarketplaceService {
       quantity: updated.quantity,
     });
     return updated;
+  }
+
+  private async prioritizeRecommendations<T extends {
+    id: string;
+    category: string;
+    subcategory: string | null;
+    warrantyHours?: number | null;
+    seller: { ratingAverage: unknown; ratingCount: number; completedSales: number };
+  }>(viewerId: bigint, products: T[], limit: number): Promise<T[]> {
+    const bought = await this.prisma.order.findMany({
+      where: { buyerId: viewerId, status: { in: ['COMPLETED', 'PAYMENT_HOLD', 'DELIVERING'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+      select: { product: { select: { category: true, subcategory: true } } },
+    });
+    const roblox = bought.some((row) => (
+      row.product.category === 'ROBLOX'
+      || (row.product.subcategory != null
+        && (ROBLOX_RECO_SUBCATEGORIES as readonly string[]).includes(row.product.subcategory))
+    ));
+    if (!roblox) return products;
+    const scored = products.map((product) => {
+      const similar = product.category === 'ROBLOX'
+        || (product.subcategory != null
+          && (ROBLOX_RECO_SUBCATEGORIES as readonly string[]).includes(product.subcategory));
+      const score = reliabilityScore({
+        rating: Number(product.seller.ratingAverage),
+        reviewCount: product.seller.ratingCount,
+        warrantyHours: product.warrantyHours ?? WARRANTY_DEFAULT_HOURS,
+        salesCount: product.seller.completedSales,
+      });
+      return { product, rank: (similar ? 10 : 0) + score };
+    });
+    scored.sort((a, b) => b.rank - a.rank);
+    return scored.slice(0, limit).map((row) => row.product);
   }
 
   private async ownedActive(user: AuthUser, id: string) {

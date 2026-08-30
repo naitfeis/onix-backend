@@ -29,11 +29,12 @@ export async function createDomainNotification(
 
 /** Best-effort Telegram Bot push — never throws to domain callers. */
 export async function pushTelegramToChatId(
-  telegramId: bigint,
+  telegramId: bigint | null | undefined,
   title: string,
   body: string,
   replyMarkup?: InlineKeyboard,
 ): Promise<void> {
+  if (telegramId == null) return;
   try {
     await sendTelegramMessage({
       chatId: Number(telegramId),

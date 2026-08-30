@@ -202,19 +202,21 @@ export class AuthService {
         data: { isSupport },
       });
     }
-    await dualWriteTelegramIdentity(this.prisma, {
-      userId: user.id,
-      telegramId: user.telegramId,
-      username: identity.username !== undefined ? identity.username : user.telegramNick,
-      displayName: user.displayName,
-      avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
-    });
+    if (user.telegramId != null) {
+      await dualWriteTelegramIdentity(this.prisma, {
+        userId: user.id,
+        telegramId: user.telegramId,
+        username: identity.username !== undefined ? identity.username : user.telegramNick,
+        displayName: user.displayName,
+        avatarUrl: identity.photoUrl !== undefined ? identity.photoUrl : user.avatarUrl,
+      });
+    }
     return this.toAuthUser(user);
   }
 
   private toAuthUser(user: {
     id: bigint;
-    telegramId: bigint;
+    telegramId: bigint | null;
     onixId: string;
     isAdmin: boolean;
     isSupport: boolean;

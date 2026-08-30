@@ -6,6 +6,7 @@ import { resolveIsSupport } from '../common';
 import { RiskScoreService, type RiskDeviceInput } from '../risk-score.service';
 import { AuthPlatformError } from './auth-errors';
 import type { VerifiedTelegramIdentity } from './telegram-login.verifier';
+import type { VerifiedGoogleIdentity } from './google-login.verifier';
 
 @Injectable()
 export class IdentityService {
@@ -112,7 +113,7 @@ export class IdentityService {
       });
     }
 
-    if (isDualWriteIdentityEnabled()) {
+    if (isDualWriteIdentityEnabled() && user.telegramId != null) {
       try {
         await dualWriteTelegramIdentity(tx, {
           userId: user.id,
@@ -143,6 +144,136 @@ export class IdentityService {
       },
     });
 
+    return user;
+  }
+
+  async upsertGoogleUser(
+    tx: Prisma.TransactionClient,
+    identity: VerifiedGoogleIdentity,
+  ): Promise<User> {
+    const link = await tx.identityLink.findFirst({
+      where: { provider: 'GOOGLE', providerUserId: identity.sub, deletedAt: null },
+      include: { user: true },
+    });
+    const loggedInAt = new Date();
+    let user: User;
+    if (link?.user && !link.user.deletedAt) {
+      const keepTelegramFace = link.user.telegramId != null;
+      user = await tx.user.update({
+        where: { id: link.user.id },
+        data: {
+          lastSeenAt: loggedInAt,
+          lastLoginAt: loggedInAt,
+          ...(!keepTelegramFace && identity.name && identity.name !== link.user.displayName
+            ? { displayName: identity.name }
+            : {}),
+          ...(!keepTelegramFace && identity.picture && identity.picture !== link.user.avatarUrl
+            ? { avatarUrl: identity.picture }
+            : {}),
+        },
+      });
+    } else if (link?.user?.deletedAt && isBanActive(link.user)) {
+      throw new AuthPlatformError('AUTH_ACCOUNT_LOCKED', 'Account is locked.', {
+        ban: banPublicInfo(link.user),
+      });
+    } else {
+      const created = await tx.user.create({
+        data: {
+          telegramId: null,
+          onixId: `PENDING-G-${identity.sub.slice(0, 16)}`,
+          displayName: identity.name,
+          avatarUrl: identity.picture,
+          lastSeenAt: loggedInAt,
+          lastLoginAt: loggedInAt,
+        },
+      });
+      user = await tx.user.update({
+        where: { id: created.id },
+        data: { onixId: `ONIX-${created.id.toString().padStart(6, '0')}` },
+      });
+    }
+
+    await tx.identityLink.upsert({
+      where: {
+        provider_providerUserId: { provider: 'GOOGLE', providerUserId: identity.sub },
+      },
+      create: {
+        userId: user.id,
+        provider: 'GOOGLE',
+        providerUserId: identity.sub,
+        email: identity.email,
+        displayName: identity.name,
+        avatarUrl: identity.picture,
+        lastUsedAt: loggedInAt,
+      },
+      update: {
+        userId: user.id,
+        email: identity.email,
+        displayName: identity.name,
+        avatarUrl: identity.picture,
+        lastUsedAt: loggedInAt,
+        deletedAt: null,
+      },
+    });
+    await tx.identityHistory.create({
+      data: {
+        userId: user.id,
+        provider: 'GOOGLE',
+        providerUserId: identity.sub,
+        action: link ? 'PROFILE_REFRESHED' : 'LINKED',
+        metadata: { source: 'auth_v2_google' },
+      },
+    });
+    return user;
+  }
+
+  async linkTelegramToUser(
+    tx: Prisma.TransactionClient,
+    userId: bigint,
+    identity: VerifiedTelegramIdentity,
+  ): Promise<User> {
+    const current = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    if (current.telegramId && current.telegramId !== identity.telegramId) {
+      throw new AuthPlatformError('AUTH_IDENTITY_CONFLICT', 'Telegram уже привязан к этому профилю.');
+    }
+    const taken = await tx.user.findUnique({ where: { telegramId: identity.telegramId } });
+    if (taken && taken.id !== userId) {
+      throw new AuthPlatformError(
+        'AUTH_IDENTITY_CONFLICT',
+        'This Telegram account is already linked to another ONIX profile.',
+      );
+    }
+    const displayName = [identity.firstName, identity.lastName].filter(Boolean).join(' ') || current.displayName;
+    const user = await tx.user.update({
+      where: { id: userId },
+      data: {
+        telegramId: identity.telegramId,
+        telegramNick: identity.username ?? current.telegramNick,
+        firstName: identity.firstName ?? current.firstName,
+        lastName: identity.lastName ?? current.lastName,
+        displayName,
+        ...(identity.photoUrl ? { avatarUrl: identity.photoUrl } : {}),
+        lastSeenAt: new Date(),
+      },
+    });
+    if (isDualWriteIdentityEnabled()) {
+      await dualWriteTelegramIdentity(tx, {
+        userId: user.id,
+        telegramId: identity.telegramId,
+        username: identity.username,
+        displayName: user.displayName,
+        avatarUrl: identity.photoUrl ?? user.avatarUrl,
+      });
+    }
+    await tx.identityHistory.create({
+      data: {
+        userId: user.id,
+        provider: 'TELEGRAM',
+        providerUserId: identity.telegramId.toString(),
+        action: 'LINKED',
+        metadata: { source: 'auth_v2_link_telegram' },
+      },
+    });
     return user;
   }
 }

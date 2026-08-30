@@ -23,6 +23,7 @@ import { buildLightDisputeCard, invalidateArbitrationContextCache } from './disp
 import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect } from './query-selects';
 import { dealDto } from './response';
+import { hideReviewsForOrder } from './marketplace/review-aggregate';
 
 class PurchaseDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
@@ -654,6 +655,9 @@ export class EscrowService {
         ...(support ? { support: true } : {}),
         fromStatus: order.status,
       });
+      if (target === 'REFUNDED' || target === 'CANCELED') {
+        await hideReviewsForOrder(tx as never, id, 'REFUND');
+      }
     });
 
     const live = await this.prisma.order.findUnique({

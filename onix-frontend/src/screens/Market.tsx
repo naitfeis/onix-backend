@@ -6,13 +6,13 @@ import {
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { IconStar } from '../components/NavIcons';
-import { Button, Card, Confirm, Input, Modal, Skeleton, StateView } from '../design-system';
-import { formatOnixId } from '../utils/onixId';
+import { Button, Card, Input, Skeleton, StateView } from '../design-system';
+import { LotSheet } from './LotSheet';
 import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
-import { PublicProfileModal, StaffBadge } from './shared';
+import { PublicProfileModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 import { t } from '../i18n';
 
@@ -44,7 +44,25 @@ const SORT_OPTIONS = [
   { value: 'new', label: 'Сначала новые', server: 'newest' as const },
   { value: 'price', label: 'Сначала дешевле', server: 'price_asc' as const },
   { value: 'price_desc', label: 'Сначала дороже', server: 'price_desc' as const },
+  { value: 'rating', label: 'По отзывам', server: 'rating' as const },
+  { value: 'warranty', label: 'По сроку гарантии', server: 'warranty' as const },
+  { value: 'reliability', label: 'По надёжности', server: 'reliability' as const },
 ] as const;
+
+function catalogScroller(): HTMLElement | Window {
+  return (document.querySelector('.app-main') as HTMLElement | null) ?? window;
+}
+
+function readCatalogScroll(): number {
+  const el = catalogScroller();
+  return el === window ? window.scrollY : (el as HTMLElement).scrollTop;
+}
+
+function writeCatalogScroll(top: number) {
+  const el = catalogScroller();
+  if (el === window) window.scrollTo({ top });
+  else (el as HTMLElement).scrollTo({ top });
+}
 
 function toServerSort(sort: string) {
   return SORT_OPTIONS.find((o) => o.value === sort)?.server ?? 'newest';
@@ -81,7 +99,10 @@ export function Market({
   onExternalCategoryConsumed?: () => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
-  const [confirm, setConfirm] = useState<Product | null>(null);
+  const [lotOrigin, setLotOrigin] = useState<'catalog' | 'profile'>('catalog');
+  const [showTop, setShowTop] = useState(false);
+  const catalogScrollRef = useRef(0);
+  const profileReturnRef = useRef<PublicProfile | null>(null);
   const [sellerProfile, setSellerProfile] = useState<PublicProfile | null>(null);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(t('market.all'));
@@ -138,7 +159,13 @@ export function Market({
   /** One view ping per product per browser tab — kills StrictMode/focus re-open spam → 429. */
   const viewedIdsRef = useRef<Set<string>>(new Set());
 
-  const openProduct = async (product: Product) => {
+  const openProduct = async (product: Product, origin: 'catalog' | 'profile' = 'catalog') => {
+    if (origin === 'catalog') {
+      catalogScrollRef.current = readCatalogScroll();
+    } else {
+      profileReturnRef.current = sellerProfile;
+    }
+    setLotOrigin(origin);
     setSelected(product);
     setDetailReady(false);
     setSellerProfile(null);
@@ -254,6 +281,39 @@ export function Market({
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
   }, [category, core.listProducts, core.products, core.states.products, query, sort, subcategory]);
+
+  const closeLot = () => {
+    const origin = lotOrigin;
+    setSelected(null);
+    setSellerTrust(null);
+    setDetailReady(false);
+    if (origin === 'profile' && profileReturnRef.current) {
+      setSellerProfile(profileReturnRef.current);
+      return;
+    }
+    requestAnimationFrame(() => writeCatalogScroll(catalogScrollRef.current));
+  };
+
+  const buySelected = async (product: Product) => {
+    const deal = await core.purchase(product.id);
+    if (!deal) return;
+    setSelected(null);
+    setSellerTrust(null);
+    setDetailReady(false);
+    setToast('Сделка создана. Деньги в сейфе.');
+    if (deal.chatId) openDealChat(deal.chatId);
+    else switchTo('deals');
+  };
+
+  useEffect(() => {
+    const el = catalogScroller();
+    const onScroll = () => {
+      const top = el === window ? window.scrollY : (el as HTMLElement).scrollTop;
+      setShowTop(top > 720);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return;
@@ -664,8 +724,9 @@ export function Market({
               </div>
             </button>
             <div className="product-card__footer product-card__footer--bar">
+              <span className="product-card__warranty">{product.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
               <strong className="product-card__price">{money(product.priceCents)}</strong>
-              <button type="button" className="button button--buy product-card__buy" onClick={() => setConfirm(product)}>{t('market.buy')}</button>
+              <button type="button" className="button button--buy product-card__buy" onClick={() => void openProduct(product)}>{t('market.buy')}</button>
             </div>
           </Card>
         );
@@ -673,74 +734,57 @@ export function Market({
     {marketState === 'success' && hasMore && (
       <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>{t('common.showMore')}</Button>
     )}
-    <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); setDetailReady(false); }}>
-      {selected && <div className="stack compact">
-        <div className="product-detail">
-          <strong>{money(selected.priceCents)}</strong>
-          {lotLabel(selected) && <span className="onixlot-id">{lotLabel(selected)}</span>}
-        </div>
-        <p className="muted">
-          {!detailReady
-            ? 'Загрузка описания…'
-            : (selected.description?.trim() || 'Продавец не добавил описание.')}
-        </p>
-        {sellerTrust && (
-          <div className="trust-strip">
-            <span><b>Уровень {sellerTrust.level}</b></span>
-            <span><b>{money(sellerTrust.depositTotal)}</b> залог</span>
-          </div>
-        )}
-        <Card><div className="seller-row"><div className="user-summary"><UserAvatar userId={selected.seller.id} avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId))} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId)) ? 'Online' : formatLastSeen(core.presenceOf(selected.seller.onixId)?.lastOnline ?? selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
-          <div className="card-actions">
-            <Button type="button" variant="secondary" onClick={async () => {
-              const onixId = selected.seller.onixId;
-              // Close lot sheet first so profile modal is never buried under it.
-              setSelected(null);
-              setSellerTrust(null);
-              setDetailReady(false);
-              try {
-                setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
-              } catch (error) {
-                setToast(friendlyError(error));
-              }
-            }}>Профиль продавца</Button>
-            <Button
-              variant="secondary"
-              busy={core.actionBusy === `follow-${selected.seller.onixId}`}
-              onClick={() => {
-                const wasFollowed = Boolean(selected.seller.followed);
-                const delta = wasFollowed ? -1 : 1;
-                setSelected((prev) => (prev ? {
-                  ...prev,
-                  seller: {
-                    ...prev.seller,
-                    followed: !wasFollowed,
-                    followersCount: Math.max(0, prev.seller.followersCount + delta),
-                  },
-                } : prev));
-                setItems((previous) => previous.map((item) => (
-                  item.seller.onixId === selected.seller.onixId
-                    ? {
-                      ...item,
-                      seller: {
-                        ...item.seller,
-                        followed: !wasFollowed,
-                        followersCount: Math.max(0, item.seller.followersCount + delta),
-                      },
-                    }
-                    : item
-                )));
-                void core.toggleFollow(selected.seller.onixId, wasFollowed);
-              }}
-            >{selected.seller.followed ? 'Отписаться' : '+ Подписаться'}</Button>
-          </div></Card>
-        <div className="modal__actions">
-          <Button variant="secondary" onClick={async () => {
+    {selected && (
+      <LotSheet
+        product={selected}
+        detailReady={detailReady}
+        trust={sellerTrust}
+        core={core}
+        buying={Boolean(core.actionBusy?.startsWith('purchase'))}
+        onBack={closeLot}
+        onBuy={() => void buySelected(selected)}
+        onOpenSeller={async () => {
+          const onixId = selected.seller.onixId;
+          setSelected(null);
+          setSellerTrust(null);
+          setDetailReady(false);
+          try {
+            setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
+          } catch (error) {
+            setToast(friendlyError(error));
+          }
+        }}
+        onWrite={async () => {
           setSelected(null);
           await openDirectChat(selected.seller.onixId);
-        }}>Написать</Button><Button variant="buy" disabled={selected.status !== 'ACTIVE'} onClick={() => setConfirm(selected)}>Купить</Button></div>
-      </div>}
-    </Modal>
+        }}
+        onToggleFollow={() => {
+          const wasFollowed = Boolean(selected.seller.followed);
+          const delta = wasFollowed ? -1 : 1;
+          setSelected((prev) => (prev ? {
+            ...prev,
+            seller: {
+              ...prev.seller,
+              followed: !wasFollowed,
+              followersCount: Math.max(0, prev.seller.followersCount + delta),
+            },
+          } : prev));
+          setItems((previous) => previous.map((item) => (
+            item.seller.onixId === selected.seller.onixId
+              ? {
+                ...item,
+                seller: {
+                  ...item.seller,
+                  followed: !wasFollowed,
+                  followersCount: Math.max(0, item.seller.followersCount + delta),
+                },
+              }
+              : item
+          )));
+          void core.toggleFollow(selected.seller.onixId, wasFollowed);
+        }}
+      />
+    )}
     <PublicProfileModal
       profile={sellerProfile}
       onClose={() => setSellerProfile(null)}
@@ -758,23 +802,28 @@ export function Market({
         await openDirectChat(onixId);
       }}
       onOpenProduct={(productId) => {
-        setSellerProfile(null);
-        setSelected(null);
-        openProductCard(productId);
+        const fromProfile = items.find((item) => item.id === productId);
+        if (fromProfile) {
+          void openProduct(fromProfile, 'profile');
+          return;
+        }
+        void api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(productId)}`)
+          .then((product) => openProduct(product, 'profile'))
+          .catch((error) => setToast(friendlyError(error)));
       }}
       setToast={setToast}
     />
-    <Confirm open={Boolean(confirm)} title="Подтвердите покупку" text={confirm ? `${money(confirm.priceCents)} будут безопасно заморожены до получения товара.` : ''} busy={core.actionBusy?.startsWith('purchase')} onCancel={() => setConfirm(null)}
-      onConfirm={async () => {
-        if (!confirm) return;
-        const deal = await core.purchase(confirm.id);
-        if (!deal) return;
-        setConfirm(null);
-        setSelected(null);
-        setToast('Сделка создана. Деньги в сейфе.');
-        if (deal.chatId) openDealChat(deal.chatId);
-        else switchTo('deals');
-      }} />
+    {showTop && !selected && (
+      <button
+        type="button"
+        className="scroll-top"
+        aria-label="Наверх к лотам"
+        onClick={() => {
+          const grid = document.querySelector('.product-grid');
+          grid?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }}
+      >↑</button>
+    )}
   </div>;
 }
 export default Market;

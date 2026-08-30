@@ -9,6 +9,7 @@ import { IdentityService } from './identity.service';
 import { SESSION_ABSOLUTE_TTL_MS, SESSION_IDLE_TTL_MS, SESSION_REMEMBER_IDLE_TTL_MS } from './session.constants';
 import { type DeviceContext, type SessionAuthResult, SessionService } from './session.service';
 import { TelegramLoginVerifier, type TelegramLoginPayload } from './telegram-login.verifier';
+import { GoogleLoginVerifier } from './google-login.verifier';
 
 export interface LoginTelegramCommand {
   telegram: TelegramLoginPayload;
@@ -38,6 +39,7 @@ export class AuthOrchestrator {
     @Inject(AUTH_EVENT_PUBLISHER) private readonly events: AuthEventPublisher,
     @Optional() private readonly rollout?: AuthRolloutService,
     @Optional() private readonly avatars?: AvatarService,
+    @Optional() private readonly google?: GoogleLoginVerifier,
   ) {}
 
   async loginWithTelegram(command: LoginTelegramCommand): Promise<SessionAuthResult & {
@@ -235,6 +237,63 @@ export class AuthOrchestrator {
       sessionId,
       reason: 'LOGOUT',
     });
+  }
+
+  async loginWithGoogle(command: {
+    idToken: string;
+    rememberMe?: boolean;
+    device?: DeviceContext;
+  }): Promise<SessionAuthResult & { refreshMaxAgeSeconds: number }> {
+    if (!this.google) {
+      throw new AuthPlatformError('AUTH_INTERNAL', 'Google login is not configured.');
+    }
+    const identity = await this.google.verify(command.idToken);
+    const { user, session, refreshToken, trustedDevice } = await this.prisma.$transaction(async (tx) => {
+      const user = await this.identities.upsertGoogleUser(tx, identity);
+      const created = await this.sessions.createSessionInTransaction(tx, user, {
+        userId: user.id,
+        rememberMe: command.rememberMe,
+        device: command.device,
+        provider: 'GOOGLE',
+        amr: ['google'],
+      });
+      return { user, ...created };
+    });
+    const tokens = this.sessions.issueTokensForSession(
+      user, session.id, refreshToken, ['google'], trustedDevice,
+    );
+    await this.events.publish('UserLoggedIn.v1', {
+      userId: user.id.toString(),
+      sessionId: session.id,
+      provider: 'GOOGLE',
+    });
+    this.avatars?.warmFromSource(user.id, identity.picture ?? user.avatarUrl);
+    return {
+      session,
+      user: {
+        id: user.id,
+        onixId: user.onixId,
+        sessionVersion: user.sessionVersion,
+        permissionVersion: user.permissionVersion,
+        isAdmin: user.isAdmin,
+        deletedAt: user.deletedAt,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      trustedDevice,
+      refreshMaxAgeSeconds: refreshMaxAgeSeconds(session.rememberMe),
+    };
+  }
+
+  async linkTelegramToCurrentUser(
+    userId: bigint,
+    telegram: TelegramLoginPayload,
+  ): Promise<{ linked: true; hasTelegram: true; canSell: true }> {
+    const identity = this.telegram.verify(telegram);
+    await this.prisma.$transaction(async (tx) => {
+      await this.identities.linkTelegramToUser(tx, userId, identity);
+    });
+    return { linked: true, hasTelegram: true, canSell: true };
   }
 
   async logoutAll(userId: bigint): Promise<{ revoked: number; sessionVersion: number }> {

@@ -28,6 +28,8 @@ export function banDurationDays(reason: BanReason, otherDays?: number): number |
     case 'OFF_PLATFORM_DEAL':
     case 'FRAUD':
       return null;
+    case 'SELLER_NO_RESPONSE':
+      return 7;
     case 'OTHER':
       if (otherDays === undefined || !Number.isFinite(otherDays) || otherDays < 1 || otherDays > 3650) {
         throw new Error('Для причины OTHER укажите срок от 1 до 3650 дней.');
@@ -43,6 +45,7 @@ export const BAN_REASON_LABELS: Record<BanReason, string> = {
   THIRD_PARTY_ADS: 'Реклама сторонней площадки',
   OFF_PLATFORM_DEAL: 'Попытка сделки вне ONIX',
   FRAUD: 'Мошенничество',
+  SELLER_NO_RESPONSE: 'Продавец не отвечает',
   OTHER: 'Другое',
 };
 

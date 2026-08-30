@@ -25,5 +25,12 @@ export function validateDraft(
   if (draft.autoDeliver && !(draft.deliveryText?.trim()) && !opts?.keepDeliverySecret) {
     errors.push('Для автовыдачи укажите текст товара');
   }
+  if (!opts?.keepDeliverySecret && !draft.acceptedRules) {
+    errors.push('Нужно согласиться с правилами платформы');
+  }
+  const warranty = draft.warrantyHours ?? 10;
+  if (!Number.isInteger(warranty) || warranty < 5 || warranty > 720) {
+    errors.push('Срок гарантии — от 5 часов до 30 дней');
+  }
   return errors;
 }

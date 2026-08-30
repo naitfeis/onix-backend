@@ -17,6 +17,7 @@ import { SessionService } from './session.service';
 import { DeviceTrustService } from './device-trust.service';
 import { SigningKeyService } from './signing-key.service';
 import { TelegramLoginVerifier } from './telegram-login.verifier';
+import { GoogleLoginVerifier } from './google-login.verifier';
 import { TokenService } from './token.service';
 import { debugEndpointsEnabled } from '../debug-endpoints';
 import { CoordinationModule } from '../coordination/coordination.module';
@@ -47,6 +48,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
     RiskScoreService,
     IdentityService,
     TelegramLoginVerifier,
+    GoogleLoginVerifier,
     AuthOrchestrator,
     RbacService,
     AuthV2Guard,

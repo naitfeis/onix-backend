@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
+import { PLATFORM_VIDEO_RULE } from './platformCopy';
 import { Button, Card, Field, Input, Textarea } from '../design-system';
 import { minPriceRubles, validateDraft } from '../utils/productValidation';
 import type { Core } from './types';
@@ -73,8 +74,29 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
         <Field label="Количество"><Input required type="number" min={1} max={999} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
       <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
       {draft.autoDeliver && <Field label="Текст товара" hint="login / password / код / ссылка — выдаётся только после оплаты"><Textarea required maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} /></Field>}
+      <Field label="Срок гарантии" hint="Необязательно. От 5 часов до 30 дней, по умолчанию 10 часов.">
+        <Input
+          type="number"
+          min={5}
+          max={720}
+          value={draft.warrantyHours ?? 10}
+          onChange={(event) => setDraft({ ...draft, warrantyHours: Number(event.target.value) })}
+        />
+      </Field>
+      <p className="muted">{PLATFORM_VIDEO_RULE}</p>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={Boolean(draft.acceptedRules)}
+          onChange={(event) => setDraft({ ...draft, acceptedRules: event.target.checked })}
+        />
+        Я прочитал и согласен с правилами платформы
+      </label>
+      {core.profile && core.profile.hasTelegram === false && (
+        <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
+      )}
       <div className="summary-line"><span>К получению (после 5%)</span><strong>{payout ? `${payout} ₽` : '—'}</strong></div>
-      <Button type="submit" busy={core.actionBusy === 'product-form'}>ОПУБЛИКОВАТЬ ЛОТ</Button>
+      <Button type="submit" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
     </form></Card></div>;
 }
 export default ProductForm;

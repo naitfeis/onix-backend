@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, money } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
   formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type ProductDraft, type PublicProfile, type TrustCard,
@@ -13,7 +13,7 @@ import type { Core } from './types';
 export const emptyDraft: ProductDraft = {
   title: '', description: '', priceRubles: '', quantity: 1,
   category: CATEGORIES[0], subcategory: SUBCATEGORIES_BY_CATEGORY[CATEGORIES[0]][0],
-  autoDeliver: false, deliveryText: '',
+  autoDeliver: false, deliveryText: '', warrantyHours: 10, acceptedRules: false,
 };
 
 export const dealLabels: Record<Deal['status'], string> = {
@@ -221,7 +221,23 @@ export function PublicProfileModal({
             ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
             : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
           <span>{'★'.repeat(review.rating)}</span>
-        </div><p className="muted">{review.text}</p></Card>))}
+        </div><p className="muted">{review.text}</p>
+        {isSelf && core && setToast && (
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              const comment = window.prompt('Почему отзыв нужно снять?');
+              if (!comment?.trim()) return;
+              try {
+                await api.post(API_PATHS.reviewAppeal(review.id), { comment: comment.trim() });
+                setToast('Обжалование отправлено в поддержку.');
+              } catch (error) {
+                setToast(friendlyError(error));
+              }
+            }}
+          >Обжаловать</Button>
+        )}
+        </Card>))}
     </div>
     {core && setToast && reportOpen && (
       <ReportUserModal

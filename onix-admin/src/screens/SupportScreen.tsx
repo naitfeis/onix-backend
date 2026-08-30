@@ -65,6 +65,7 @@ export function SupportScreen() {
         <td>{report.reason}<br /><span className="muted">{report.comment}</span></td>
         <td className="actions-cell">
           {report.kind === 'AI_SUPPORT' && <button className="primary" type="button" disabled={!reason.trim()} onClick={() => void act(`/api/admin/support/reports/${report.id}/reply`, { text: reason })}>Reply</button>}
+          {report.kind === 'REVIEW_APPEAL' && <button className="primary" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/uphold-appeal`, {})}>Uphold appeal</button>}
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/close`, { reason })}>Close</button>
         </td>
       </tr>)}</tbody>

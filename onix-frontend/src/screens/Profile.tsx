@@ -401,6 +401,11 @@ export function Profile({
           </div>
         )}
       </div>
+      {profile.hasTelegram === false && (
+        <p className="form-error" role="alert">
+          Аккаунт Google: покупки доступны. Чтобы продавать, привяжите Telegram — имя и аватар тогда возьмутся из Telegram.
+        </p>
+      )}
       {showWebsiteLogout && (
         <div className="profile-logout">
           <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>

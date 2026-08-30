@@ -4,6 +4,8 @@ import { AuthUser } from './common';
 import { formatOnixId } from './onix-id';
 import { statusBadge, type PlatformStatusCode } from './platform-status';
 import { publicDisplayName } from './public-username';
+import { canLeaveReview } from './marketplace/review-policy';
+import { formatWarranty } from './marketplace/warranty';
 
 type PublicUser = {
   id: bigint;
@@ -49,6 +51,9 @@ export interface ProfileDto {
   };
   /** Additive Stage 1 — public trust card shape (never trustScore). */
   trustCard?: import('./economy/trust/trust-card').PublicTrustCard;
+  /** Selling requires a linked Telegram account. */
+  canSell?: boolean;
+  hasTelegram?: boolean;
 }
 
 export interface LedgerDto {
@@ -77,6 +82,8 @@ export interface ProductDto {
   createdAt: string;
   /** Unique views — only for the listing owner. */
   viewCount?: number;
+  warrantyHours?: number;
+  warrantyLabel?: string;
 }
 
 function resolveStatus(user: Pick<PublicUser, 'platformStatus' | 'isAdmin' | 'isSupport'>): PlatformStatus {
@@ -159,9 +166,11 @@ export function productDto(product: {
   seller: PublicUser;
   favorites?: Array<{ userId: bigint }>;
   _count?: { viewUniques?: number };
+  warrantyHours?: number | null;
 }, viewerId?: bigint): ProductDto {
   const ownerId = product.sellerId ?? product.seller.id;
   const isOwner = viewerId != null && ownerId === viewerId;
+  const warrantyHours = product.warrantyHours ?? 10;
   return {
     id: product.id,
     ...(product.lotNumber != null ? { lotNumber: product.lotNumber } : {}),
@@ -182,6 +191,8 @@ export function productDto(product: {
     ...(isOwner && product._count?.viewUniques != null
       ? { viewCount: product._count.viewUniques }
       : {}),
+    warrantyHours,
+    warrantyLabel: formatWarranty(warrantyHours),
   };
 }
 
@@ -222,10 +233,12 @@ export function dealDto(order: {
     role: buyer ? 'buyer' as const : 'seller' as const,
     counterparty: sellerDto(buyer ? order.seller : order.buyer),
     createdAt: order.createdAt.toISOString(),
-    canReview: order.status === 'COMPLETED'
-      && buyer
-      && order.totalAmountCents > 0n
-      && !order.reviews.some((review) => review.authorId === viewer.id),
+    canReview: canLeaveReview({
+      status: order.status,
+      buyerId: order.buyerId,
+      authorId: viewer.id,
+      totalAmountCents: order.totalAmountCents,
+    }) && !order.reviews.some((review) => review.authorId === viewer.id),
     complaintOpen,
     ...(order.chat?.id ? { chatId: order.chat.id } : {}),
     ...(order.dispute ? { dispute: order.dispute } : {}),

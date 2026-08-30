@@ -112,6 +112,7 @@ export async function backfillTelegramIdentityLinks(
 
   let insertedOrUpdated = 0;
   for (const user of users) {
+    if (user.telegramId == null) continue;
     const before = await prisma.identityLink.findUnique({
       where: {
         provider_providerUserId: {

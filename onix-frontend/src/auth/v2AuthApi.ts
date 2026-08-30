@@ -128,6 +128,27 @@ export async function postAuthV2Login(
   return data;
 }
 
+export async function postAuthV2Google(
+  body: { idToken: string; rememberMe?: boolean },
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<AuthV2LoginData> {
+  const response = await fetchImpl(`${apiBase}/api/v2/auth/google`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await readEnvelope<AuthV2LoginData>(response);
+  if (!data.accessToken || !Number.isFinite(data.expiresIn)) {
+    throw new AuthV2ApiError('Login response missing accessToken/expiresIn.', response.status);
+  }
+  return data;
+}
+
 /**
  * GET /api/v2/auth/me — Bearer Ed25519 access (AuthV2Guard).
  */

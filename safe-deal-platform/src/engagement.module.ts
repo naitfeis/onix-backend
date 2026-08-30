@@ -21,6 +21,8 @@ import { messageDto, notificationDto, reviewDto } from './response';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
 import { sanitizeReviewText } from './sanitize-user-text';
+import { hideReviewsForOrder, recomputeSellerRating } from './marketplace/review-aggregate';
+import { canLeaveReview } from './marketplace/review-policy';
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
 class MessageDto { @IsString() @Length(1, 2000) text!: string; }
 class MessagesQuery {
@@ -31,6 +33,9 @@ class MessagesQuery {
 class ReviewDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(5) rating!: number;
   @IsOptional() @IsString() @Length(1, 1000) text?: string;
+}
+class AppealReviewDto {
+  @IsString() @Length(1, 1000) comment!: string;
 }
 class CreateGroupDto {
   @IsString() @Length(1, 80) title!: string;
@@ -74,7 +79,6 @@ export class ChatService {
     const q = search?.trim();
     const chats = await this.prisma.chat.findMany({
       where: {
-        kind: { not: 'AI' },
         members: { some: { userId: user.id } },
         ...(q ? {
           OR: [
@@ -198,7 +202,11 @@ export class ChatService {
       };
     });
 
-    return mapped;
+    return mapped.sort((a, b) => {
+      if (a.kind === 'AI' && b.kind !== 'AI') return -1;
+      if (b.kind === 'AI' && a.kind !== 'AI') return 1;
+      return 0;
+    });
   }
 
   async searchUsers(user: AuthUser, q: string, limit: number) {
@@ -336,7 +344,6 @@ export class ChatService {
     await this.member(user.id, chatId);
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
-    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI больше недоступен.');
     const take = Math.min(Math.max(limit, 1), 100);
     const beforeId = before ? parseId(before) : undefined;
 
@@ -388,7 +395,9 @@ export class ChatService {
 
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
-    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI больше недоступен.');
+    if (chat.kind === 'AI') {
+      throw new BadRequestException('Пишите в ONIX AI через /api/ai/messages.');
+    }
 
     assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
 
@@ -718,7 +727,7 @@ export class ReviewService {
   async list(onixId: string) {
     const subject = await requireUserByOnixId(this.prisma, onixId);
     const reviews = await this.prisma.review.findMany({
-      where: { subjectId: subject.id },
+      where: { subjectId: subject.id, hiddenAt: null },
       include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -726,18 +735,64 @@ export class ReviewService {
     return reviews.map(reviewDto);
   }
 
+  async hideForRefundedOrder(orderId: bigint) {
+    await this.prisma.$transaction(async (tx) => {
+      await hideReviewsForOrder(tx as never, orderId, 'REFUND');
+    });
+  }
+
+  async appeal(user: AuthUser, reviewId: bigint, comment: string) {
+    const text = comment.trim();
+    if (!text) throw new BadRequestException('Укажите причину обжалования.');
+    const review = await this.prisma.review.findUnique({
+      where: { id: reviewId },
+      include: { subject: { select: { id: true, onixId: true } } },
+    });
+    if (!review || review.hiddenAt) throw new NotFoundException('Отзыв не найден.');
+    if (review.subjectId !== user.id) {
+      throw new ForbiddenException('Обжаловать отзыв может только продавец.');
+    }
+    const existing = await this.prisma.userReport.findFirst({
+      where: { reviewId, reporterId: user.id, closedAt: null },
+      select: { id: true },
+    });
+    if (existing) throw new ConflictException('Обжалование по этому отзыву уже отправлено.');
+    const report = await this.prisma.userReport.create({
+      data: {
+        reporterId: user.id,
+        targetId: review.authorId,
+        reason: 'OTHER',
+        comment: text.slice(0, 1000),
+        kind: 'REVIEW_APPEAL',
+        reviewId,
+      },
+    });
+    return { id: report.id, reviewId: review.id.toString() };
+  }
+
+  async hideOnAppeal(reviewId: bigint) {
+    await this.prisma.$transaction(async (tx) => {
+      const review = await tx.review.findUnique({ where: { id: reviewId } });
+      if (!review || review.hiddenAt) return;
+      await tx.review.update({
+        where: { id: reviewId },
+        data: { hiddenAt: new Date(), hiddenReason: 'APPEAL' },
+      });
+      await recomputeSellerRating(tx as never, review.subjectId, { floorPrevious: true });
+    });
+  }
+
   async create(user: AuthUser, orderId: bigint, dto: ReviewDto) {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const order = await tx.order.findUnique({ where: { id: orderId } });
-        if (!order || order.status !== 'COMPLETED') {
-          throw new BadRequestException('Отзыв доступен только после завершённой сделки.');
-        }
-        if (order.buyerId !== user.id) {
-          throw new BadRequestException('Отзыв может оставить только покупатель продавцу.');
-        }
-        if (order.totalAmountCents <= 0n) {
-          throw new BadRequestException('Отзыв недоступен для сделок на 0 ₽.');
+        if (!order || !canLeaveReview({
+          status: order.status,
+          buyerId: order.buyerId,
+          authorId: user.id,
+          totalAmountCents: order.totalAmountCents,
+        })) {
+          throw new BadRequestException('Отзыв доступен только после завершённой сделки от 100 ₽.');
         }
         const subjectId = order.sellerId;
         if (subjectId === user.id) {
@@ -759,19 +814,7 @@ export class ReviewService {
             ...(cleanText !== undefined ? { text: cleanText } : {}),
           },
         });
-        const aggregate = await tx.review.aggregate({
-          where: { subjectId },
-          _avg: { rating: true },
-          _count: true,
-        });
-        const average = aggregate._avg.rating ?? 0;
-        await tx.user.update({
-          where: { id: subjectId },
-          data: {
-            ratingAverage: Math.round(average * 100) / 100,
-            ratingCount: aggregate._count,
-          },
-        });
+        await recomputeSellerRating(tx as never, subjectId);
         await createDomainNotification(tx, {
           userId: subjectId,
           type: 'NEW_REVIEW',
@@ -906,6 +949,16 @@ export class EngagementController {
   ) {
     assertRateLimit(`review-create:${user.id}`, 10, 60_000);
     return this.reviews.create(user, parseId(id), dto);
+  }
+
+  @Post('reviews/:id/appeal')
+  appealReview(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: AppealReviewDto,
+  ) {
+    assertRateLimit(`review-appeal:${user.id}`, 8, 60_000);
+    return this.reviews.appeal(user, parseId(id), dto.comment);
   }
 }
 

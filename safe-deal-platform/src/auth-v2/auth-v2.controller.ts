@@ -5,7 +5,7 @@ import type { Response } from 'express';
 import { Public } from '../common';
 import { AuthOrchestrator } from './auth-orchestrator.service';
 import { AuthPlatformError } from './auth-errors';
-import { LoginDto, RefreshDto } from './auth-v2.dto';
+import { GoogleLoginDto, LinkTelegramDto, LoginDto, RefreshDto } from './auth-v2.dto';
 import { AuthV2Guard, type AuthV2RequestUser } from './auth-v2.guards';
 import {
   assertCsrfHeader,
@@ -80,6 +80,63 @@ export class AuthV2Controller {
         rememberMe: result.session.rememberMe,
       },
     };
+  }
+
+  @Post('google')
+  @Header('Cache-Control', 'no-store')
+  async loginGoogle(
+    @Body() body: GoogleLoginDto,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: { ip?: string; headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    await this.rateLimit.assert(`auth:v2:google:${clientIp ?? 'unknown'}`, 20, 60_000);
+    const result = await this.orchestrator.loginWithGoogle({
+      idToken: body.idToken,
+      rememberMe: body.rememberMe,
+      device: {
+        ...body.device,
+        userAgent: body.device?.userAgent ?? headerString(headers, 'user-agent'),
+        ipAddress: clientIp ?? undefined,
+      },
+    });
+    res.setHeader('Set-Cookie', buildRefreshCookieHeader(result.refreshToken, result.refreshMaxAgeSeconds));
+    return {
+      accessToken: result.accessToken,
+      tokenType: 'Bearer',
+      expiresIn: 900,
+      refreshMaxAgeSeconds: result.refreshMaxAgeSeconds,
+      trustedDevice: result.trustedDevice,
+      user: {
+        id: result.user.id.toString(),
+        onixId: result.user.onixId,
+        isAdmin: result.user.isAdmin,
+        sessionVersion: result.user.sessionVersion,
+        permissionVersion: result.user.permissionVersion,
+      },
+      session: {
+        id: result.session.id,
+        deviceName: result.session.deviceName,
+        browser: result.session.browser,
+        os: result.session.os,
+        country: result.session.country,
+        lastSeenAt: result.session.lastSeenAt.toISOString(),
+        createdAt: result.session.createdAt.toISOString(),
+        expiresAt: result.session.absoluteExpiresAt.toISOString(),
+        rememberMe: result.session.rememberMe,
+      },
+    };
+  }
+
+  @UseGuards(AuthV2Guard)
+  @Post('link/telegram')
+  @Header('Cache-Control', 'no-store')
+  linkTelegram(
+    @Req() req: { user: AuthV2RequestUser },
+    @Body() body: LinkTelegramDto,
+  ) {
+    return this.orchestrator.linkTelegramToCurrentUser(req.user.id, body.telegram);
   }
 
   @Post('refresh')

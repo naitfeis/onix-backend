@@ -53,6 +53,8 @@ export interface Product {
   createdAt: string;
   /** Unique views — present only for the listing owner. */
   viewCount?: number;
+  warrantyHours?: number;
+  warrantyLabel?: string;
 }
 
 export interface DisputeCard {
@@ -164,6 +166,8 @@ export interface Profile extends Seller {
   /** Embedded by GET /users/me after Stage 1 — prefer over extra RTT. */
   deposit?: DepositWallet;
   trustCard?: TrustCard;
+  canSell?: boolean;
+  hasTelegram?: boolean;
 }
 
 /** GET /api/users/me/analytics — Mon–Sun week */
@@ -233,6 +237,8 @@ export interface PublicProfile extends Seller {
     status: string;
     quantity: number;
     createdAt: string;
+    warrantyHours?: number;
+    lotNumber?: number;
   }>;
   reviews?: Review[];
 }
@@ -286,9 +292,11 @@ export interface ProductDraft {
   subcategory: string;
   autoDeliver?: boolean;
   deliveryText?: string;
+  warrantyHours?: number;
+  acceptedRules?: boolean;
 }
 
-export type ProductListSort = 'newest' | 'price_asc' | 'price_desc' | 'rating';
+export type ProductListSort = 'newest' | 'price_asc' | 'price_desc' | 'rating' | 'warranty' | 'reliability';
 
 export type ProductListQuery = {
   search?: string;
@@ -390,6 +398,12 @@ export const API_PATHS = {
   userPublic: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}`,
   reviews: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/reviews`,
   reviewCreate: (orderId: string) => `/api/orders/${encodeURIComponent(orderId)}/reviews`,
+  reviewAppeal: (id: string) => `/api/reviews/${encodeURIComponent(id)}/appeal`,
+  aiChat: '/api/ai/chat',
+  aiFaqs: '/api/ai/faqs',
+  aiMessages: '/api/ai/messages',
+  authGoogle: '/api/v2/auth/google',
+  authLinkTelegram: '/api/v2/auth/link/telegram',
   walletWithdraw: '/api/wallet/withdrawals',
   mfaStatus: (challengeId: string) =>
     `/api/v2/auth/mfa/status?challengeId=${encodeURIComponent(challengeId)}`,
@@ -452,6 +466,7 @@ export type BanReasonCode =
   | 'THIRD_PARTY_ADS'
   | 'OFF_PLATFORM_DEAL'
   | 'FRAUD'
+  | 'SELLER_NO_RESPONSE'
   | 'OTHER';
 
 export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hint: string }> = [
@@ -459,6 +474,7 @@ export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hi
   { value: 'THIRD_PARTY_ADS', label: 'Реклама сторонней площадки', hint: '30 дней' },
   { value: 'OFF_PLATFORM_DEAL', label: 'Попытка сделки вне ONIX', hint: 'Навсегда' },
   { value: 'FRAUD', label: 'Мошенничество', hint: 'Навсегда' },
+  { value: 'SELLER_NO_RESPONSE', label: 'Продавец не отвечает', hint: '7 дней' },
   { value: 'OTHER', label: 'Другое', hint: 'Срок вручную' },
 ];
 

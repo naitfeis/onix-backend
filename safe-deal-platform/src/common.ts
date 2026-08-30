@@ -13,7 +13,7 @@ import { formatErrorForLog } from './safe-error-log';
 
 export interface AuthUser {
   id: bigint;
-  telegramId: bigint;
+  telegramId: bigint | null;
   onixId: string;
   isAdmin: boolean;
   /** SUPPORT staff (or admin). Used for tickets/refunds — not a bypass of Escrow. */
@@ -38,8 +38,9 @@ export function isStaffViewer(user: Pick<AuthUser, 'isAdmin' | 'isSupport' | 'pl
 }
 
 /** Resolve SUPPORT flag from env (comma-separated Telegram IDs) + admin. */
-export function resolveIsSupport(telegramId: bigint, isAdmin: boolean): boolean {
+export function resolveIsSupport(telegramId: bigint | null | undefined, isAdmin: boolean): boolean {
   if (isAdmin) return true;
+  if (telegramId == null) return false;
   const raw = process.env.SUPPORT_TELEGRAM_IDS ?? '';
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
   return ids.includes(telegramId.toString());
