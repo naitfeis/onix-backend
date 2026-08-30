@@ -286,7 +286,6 @@ html[data-theme="dark"] .public-profile .product-card {
  * Acrylic blur + bright glass borders read as vertical «потеки» / white streaks.
  */
 .sidebar-left,
-.sidebar-right,
 html[data-theme="light"] .sidebar-left,
 html[data-theme="dark"] .sidebar-left {
   -webkit-backdrop-filter: none !important;
@@ -294,18 +293,31 @@ html[data-theme="dark"] .sidebar-left {
   isolation: isolate;
   contain: paint;
   box-shadow: none;
-  border-color: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+}
+
+.sidebar-right,
+html[data-theme="light"] .sidebar-right,
+html[data-theme="dark"] .sidebar-right {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  isolation: isolate;
+  contain: none;
+  box-shadow: none;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
 }
 
 html[data-theme="light"] .sidebar-left,
 html[data-theme="light"] .sidebar-right {
-  border-color: rgba(20, 25, 35, 0.06);
-  background: rgba(255, 255, 255, 0.97);
+  border-color: transparent;
+  background: transparent;
 }
 
 html[data-theme="dark"] .sidebar-left,
 html[data-theme="dark"] .sidebar-right {
-  background: rgba(14, 12, 22, 0.97);
+  background: transparent;
 }
 
 /* No edge glints — they read as stripes through stacked glass */
@@ -389,10 +401,10 @@ html[data-theme="light"] .topbar::after {
 .sidebar-left,
 .sidebar-right {
   position: relative;
-  overflow: hidden;
-  background: var(--glass-bg);
-  border: var(--glass-border);
-  border-radius: var(--radius-card);
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -417,12 +429,17 @@ html[data-theme="light"] .topbar::after {
 
 /* Sidebar panel keeps acrylic blur; children must not add a second blur layer */
 .sidebar-left,
-.sidebar-right,
-.app-shell--left-icons .sidebar-left,
-.app-shell--right-icons .sidebar-right {
+.app-shell--left-icons .sidebar-left {
   overflow: hidden;
   isolation: isolate;
   contain: paint;
+}
+
+.sidebar-right,
+.app-shell--right-icons .sidebar-right {
+  overflow: visible;
+  isolation: isolate;
+  contain: none;
 }
 
 .sidebar-nav,
