@@ -172,7 +172,7 @@ export class AuthService {
             where: { id: created.id },
             data: { onixId: `ONIX-${created.id.toString().padStart(6, '0')}` },
           });
-          if (isDualWriteIdentityEnabled()) {
+          if (isDualWriteIdentityEnabled() && withOnixId.telegramId != null) {
             await dualWriteTelegramIdentity(tx, {
               userId: withOnixId.id,
               telegramId: withOnixId.telegramId,

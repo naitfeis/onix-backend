@@ -587,8 +587,9 @@ export class AdminSecurityService {
       throw new BadRequestException('Это не обжалование отзыва.');
     }
     if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
+    const reviewId = report.reviewId;
     await this.prisma.$transaction(async (tx) => {
-      const review = await tx.review.findUnique({ where: { id: report.reviewId! } });
+      const review = await tx.review.findUnique({ where: { id: reviewId } });
       if (review && !review.hiddenAt) {
         await tx.review.update({
           where: { id: review.id },
@@ -606,7 +607,7 @@ export class AdminSecurityService {
           action: 'ADMIN_REVIEW_APPEAL_UPHOLD',
           targetType: 'UserReport',
           targetId: reportId,
-          metadataJson: { reviewId: report.reviewId.toString() },
+          metadataJson: { reviewId: reviewId.toString() },
         },
       });
     });
@@ -879,8 +880,8 @@ export class AdminSecurityService {
       payoutCents: row.payoutCents.toString(),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
-      buyer: { ...row.buyer, telegramId: row.buyer.telegramId.toString(), onixId: formatOnixId(row.buyer.onixId) },
-      seller: { ...row.seller, telegramId: row.seller.telegramId.toString(), onixId: formatOnixId(row.seller.onixId) },
+      buyer: { ...row.buyer, telegramId: row.buyer.telegramId?.toString() ?? null, onixId: formatOnixId(row.buyer.onixId) },
+      seller: { ...row.seller, telegramId: row.seller.telegramId?.toString() ?? null, onixId: formatOnixId(row.seller.onixId) },
       transitions: row.transitions.map((t) => ({ ...t, actorId: t.actorId?.toString() ?? null, createdAt: t.createdAt.toISOString() })),
     }));
   }
@@ -905,8 +906,8 @@ export class AdminSecurityService {
       id: order.id.toString(), productId: order.productId.toString(), buyerId: order.buyerId.toString(), sellerId: order.sellerId.toString(),
       totalAmountCents: order.totalAmountCents.toString(), feeCents: order.feeCents.toString(), payoutCents: order.payoutCents.toString(),
       createdAt: order.createdAt.toISOString(), updatedAt: order.updatedAt.toISOString(), canceledAt: order.canceledAt?.toISOString() ?? null, completedAt: order.completedAt?.toISOString() ?? null,
-      buyer: { ...order.buyer, id: order.buyer.id.toString(), telegramId: order.buyer.telegramId.toString(), onixId: formatOnixId(order.buyer.onixId) },
-      seller: { ...order.seller, id: order.seller.id.toString(), telegramId: order.seller.telegramId.toString(), onixId: formatOnixId(order.seller.onixId) },
+      buyer: { ...order.buyer, id: order.buyer.id.toString(), telegramId: order.buyer.telegramId?.toString() ?? null, onixId: formatOnixId(order.buyer.onixId) },
+      seller: { ...order.seller, id: order.seller.id.toString(), telegramId: order.seller.telegramId?.toString() ?? null, onixId: formatOnixId(order.seller.onixId) },
       product: { ...order.product, priceCents: order.product.priceCents.toString() },
       transitions: order.transitions.map((t) => ({ ...t, id: t.id.toString(), orderId: t.orderId.toString(), actorId: t.actorId?.toString() ?? null, createdAt: t.createdAt.toISOString() })),
       supportTickets: order.supportTickets.map((t) => ({ ...t, openedById: t.openedById.toString(), createdAt: t.createdAt.toISOString(), closedAt: t.closedAt?.toISOString() ?? null })),

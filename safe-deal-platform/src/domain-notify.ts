@@ -49,7 +49,7 @@ export async function pushTelegramToChatId(
 
 /** Notify seller followers about a newly published ACTIVE product (Bot API, no polling). */
 export async function pushNewProductToFollowers(
-  followers: Array<{ telegramId: bigint }>,
+  followers: Array<{ telegramId: bigint | null }>,
   product: { id: string; title: string; priceCents: bigint; category: string },
 ): Promise<void> {
   const appBase = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',')[0]?.trim();
