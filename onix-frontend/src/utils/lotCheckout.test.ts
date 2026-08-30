@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lotDisplayTitle, lotShortDescription, quoteLotCheckout } from './lotCheckout';
+import { LOT_PAY_METHODS, lotDisplayTitle, lotShortDescription, quoteLotCheckout } from './lotCheckout';
 
 describe('quoteLotCheckout', () => {
   it('covers a cheap lot from balance with no fee', () => {
@@ -22,6 +22,10 @@ describe('quoteLotCheckout', () => {
     expect(q.remainingCents).toBe(96_000);
     expect(q.feeCents).toBe(960);
     expect(q.externalCents).toBe(96_960);
+  });
+
+  it('does not offer cryptocurrency as a checkout method', () => {
+    expect(LOT_PAY_METHODS).toEqual(['BALANCE', 'SBP', 'CARD']);
   });
 
   it('applies 4% card fee only to the leftover', () => {

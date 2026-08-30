@@ -593,7 +593,7 @@ export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
   DEPOSIT: 'Пополнение',
   DEPOSIT_FUND: 'Пополнение залога',
   DEPOSIT_RETURN: 'Возврат залога',
-  PURCHASE_HOLD: 'Оплата в сейф ONIX',
+  PURCHASE_HOLD: 'Покупки',
   REFUND: 'Возврат',
   SALE_PAYOUT: 'Выплата с продажи',
   ADMIN_ADJUSTMENT: 'Корректировка',
@@ -602,6 +602,20 @@ export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
 
 export function ledgerTypeLabel(type: string): string {
   return LEDGER_TYPE_LABELS[type as WalletOperation['type']] ?? type;
+}
+
+/** Wallet history amount: credits (sale, top-up) show a leading +. */
+export function formatLedgerAmount(amountCents: string): string {
+  const value = Number(amountCents);
+  if (!Number.isFinite(value)) return '—';
+  const formatted = new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'RUB',
+    maximumFractionDigits: 2,
+  }).format(Math.abs(value) / 100);
+  if (value > 0) return `+${formatted}`;
+  if (value < 0) return `−${formatted}`;
+  return formatted;
 }
 
 /** lastSeen display — precise online arrives with WebSocket (5.6). */

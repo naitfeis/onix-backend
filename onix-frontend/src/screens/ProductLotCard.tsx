@@ -53,15 +53,15 @@ export function ProductLotCard({
             <span className="product-card__rating-score"><IconStar /> {rating}</span>
             <span className="product-card__rating-count">{reviewCountLabel(product.seller.reviewCount)}</span>
           </div>
-          {(showFounder || product.autoDeliver) && (
+          {showFounder && (
             <div className="product-card__flags">
-              {showFounder && <span className="pill-super">Основатель</span>}
-              {product.autoDeliver && (
-                <span className="product-card__bolt" title="Автовыдача" aria-label="Автовыдача">⚡</span>
-              )}
+              <span className="pill-super">Основатель</span>
             </div>
           )}
         </div>
+        {product.autoDeliver && (
+          <span className="product-card__bolt" title="Автовыдача" aria-label="Автовыдача">⚡</span>
+        )}
         <div className="product-card__seller-float">
           <div className="product-card__avatar">
             <UserAvatar

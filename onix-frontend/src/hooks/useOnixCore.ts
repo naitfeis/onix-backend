@@ -141,6 +141,9 @@ export function useOnixCore() {
   const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
   const chatsRef = useRef(store.chats);
   chatsRef.current = store.chats;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
+  const activeChatIdRef = useRef<string | null>(null);
 
   const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -440,6 +443,7 @@ export function useOnixCore() {
           if (list.some((row) => row.id === incoming.id)) return previous;
           return { ...previous, [msg.chatId]: [...list, incoming] };
         });
+        const viewing = activeChatIdRef.current === msg.chatId;
         setStore((previous) => ({
           ...previous,
           chats: previous.chats.map((chat) => {
@@ -447,14 +451,51 @@ export function useOnixCore() {
             return {
               ...chat,
               subtitle: incoming.text,
-              unreadCount: msg.unreadDelta
-                ? (chat.unreadCount ?? 0) + msg.unreadDelta
-                : chat.unreadCount,
+              unreadCount: viewing
+                ? 0
+                : msg.unreadDelta
+                  ? (chat.unreadCount ?? 0) + msg.unreadDelta
+                  : chat.unreadCount,
             };
           }),
         }));
+        if (viewing) getRealtimeClient().markRead(msg.chatId);
         const aiThread = chatsRef.current.some((row) => row.id === msg.chatId && row.kind === 'AI');
         if (!incoming.mine && (incoming.kind !== 'SYSTEM' || aiThread)) playSound('notify');
+        return;
+      }
+      if (msg.type === 'chat.read') {
+        const reader = normOnixId(msg.onixId);
+        const isMe = Boolean(profileRef.current && normOnixId(profileRef.current.onixId) === reader);
+        if (isMe) {
+          setStore((previous) => ({
+            ...previous,
+            chats: previous.chats.map((chat) => (
+              chat.id === msg.chatId ? { ...chat, unreadCount: 0 } : chat
+            )),
+          }));
+        }
+        setMessages((previous) => {
+          const list = previous[msg.chatId];
+          if (!list) return previous;
+          const readAt = new Date(msg.lastReadAt).getTime();
+          let changed = false;
+          const next = list.map((row) => {
+            if (!row.mine || row.kind === 'SYSTEM') return row;
+            if (new Date(row.createdAt).getTime() > readAt) return row;
+            const already = row.readBy?.some((item) => normOnixId(item.onixId) === reader);
+            if (already && row.deliveryStatus === 'READ') return row;
+            changed = true;
+            return {
+              ...row,
+              deliveryStatus: 'READ' as const,
+              readBy: already
+                ? row.readBy
+                : [...(row.readBy ?? []), { onixId: msg.onixId, username: msg.username, readAt: msg.lastReadAt }],
+            };
+          });
+          return changed ? { ...previous, [msg.chatId]: next } : previous;
+        });
         return;
       }
       if (msg.type === 'presence') {
@@ -484,6 +525,7 @@ export function useOnixCore() {
         return;
       }
       if (msg.type === 'order.updated') {
+        if (msg.sound === 'order') playSound('order');
         void load('deals', API_PATHS.orders, { silent: true });
         void load('chats', API_PATHS.chats, { silent: true });
         return;
@@ -524,7 +566,7 @@ export function useOnixCore() {
             ...previous.notifications,
           ].slice(0, 100),
         }));
-        playSound(isOrderNotification(msg.title, msg.body) ? 'order' : 'notify');
+        if (!isOrderNotification(msg.title, msg.body)) playSound('notify');
       }
     });
     // Keep token provider warm; reconnect if socket dropped auth.
@@ -539,6 +581,11 @@ export function useOnixCore() {
       window.clearInterval(tokenRefresh);
     };
   }, [profile?.onixId, load]);
+
+  const setActiveChatId = useCallback((chatId: string | null) => {
+    activeChatIdRef.current = chatId;
+    if (chatId) getRealtimeClient().markRead(chatId);
+  }, []);
 
   const subscribeRealtimeChat = useCallback((chatId: string) => {
     getRealtimeClient().subscribeChat(chatId);
@@ -916,6 +963,6 @@ export function useOnixCore() {
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
     markNotificationRead, reportUser, signOut,
-    subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
+    subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
   };
 }

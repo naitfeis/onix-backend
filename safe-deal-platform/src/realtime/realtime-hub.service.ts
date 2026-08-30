@@ -168,6 +168,10 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         await this.emitTyping(state, msg.chatId);
         return;
       }
+      if (msg.type === 'chat.read') {
+        await this.markChatRead(state, msg.chatId);
+        return;
+      }
     } catch (err) {
       const code = err instanceof AuthPlatformError ? err.code : 'REALTIME_ERROR';
       const message = err instanceof Error ? err.message : 'Realtime error';
@@ -258,6 +262,47 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async markChatRead(state: SocketState, chatId: string): Promise<void> {
+    if (!state.user) return;
+    const id = chatId.trim();
+    if (!id || id.length > 64) {
+      this.send(state.ws, { type: 'error', code: 'REALTIME_BAD_CHAT', message: 'Invalid chatId.' });
+      return;
+    }
+    const member = await this.prisma.chatMember.findUnique({
+      where: { chatId_userId: { chatId: id, userId: state.user.id } },
+      select: { chatId: true },
+    });
+    if (!member) {
+      this.send(state.ws, { type: 'error', code: 'REALTIME_FORBIDDEN', message: 'Not a chat member.' });
+      return;
+    }
+    const lastReadAt = new Date();
+    await this.prisma.chatMember.update({
+      where: { chatId_userId: { chatId: id, userId: state.user.id } },
+      data: { lastReadAt },
+    });
+    const others = await this.prisma.chatMember.findMany({
+      where: { chatId: id, userId: { not: state.user.id } },
+      select: { userId: true },
+      take: 50,
+    });
+    const user = await this.prisma.user.findUnique({
+      where: { id: state.user.id },
+      select: { onixId: true, displayName: true },
+    });
+    if (!user) return;
+    this.bus.publish({
+      kind: 'chat.read',
+      chatId: id,
+      userId: state.user.id,
+      onixId: user.onixId,
+      username: publicDisplayName(user.displayName, user.onixId),
+      lastReadAt: lastReadAt.toISOString(),
+      recipientUserIds: [state.user.id, ...others.map((m) => m.userId)],
+    });
+  }
+
   private onBusEvent(event: import('./realtime.types').RealtimeBusEvent): void {
     if (event.kind === 'chat.message') {
       for (const [viewerKey, dto] of event.messageByViewer) {
@@ -279,6 +324,18 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         userId: event.userId.toString(),
         onixId: event.onixId,
         username: event.username,
+      };
+      for (const id of event.recipientUserIds) this.sendToUser(id, payload);
+      return;
+    }
+    if (event.kind === 'chat.read') {
+      const payload: RealtimeServerMessage = {
+        type: 'chat.read',
+        chatId: event.chatId,
+        userId: event.userId.toString(),
+        onixId: event.onixId,
+        username: event.username,
+        lastReadAt: event.lastReadAt,
       };
       for (const id of event.recipientUserIds) this.sendToUser(id, payload);
       return;
@@ -307,13 +364,16 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     if (event.kind === 'order.updated') {
-      const payload: RealtimeServerMessage = {
-        type: 'order.updated',
-        orderId: event.orderId,
-        status: event.status,
-        ...(event.chatId ? { chatId: event.chatId } : {}),
-      };
-      for (const id of event.recipientUserIds) this.sendToUser(id, payload);
+      const soundIds = new Set((event.soundUserIds ?? []).map((id) => id.toString()));
+      for (const id of event.recipientUserIds) {
+        this.sendToUser(id, {
+          type: 'order.updated',
+          orderId: event.orderId,
+          status: event.status,
+          ...(event.chatId ? { chatId: event.chatId } : {}),
+          ...(soundIds.has(id.toString()) ? { sound: 'order' as const } : {}),
+        });
+      }
       return;
     }
     if (event.kind === 'product.changed') {

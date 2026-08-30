@@ -1,13 +1,12 @@
-export type LotPayMethod = 'BALANCE' | 'SBP' | 'CARD' | 'CRYPTO';
+export type LotPayMethod = 'BALANCE' | 'SBP' | 'CARD';
 
 export const LOT_PAY_FEE_BPS: Record<LotPayMethod, number> = {
   BALANCE: 0,
   SBP: 100,
   CARD: 400,
-  CRYPTO: 0,
 };
 
-export const LOT_PAY_METHODS: LotPayMethod[] = ['BALANCE', 'SBP', 'CARD', 'CRYPTO'];
+export const LOT_PAY_METHODS: LotPayMethod[] = ['BALANCE', 'SBP', 'CARD'];
 
 export function lotPayMethodMeta(method: LotPayMethod): {
   title: string;
@@ -17,7 +16,6 @@ export function lotPayMethodMeta(method: LotPayMethod): {
 } {
   if (method === 'SBP') return { title: 'СБП', hint: 'Сбор 1% с остатка', icon: '⚡', live: true };
   if (method === 'CARD') return { title: 'Банковская карта', hint: 'Сбор 4% с остатка', icon: '💳', live: true };
-  if (method === 'CRYPTO') return { title: 'Криптовалюта', hint: 'Тестовый способ', icon: '◎', live: false };
   return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: '◆', live: true };
 }
 

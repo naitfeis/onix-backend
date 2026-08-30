@@ -187,7 +187,6 @@ export function PublicProfileModal({
           <strong>{money(trustCard?.depositTotal ?? '0')}</strong>
         </div>
       </Card>
-      <p className="muted">Пополняется продавцом добровольно. Используется как дополнительная гарантия.</p>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}
       <div className="chips profile-tabs">

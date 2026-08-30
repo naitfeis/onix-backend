@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { api, ApiError, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, ledgerTypeLabel, sellerIsPresent,
+  API_PATHS, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import { isTelegramMiniApp } from '../auth/telegramEnv';
@@ -453,7 +453,7 @@ export function Profile({
       )}
     </div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
-      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
+      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{formatLedgerAmount(item.amountCents)}</strong></div>)}</div>
       {historyHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
           <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>{t('common.showMore')}</Button>

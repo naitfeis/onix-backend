@@ -568,7 +568,7 @@ html[data-theme="dark"] .button--secondary {
   color: #fff;
   background: linear-gradient(180deg, #F07068, #D44A42);
   border: 0;
-  box-shadow: 0 4px 14px rgba(240, 86, 74, 0.35);
+  box-shadow: none;
 }
 .button--ghost {
   color: var(--muted);
@@ -581,7 +581,8 @@ html[data-theme="dark"] .button--secondary {
   color: #fff;
   background: #6B5FE0;
   border: 0;
-  box-shadow: none;
+  box-shadow: none !important;
+  filter: none;
 }
 .spinner { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .65s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -594,7 +595,9 @@ html[data-theme="dark"] .button--secondary {
   box-sizing: border-box;
   overflow-x: clip;
   overflow-wrap: anywhere;
-  /* glass: tokens.css — blur via --glass-blur */
+}
+.card.seller-identity {
+  overflow: visible;
 }
 .card h2,
 .card p,
@@ -766,23 +769,30 @@ html[data-theme="light"] .product-card__avatar .user-avatar__presence {
   gap: 6px;
 }
 .product-card__bolt {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: rgba(16, 14, 24, 0.72);
-  border: 1px solid rgba(245, 193, 74, 0.4);
+  background: rgba(16, 14, 24, 0.78);
+  border: 1px solid rgba(245, 193, 74, 0.45);
   font-size: 14px;
   line-height: 1;
+  box-shadow: none;
+  filter: none;
 }
 .product-card__rating {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
-  min-width: 0;
+  flex-shrink: 0;
+  min-width: max-content;
   padding: 4px 8px;
   border-radius: 10px;
   color: #fff;
@@ -803,6 +813,7 @@ html[data-theme="light"] .product-card__rating {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
+  white-space: nowrap;
 }
 .product-card__rating-score svg {
   width: 11px;
@@ -879,32 +890,43 @@ html[data-theme="light"] .product-card__rating-count {
   margin-top: 6px;
 }
 .product-card__footer--bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "warranty warranty"
+    "price buy";
+  align-items: center;
+  gap: 8px 10px;
   padding: 0 12px 12px;
   margin-top: 0;
-  flex-wrap: wrap;
 }
 .product-card__warranty {
-  flex: 1 1 100%;
+  grid-area: warranty;
   text-align: left;
   font-size: 11px;
   line-height: 1.2;
   color: var(--text-secondary);
 }
 .product-card__price {
+  grid-area: price;
   font-family: var(--font-body), sans-serif;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   color: var(--text);
-  min-width: max-content;
+  min-width: 0;
   white-space: nowrap;
 }
 .product-card__buy {
+  grid-area: buy;
   min-height: 32px;
-  padding: 6px 12px;
+  min-width: 64px;
+  padding: 6px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
+  box-shadow: none !important;
+  filter: none;
 }
 .onixlot-id {
   font-family: var(--font-mono), ui-monospace, monospace;
@@ -2380,13 +2402,13 @@ body.is-resizing-chat * {
   width: 100%;
   padding: 13px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   text-align: left;
-  border: var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: var(--glass-regular-bg);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   font-size: 12px;
   font-family: inherit;
@@ -2395,14 +2417,38 @@ body.is-resizing-chat * {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
+html[data-theme="light"] .thread {
+  background: #fff;
+  border-color: rgba(20, 24, 32, 0.1);
+}
 .thread.active {
   border-color: color-mix(in srgb, var(--accent-violet) 55%, var(--line));
   background: color-mix(in srgb, var(--accent-violet) 16%, var(--glass-regular-bg));
 }
-.thread-peer { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
-.thread span { display: grid; gap: 4px; min-width: 0; }.thread b, .thread small { overflow-wrap: anywhere; }
+.thread-peer { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
+.thread span { display: grid; gap: 4px; min-width: 0; }
+.thread b { overflow-wrap: anywhere; }
+.thread small {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  max-height: calc(1.35em * 4);
+}
 .thread small, .conversation__head small { color: var(--muted); }
+.conversation__head small {
+  display: block;
+  -webkit-line-clamp: unset;
+  max-height: none;
+  overflow: visible;
+}
 .thread em, .nav-count {
+  align-self: center;
+  flex-shrink: 0;
   min-width: 18px;
   height: 18px;
   padding: 3px;
@@ -2815,16 +2861,22 @@ html[data-theme="dark"] .stats b { color: #fff; }
   padding: 0 0 28px;
 }
 .lot-island {
-  padding: 16px;
+  padding: 16px 16px 18px;
   border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--glass-card-bg, var(--surface, rgba(255,255,255,0.04)));
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #1a1a22;
+  overflow: visible;
+}
+html[data-theme="light"] .lot-island {
+  background: #fff;
+  border-color: rgba(20, 24, 32, 0.12);
 }
 .lot-island--seller .seller-identity.profile-card {
   background: transparent;
   border: none;
   box-shadow: none;
   padding: 0;
+  overflow: visible;
 }
 .lot-sheet__hero h1 { margin: 0 0 8px; font-size: 22px; }
 .lot-sheet__kicker {
@@ -2885,6 +2937,8 @@ html[data-theme="dark"] .lot-sheet__detail {
 .lot-sheet__badge--auto {
   color: #f5c14a;
   border-color: rgba(245, 193, 74, 0.35);
+  box-shadow: none;
+  filter: none;
 }
 .lot-checkout {
   display: grid;
@@ -2928,6 +2982,8 @@ html[data-theme="dark"] .lot-sheet__detail {
 .lot-pay-option.is-active,
 .lot-pay-picker__list .lot-pay-option:hover {
   border-color: var(--accent);
+  box-shadow: none;
+  filter: none;
 }
 .lot-pay-option__icon {
   width: 40px;
@@ -2971,6 +3027,8 @@ html[data-theme="dark"] .lot-sheet__detail {
 }
 .lot-sheet__buy .button {
   width: 100%;
+  box-shadow: none !important;
+  filter: none;
 }
 @media (max-width: 899px) {
   .lot-sheet__buy {
@@ -2986,7 +3044,10 @@ html[data-theme="dark"] .lot-sheet__detail {
   font-size: 12px;
   color: var(--text-secondary);
 }
-.seller-identity.profile-card { margin: 0; }
+.seller-identity.profile-card {
+  margin: 0;
+  overflow: visible;
+}
 .seller-identity.profile-card > .card-actions { grid-column: 1 / -1; }
 .seller-identity .profile-main h1 { font-size: 18px; }
 .seller-identity__trust {
@@ -3004,12 +3065,25 @@ html[data-theme="dark"] .lot-sheet__detail {
 .seller-identity__trust span { color: var(--text-secondary); }
 .seller-identity__actions {
   display: grid !important;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  margin-top: 14px;
+  padding-bottom: 2px;
 }
 .seller-identity__actions .button {
-  min-height: 40px;
-  border: 1px solid var(--border);
-  background: var(--surface, rgba(255,255,255,0.04));
+  min-height: 44px;
+  min-width: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+  overflow: visible;
+  line-height: 1.2;
+}
+html[data-theme="light"] .seller-identity__actions .button {
+  border-color: rgba(20, 24, 32, 0.14);
+  background: rgba(20, 24, 32, 0.04);
 }
 .lot-sheet__warn {
   margin: 10px 0 0;
@@ -3076,11 +3150,9 @@ html[data-theme="dark"] .lot-sheet__detail {
   box-shadow: none;
 }
 .modal__actions .button--primary,
-.modal__actions .button--buy {
-  box-shadow: 0 4px 16px rgba(91, 141, 239, 0.4);
-}
+.modal__actions .button--buy,
 .modal__actions .button--danger {
-  box-shadow: 0 4px 14px rgba(240, 86, 74, 0.32);
+  box-shadow: none;
 }
 .order-card-inline__cta,
 .order-card-inline .button--primary {
@@ -3091,7 +3163,7 @@ html[data-theme="dark"] .lot-sheet__detail {
   color: #fff !important;
   background: linear-gradient(180deg, #7AA4F5, #3D6FD4) !important;
   border: 0 !important;
-  box-shadow: 0 4px 16px rgba(91, 141, 239, 0.4);
+  box-shadow: none !important;
 }
 .message-menu {
   position: absolute;
@@ -4090,10 +4162,16 @@ html[data-theme="dark"] .sidebar-right {
   backdrop-filter: none !important;
 }
 
-html[data-theme="light"] .thread-list .thread,
+html[data-theme="light"] .thread-list .thread {
+  background: #fff !important;
+  border-color: rgba(20, 24, 32, 0.1) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
 html[data-theme="dark"] .thread-list .thread {
-  background: transparent !important;
-  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;

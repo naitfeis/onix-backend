@@ -681,7 +681,6 @@ export function Market({
           product={product}
           core={core}
           onOpen={() => void openProduct(product)}
-          hidePrice
           onFavorite={() => {
             setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
             void core.toggleFavorite(product);

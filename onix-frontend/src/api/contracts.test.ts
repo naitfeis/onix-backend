@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  API_PATHS, CATEGORIES, productsListPath, productsMinePath, ordersListPath, walletLedgerPath,
+  API_PATHS, CATEGORIES, formatLedgerAmount, ledgerTypeLabel, productsListPath, productsMinePath, ordersListPath, walletLedgerPath,
 } from './contracts';
 
 describe('ONIX API paths', () => {
@@ -45,6 +45,13 @@ describe('ONIX API paths', () => {
     expect(walletLedgerPath({ limit: 15, offset: 15 })).toBe('/api/wallet/ledger?limit=15&offset=15');
     expect(productsMinePath({ limit: 15, offset: 0 })).toBe('/api/products/mine?limit=15&offset=0');
     expect(API_PATHS.walletLedger({ limit: 15, offset: 30 })).toBe('/api/wallet/ledger?limit=15&offset=30');
+  });
+
+  it('labels wallet purchases in plain language and signs credits', () => {
+    expect(ledgerTypeLabel('PURCHASE_HOLD')).toBe('Покупки');
+    expect(formatLedgerAmount('100000')).toMatch(/^\+1[\s\u00a0]000,00[\s\u00a0]₽$/);
+    expect(formatLedgerAmount('-100000')).toMatch(/^−1[\s\u00a0]000,00[\s\u00a0]₽$/);
+    expect(formatLedgerAmount('50000')).toMatch(/^\+/);
   });
 
   it('uses canonical backend category enum values', () => {

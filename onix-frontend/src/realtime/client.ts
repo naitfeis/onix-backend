@@ -9,9 +9,10 @@ export type RealtimeInbound =
   | { type: 'error'; code: string; message: string }
   | { type: 'chat.message'; chatId: string; message: unknown; unreadDelta?: number }
   | { type: 'chat.typing'; chatId: string; userId: string; onixId: string; username: string }
+  | { type: 'chat.read'; chatId: string; userId: string; onixId: string; username: string; lastReadAt: string }
   | { type: 'presence'; userId: string; onixId: string; online: boolean; lastOnline: string }
   | { type: 'notification'; id: string; title: string; body: string; createdAt: string; data?: Record<string, unknown> }
-  | { type: 'order.updated'; orderId: string; status: string; chatId?: string }
+  | { type: 'order.updated'; orderId: string; status: string; chatId?: string; sound?: 'order' }
   | {
       type: 'product.changed';
       productId: string;
@@ -92,6 +93,10 @@ export class RealtimeClient {
 
   typing(chatId: string): void {
     this.send({ type: 'typing', chatId });
+  }
+
+  markRead(chatId: string): void {
+    this.send({ type: 'chat.read', chatId });
   }
 
   private open(): void {

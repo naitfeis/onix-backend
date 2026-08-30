@@ -71,13 +71,14 @@ export class EscrowService {
     buyerId: bigint;
     sellerId: bigint;
     chatId?: string | null;
-  }): void {
+  }, opts?: { soundUserIds?: bigint[] }): void {
     this.realtime.publish({
       kind: 'order.updated',
       orderId: order.id.toString(),
       status: order.status,
       ...(order.chatId ? { chatId: order.chatId } : {}),
       recipientUserIds: [order.buyerId, order.sellerId],
+      ...(opts?.soundUserIds?.length ? { soundUserIds: opts.soundUserIds } : {}),
     });
   }
 
@@ -169,7 +170,7 @@ export class EscrowService {
       if (totalAmountCents > 0n) {
         await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
           idempotencyKey: `order:${key}:hold`,
-          description: 'Оплата в сейф ONIX',
+          description: 'Покупки',
           actorUserId: user.id,
           source: 'SYSTEM',
         });
@@ -298,13 +299,13 @@ export class EscrowService {
       select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
     });
     if (live) {
-      this.emitOrderUpdated(live);
+      this.emitOrderUpdated(live, { soundUserIds: [live.sellerId] });
       this.realtime.publish({
         kind: 'notification',
         userId: live.sellerId,
         id: `order-paid-${live.id.toString()}`,
         title: 'Новая покупка',
-        body: 'Покупатель оплатил заказ — деньги хранятся в сейфе ONIX.',
+        body: 'Покупатель оплатил заказ.',
         createdAt: new Date().toISOString(),
         data: {
           orderId: live.id.toString(),

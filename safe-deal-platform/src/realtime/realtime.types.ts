@@ -8,7 +8,8 @@ export type RealtimeClientMessage =
   | { type: 'ping' }
   | { type: 'subscribe_chat'; chatId: string }
   | { type: 'unsubscribe_chat'; chatId: string }
-  | { type: 'typing'; chatId: string };
+  | { type: 'typing'; chatId: string }
+  | { type: 'chat.read'; chatId: string };
 
 export type RealtimeServerMessage =
   | { type: 'ready'; userId: string }
@@ -27,6 +28,14 @@ export type RealtimeServerMessage =
       userId: string;
       onixId: string;
       username: string;
+    }
+  | {
+      type: 'chat.read';
+      chatId: string;
+      userId: string;
+      onixId: string;
+      username: string;
+      lastReadAt: string;
     }
   | {
       type: 'presence';
@@ -48,6 +57,7 @@ export type RealtimeServerMessage =
       orderId: string;
       status: string;
       chatId?: string;
+      sound?: 'order';
     }
   | {
       type: 'product.changed';
@@ -97,11 +107,21 @@ export type RealtimeBusEvent =
       data?: Record<string, unknown>;
     }
   | {
+      kind: 'chat.read';
+      chatId: string;
+      userId: bigint;
+      onixId: string;
+      username: string;
+      lastReadAt: string;
+      recipientUserIds: bigint[];
+    }
+  | {
       kind: 'order.updated';
       orderId: string;
       status: string;
       chatId?: string;
       recipientUserIds: bigint[];
+      soundUserIds?: bigint[];
     }
   | {
       kind: 'product.changed';

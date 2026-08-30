@@ -205,7 +205,7 @@ export function LotSheet({
             />
             {methodsOpen && (
               <div className="lot-pay-picker__list" role="list">
-                {LOT_PAY_METHODS.map((item) => {
+                {LOT_PAY_METHODS.filter((item) => item !== activeMethod).map((item) => {
                   const meta = lotPayMethodMeta(item);
                   const value = item === 'BALANCE'
                     ? money(String(balanceCents))
@@ -217,7 +217,6 @@ export function LotSheet({
                       key={item}
                       method={item}
                       value={value}
-                      active={item === activeMethod}
                       onClick={() => {
                         setMethod(item);
                         setMethodsOpen(false);

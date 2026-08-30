@@ -659,7 +659,7 @@ export default function App() {
                         ) : (
                           <span
                             className="cat-card__emblem"
-                            style={{ width: 28, height: 28, fontSize: 10, background: style.bg, boxShadow: `0 0 12px ${style.glow}` }}
+                            style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
                           >{style.letter}</span>
                         )}
                         <span className="widget-trend__title">{product.title}</span>

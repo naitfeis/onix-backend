@@ -242,6 +242,11 @@ export function Chats({
   }, [loadMessages, threadId]);
 
   useEffect(() => {
+    core.setActiveChatId(threadId || null);
+    return () => core.setActiveChatId(null);
+  }, [threadId, core.setActiveChatId]);
+
+  useEffect(() => {
     if (!threadId) return;
     core.subscribeRealtimeChat(threadId);
     return () => core.unsubscribeRealtimeChat(threadId);
