@@ -24,6 +24,15 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('keeps market categories as a compact four-column app grid', () => {
+    expect(appCss).toMatch(
+      /\.cat-row\s*\{[^}]*grid-template-columns:\s*repeat\(4, minmax\(72px, 88px\)\)/s,
+    );
+    expect(appCss).toMatch(
+      /\.market-hero \.button--violet\s*\{[^}]*box-shadow:\s*none;/s,
+    );
+  });
+
   it('uses the deeper semantic accent behind unread counts', () => {
     expect(appCss).toMatch(
       /\.thread em, \.nav-count\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,

@@ -30,13 +30,13 @@ html[data-theme="dark"] {
   --glass-thin-bg: rgba(18, 16, 28, 0.82);
   --glass-regular-bg: rgba(18, 16, 28, 0.9);
   --glass-thick-bg: rgba(18, 16, 28, 0.94);
-  --glass-card-bg: rgba(18, 16, 28, 0.9);
+  --glass-card-bg: #12101c;
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.08);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
-  --glass-shadow: var(--glass-drop-shadow);
+  --glass-drop-shadow: none;
+  --glass-shadow: none;
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.08);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.14);
@@ -53,12 +53,12 @@ html[data-theme="dark"] {
   --accent: #5B8DEF;
   --accent-coral: #5B8DEF;
   --accent-coral-deep: #3D6FD4;
-  --accent-coral-glow: 0 0 40px 6px rgba(91, 141, 239, 0.4);
+  --accent-coral-glow: none;
   --accent-soft: #5B8DEF;
   --accent-mint: #3FBF8F;
   --accent-violet: #8B7FF5;
   --accent-violet-deep: #6B5FE0;
-  --accent-violet-glow: 0 0 30px rgba(139, 127, 245, 0.35);
+  --accent-violet-glow: none;
   --accent-star: #E8B93E;
 
   /* Icon glass — no blur, soft strokes (not black silhouettes) */
@@ -180,13 +180,13 @@ html[data-theme="light"] {
   --glass-thin-bg: rgba(255, 255, 255, 0.86);
   --glass-regular-bg: rgba(255, 255, 255, 0.92);
   --glass-thick-bg: rgba(255, 255, 255, 0.96);
-  --glass-card-bg: rgba(255, 255, 255, 0.94);
+  --glass-card-bg: #ffffff;
 
   --glass-border: 1px solid rgba(20, 25, 35, 0.08);
   --glass-highlight: none;
   --glass-inner-shadow: none;
-  --glass-drop-shadow: 0 10px 28px rgba(20, 25, 35, 0.08);
-  --glass-shadow: var(--glass-drop-shadow);
+  --glass-drop-shadow: none;
+  --glass-shadow: none;
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.35);
   --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.45);
@@ -202,12 +202,12 @@ html[data-theme="light"] {
   --accent: #5B8DEF;
   --accent-coral: #5B8DEF;
   --accent-coral-deep: #3D6FD4;
-  --accent-coral-glow: 0 0 28px 4px rgba(91, 141, 239, 0.22);
+  --accent-coral-glow: none;
   --accent-soft: #5B8DEF;
   --accent-mint: #2FA87A;
   --accent-violet: #6B5FE0;
   --accent-violet-deep: #5548C8;
-  --accent-violet-glow: 0 0 20px rgba(107, 95, 224, 0.18);
+  --accent-violet-glow: none;
   --accent-star: #C99620;
 
   --icon-color: rgba(40, 44, 56, 0.72);
@@ -472,17 +472,25 @@ html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
 html[data-theme="light"] .product-card,
 html[data-theme="light"] .topbar,
-html[data-theme="light"] .section-head {
+html[data-theme="light"] .section-head,
+html[data-theme="light"] .desktop-hero,
+html[data-theme="light"] .market-hero,
+html[data-theme="light"] .wallet-hero {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;
+  box-shadow: none !important;
 }
 html[data-theme="dark"] .card,
 html[data-theme="dark"] .widget,
-html[data-theme="dark"] .product-card {
+html[data-theme="dark"] .product-card,
+html[data-theme="dark"] .desktop-hero,
+html[data-theme="dark"] .market-hero,
+html[data-theme="dark"] .wallet-hero {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;
+  box-shadow: none !important;
 }
 .cat-card {
   overflow: visible;
@@ -490,7 +498,7 @@ html[data-theme="dark"] .product-card {
   /* Solid fill only — backdrop blur paints purple horizontal bands on active chips */
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: var(--glass-card-bg, var(--glass-bg)) !important;
+  background: transparent !important;
   box-shadow: none !important;
 }
 

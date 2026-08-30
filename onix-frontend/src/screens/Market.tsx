@@ -56,6 +56,15 @@ function formatCatCount(n: number): string {
   return String(n);
 }
 
+function reviewCountLabel(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return `${n} отзывов`;
+  if (last === 1) return `${n} отзыв`;
+  if (last >= 2 && last <= 4) return `${n} отзыва`;
+  return `${n} отзывов`;
+}
+
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openProductCard, openDealChat,
   externalCategory, onExternalCategoryConsumed,
@@ -88,13 +97,13 @@ export function Market({
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
-  const [catVisibleCount, setCatVisibleCount] = useState(10);
+  const [catVisibleCount, setCatVisibleCount] = useState(11);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
-  /** Categories shown under «Все» — collapsed = first page, expanded = all. */
-  const CAT_PAGE_SIZE = 10;
+  /** ALL + 11 categories = 12 tiles → 4×3 on desktop, 3×4 on mobile. */
+  const CAT_PAGE_SIZE = 11;
   const catsFullyOpen = catVisibleCount >= CATEGORIES.length;
   const visibleCats = catsFullyOpen ? CATEGORIES : CATEGORIES.slice(0, CAT_PAGE_SIZE);
   const greetName = core.profile ? publicAt(core.profile.username) : 'гость';
@@ -451,9 +460,11 @@ export function Market({
           className={`cat-card${category === t('market.all') ? ' active' : ''}`}
           onClick={() => { setCategory(t('market.all')); setSubcategory(''); }}
         >
-          <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
+          <span className="cat-card__icon">
+            <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
+            {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
+          </span>
           <span className="cat-card__name">{t('market.all')}</span>
-          {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
         </button>
         {visibleCats.map((cat) => {
           const style = CAT_STYLE[cat];
@@ -467,26 +478,28 @@ export function Market({
               className={`cat-card${category === cat ? ' active' : ''}`}
               onClick={() => { setCategory(cat); setSubcategory(''); }}
             >
-              {image ? (
-                <span className="cat-card__emblem cat-card__emblem--photo">
-                  <img
-                    src={image}
-                    alt=""
-                    width={40}
-                    height={40}
-                    loading="lazy"
-                    decoding="async"
-                    fetchPriority="low"
-                  />
-                </span>
-              ) : (
-                <span
-                  className="cat-card__emblem"
-                  style={{ background: style.bg, ['--_glow' as string]: style.glow }}
-                >{style.letter}</span>
-              )}
+              <span className="cat-card__icon">
+                {image ? (
+                  <span className="cat-card__emblem cat-card__emblem--photo">
+                    <img
+                      src={image}
+                      alt=""
+                      width={44}
+                      height={44}
+                      loading="lazy"
+                      decoding="async"
+                      fetchPriority="low"
+                    />
+                  </span>
+                ) : (
+                  <span
+                    className="cat-card__emblem"
+                    style={{ background: style.bg }}
+                  >{style.letter}</span>
+                )}
+                {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
+              </span>
               <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
-              {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
             </button>
           );
         })}
@@ -613,7 +626,10 @@ export function Market({
                 aria-label={`Открыть ${product.title}`}
               />
               <div className="product-card__badges">
-                <span className="pill-rating"><IconStar /> {rating} · {product.seller.reviewCount} {t('market.reviews')}</span>
+                <div className="product-card__rating">
+                  <span className="product-card__rating-score"><IconStar /> {rating}</span>
+                  <span className="product-card__rating-count">{reviewCountLabel(product.seller.reviewCount)}</span>
+                </div>
                 {showFounder && <span className="pill-super">Основатель</span>}
               </div>
               <div className="product-card__seller-float">
