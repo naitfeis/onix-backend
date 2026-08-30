@@ -17,6 +17,13 @@ type Investigation = {
     bannedUntil?: string | null;
     sellBannedAt?: string | null;
   };
+  pro: {
+    active: boolean;
+    plan: string | null;
+    status: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+  };
   flags: Array<Record<string, unknown>>;
   securityEvents: Array<{ id: string; type: string; severity?: string; createdAt: string }>;
   ledger: Array<{ id: string; type: string; amountCents: string; createdAt: string; fundKind?: string | null; saleKind?: string | null }>;
@@ -36,6 +43,7 @@ export function UserInvestigateScreen({ adminRole }: { adminRole: string }) {
   const [days, setDays] = useState('');
   const [status, setStatus] = useState('USER');
   const [balance, setBalance] = useState('');
+  const [proEndsAt, setProEndsAt] = useState('');
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -97,6 +105,38 @@ export function UserInvestigateScreen({ adminRole }: { adminRole: string }) {
               <label>Balance adjustment (cents)<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 or -1000" /></label><button className="primary" type="button" disabled={actionBusy || !balance} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/balance`, { method: 'POST', body: JSON.stringify({ amountCents: balance, reason: comment, idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}` }) })}>Adjust balance</button>
             </div>
           </div>
+          {adminRole === 'SUPER_ADMIN' && (
+            <div className="admin-actions">
+              <h3>PRO subscription</h3>
+              <p className="muted">
+                {data.pro.active ? `Active${data.pro.endsAt ? ` until ${new Date(data.pro.endsAt).toLocaleString()}` : ' without expiry'}` : 'Not active'}
+              </p>
+              <div className="row">
+                <label>Optional end date
+                  <input type="datetime-local" value={proEndsAt} onChange={(event) => setProEndsAt(event.target.value)} />
+                </label>
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={actionBusy}
+                  onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/pro/grant`, {
+                    method: 'POST',
+                    body: JSON.stringify(proEndsAt ? { endsAt: new Date(proEndsAt).toISOString() } : {}),
+                  })}
+                >
+                  Grant PRO
+                </button>
+                <button
+                  className="ghost"
+                  type="button"
+                  disabled={actionBusy || !data.pro.active}
+                  onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/pro/revoke`, { method: 'POST' })}
+                >
+                  Revoke PRO
+                </button>
+              </div>
+            </div>
+          )}
           <p className="muted">Balance {data.profile.balanceCents}¢ · trust L{data.profile.trustLevel ?? '—'} / {data.profile.trustScore ?? '—'}</p>
           <h3>Purchases</h3>
           <table><thead><tr><th>ID</th><th>Product</th><th>Seller</th><th>Status</th><th>Amount</th></tr></thead><tbody>{data.purchases.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.product.title}</td><td>{o.seller.onixId}</td><td>{o.status}</td><td>{o.totalAmountCents}?</td></tr>)}</tbody></table>

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import {
   hashMfaCode, hashPassword, mintMfaCode, verifyPassword,
 } from '../src/admin/admin-crypto';
@@ -14,6 +15,9 @@ import {
 } from '../src/admin/admin-cookie';
 import { AdminAccessGuard, AdminRoleGuard } from '../src/admin/admin.guard';
 import { AuthPlatformError } from '../src/auth-v2/auth-errors';
+import { AdminPlaneController } from '../src/admin/admin.controller';
+import { EconomyController } from '../src/economy/economy.controller';
+import { PaymentsService } from '../src/economy/payments/payments.service';
 
 test('admin password hash verifies', () => {
   const stored = hashPassword('correct-horse-battery');
@@ -107,4 +111,49 @@ test('admin role matrix separates support, security and finance', () => {
   assert.throws(() => guardFor(['SUPER_ADMIN', 'SUPPORT_ADMIN']).canActivate(contextFor('SECURITY_ADMIN')));
   assert.equal(guardFor(['SUPER_ADMIN', 'FINANCE_ADMIN']).canActivate(contextFor('FINANCE_ADMIN')), true);
   assert.throws(() => guardFor(['SUPER_ADMIN', 'SECURITY_ADMIN']).canActivate(contextFor('FINANCE_ADMIN')));
+});
+
+test('PRO and MANUAL admin endpoints enforce the separated role matrix', () => {
+  const reflector = new Reflector();
+  const contextFor = (handler: (...args: never[]) => unknown, role: string) => ({
+    getHandler: () => handler,
+    getClass: () => AdminPlaneController,
+    switchToHttp: () => ({
+      getRequest: () => ({
+        admin: { id: 1n, email: 'admin@example.com', role, sessionId: 'session-1' },
+      }),
+    }),
+  } as unknown as ExecutionContext);
+  const guard = new AdminRoleGuard(reflector);
+
+  assert.equal(guard.canActivate(contextFor(AdminPlaneController.prototype.grantPro, 'SUPER_ADMIN')), true);
+  assert.throws(
+    () => guard.canActivate(contextFor(AdminPlaneController.prototype.grantPro, 'FINANCE_ADMIN')),
+    /Недостаточно прав admin-роли/,
+  );
+  assert.equal(guard.canActivate(contextFor(AdminPlaneController.prototype.createManualPayment, 'FINANCE_ADMIN')), true);
+  assert.equal(guard.canActivate(contextFor(AdminPlaneController.prototype.confirmManualPayment, 'SUPER_ADMIN')), true);
+  assert.throws(
+    () => guard.canActivate(contextFor(AdminPlaneController.prototype.confirmManualPayment, 'SUPPORT_ADMIN')),
+    /Недостаточно прав admin-роли/,
+  );
+});
+
+test('customer plane rejects MANUAL even for legacy admin customer claims', async () => {
+  const payments = new PaymentsService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  await assert.rejects(
+    () => payments.createTopUp(
+      { id: 9n, telegramId: 99n, onixId: '000009', isAdmin: true, isSupport: true },
+      { wallet: 'MAIN', amountCents: 500, provider: 'MANUAL', idempotencyKey: 'customer-manual-key' },
+    ),
+    /admin control plane/,
+  );
+  assert.equal('confirmIntent' in EconomyController.prototype, false);
 });

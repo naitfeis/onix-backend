@@ -1,15 +1,12 @@
 import {
-  Body, CanActivate, Controller, ExecutionContext, ForbiddenException,
-  Get, Header, Injectable, Param, Post, Query, UseGuards,
+  Body, Controller, Get, Header, Param, Post, Query,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
   IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
 } from 'class-validator';
 import type { PaymentProviderCode, PaymentWallet } from '@prisma/client';
-import { AuthRequest, AuthUser, CurrentUser } from '../common';
-import { PrismaService } from '../prisma.service';
-import { requireUserByOnixId } from '../onix-id-lookup';
+import { AuthUser, CurrentUser } from '../common';
 import { assertRateLimit } from '../rate-limit';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
@@ -43,10 +40,6 @@ class ProductViewDto {
   @IsOptional() @IsBoolean() isPrefetch?: boolean;
 }
 
-class GrantProDto {
-  @IsOptional() @IsString() endsAt?: string;
-}
-
 class SellerAnalyticsQueryDto {
   /** 0 = current Mon–Sun week, -1 = previous week, … (max -52). */
   @IsOptional() @Type(() => Number) @IsInt() @Min(-52) @Max(0) weekOffset?: number;
@@ -67,12 +60,6 @@ export class EconomyController {
   createIntent(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentIntentDto) {
     assertRateLimit(`payment:create:${user.id}`, 30, 60_000);
     return this.payments.createTopUp(user, dto);
-  }
-
-  @Post('payments/intents/:id/confirm')
-  confirmIntent(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    assertRateLimit(`payment:confirm:${user.id}`, 30, 60_000);
-    return this.payments.confirmManual(user, id);
   }
 
   @Get('payments/intents/:id')
@@ -171,40 +158,5 @@ export class EconomyController {
       purpose: dto.purpose,
       isPrefetch: dto.isPrefetch,
     });
-  }
-}
-
-@Injectable()
-class EconomyAdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    if (!context.switchToHttp().getRequest<AuthRequest>().user?.isAdmin) {
-      throw new ForbiddenException('Требуются права администратора ONIX.');
-    }
-    return true;
-  }
-}
-
-@Controller('admin')
-@UseGuards(EconomyAdminGuard)
-export class AdminEconomyController {
-  constructor(
-    private readonly pro: ProSubscriptionService,
-    private readonly prisma: PrismaService,
-  ) {}
-
-  @Post('users/:onixId/pro/grant')
-  async grantPro(
-    @CurrentUser() actor: AuthUser,
-    @Param('onixId') onixId: string,
-    @Body() body: GrantProDto,
-  ) {
-    const user = await requireUserByOnixId(this.prisma, onixId);
-    return this.pro.grant(actor, user.id, body.endsAt ? new Date(body.endsAt) : undefined);
-  }
-
-  @Post('users/:onixId/pro/revoke')
-  async revokePro(@CurrentUser() actor: AuthUser, @Param('onixId') onixId: string) {
-    const user = await requireUserByOnixId(this.prisma, onixId);
-    return this.pro.revoke(actor, user.id);
   }
 }

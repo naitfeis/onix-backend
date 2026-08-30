@@ -67,15 +67,36 @@ export class PaymentsService {
       idempotencyKey: string;
     },
   ) {
-    if (dto.amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения — 1 ₽.');
     if (dto.provider === 'MANUAL') {
-      if (!user.isAdmin) {
-        throw new ForbiddenException('Manual-пополнение доступно только администратору.');
-      }
-      if (!isManualPaymentsEnabled()) {
-        throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
-      }
+      throw new ForbiddenException('MANUAL-пополнение доступно только через admin control plane.');
     }
+    return this.createTopUpForUser(user.id, dto);
+  }
+
+  async createManualTopUpForAdmin(
+    userId: bigint,
+    dto: {
+      wallet: PaymentWallet;
+      amountCents: number;
+      idempotencyKey: string;
+    },
+  ) {
+    if (!isManualPaymentsEnabled()) {
+      throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
+    }
+    return this.createTopUpForUser(userId, { ...dto, provider: 'MANUAL' });
+  }
+
+  private async createTopUpForUser(
+    userId: bigint,
+    dto: {
+      wallet: PaymentWallet;
+      amountCents: number;
+      provider: PaymentProviderCode;
+      idempotencyKey: string;
+    },
+  ) {
+    if (dto.amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения — 1 ₽.');
     const provider = this.provider(dto.provider);
     const amountCents = BigInt(dto.amountCents);
 
@@ -86,7 +107,7 @@ export class PaymentsService {
       provider: PaymentProviderCode;
     }>(existing: T): T => {
       if (
-        existing.userId !== user.id
+        existing.userId !== userId
         || existing.amountCents !== amountCents
         || existing.wallet !== dto.wallet
         || existing.provider !== dto.provider
@@ -102,7 +123,7 @@ export class PaymentsService {
       claim = await withSerializableTransaction(this.prisma, (tx) =>
         tx.paymentIntent.create({
           data: {
-            userId: user.id,
+            userId,
             wallet: dto.wallet,
             provider: dto.provider,
             amountCents,
@@ -133,7 +154,7 @@ export class PaymentsService {
     // A stale-owner recovery may repeat it after a crash, so the provider MUST
     // deduplicate the stable idempotency key required by PaymentProvider.
     const created = await provider.createIntent({
-      userId: user.id,
+      userId,
       wallet: dto.wallet,
       amountCents,
       idempotencyKey: dto.idempotencyKey,
@@ -200,17 +221,14 @@ export class PaymentsService {
     return { intent, ownsClaim: false };
   }
 
-  async confirmManual(user: AuthUser, intentId: string) {
-    if (!user.isAdmin) {
-      throw new ForbiddenException('Подтверждение Manual-платежа доступно только администратору.');
-    }
+  async confirmManualForAdmin(intentId: string, adminUserId: bigint) {
     if (!isManualPaymentsEnabled()) {
       throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
     }
     const result = await this.idempotency.run(
       'payment.confirm',
       intentId,
-      { intentId, actorId: user.id.toString(), provider: 'MANUAL' },
+      { intentId, adminUserId: adminUserId.toString(), provider: 'MANUAL' },
       () => this.settleIntentOnce(intentId, { expectProvider: 'MANUAL' }),
       { recover: () => this.recoverProviderEvent('MANUAL', intentId, 'SUCCEEDED') },
     );
@@ -425,7 +443,7 @@ export class PaymentsService {
 
   async getIntent(user: AuthUser, intentId: string) {
     const intent = await this.prisma.paymentIntent.findUnique({ where: { id: intentId } });
-    if (!intent || (intent.userId !== user.id && !user.isAdmin)) {
+    if (!intent || intent.userId !== user.id) {
       throw new NotFoundException('Платёж не найден.');
     }
     return intent;

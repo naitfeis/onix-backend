@@ -37,7 +37,6 @@ describe('ONIX contract matrix', () => {
   it('classifies intentionally unused FE paths', () => {
     expect(API_PATH_STATUS.meVerifications).toBe('FUTURE');
     expect(API_PATH_STATUS.mePro).toBe('FUTURE');
-    expect(API_PATH_STATUS.aiChat).toBe('FUTURE');
     expect(API_PATH_STATUS.supportClose).toBe('DEPRECATED');
   });
 

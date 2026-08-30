@@ -1,7 +1,8 @@
 # ONIX Trust & Seller Economy — Stage 1 Foundation
 
-Статус: **foundation implemented** — полный UI / Stage 2 analytics UI **не** в scope.  
-Ворота: полный аудит Stage 1 обязателен до Stage 2.
+Статус: **historical foundation document**. Текущий runtime больше не содержит
+`SellerVerification` или `VerificationService`; исходные определения ниже описывают
+миграцию Stage 1 и сохранены только как история.
 
 ## Цель
 
@@ -32,7 +33,7 @@ Additive columns on `User`:
 | `DepositLedgerEntry` | Deposit money journal |
 | `DepositLock` | Per-order freeze |
 | `TrustHistoryEvent` | Trust audit journal |
-| `SellerVerification` | PHONE_* / PASSPORT / VOICE_IDENTITY |
+| `SellerVerification` | Historical only; retired from the current runtime |
 | `SellerSubscription` | ONIX PRO (not trust) |
 | `ProductViewUnique` | Unique views foundation |
 | `SellerAnalyticsDaily` | Rollup schema for Stage 2 |
@@ -48,7 +49,7 @@ Additive columns on `User`:
 | `DepositService` | **Only** path for deposit available/locked |
 | `LockService` | Freeze on COMPLETED; HELD_DISPUTE; lazy unlock |
 | `TrustService` | Score 0–1000 → Level 1–5; history |
-| `VerificationService` | Status + hash only (no media) |
+| `VerificationService` | Historical only; retired from the current runtime |
 | `ProSubscriptionService` | PRO grant/revoke (no score mutation) |
 | `AnalyticsFoundationService` | Unique view write path |
 | `WalletEconomyService` | Owner/public trust + deposit APIs |

@@ -591,8 +591,6 @@ safe-deal-platform/src/economy/
 ├── trust/
 │   ├── trust.service.ts
 │   └── trust-card.ts
-├── verification/
-│   └── verification.service.ts
 └── wallet/
     ├── balance.service.ts
     ├── clawback.service.ts
@@ -610,6 +608,8 @@ safe-deal-platform/src/economy/
 This is one of the highest-risk areas.
 
 Financial truth must remain backend/database controlled.
+
+`SellerVerification` and its runtime service are retired; historical migrations may still contain their original definitions.
 
 Key concepts:
 - wallet;
@@ -765,16 +765,14 @@ safe-deal-platform/src/ai/
 ├── ai.module.ts
 ├── ai.service.ts
 ├── conversation.service.ts
-├── entity-extractor.ts
 ├── help-replies.ts
-├── intent-recognizer.ts
-└── product-creation.service.ts
+└── intent-recognizer.ts
 ```
 
 Purpose:
-ONIX AI chat/support/product-related intelligence.
+ONIX AI chat, marketplace help and support handoff.
 
-AI must not bypass normal authorization, financial validation or domain security.
+Lot creation and withdrawals are intentionally unavailable through AI chat. They remain normal application flows and must not be added as AI intents or instructions.
 
 ---
 

@@ -7,8 +7,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
 } from 'class-validator';
-import { AIService } from './ai/ai.service';
-import { AiModule } from './ai/ai.module';
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
@@ -68,7 +66,6 @@ const SENDER_SELECT = {
 export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly ai: AIService,
     private readonly realtime: RealtimeBus,
   ) {}
 
@@ -77,6 +74,7 @@ export class ChatService {
     const q = search?.trim();
     const chats = await this.prisma.chat.findMany({
       where: {
+        kind: { not: 'AI' },
         members: { some: { userId: user.id } },
         ...(q ? {
           OR: [
@@ -151,7 +149,6 @@ export class ChatService {
 
     const mapped = chats.map((chat) => {
       const isGroup = chat.kind === 'GROUP';
-      const isAi = chat.kind === 'AI';
       const other = chat.members.find((member) => (
         member.userId !== user.id
         && !member.user.isAdmin
@@ -166,31 +163,29 @@ export class ChatService {
       return {
         id: chat.id,
         kind: chat.kind,
-        title: isAi
-          ? 'ONIX AI'
-          : isGroup
+        title: isGroup
             ? (chat.title ?? 'Группа')
             : (other
               ? publicDisplayName(other.user.displayName, peerOnix ?? other.user.onixId)
               : (peerOnix ?? 'Диалог')),
-        subtitle: isAi ? (subtitle || 'Помощник платформы') : subtitle,
+        subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
-        peerOnixId: isGroup || isAi ? undefined : peerOnix,
-        peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
-        ...(!isGroup && !isAi && other
+        peerOnixId: isGroup ? undefined : peerOnix,
+        peerLastOnline: isGroup ? undefined : other?.user.lastSeenAt?.toISOString(),
+        ...(!isGroup && other
           ? {
             peerAvatarUrl: clientAvatarUrl(other.user.id, other.user.avatarUrl),
             peerUserId: other.user.id.toString(),
           }
           : {}),
-        ...(!isGroup && !isAi && other
+        ...(!isGroup && other
           ? (() => {
             const b = statusBadge(other.user.platformStatus
               ?? (other.user.isAdmin ? 'ADMIN' : other.user.isSupport ? 'MODERATOR' : 'USER'));
             return b ? { peerBadge: b } : {};
           })()
           : {}),
-        ...(latestOrder && !isAi ? {
+        ...(latestOrder ? {
           dealId: latestOrder.id.toString(),
           orderCard: {
             id: latestOrder.id.toString(),
@@ -203,26 +198,6 @@ export class ChatService {
       };
     });
 
-    // Ensure AI chat only when missing (not on every poll).
-    if (!q && !mapped.some((c) => c.kind === 'AI')) {
-      const ai = await this.ai.ensureChat(user);
-      mapped.unshift({
-        id: ai.id,
-        kind: 'AI',
-        title: 'ONIX AI',
-        subtitle: 'Помощник платформы',
-        unreadCount: 0,
-        peerOnixId: undefined,
-        peerLastOnline: undefined,
-      });
-    }
-
-    // ONIX AI always first in the dialog list.
-    mapped.sort((a, b) => {
-      if (a.kind === 'AI' && b.kind !== 'AI') return -1;
-      if (b.kind === 'AI' && a.kind !== 'AI') return 1;
-      return 0;
-    });
     return mapped;
   }
 
@@ -359,6 +334,9 @@ export class ChatService {
 
   async messages(user: AuthUser, chatId: string, limit: number, before?: string) {
     await this.member(user.id, chatId);
+    const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI больше недоступен.');
     const take = Math.min(Math.max(limit, 1), 100);
     const beforeId = before ? parseId(before) : undefined;
 
@@ -410,28 +388,9 @@ export class ChatService {
 
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI больше недоступен.');
 
-    // Anti-spam: AI tighter (writes + FSM), regular chats looser.
-    if (chat.kind === 'AI') {
-      assertRateLimit(`chat-ai:${user.id}`, 20, 60_000);
-    } else {
-      assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
-    }
-
-    if (chat.kind === 'AI') {
-      const message = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.message.create({
-          data: { chatId, senderId: user.id, kind: 'USER', text: body },
-          include: { sender: { select: SENDER_SELECT } },
-        });
-        await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
-        return created;
-      });
-      await this.ai.reply(user, chatId, body);
-      return messageDto(message, user.id, {
-        staffViewer: false,
-      });
-    }
+    assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
 
     const others = await this.prisma.chatMember.findMany({
       where: { chatId, userId: { not: user.id } },
@@ -698,7 +657,6 @@ export class ChatService {
   async leaveGroup(user: AuthUser, chatId: string) {
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId } });
     if (!chat) throw new NotFoundException('Чат не найден.');
-    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI удалить нельзя.');
     if (chat.kind !== 'GROUP') throw new BadRequestException('Выйти можно только из группы.');
     await this.member(user.id, chatId);
     await this.prisma.chatMember.delete({
@@ -952,7 +910,7 @@ export class EngagementController {
 }
 
 @Module({
-  imports: [AiModule, RealtimeModule],
+  imports: [RealtimeModule],
   controllers: [EngagementController],
   providers: [ChatService, NotificationService, ReviewService],
 })

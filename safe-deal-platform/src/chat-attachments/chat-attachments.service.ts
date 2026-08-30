@@ -59,7 +59,7 @@ export class ChatAttachmentsService {
     await this.requireMember(user.id, chatId);
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
-    if (chat.kind === 'AI') throw new BadRequestException('Вложения в чат с AI недоступны.');
+    if (chat.kind === 'AI') throw new BadRequestException('Чат ONIX AI больше недоступен.');
 
     assertRateLimit(`attach-intent:${user.id}`, 30, 60_000);
     assertRateLimit(`attach-cooldown:${user.id}`, 1, 1_000);

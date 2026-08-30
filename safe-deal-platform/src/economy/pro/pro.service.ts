@@ -1,6 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AuthUser } from '../../common';
 import { PrismaService } from '../../prisma.service';
 import { TrustService } from '../trust/trust.service';
 import { createId } from '../wallet/cuid';
@@ -31,9 +30,8 @@ export class ProSubscriptionService {
     };
   }
 
-  /** Admin/ops grant — commercial only. */
-  async grant(actor: AuthUser, userId: bigint, endsAt?: Date) {
-    if (!actor.isAdmin) throw new ForbiddenException('Только администратор.');
+  /** Trusted admin-plane grant — authorization and audit are enforced by its caller. */
+  async grantFromAdminPlane(userId: bigint, endsAt?: Date) {
     return this.prisma.$transaction(async (tx) => {
       const sub = await tx.sellerSubscription.upsert({
         where: { userId },
@@ -59,8 +57,8 @@ export class ProSubscriptionService {
     }, SERIALIZABLE);
   }
 
-  async revoke(actor: AuthUser, userId: bigint) {
-    if (!actor.isAdmin) throw new ForbiddenException('Только администратор.');
+  /** Trusted admin-plane revoke — authorization and audit are enforced by its caller. */
+  async revokeFromAdminPlane(userId: bigint) {
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.sellerSubscription.findUnique({ where: { userId } });
       if (!existing) throw new NotFoundException('Подписка не найдена.');

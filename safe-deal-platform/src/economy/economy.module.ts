@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AdminEconomyController, EconomyController } from './economy.controller';
+import { EconomyController } from './economy.controller';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { ManualPaymentProvider } from './payments/manual.provider';
@@ -14,7 +14,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
 import { WithdrawVelocityService } from './wallet/withdraw-velocity';
 
 @Module({
-  controllers: [EconomyController, AdminEconomyController],
+  controllers: [EconomyController],
   providers: [
     ManualPaymentProvider,
     PaymentsService,

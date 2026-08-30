@@ -1,9 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { PlatformStatus, Prisma } from '@prisma/client';
+import type { PaymentWallet, PlatformStatus, Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
+import { createDomainNotification, pushTelegramToChatId } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
+import { PaymentsService } from '../economy/payments/payments.service';
+import { ProSubscriptionService } from '../economy/pro/pro.service';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
 import { EscrowService } from '../escrow.module';
 import { formatOnixId } from '../onix-id';
@@ -27,6 +30,8 @@ export class AdminSecurityService {
     private readonly withdrawVelocity: WithdrawVelocityService,
     private readonly balance: BalanceService,
     private readonly escrow: EscrowService,
+    private readonly payments: PaymentsService,
+    private readonly pro: ProSubscriptionService,
   ) {}
 
   async dashboard() {
@@ -87,7 +92,7 @@ export class AdminSecurityService {
     });
     if (!user) return null;
 
-    const [sessions, ledger, securityEvents, sales] = await Promise.all([
+    const [sessions, ledger, securityEvents, sales, pro] = await Promise.all([
       this.prisma.session.findMany({
         where: { userId: user.id },
         orderBy: { lastSeenAt: 'desc' },
@@ -149,6 +154,10 @@ export class AdminSecurityService {
           productId: true,
         },
       }),
+      this.prisma.sellerSubscription.findUnique({
+        where: { userId: user.id },
+        select: { plan: true, status: true, startsAt: true, endsAt: true },
+      }),
     ]);
 
     const [purchases, chats] = await Promise.all([
@@ -179,6 +188,14 @@ export class AdminSecurityService {
         bannedUntil: user.bannedUntil?.toISOString() ?? null,
         sellBannedAt: user.sellBannedAt?.toISOString() ?? null,
       },
+      pro: pro
+        ? {
+            ...pro,
+            active: pro.status === 'ACTIVE' && (!pro.endsAt || pro.endsAt > new Date()),
+            startsAt: pro.startsAt.toISOString(),
+            endsAt: pro.endsAt?.toISOString() ?? null,
+          }
+        : { active: false, plan: null, status: null, startsAt: null, endsAt: null },
       flags: yellow ? [yellow] : [],
       sessions: sessions.map((s) => ({
         ...s,
@@ -218,6 +235,129 @@ export class AdminSecurityService {
     });
     if (!user) throw new BadRequestException('???????????? ?? ??????.');
     return user;
+  }
+
+  private async runAuditedAdminAction<T>(
+    actor: AdminActor,
+    action: string,
+    target: { type: string; id: string },
+    metadata: Record<string, unknown>,
+    operation: () => Promise<T>,
+    completedMetadata?: (result: T) => Record<string, unknown>,
+  ): Promise<T> {
+    const audit = await this.prisma.adminActionLog.create({
+      data: {
+        adminUserId: actor.id,
+        action: `${action}_PENDING`,
+        targetType: target.type,
+        targetId: target.id,
+        metadataJson: { ...metadata, state: 'PENDING' } as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+    let result: T;
+    try {
+      result = await operation();
+    } catch (error) {
+      await this.prisma.adminActionLog.update({
+        where: { id: audit.id },
+        data: {
+          action,
+          metadataJson: {
+            ...metadata,
+            state: 'FAILED',
+            error: error instanceof Error ? error.message.slice(0, 500) : 'Admin mutation failed',
+          } as Prisma.InputJsonValue,
+        },
+      }).catch(() => undefined);
+      throw error;
+    }
+    await this.prisma.adminActionLog.update({
+      where: { id: audit.id },
+      data: {
+        action,
+        metadataJson: {
+          ...metadata,
+          ...completedMetadata?.(result),
+          state: 'COMPLETED',
+        } as Prisma.InputJsonValue,
+      },
+    }).catch(() => undefined);
+    return result;
+  }
+
+  async grantPro(actor: AdminActor, targetId: string, endsAt?: string) {
+    const target = await this.resolveTarget(targetId);
+    const parsedEndsAt = endsAt ? new Date(endsAt) : undefined;
+    return this.runAuditedAdminAction(
+      actor,
+      'ADMIN_PRO_GRANT',
+      { type: 'User', id: target.id.toString() },
+      { onixId: formatOnixId(target.onixId), endsAt: parsedEndsAt?.toISOString() ?? null },
+      () => this.pro.grantFromAdminPlane(target.id, parsedEndsAt),
+      (subscription) => ({ subscriptionId: subscription.id }),
+    );
+  }
+
+  async revokePro(actor: AdminActor, targetId: string) {
+    const target = await this.resolveTarget(targetId);
+    return this.runAuditedAdminAction(
+      actor,
+      'ADMIN_PRO_REVOKE',
+      { type: 'User', id: target.id.toString() },
+      { onixId: formatOnixId(target.onixId) },
+      () => this.pro.revokeFromAdminPlane(target.id),
+      (subscription) => ({ subscriptionId: subscription.id }),
+    );
+  }
+
+  async createManualPayment(
+    actor: AdminActor,
+    targetId: string,
+    input: { wallet: PaymentWallet; amountCents: number; idempotencyKey: string },
+  ) {
+    const target = await this.resolveTarget(targetId);
+    const intent = await this.runAuditedAdminAction(
+      actor,
+      'ADMIN_MANUAL_PAYMENT_CREATE',
+      { type: 'User', id: target.id.toString() },
+      {
+        onixId: formatOnixId(target.onixId),
+        wallet: input.wallet,
+        amountCents: input.amountCents,
+        idempotencyKey: input.idempotencyKey,
+      },
+      () => this.payments.createManualTopUpForAdmin(target.id, input),
+      (created) => ({ paymentIntentId: created.id }),
+    );
+    return {
+      ...intent,
+      userId: intent.userId.toString(),
+      amountCents: intent.amountCents.toString(),
+    };
+  }
+
+  async confirmManualPayment(actor: AdminActor, intentId: string) {
+    const intent = await this.prisma.paymentIntent.findUnique({
+      where: { id: intentId },
+      select: { id: true, userId: true, provider: true },
+    });
+    if (!intent) throw new NotFoundException('Платёж не найден.');
+    if (intent.provider !== 'MANUAL') {
+      throw new BadRequestException('Подтверждать через admin control plane можно только MANUAL-платежи.');
+    }
+    const confirmed = await this.runAuditedAdminAction(
+      actor,
+      'ADMIN_MANUAL_PAYMENT_CONFIRM',
+      { type: 'PaymentIntent', id: intent.id },
+      { targetUserId: intent.userId.toString(), provider: intent.provider },
+      () => this.payments.confirmManualForAdmin(intent.id, actor.id),
+    );
+    return {
+      ...confirmed,
+      userId: confirmed.userId.toString(),
+      amountCents: confirmed.amountCents.toString(),
+    };
   }
 
   async banUser(actor: AdminActor, targetId: string, input: { reason: string; comment: string; durationDays?: number }) {
@@ -465,18 +605,17 @@ export class AdminSecurityService {
     if (!report) throw new NotFoundException('Жалоба не найдена.');
     if (report.kind !== 'AI_SUPPORT') throw new BadRequestException('Ответ доступен только для AI_SUPPORT.');
     if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
-    const pairKey = `ai:${report.reporterId}`;
+    const reporter = await this.prisma.user.findUnique({
+      where: { id: report.reporterId },
+      select: { telegramId: true },
+    });
     await this.prisma.$transaction(async (tx) => {
-      const chat = await tx.chat.upsert({
-        where: { pairKey },
-        create: {
-          pairKey, kind: 'AI', title: 'ONIX AI',
-          members: { create: { userId: report.reporterId } },
-        },
-        update: { kind: 'AI', title: 'ONIX AI' },
-      });
-      await tx.message.create({
-        data: { chatId: chat.id, kind: 'SYSTEM', text: `💬 Ответ поддержки ONIX\n\n${reply}` },
+      await createDomainNotification(tx, {
+        userId: report.reporterId,
+        type: 'SYSTEM',
+        title: 'Ответ поддержки ONIX',
+        body: reply,
+        data: { reportId: report.id },
       });
       await tx.userReport.update({
         where: { id: reportId },
@@ -491,6 +630,9 @@ export class AdminSecurityService {
         },
       });
     });
+    if (reporter?.telegramId) {
+      void pushTelegramToChatId(reporter.telegramId, 'Ответ поддержки ONIX', reply);
+    }
     return { id: reportId, replied: true as const, closed: true as const };
   }
 

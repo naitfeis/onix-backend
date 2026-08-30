@@ -2,12 +2,26 @@
   Body, Controller, Delete, Get, Header, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  IsIn, IsInt, IsISO8601, IsOptional, IsString, Length, Max, Min,
+} from 'class-validator';
 import { Public } from '../common';
 import {
   AdminAccessGuard, AdminRoleGuard, AdminRoles, CurrentAdmin,
 } from './admin.guard';
 import type { AdminActor } from './admin-session.service';
 import { AdminSecurityService } from './admin-security.service';
+
+class GrantProDto {
+  @IsOptional() @IsISO8601() endsAt?: string;
+}
+
+class CreateManualPaymentDto {
+  @IsIn(['MAIN', 'DEPOSIT']) wallet!: 'MAIN' | 'DEPOSIT';
+  @Type(() => Number) @IsInt() @Min(100) @Max(50_000_000) amountCents!: number;
+  @IsString() @Length(16, 100) idempotencyKey!: string;
+}
 
 /**
  * Slice 6 Security Operations Console APIs.
@@ -105,6 +119,39 @@ export class AdminPlaneController {
   adjustUserBalance(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { amountCents: string; reason: string; idempotencyKey: string }) {
     return this.security.adjustUserBalance(admin, id, body);
   }
+
+  @Post('users/:id/pro/grant')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  grantPro(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: GrantProDto) {
+    return this.security.grantPro(admin, id, body.endsAt);
+  }
+
+  @Post('users/:id/pro/revoke')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  revokePro(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    return this.security.revokePro(admin, id);
+  }
+
+  @Post('users/:id/payments/manual')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  createManualPayment(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: CreateManualPaymentDto,
+  ) {
+    return this.security.createManualPayment(admin, id, body);
+  }
+
+  @Post('payments/intents/:id/confirm')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  confirmManualPayment(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    return this.security.confirmManualPayment(admin, id);
+  }
+
   @Get('orders')
   @Header('Cache-Control', 'no-store')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)

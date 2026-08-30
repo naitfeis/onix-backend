@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
-import { AiModule } from './ai/ai.module';
 import { AuthGuard, AuthModule } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { ApiExceptionFilter } from './common';
@@ -35,7 +34,7 @@ import { spaServeModules } from './spa-static';
     AvatarsModule,
     AuthModule, AuthV2Module, LoginChallengeModule, MfaModule, AdminModule,
     ProfilesModule, MarketplaceModule, SocialModule,
-    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule, AiModule,
+    EscrowModule, EngagementModule, SupportModule, OperationsModule, EconomyModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },

@@ -111,15 +111,9 @@ test('top-up serialization retry calls the external provider exactly once', asyn
       provider as never,
     );
 
-    const result = await service.createTopUp(
-      {
-        id: 9n,
-        telegramId: 99n,
-        onixId: '000009',
-        isAdmin: true,
-        isSupport: false,
-      },
-      { wallet: 'MAIN', amountCents: 500, provider: 'MANUAL', idempotencyKey: 'topup-1' },
+    const result = await service.createManualTopUpForAdmin(
+      9n,
+      { wallet: 'MAIN', amountCents: 500, idempotencyKey: 'topup-1' },
     );
 
     assert.equal(result.id, 'intent-1');
@@ -197,23 +191,15 @@ test('two concurrent identical top-ups share one DB claim and one provider call'
       {} as never,
       provider as never,
     );
-    const user = {
-      id: 9n,
-      telegramId: 99n,
-      onixId: '000009',
-      isAdmin: true,
-      isSupport: false,
-    };
     const input = {
       wallet: 'MAIN' as const,
       amountCents: 500,
-      provider: 'MANUAL' as const,
       idempotencyKey: 'topup-concurrent',
     };
 
-    const first = service.createTopUp(user, input);
+    const first = service.createManualTopUpForAdmin(9n, input);
     await providerStarted;
-    const second = service.createTopUp(user, input);
+    const second = service.createManualTopUpForAdmin(9n, input);
     await new Promise((resolve) => setTimeout(resolve, 5));
     assert.equal(providerCalls, 1);
     releaseProvider();
@@ -291,18 +277,11 @@ test('stale CREATED top-up is recovered with the original provider idempotency k
       provider as never,
     );
 
-    const result = await service.createTopUp(
-      {
-        id: 9n,
-        telegramId: 99n,
-        onixId: '000009',
-        isAdmin: true,
-        isSupport: false,
-      },
+    const result = await service.createManualTopUpForAdmin(
+      9n,
       {
         wallet: 'MAIN',
         amountCents: 500,
-        provider: 'MANUAL',
         idempotencyKey: 'topup-stable-recovery',
       },
     );
@@ -483,7 +462,7 @@ test('numeric order investigation id reaches the database and malformed ids do n
       },
     },
   };
-  const service = new AdminSecurityService(prisma as never, {} as never, {} as never, {} as never);
+  const service = new AdminSecurityService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never);
 
   assert.equal(await service.getOrderInvestigation('42'), null);
   assert.equal(await service.getOrderInvestigation('42x'), null);
@@ -507,7 +486,7 @@ test('platform-status mutation is super-admin-only and rejects no-op transitions
     user: { findFirst: async () => target },
     $transaction: async (execute: (client: typeof tx) => Promise<unknown>) => execute(tx),
   };
-  const service = new AdminSecurityService(prisma as never, {} as never, {} as never, {} as never);
+  const service = new AdminSecurityService(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never);
 
   await assert.rejects(
     () => service.setUserStatus(
@@ -583,6 +562,8 @@ for (const operation of ['refund', 'complete'] as const) {
       {} as never,
       {} as never,
       escrow as never,
+      {} as never,
+      {} as never,
     );
     const actor = {
       id: 1n,

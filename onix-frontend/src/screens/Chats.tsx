@@ -76,7 +76,6 @@ export function Chats({
   const [groupBusy, setGroupBusy] = useState(false);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
-  const [aiActionsOpen, setAiActionsOpen] = useState(false);
   const [leaveGroupId, setLeaveGroupId] = useState<string | null>(null);
   const [groupMembers, setGroupMembers] = useState<ChatMemberItem[] | null>(null);
   const [groupMembersTitle, setGroupMembersTitle] = useState('');
@@ -536,10 +535,10 @@ export function Chats({
         >
           <span className="thread-peer">
             <UserAvatar
-              userId={chat.kind === 'AI' ? undefined : chat.peerUserId}
-              avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
+              userId={chat.peerUserId}
+              avatarUrl={chat.peerAvatarUrl}
               name={chat.title}
-              online={chat.kind === 'GROUP' || chat.kind === 'AI' || !chat.peerOnixId
+              online={chat.kind === 'GROUP' || !chat.peerOnixId
                 ? undefined
                 : sellerIsPresent(
                   { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
@@ -550,7 +549,7 @@ export function Chats({
             <span>
               <b>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
               <small>
-                {chat.kind === 'AI' ? 'Помощник' : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
+                {chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
               </small>
             </span>
           </span>
@@ -566,10 +565,9 @@ export function Chats({
       <button
         type="button"
         className="conversation__peer"
-        disabled={thread.kind === 'AI' || (thread.kind !== 'GROUP' && !thread.peerOnixId)}
+        disabled={thread.kind !== 'GROUP' && !thread.peerOnixId}
         aria-label={thread.kind === 'GROUP' ? `Участники ${thread.title}` : (thread.peerOnixId ? `Профиль ${thread.title}` : undefined)}
         onClick={async () => {
-          if (thread.kind === 'AI') return;
           if (thread.kind === 'GROUP') {
             try {
               const data = await api.get<{ title?: string; members: ChatMemberItem[] }>(API_PATHS.chatMembers(thread.id));
@@ -586,10 +584,10 @@ export function Chats({
       >
         {(thread.peerAvatarUrl !== undefined || thread.title) ? (
           <UserAvatar
-            userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
-            avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
+            userId={thread.peerUserId}
+            avatarUrl={thread.peerAvatarUrl}
             name={thread.title}
-            online={thread.kind === 'GROUP' || thread.kind === 'AI' || !thread.peerOnixId
+            online={thread.kind === 'GROUP' || !thread.peerOnixId
               ? undefined
               : sellerIsPresent(
                 { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
@@ -601,7 +599,7 @@ export function Chats({
         <div>
           <b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
           <small>
-            {thread.kind === 'AI' ? 'Помощник платформы' : thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}
+            {thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}
           </small>
         </div>
       </button>
@@ -665,7 +663,7 @@ export function Chats({
             onPointerCancel={clearLongPress}
           >
             {message.kind !== 'SYSTEM' && <small>{publicAt(message.sender.username)} <StaffBadge badge={message.sender.badge} /></small>}
-            {message.kind === 'SYSTEM' && <small>{thread.kind === 'AI' ? 'ONIX AI' : '🛡 ONIX'}</small>}
+            {message.kind === 'SYSTEM' && <small>🛡 ONIX</small>}
             <p><MessageText
               text={message.text}
               onOpenOnix={openOnixProfile}
@@ -730,45 +728,10 @@ export function Chats({
         </button>
       )}
       </div>
-      {thread.kind === 'AI' && (
-        <div className={`ai-actions ${aiActionsOpen ? 'is-open' : ''}`}>
-          <button
-            type="button"
-            className="ai-actions__toggle"
-            aria-expanded={aiActionsOpen}
-            aria-controls={`ai-actions-${thread.id}`}
-            onClick={() => setAiActionsOpen((open) => !open)}
-          >
-            <span>Действия ONIX AI</span>
-            <span className="ai-actions__chevron" aria-hidden="true">{aiActionsOpen ? '▼' : '▲'}</span>
-          </button>
-          {aiActionsOpen && (
-            <div className="ai-quick-replies" id={`ai-actions-${thread.id}`} role="group" aria-label="Быстрые действия">
-              {[
-                { label: 'О площадке ONIX', send: 'О площадке ONIX' },
-                { label: 'Написать в поддержку', send: 'Написать в поддержку' },
-                { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
-                { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },
-              ].map((item) => (
-                <button
-                  key={item.send}
-                  type="button"
-                  className="ai-quick-replies__btn"
-                  disabled={Boolean(core.actionBusy === `message-${thread.id}`)}
-                  onClick={() => void sendMessage(thread.id, item.send).then((ok) => { if (ok) void loadMessages(thread.id); })}
-                >{item.label}</button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
       <form className="composer" onSubmit={async event => {
         event.preventDefault();
-        const sent = text;
         if (await sendMessage(thread.id, text)) {
           setText('');
-          if (thread.kind === 'AI') await loadMessages(thread.id);
-          else void sent;
         }
       }}>
         <Input

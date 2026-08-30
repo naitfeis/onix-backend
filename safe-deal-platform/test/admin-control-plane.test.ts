@@ -24,7 +24,14 @@ test('global message moderation writes immutable admin audit entry', async () =>
     },
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   };
-  const service = new AdminSecurityService(prisma as never, {} as never, {} as never, {} as never);
+  const service = new AdminSecurityService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
   const result = await service.moderateMessage(
     { id: 7n, email: 'security@example.com', role: 'SECURITY_ADMIN', sessionId: 'session-1' },
     '42',
@@ -38,4 +45,47 @@ test('global message moderation writes immutable admin audit entry', async () =>
   assert.equal(audit.data.targetType, 'Message');
   assert.equal(audit.data.targetId, '42');
   assert.deepEqual(audit.data.metadataJson, { chatId: 'chat-1', reason: 'fraud link' });
+});
+
+test('PRO mutation audit records separate admin actor and customer target', async () => {
+  let pending: any;
+  let completed: any;
+  const prisma = {
+    user: {
+      findFirst: async () => ({ id: 42n, onixId: '000042' }),
+    },
+    adminActionLog: {
+      create: async (args: any) => {
+        pending = args;
+        return { id: 88n };
+      },
+      update: async (args: any) => {
+        completed = args;
+        return args;
+      },
+    },
+  };
+  const pro = {
+    grantFromAdminPlane: async (userId: bigint) => ({ id: 'subscription-1', userId }),
+  };
+  const service = new AdminSecurityService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    pro as never,
+  );
+
+  await service.grantPro(
+    { id: 7n, email: 'root@example.com', role: 'SUPER_ADMIN', sessionId: 'session-1' },
+    'ONIX-000042',
+  );
+
+  assert.equal(pending.data.adminUserId, 7n);
+  assert.equal(pending.data.targetType, 'User');
+  assert.equal(pending.data.targetId, '42');
+  assert.equal(pending.data.action, 'ADMIN_PRO_GRANT_PENDING');
+  assert.equal(completed.data.action, 'ADMIN_PRO_GRANT');
+  assert.equal(completed.data.metadataJson.state, 'COMPLETED');
 });

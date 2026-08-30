@@ -416,8 +416,6 @@ export const API_PATHS = {
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
   subcategories: '/api/products/catalog/subcategories',
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
-  /** @status FUTURE — AI chat entry is via Chats list, not this path. */
-  aiChat: '/api/ai/chat',
 } as const;
 
 /**
@@ -432,7 +430,6 @@ export const API_PATH_STATUS = {
   subcategories: 'LIVE',
   meVerifications: 'FUTURE',
   mePro: 'FUTURE',
-  aiChat: 'FUTURE',
   supportClose: 'DEPRECATED',
 } as const;
 

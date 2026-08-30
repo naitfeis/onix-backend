@@ -11,10 +11,11 @@ import { AuditLogScreen } from './screens/AuditLogScreen';
 import { SupportScreen } from './screens/SupportScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
 import { MessagesScreen } from './screens/MessagesScreen';
+import { PaymentsScreen } from './screens/PaymentsScreen';
 
 type AdminMe = { id: string; email: string; role: string; sessionId?: string };
 function adminRoleLabel(role: string) { return role === 'SUPER_ADMIN' ? 'FOUNDER' : role; }
-type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk';
+type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk' | 'payments';
 
 export function App() {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
@@ -76,6 +77,7 @@ export function App() {
         <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Audit Log</button>
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'flags' ? 'active' : ''} onClick={() => setScreen('flags')}>Security Alerts</button>}
         {admin.role !== 'SUPPORT_ADMIN' && <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Withdrawals</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'FINANCE_ADMIN') && <button type="button" className={screen === 'payments' ? 'active' : ''} onClick={() => setScreen('payments')}>Manual Payments</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>User Investigate</button>}
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Events</button>}
         <div style={{ marginTop: '1.5rem' }}>
@@ -101,6 +103,7 @@ export function App() {
         {screen === 'audit' && <AuditLogScreen />}
         {screen === 'flags' && <SecurityFlagsScreen />}
         {screen === 'withdrawals' && <WithdrawalsScreen />}
+        {screen === 'payments' && <PaymentsScreen />}
         {screen === 'users' && <UserInvestigateScreen adminRole={admin.role} />}
         {screen === 'risk' && <RiskEventsScreen />}
       </main>

@@ -467,10 +467,8 @@ safe-deal-platform\src\ai\ai.controller.ts
 safe-deal-platform\src\ai\ai.module.ts
 safe-deal-platform\src\ai\ai.service.ts
 safe-deal-platform\src\ai\conversation.service.ts
-safe-deal-platform\src\ai\entity-extractor.ts
 safe-deal-platform\src\ai\help-replies.ts
 safe-deal-platform\src\ai\intent-recognizer.ts
-safe-deal-platform\src\ai\product-creation.service.ts
 safe-deal-platform\src\app.module.ts
 safe-deal-platform\src\auth.module.ts
 safe-deal-platform\src\auth-v2\auth-errors.ts
@@ -530,7 +528,6 @@ safe-deal-platform\src\economy\payments\payment-webhook-model.ts
 safe-deal-platform\src\economy\pro\pro.service.ts
 safe-deal-platform\src\economy\trust\trust.service.ts
 safe-deal-platform\src\economy\trust\trust-card.ts
-safe-deal-platform\src\economy\verification\verification.service.ts
 safe-deal-platform\src\economy\wallet\balance.service.ts
 safe-deal-platform\src\economy\wallet\clawback.service.ts
 safe-deal-platform\src\economy\wallet\correlation-id.ts
