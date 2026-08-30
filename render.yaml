@@ -3,8 +3,9 @@
 # so Telegram login returns empty body → "Unexpected end of JSON input".
 # www.onixtg.shop → onix-api custom domain (SPA+API same origin, __Host- cookies).
 #
-# Critical: migrate runs in preDeploy (separate one-shot), NOT in startCommand.
-# startCommand must be a single Node process (no npm wrapper, no migrate&&start).
+# Critical: startCommand must be a single Node process (no npm wrapper, no migrate&&start).
+# Free plan does not run preDeployCommand — build:web applies migrations when RENDER=true.
+# preDeployCommand stays for paid plans that actually execute it.
 services:
   - type: web
     name: onix-api

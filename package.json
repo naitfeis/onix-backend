@@ -22,7 +22,7 @@
     "build": "prisma generate && tsc --incremental false",
     "build:spa": "npm ci --prefix onix-frontend --include=dev && npm run build --prefix onix-frontend && npm ci --prefix onix-admin --include=dev && npm run build --prefix onix-admin && node scripts/sync-spa-dist.mjs",
     "build:admin": "npm ci --prefix onix-admin --include=dev && npm run build --prefix onix-admin",
-    "build:web": "npm run build && npm run build:spa",
+    "build:web": "node scripts/migrate-on-render.mjs && npm run build && npm run build:spa",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
     "ops:migrate-gate": "prisma migrate status",
