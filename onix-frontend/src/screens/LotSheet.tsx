@@ -6,7 +6,9 @@ import {
 } from '../api/contracts';
 import { Button } from '../design-system';
 import { popModal, pushModal } from '../design-system/modalStack';
-import { lotPayMethodLabel, parseCents, quoteLotCheckout, type LotPayMethod } from '../utils/lotCheckout';
+import {
+  lotDisplayTitle, lotPayMethodLabel, lotShortDescription, parseCents, quoteLotCheckout, type LotPayMethod,
+} from '../utils/lotCheckout';
 import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
 
@@ -26,11 +28,11 @@ export function LotSheet({
   core,
   buying,
   backLabel,
+  suppressed,
   onBack,
   onBuy,
   onOpenSeller,
   onWrite,
-  onToggleFollow,
   onToast,
 }: {
   product: Product;
@@ -39,14 +41,13 @@ export function LotSheet({
   core: Core;
   buying: boolean;
   backLabel: string;
+  suppressed?: boolean;
   onBack: () => void;
   onBuy: () => Promise<void> | void;
   onOpenSeller: () => void;
   onWrite: () => void;
-  onToggleFollow: () => void;
   onToast: (text: string) => void;
 }) {
-  const [payHint] = useState(true);
   const [method, setMethod] = useState<LotPayMethod>('BALANCE');
   const [methodsOpen, setMethodsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -57,13 +58,18 @@ export function LotSheet({
   const quote = quoteLotCheckout(priceCents, balanceCents, method);
   const lot = product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null;
   const canBuy = product.status === 'ACTIVE' && Boolean(core.profile);
-  const categoryLabel = CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category;
+  const categoryLabel = CATEGORY_LABELS[product.category] ?? product.category;
   const subLabel = product.subcategory
     ? (SUBCATEGORY_LABELS[product.subcategory] ?? product.subcategory)
     : '';
   const payOptions: LotPayMethod[] = quote.coveredByBalance ? ['BALANCE'] : ['SBP', 'CARD'];
   const activeMethod = payOptions.includes(method) ? method : payOptions[0]!;
   const activeQuote = quoteLotCheckout(priceCents, balanceCents, activeMethod);
+  const title = lotDisplayTitle(product);
+  const summary = lotShortDescription(product);
+  const detail = !detailReady
+    ? 'Загрузка описания…'
+    : (product.description?.trim() || 'Продавец не добавил описание.');
 
   useEffect(() => {
     const { id } = pushModal(() => onBackRef.current());
@@ -102,7 +108,13 @@ export function LotSheet({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="lot-sheet" role="dialog" aria-modal="true" aria-label={product.title}>
+    <div
+      className={`lot-sheet${suppressed ? ' lot-sheet--suppressed' : ''}`}
+      role="dialog"
+      aria-modal={!suppressed}
+      aria-hidden={suppressed || undefined}
+      aria-label={title}
+    >
       <div className="lot-sheet__bar">
         <Button type="button" variant="secondary" onClick={onBack}>{backLabel}</Button>
         {lot && <span className="onixlot-id">{lot}</span>}
@@ -110,11 +122,11 @@ export function LotSheet({
       <div className="lot-sheet__body">
         <div className="lot-sheet__hero">
           <p className="lot-sheet__kicker">Оформление заказа</p>
-          <h1>{product.title}</h1>
-          <p className="muted">
-            {categoryLabel}{subLabel ? ` · ${subLabel}` : ''}
-            {product.warrantyLabel ? ` · ${product.warrantyLabel}` : ''}
-          </p>
+          <div className="lot-sheet__badges">
+            <span className="lot-sheet__badge">{categoryLabel}</span>
+            {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
+            {product.warrantyLabel ? <span className="lot-sheet__badge">{product.warrantyLabel}</span> : null}
+          </div>
         </div>
         <div className="lot-sheet__split">
           <section className="lot-sheet__col lot-sheet__col--profile" aria-label="Продавец">
@@ -123,18 +135,19 @@ export function LotSheet({
               seller={product.seller}
               trust={trust}
               core={core}
+              checkout
               onOpen={onOpenSeller}
               onWrite={onWrite}
-              onToggleFollow={onToggleFollow}
             />
           </section>
           <section className="lot-sheet__col lot-sheet__col--pay" aria-label="Оплата">
+            <p className="lot-sheet__section">Название</p>
+            <p className="lot-sheet__title">{title}</p>
             <p className="lot-sheet__section">Краткое описание</p>
-            <p>{product.title}</p>
+            <p className="lot-sheet__summary">{summary}</p>
+            <p className="lot-sheet__summary-price">{money(product.priceCents)}</p>
             <p className="lot-sheet__section">Подробное описание</p>
-            <p className="muted">
-              {!detailReady ? 'Загрузка описания…' : (product.description?.trim() || 'Продавец не добавил описание.')}
-            </p>
+            <p className="lot-sheet__detail">{detail}</p>
             <p className="lot-sheet__section">Сумма заказа</p>
             <div className="lot-checkout">
               <div className="lot-checkout__row"><span>Цена товара</span><b>{money(String(activeQuote.priceCents))}</b></div>
@@ -190,21 +203,23 @@ export function LotSheet({
                 </div>
               )}
             </div>
-            {payHint && <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>}
-            <p className="lot-sheet__warn">{SAFE_NOTE}</p>
-            <Button
-              variant="buy"
-              busy={busy || buying}
-              disabled={!canBuy}
-              onClick={() => void submit()}
-            >
-              {activeQuote.coveredByBalance
-                ? `Купить за ${money(String(activeQuote.priceCents))}`
-                : `Оплатить остаток ${money(String(activeQuote.externalCents))}`}
-            </Button>
+            <div className="lot-sheet__buy">
+              <Button
+                variant="buy"
+                busy={busy || buying}
+                disabled={!canBuy}
+                onClick={() => void submit()}
+              >
+                {activeQuote.coveredByBalance
+                  ? `Купить за ${money(String(activeQuote.priceCents))}`
+                  : `Оплатить остаток ${money(String(activeQuote.externalCents))}`}
+              </Button>
+            </div>
             <p className="lot-sheet__legal">
               Нажимая «Купить», вы соглашаетесь с правилами площадки и политикой возвратов.
             </p>
+            <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>
+            <p className="lot-sheet__warn">{SAFE_NOTE}</p>
           </section>
         </div>
       </div>

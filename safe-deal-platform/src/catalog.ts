@@ -27,6 +27,15 @@ export const SUBCATEGORIES_BY_CATEGORY: Record<ProductCategory, ProductSubcatego
 
 export const PRODUCT_CATEGORIES = Object.keys(SUBCATEGORIES_BY_CATEGORY) as ProductCategory[];
 
+/** Hidden from market chips and create-lot pickers. Existing lots stay valid. */
+export const HIDDEN_PRODUCT_CATEGORIES: ProductCategory[] = ['VALORANT'];
+
+export function publicSubcategoryCatalog(): Partial<Record<ProductCategory, ProductSubcategory[]>> {
+  const next: Partial<Record<ProductCategory, ProductSubcategory[]>> = { ...SUBCATEGORIES_BY_CATEGORY };
+  for (const key of HIDDEN_PRODUCT_CATEGORIES) delete next[key];
+  return next;
+}
+
 export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   STEAM: 'Steam',
   ROBLOX: 'Roblox',

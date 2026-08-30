@@ -2,12 +2,21 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AuthUser } from '../common';
 import { FAQ_ITEMS, faqAnswer, matchFaq, TICKET_HINT } from './help-replies';
+import { messageDto } from '../response';
+import { RealtimeBus } from '../realtime/realtime-bus.service';
 
 const AI_TITLE = 'ONIX AI';
 
+const SENDER_SELECT = {
+  id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
+} as const;
+
 @Injectable()
 export class AiConversationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeBus,
+  ) {}
 
   async ensureChat(user: AuthUser) {
     const existing = await this.prisma.chat.findFirst({
@@ -64,15 +73,34 @@ export class AiConversationService {
           : `Не нашёл точный ответ.\n\n${TICKET_HINT}`
       ));
 
-    if (body) {
-      await this.prisma.message.create({
+    const userMessage = body
+      ? await this.prisma.message.create({
         data: { chatId: chat.id, kind: 'USER', senderId: user.id, text: body.slice(0, 2000) },
-      });
-    }
-    await this.prisma.message.create({
+        include: { sender: { select: SENDER_SELECT } },
+      })
+      : null;
+    const aiMessage = await this.prisma.message.create({
       data: { chatId: chat.id, kind: 'SYSTEM', senderId: null, text: answer },
     });
     await this.prisma.chat.update({ where: { id: chat.id }, data: { updatedAt: new Date() } });
+    if (userMessage) this.publishAiMessage(chat.id, userMessage, user.id, user.id);
+    this.publishAiMessage(chat.id, { ...aiMessage, sender: null }, user.id, 0n);
     return { chatId: chat.id, answer, faqs: FAQ_ITEMS, ticketCreated: Boolean(ticket && body.length >= 8) };
+  }
+
+  private publishAiMessage(
+    chatId: string,
+    message: Parameters<typeof messageDto>[0],
+    viewerId: bigint,
+    senderId: bigint,
+  ): void {
+    const dto = messageDto(message, viewerId) as unknown as Record<string, unknown>;
+    this.realtime.publish({
+      kind: 'chat.message',
+      chatId,
+      recipientUserIds: [viewerId],
+      messageByViewer: new Map([[viewerId.toString(), dto]]),
+      senderId,
+    });
   }
 }

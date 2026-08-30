@@ -9,7 +9,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, SUBCATEGORIES_BY_CATEGORY } from './catalog';
+import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, publicSubcategoryCatalog, SUBCATEGORIES_BY_CATEGORY } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
 import { AuthModule, AuthService } from './auth.module';
@@ -149,7 +149,7 @@ export class MarketplaceService {
   }
 
   catalog() {
-    return SUBCATEGORIES_BY_CATEGORY;
+    return publicSubcategoryCatalog();
   }
 
   async list(user: AuthUser | null, query: ProductQuery) {

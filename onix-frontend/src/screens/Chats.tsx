@@ -8,6 +8,7 @@ import { parseMemberTokens } from '../utils/parseMemberTokens';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
+import { playSound, unlockSounds } from '../audio/sounds';
 import { getRealtimeClient } from '../realtime/client';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { t } from '../i18n';
@@ -230,10 +231,11 @@ export function Chats({
     void api.get<{ id: string; faqs?: Array<{ id: string; title: string }> }>(API_PATHS.aiChat)
       .then((chat) => {
         if (chat.faqs) setAiFaqs(chat.faqs);
+        if (chat.id) core.subscribeRealtimeChat(chat.id);
         void refreshChats();
       })
       .catch(() => { /* AI optional */ });
-  }, [refreshChats]);
+  }, [refreshChats, core.subscribeRealtimeChat]);
 
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
@@ -751,7 +753,9 @@ export function Chats({
               key={faq.id}
               onClick={async () => {
                 try {
+                  unlockSounds();
                   await api.post(API_PATHS.aiMessages, { faqId: faq.id, text: faq.title });
+                  if (!getRealtimeClient().isReady()) playSound('notify');
                   await loadMessages(thread.id);
                 } catch (error) {
                   setToast(friendlyError(error));
@@ -765,8 +769,10 @@ export function Chats({
         event.preventDefault();
         if (thread.kind === 'AI') {
           try {
+            unlockSounds();
             await api.post(API_PATHS.aiMessages, { text });
             setText('');
+            if (!getRealtimeClient().isReady()) playSound('notify');
             await loadMessages(thread.id);
           } catch (error) {
             setToast(friendlyError(error));

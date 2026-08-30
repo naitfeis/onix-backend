@@ -36,8 +36,9 @@ export function unlockSounds(): void {
 
 export function playSound(name: SoundName): void {
   if (typeof window === 'undefined') return;
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+  if (!unlocked) unlockSounds();
   const audio = player(name);
+  audio.muted = false;
   audio.currentTime = 0;
   void audio.play().catch(() => {
     unlocked = false;

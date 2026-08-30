@@ -38,3 +38,19 @@ export function lotPayMethodLabel(method: LotPayMethod): string {
   if (method === 'CARD') return 'Банковская карта';
   return 'Баланс ONIX';
 }
+
+/** Lot name for checkout. Empty title falls back to the short description. */
+export function lotDisplayTitle(product: { title?: string | null; description?: string | null }): string {
+  const title = product.title?.trim();
+  if (title) return title;
+  const line = product.description?.trim().split(/\n/)[0]?.trim();
+  if (line) return line.slice(0, 80);
+  return 'Лот';
+}
+
+/** Short blurb under the title — never an empty field. */
+export function lotShortDescription(product: { title?: string | null; description?: string | null }): string {
+  const title = product.title?.trim();
+  if (title) return title;
+  return lotDisplayTitle(product);
+}

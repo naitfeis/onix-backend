@@ -659,14 +659,12 @@ export function Market({
         core={core}
         buying={Boolean(core.actionBusy?.startsWith('purchase'))}
         backLabel={catalogBackLabel(category, subcategory)}
+        suppressed={Boolean(sellerProfile)}
         onBack={closeLot}
         onBuy={() => buySelected(selected)}
         onToast={setToast}
         onOpenSeller={async () => {
           const onixId = selected.seller.onixId;
-          setSelected(null);
-          setSellerTrust(null);
-          setDetailReady(false);
           try {
             setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
           } catch (error) {
@@ -677,35 +675,11 @@ export function Market({
           setSelected(null);
           await openDirectChat(selected.seller.onixId);
         }}
-        onToggleFollow={() => {
-          const wasFollowed = Boolean(selected.seller.followed);
-          const delta = wasFollowed ? -1 : 1;
-          setSelected((prev) => (prev ? {
-            ...prev,
-            seller: {
-              ...prev.seller,
-              followed: !wasFollowed,
-              followersCount: Math.max(0, prev.seller.followersCount + delta),
-            },
-          } : prev));
-          setItems((previous) => previous.map((item) => (
-            item.seller.onixId === selected.seller.onixId
-              ? {
-                ...item,
-                seller: {
-                  ...item.seller,
-                  followed: !wasFollowed,
-                  followersCount: Math.max(0, item.seller.followersCount + delta),
-                },
-              }
-              : item
-          )));
-          void core.toggleFollow(selected.seller.onixId, wasFollowed);
-        }}
       />
     )}
     <PublicProfileModal
       profile={sellerProfile}
+      title={selected ? 'Назад к оформлению' : 'Профиль'}
       onClose={() => setSellerProfile(null)}
       core={core}
       onOpenOnix={async (onixId) => {

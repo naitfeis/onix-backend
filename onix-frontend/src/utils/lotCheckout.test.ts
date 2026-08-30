@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quoteLotCheckout } from './lotCheckout';
+import { lotDisplayTitle, lotShortDescription, quoteLotCheckout } from './lotCheckout';
 
 describe('quoteLotCheckout', () => {
   it('covers a cheap lot from balance with no fee', () => {
@@ -9,6 +9,11 @@ describe('quoteLotCheckout', () => {
     expect(q.feeCents).toBe(0);
     expect(q.externalCents).toBe(0);
     expect(q.coveredByBalance).toBe(true);
+  });
+
+  it('falls back to the short description when the lot has no title', () => {
+    expect(lotDisplayTitle({ title: '  ', description: '1000 рублей по логину стим\nдетали' })).toBe('1000 рублей по логину стим');
+    expect(lotShortDescription({ title: '', description: 'Пополнение Steam' })).toBe('Пополнение Steam');
   });
 
   it('splits 40 RUB on balance and 960 leftover with SBP 1%', () => {

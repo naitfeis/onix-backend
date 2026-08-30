@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
   getSharedAuthManager, getWebsiteAuthProvider,
@@ -139,6 +139,8 @@ export function useOnixCore() {
   const [presenceByOnixId, setPresenceByOnixId] = useState<Record<string, { online: boolean; lastOnline: string }>>({});
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
+  const chatsRef = useRef(store.chats);
+  chatsRef.current = store.chats;
 
   const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -158,7 +160,11 @@ export function useOnixCore() {
   const loadCatalog = useCallback(async () => {
     try {
       const data = await api.get<SubcategoryCatalog>(API_PATHS.subcategories);
-      if (data && typeof data === 'object') setCatalogSubcategories(data);
+      if (data && typeof data === 'object') {
+        const next = { ...data };
+        delete next.VALORANT;
+        setCatalogSubcategories(next);
+      }
     } catch {
       // Keep bootstrap fallback — form still works offline / on API blip.
     }
@@ -447,7 +453,8 @@ export function useOnixCore() {
             };
           }),
         }));
-        if (!incoming.mine && incoming.kind !== 'SYSTEM') playSound('notify');
+        const aiThread = chatsRef.current.some((row) => row.id === msg.chatId && row.kind === 'AI');
+        if (!incoming.mine && (incoming.kind !== 'SYSTEM' || aiThread)) playSound('notify');
         return;
       }
       if (msg.type === 'presence') {

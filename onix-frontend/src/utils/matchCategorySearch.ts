@@ -10,7 +10,6 @@ const ALIASES: Array<{ re: RegExp; value: Cat }> = [
   { re: /brawl\s*stars|бравл/i, value: 'BRAWL_STARS' },
   { re: /counter[-\s]?strike\s*2|\bcs\s*2\b|кс\s*2/i, value: 'CS2' },
   { re: /\bfortnite\b|фортнайт/i, value: 'FORTNITE' },
-  { re: /\bvalorant\b|валорант/i, value: 'VALORANT' },
   { re: /gta\s*5|гта\s*5|gta\s*v/i, value: 'GTA_5' },
   { re: /gta\s*6|гта\s*6|gta\s*vi/i, value: 'GTA_6' },
   { re: /dota\s*2|дота\s*2|\bдота\b/i, value: 'DOTA_2' },

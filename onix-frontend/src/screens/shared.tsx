@@ -97,9 +97,10 @@ export function dealProgress(status: Deal['status']) {
 }
 
 export function PublicProfileModal({
-  profile, onClose, core, onOpenOnix, onWrite, onOpenProduct, onReport, setToast,
+  profile, title = 'Профиль', onClose, core, onOpenOnix, onWrite, onOpenProduct, onReport, setToast,
 }: {
   profile: PublicProfile | null;
+  title?: string;
   onClose: () => void;
   core?: Core;
   onOpenOnix?: (onixId: string) => void;
@@ -134,7 +135,7 @@ export function PublicProfileModal({
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
 
-  return <Modal open={Boolean(profile)} title="Профиль" onClose={onClose} size="wide">
+  return <Modal open={Boolean(profile)} title={title} onClose={onClose} size="wide">
     <div className="stack public-profile">
       <Card className="profile-card">
         <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />

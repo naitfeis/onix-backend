@@ -14,6 +14,7 @@ export function SellerIdentityCard({
   trust,
   core,
   compact,
+  checkout,
   onOpen,
   onWrite,
   onToggleFollow,
@@ -22,15 +23,17 @@ export function SellerIdentityCard({
   trust?: TrustCard | null;
   core: Core;
   compact?: boolean;
+  checkout?: boolean;
   onOpen?: () => void;
   onWrite?: () => void;
   onToggleFollow?: () => void;
 }) {
   const present = sellerIsPresent(seller, core.profile, core.presenceOf(seller.onixId));
   const isSelf = Boolean(core.profile && core.profile.onixId === seller.onixId);
+  const showFollow = Boolean(onToggleFollow) && !checkout;
 
   return (
-    <Card className={`profile-card seller-identity${compact ? ' seller-identity--compact' : ''}`}>
+    <Card className={`profile-card seller-identity${compact ? ' seller-identity--compact' : ''}${checkout ? ' seller-identity--checkout' : ''}`}>
       <UserAvatar
         userId={seller.id}
         avatarUrl={seller.avatarUrl}
@@ -50,15 +53,25 @@ export function SellerIdentityCard({
           <span><b>{seller.salesCount}</b> сделок</span>
           <span><b>{seller.reviewCount}</b> отзывов</span>
           <span><b>{seller.followersCount}</b> подписчиков</span>
-          {trust && <span><b>Уровень {trust.level}</b> доверия</span>}
-          {trust && <span><b>{money(trust.depositTotal)}</b> залог</span>}
+          {!checkout && trust && <span><b>Уровень {trust.level}</b> доверия</span>}
+          {!checkout && trust && <span><b>{money(trust.depositTotal)}</b> залог</span>}
         </div>
+        {checkout && (
+          <div className="seller-identity__trust">
+            <p><span>Уровень доверия</span><b>{trust ? `Уровень ${trust.level}` : '—'}</b></p>
+            <p><span>Размер залога</span><b>{trust ? money(trust.depositTotal) : '—'}</b></p>
+          </div>
+        )}
       </div>
-      {!isSelf && (onOpen || onWrite || onToggleFollow) && (
-        <div className="card-actions">
+      {!isSelf && (onOpen || onWrite || showFollow) && (
+        <div className={`card-actions${checkout ? ' seller-identity__actions' : ''}`}>
+          {onWrite && (
+            <Button type="button" variant="secondary" onClick={onWrite}>
+              {checkout ? 'Написать продавцу' : 'Написать'}
+            </Button>
+          )}
           {onOpen && <Button type="button" variant="secondary" onClick={onOpen}>Профиль</Button>}
-          {onWrite && <Button type="button" variant="secondary" onClick={onWrite}>Написать</Button>}
-          {onToggleFollow && (
+          {showFollow && (
             <Button
               variant="secondary"
               busy={core.actionBusy === `follow-${seller.onixId}`}

@@ -2764,6 +2764,9 @@ body.lot-sheet-open {
   flex-direction: column;
   gap: 14px;
 }
+.lot-sheet--suppressed {
+  display: none;
+}
 .lot-sheet__hero h1 { margin: 0 0 8px; font-size: 22px; }
 .lot-sheet__kicker {
   margin: 0 0 6px;
@@ -2772,6 +2775,52 @@ body.lot-sheet-open {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-secondary);
+}
+.lot-sheet__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.lot-sheet__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface, rgba(255,255,255,0.04));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.lot-sheet__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.lot-sheet__summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.lot-sheet__summary-price {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.lot-sheet__detail {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+html[data-theme="dark"] .lot-sheet__detail {
+  color: rgba(255, 255, 255, 0.94);
 }
 .lot-sheet__split {
   display: grid;
@@ -2852,6 +2901,21 @@ body.lot-sheet-open {
 .lot-pay-picker__list button.active {
   border-color: var(--accent);
 }
+.lot-sheet__buy {
+  margin-top: 14px;
+}
+.lot-sheet__buy .button {
+  width: 100%;
+}
+@media (max-width: 899px) {
+  .lot-sheet__buy {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    padding: 10px 0 6px;
+    background: var(--page-bg);
+  }
+}
 .lot-sheet__legal {
   margin: 10px 0 0;
   font-size: 12px;
@@ -2860,8 +2924,30 @@ body.lot-sheet-open {
 .seller-identity.profile-card { margin: 0; }
 .seller-identity.profile-card > .card-actions { grid-column: 1 / -1; }
 .seller-identity .profile-main h1 { font-size: 18px; }
+.seller-identity__trust {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.seller-identity__trust p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 13px;
+}
+.seller-identity__trust span { color: var(--text-secondary); }
+.seller-identity__actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr;
+}
+.seller-identity__actions .button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  background: var(--surface, rgba(255,255,255,0.04));
+}
 .lot-sheet__warn {
-  margin: 0 0 10px;
+  margin: 10px 0 0;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
