@@ -609,7 +609,11 @@ export function Chats({
         <div>
           <b>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
           <small>
-            {thread.kind === 'GROUP' ? 'Группа' : formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}
+            {thread.kind === 'GROUP'
+              ? 'Группа'
+              : thread.kind === 'AI'
+                ? 'Помощник ONIX'
+                : `${thread.peerOnixId ? `${formatOnixId(thread.peerOnixId)} · ` : ''}${formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}`}
           </small>
         </div>
       </button>
@@ -626,7 +630,7 @@ export function Chats({
       </div>
       {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
         <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
-          <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · Escrow</span></div>
+          <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · деньги в сейфе</span></div>
         <Button variant="primary" className="order-card-inline__cta" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
       </div>}
       <div className="messages-wrap">

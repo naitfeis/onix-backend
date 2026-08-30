@@ -20,6 +20,7 @@ import {
 } from '../perf/bootstrapTiming';
 import { markAppReady } from '../perf/timing';
 import { getRealtimeClient } from '../realtime/client';
+import { isOrderNotification, playSound } from '../audio/sounds';
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
 type AuthBootstrap =
@@ -446,6 +447,7 @@ export function useOnixCore() {
             };
           }),
         }));
+        if (!incoming.mine && incoming.kind !== 'SYSTEM') playSound('notify');
         return;
       }
       if (msg.type === 'presence') {
@@ -515,6 +517,7 @@ export function useOnixCore() {
             ...previous.notifications,
           ].slice(0, 100),
         }));
+        playSound(isOrderNotification(msg.title, msg.body) ? 'order' : 'notify');
       }
     });
     // Keep token provider warm; reconnect if socket dropped auth.

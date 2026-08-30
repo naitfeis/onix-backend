@@ -592,7 +592,7 @@ export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
   DEPOSIT: 'Пополнение',
   DEPOSIT_FUND: 'Пополнение залога',
   DEPOSIT_RETURN: 'Возврат залога',
-  PURCHASE_HOLD: 'Оплата в Escrow',
+  PURCHASE_HOLD: 'Оплата в сейф ONIX',
   REFUND: 'Возврат',
   SALE_PAYOUT: 'Выплата с продажи',
   ADMIN_ADJUSTMENT: 'Корректировка',

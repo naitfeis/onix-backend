@@ -45,7 +45,6 @@ const SORT_OPTIONS = [
   { value: 'price_desc', label: 'Сначала дороже', server: 'price_desc' as const },
   { value: 'rating', label: 'По отзывам', server: 'rating' as const },
   { value: 'warranty', label: 'По сроку гарантии', server: 'warranty' as const },
-  { value: 'reliability', label: 'По надёжности', server: 'reliability' as const },
 ] as const;
 
 function catalogScroller(): HTMLElement | Window {
@@ -65,6 +64,13 @@ function writeCatalogScroll(top: number) {
 
 function toServerSort(sort: string) {
   return SORT_OPTIONS.find((o) => o.value === sort)?.server ?? 'newest';
+}
+
+function catalogBackLabel(category: string, subcategory: string): string {
+  if (category === t('market.all')) return 'Назад ко всем лотам';
+  const cat = CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category;
+  const sub = subcategory ? (SUBCATEGORY_LABELS[subcategory] ?? subcategory) : '';
+  return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
 function formatCatCount(n: number): string {
@@ -278,7 +284,7 @@ export function Market({
     setSelected(null);
     setSellerTrust(null);
     setDetailReady(false);
-    setToast('Сделка создана. Деньги в сейфе.');
+    setToast('Сделка создана. Деньги хранятся на платформе до передачи товара.');
     if (deal.chatId) openDealChat(deal.chatId);
     else switchTo('deals');
   };
@@ -635,6 +641,7 @@ export function Market({
           product={product}
           core={core}
           onOpen={() => void openProduct(product)}
+          hidePrice
           onFavorite={() => {
             setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
             void core.toggleFavorite(product);
@@ -651,8 +658,10 @@ export function Market({
         trust={sellerTrust}
         core={core}
         buying={Boolean(core.actionBusy?.startsWith('purchase'))}
+        backLabel={catalogBackLabel(category, subcategory)}
         onBack={closeLot}
-        onBuy={() => void buySelected(selected)}
+        onBuy={() => buySelected(selected)}
+        onToast={setToast}
         onOpenSeller={async () => {
           const onixId = selected.seller.onixId;
           setSelected(null);

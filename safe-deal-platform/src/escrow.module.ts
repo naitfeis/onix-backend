@@ -169,7 +169,7 @@ export class EscrowService {
       if (totalAmountCents > 0n) {
         await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
           idempotencyKey: `order:${key}:hold`,
-          description: 'Оплата в Escrow',
+          description: 'Оплата в сейф ONIX',
           actorUserId: user.id,
           source: 'SYSTEM',
         });
@@ -286,7 +286,7 @@ export class EscrowService {
     // Best-effort Telegram (after commit).
     void this.prisma.user.findUnique({ where: { id: order.sellerId }, select: { telegramId: true } })
       .then((seller) => {
-        if (seller) void pushTelegramToChatId(seller.telegramId, 'Новая покупка', 'Покупатель оплатил заказ — средства в Escrow.');
+        if (seller) void pushTelegramToChatId(seller.telegramId, 'Новая покупка', 'Покупатель оплатил заказ — деньги хранятся в сейфе ONIX.');
       });
     void this.prisma.user.findUnique({ where: { id: user.id }, select: { telegramId: true } })
       .then((buyer) => {
@@ -304,7 +304,7 @@ export class EscrowService {
         userId: live.sellerId,
         id: `order-paid-${live.id.toString()}`,
         title: 'Новая покупка',
-        body: 'Покупатель оплатил заказ — средства в Escrow.',
+        body: 'Покупатель оплатил заказ — деньги хранятся в сейфе ONIX.',
         createdAt: new Date().toISOString(),
         data: {
           orderId: live.id.toString(),
@@ -381,7 +381,7 @@ export class EscrowService {
           senderId: null,
           text: [
             `Решение поддержки по заказу #${id}: подтверждение продавцу.`,
-            'Средства из Escrow зачислены продавцу (за вычетом комиссии площадки 5%).',
+            'Деньги из сейфа ONIX зачислены продавцу (за вычетом комиссии площадки 5%).',
             'Сделка завершена.',
           ].join('\n'),
         },
@@ -702,7 +702,7 @@ export class EscrowService {
             senderId: null,
             text: [
               `Решение поддержки по заказу #${id}: возврат покупателю.`,
-              'Средства из Escrow возвращены покупателю.',
+              'Деньги из сейфа ONIX возвращены покупателю.',
               'Сделка закрыта. Продавец выплату не получает.',
             ].join('\n'),
           },

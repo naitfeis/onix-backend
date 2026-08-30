@@ -1,19 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { money } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
-  CATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Product, type TrustCard,
+  API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, type Product, type TrustCard,
 } from '../api/contracts';
-import UserAvatar from '../components/UserAvatar';
-import { Button, Card } from '../design-system';
+import { Button } from '../design-system';
 import { popModal, pushModal } from '../design-system/modalStack';
-import { formatOnixId } from '../utils/onixId';
-import { publicAt } from '../utils/publicAt';
+import { lotPayMethodLabel, parseCents, quoteLotCheckout, type LotPayMethod } from '../utils/lotCheckout';
 import type { Core } from './types';
-import { StaffBadge } from './shared';
+import { SellerIdentityCard } from './SellerIdentityCard';
 
 const PAYMENT_WARNING =
-  'Не подтверждайте заказ до передачи вам товара продавцом и ведите видеозапись, чтобы избежать спорных ситуаций.';
+  'Не подтверждайте заказ, пока продавец не передал товар. Снимите передачу на видео — так проще решить спор.';
+const SAFE_NOTE =
+  'Деньги не уходят продавцу сразу: они хранятся на платформе, пока вы не подтвердите, что товар получен.';
+const LOT_FEE_LABEL: Record<Exclude<LotPayMethod, 'BALANCE'>, string> = {
+  SBP: '1%',
+  CARD: '4%',
+};
 
 export function LotSheet({
   product,
@@ -21,30 +25,45 @@ export function LotSheet({
   trust,
   core,
   buying,
+  backLabel,
   onBack,
   onBuy,
   onOpenSeller,
   onWrite,
   onToggleFollow,
+  onToast,
 }: {
   product: Product;
   detailReady: boolean;
   trust: TrustCard | null;
   core: Core;
   buying: boolean;
+  backLabel: string;
   onBack: () => void;
-  onBuy: () => void;
+  onBuy: () => Promise<void> | void;
   onOpenSeller: () => void;
   onWrite: () => void;
   onToggleFollow: () => void;
+  onToast: (text: string) => void;
 }) {
-  const [payHint, setPayHint] = useState(true);
+  const [payHint] = useState(true);
+  const [method, setMethod] = useState<LotPayMethod>('BALANCE');
+  const [methodsOpen, setMethodsOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
-  const balance = core.profile?.balanceCents ?? '0';
+  const balanceCents = parseCents(core.profile?.balanceCents);
+  const priceCents = parseCents(product.priceCents);
+  const quote = quoteLotCheckout(priceCents, balanceCents, method);
   const lot = product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null;
-  const canBuy = product.status === 'ACTIVE';
-  const present = sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId));
+  const canBuy = product.status === 'ACTIVE' && Boolean(core.profile);
+  const categoryLabel = CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category;
+  const subLabel = product.subcategory
+    ? (SUBCATEGORY_LABELS[product.subcategory] ?? product.subcategory)
+    : '';
+  const payOptions: LotPayMethod[] = quote.coveredByBalance ? ['BALANCE'] : ['SBP', 'CARD'];
+  const activeMethod = payOptions.includes(method) ? method : payOptions[0]!;
+  const activeQuote = quoteLotCheckout(priceCents, balanceCents, activeMethod);
 
   useEffect(() => {
     const { id } = pushModal(() => onBackRef.current());
@@ -55,83 +74,138 @@ export function LotSheet({
     };
   }, []);
 
+  const submit = async () => {
+    if (!canBuy) {
+      onToast('Войдите, чтобы купить лот.');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (!activeQuote.coveredByBalance) {
+        const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
+          wallet: 'MAIN',
+          amountCents: activeQuote.externalCents,
+          provider: activeMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
+          idempotencyKey: crypto.randomUUID(),
+        });
+        await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
+        await core.loadProfile();
+      }
+      await onBuy();
+    } catch (error) {
+      onToast(friendlyError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div className="lot-sheet" role="dialog" aria-modal="true" aria-label={product.title}>
       <div className="lot-sheet__bar">
-        <Button type="button" variant="secondary" onClick={onBack}>Назад</Button>
+        <Button type="button" variant="secondary" onClick={onBack}>{backLabel}</Button>
         {lot && <span className="onixlot-id">{lot}</span>}
       </div>
       <div className="lot-sheet__body">
         <div className="lot-sheet__hero">
+          <p className="lot-sheet__kicker">Оформление заказа</p>
           <h1>{product.title}</h1>
-          <strong className="lot-sheet__price">{money(product.priceCents)}</strong>
-          {product.warrantyLabel && (
-            <span className="lot-sheet__warranty">{product.warrantyLabel}</span>
-          )}
           <p className="muted">
-            {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category}
-          </p>
-          <p className="muted">
-            {!detailReady ? 'Загрузка описания…' : (product.description?.trim() || 'Продавец не добавил описание.')}
+            {categoryLabel}{subLabel ? ` · ${subLabel}` : ''}
+            {product.warrantyLabel ? ` · ${product.warrantyLabel}` : ''}
           </p>
         </div>
-        {trust && (
-          <div className="trust-strip">
-            <span><b>Уровень {trust.level}</b></span>
-            <span><b>{money(trust.depositTotal)}</b> залог</span>
-          </div>
-        )}
-        <Card>
-          <div className="seller-row">
-            <div className="user-summary">
-              <UserAvatar
-                userId={product.seller.id}
-                avatarUrl={product.seller.avatarUrl}
-                name={product.seller.username}
-                online={present}
-              />
-              <div>
-                <b>{publicAt(product.seller.username)} <StaffBadge badge={product.seller.badge} /></b>
-                <p className="muted">
-                  {formatOnixId(product.seller.onixId)} · {product.seller.salesCount} сделок · {product.seller.reviewCount} отзывов · {present ? 'Online' : formatLastSeen(core.presenceOf(product.seller.onixId)?.lastOnline ?? product.seller.lastOnline)}
-                </p>
+        <div className="lot-sheet__split">
+          <section className="lot-sheet__col lot-sheet__col--profile" aria-label="Продавец">
+            <p className="lot-sheet__section">Продавец</p>
+            <SellerIdentityCard
+              seller={product.seller}
+              trust={trust}
+              core={core}
+              onOpen={onOpenSeller}
+              onWrite={onWrite}
+              onToggleFollow={onToggleFollow}
+            />
+          </section>
+          <section className="lot-sheet__col lot-sheet__col--pay" aria-label="Оплата">
+            <p className="lot-sheet__section">Краткое описание</p>
+            <p>{product.title}</p>
+            <p className="lot-sheet__section">Подробное описание</p>
+            <p className="muted">
+              {!detailReady ? 'Загрузка описания…' : (product.description?.trim() || 'Продавец не добавил описание.')}
+            </p>
+            <p className="lot-sheet__section">Сумма заказа</p>
+            <div className="lot-checkout">
+              <div className="lot-checkout__row"><span>Цена товара</span><b>{money(String(activeQuote.priceCents))}</b></div>
+              <div className="lot-checkout__row"><span>Уже на балансе</span><b>{money(String(activeQuote.fromBalanceCents))}</b></div>
+              <div className="lot-checkout__row">
+                <span>Осталось оплатить</span>
+                <b>{money(String(activeQuote.remainingCents))}</b>
+              </div>
+              <div className="lot-checkout__row">
+                <span>
+                  Сервисный сбор
+                  {activeQuote.remainingCents > 0 ? ` · ${lotPayMethodLabel(activeMethod)} ${activeQuote.feeBps / 100}%` : ''}
+                </span>
+                <b>{money(String(activeQuote.feeCents))}</b>
+              </div>
+              <div className="lot-checkout__due">
+                <small>К оплате {activeQuote.coveredByBalance ? 'с баланса' : 'сейчас'}</small>
+                <strong>{money(String(activeQuote.coveredByBalance ? activeQuote.priceCents : activeQuote.externalCents))}</strong>
               </div>
             </div>
-            <span>★ {product.seller.rating.toFixed(1)}</span>
-          </div>
-          <div className="card-actions">
-            <Button type="button" variant="secondary" onClick={onOpenSeller}>Профиль продавца</Button>
-            <Button type="button" variant="secondary" onClick={onWrite}>Написать</Button>
+            <p className="lot-sheet__section">Способ оплаты</p>
+            <div className="lot-pay-picker">
+              <button
+                type="button"
+                className="lot-pay-picker__btn"
+                aria-expanded={methodsOpen}
+                onClick={() => setMethodsOpen((open) => !open)}
+              >
+                <span>{lotPayMethodLabel(activeMethod)}</span>
+                <b>
+                  {activeQuote.coveredByBalance
+                    ? money(String(balanceCents))
+                    : `${activeQuote.feeBps / 100}% сбор`}
+                </b>
+              </button>
+              {methodsOpen && (
+                <div className="lot-pay-picker__list" role="list">
+                  {payOptions.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      role="listitem"
+                      className={item === activeMethod ? 'active' : ''}
+                      onClick={() => {
+                        setMethod(item);
+                        setMethodsOpen(false);
+                      }}
+                    >
+                      {lotPayMethodLabel(item)}
+                      {item !== 'BALANCE' ? ` · сбор ${LOT_FEE_LABEL[item]}` : ' · без сбора'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {payHint && <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>}
+            <p className="lot-sheet__warn">{SAFE_NOTE}</p>
             <Button
-              variant="secondary"
-              busy={core.actionBusy === `follow-${product.seller.onixId}`}
-              onClick={onToggleFollow}
-            >{product.seller.followed ? 'Отписаться' : '+ Подписаться'}</Button>
-          </div>
-        </Card>
-      </div>
-      <div className="lot-sheet__buy">
-        {payHint && <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>}
-        <div className="lot-sheet__pay">
-          <div>
-            <small>Ваш баланс</small>
-            <strong>{money(balance)}</strong>
-          </div>
-          <div>
-            <small>К оплате</small>
-            <strong>{money(product.priceCents)}</strong>
-          </div>
-          <Button
-            variant="buy"
-            busy={buying}
-            disabled={!canBuy}
-            onClick={() => {
-              setPayHint(true);
-              onBuy();
-            }}
-          >Купить</Button>
+              variant="buy"
+              busy={busy || buying}
+              disabled={!canBuy}
+              onClick={() => void submit()}
+            >
+              {activeQuote.coveredByBalance
+                ? `Купить за ${money(String(activeQuote.priceCents))}`
+                : `Оплатить остаток ${money(String(activeQuote.externalCents))}`}
+            </Button>
+            <p className="lot-sheet__legal">
+              Нажимая «Купить», вы соглашаетесь с правилами площадки и политикой возвратов.
+            </p>
+          </section>
         </div>
       </div>
     </div>,

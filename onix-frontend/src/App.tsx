@@ -16,6 +16,7 @@ import {
   IconWallet,
 } from './components/NavIcons';
 import { Button, Card, Skeleton, Toast } from './design-system';
+import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
 import { t } from './i18n';
 import AuthNotice from './screens/AuthGate';
@@ -198,6 +199,12 @@ export default function App() {
   const leftIcons = leftW <= LEFT_ICONS_AT;
   const rightIcons = rightW <= RIGHT_ICONS_AT;
   const miniApp = useMemo(() => isTelegramMiniApp(), []);
+
+  useEffect(() => {
+    const unlock = () => unlockSounds();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, []);
 
   const startResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();

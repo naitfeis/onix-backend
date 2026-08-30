@@ -26,12 +26,14 @@ export function ProductLotCard({
   core,
   onOpen,
   onFavorite,
+  hidePrice,
   footer,
 }: {
   product: Product;
   core: Core;
   onOpen: () => void;
   onFavorite?: () => void;
+  hidePrice?: boolean;
   footer?: ReactNode;
 }) {
   const rating = product.seller.rating.toFixed(1);
@@ -86,7 +88,7 @@ export function ProductLotCard({
       {footer ?? (
         <div className="product-card__footer product-card__footer--bar">
           <span className="product-card__warranty">{product.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
-          <strong className="product-card__price">{money(product.priceCents)}</strong>
+          {!hidePrice && <strong className="product-card__price">{money(product.priceCents)}</strong>}
           <button type="button" className="button button--buy product-card__buy" onClick={onOpen}>{t('market.buy')}</button>
         </div>
       )}

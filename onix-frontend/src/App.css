@@ -2765,31 +2765,107 @@ body.lot-sheet-open {
   gap: 14px;
 }
 .lot-sheet__hero h1 { margin: 0 0 8px; font-size: 22px; }
-.lot-sheet__price { font-size: 28px; }
-.lot-sheet__warranty {
-  display: block;
-  margin-top: 6px;
-  font-size: 13px;
+.lot-sheet__kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-secondary);
 }
-.lot-sheet__buy {
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
-  background: var(--bg);
+.lot-sheet__split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
+@media (min-width: 900px) {
+  .lot-sheet__split {
+    grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+  }
+}
+.lot-sheet__section {
+  margin: 16px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.lot-sheet__section:first-child { margin-top: 0; }
+.lot-checkout {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface, rgba(255,255,255,0.04));
+}
+.lot-checkout__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.lot-checkout__due {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.lot-checkout__due small { color: var(--text-secondary); font-size: 11px; }
+.lot-checkout__due strong { font-size: 22px; }
+.lot-pay-picker { position: relative; }
+.lot-pay-picker__btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface, rgba(255,255,255,0.04));
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.lot-pay-picker__list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+.lot-pay-picker__list button {
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.lot-pay-picker__list button.active {
+  border-color: var(--accent);
+}
+.lot-sheet__legal {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.seller-identity.profile-card { margin: 0; }
+.seller-identity.profile-card > .card-actions { grid-column: 1 / -1; }
+.seller-identity .profile-main h1 { font-size: 18px; }
 .lot-sheet__warn {
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
 }
-.lot-sheet__pay {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.lot-sheet__pay small { display: block; color: var(--text-secondary); font-size: 11px; }
 .scroll-top {
   position: fixed;
   right: 16px;
