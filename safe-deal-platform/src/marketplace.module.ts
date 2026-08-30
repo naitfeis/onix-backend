@@ -95,6 +95,7 @@ class ProductQuery {
   @IsOptional() @IsString() @Matches(/^\d+$/) minPriceCents?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) maxPriceCents?: string;
   @IsOptional() @IsIn(['newest', 'price_asc', 'price_desc', 'rating', 'warranty', 'reliability']) sort: string = 'newest';
+  @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 30;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
@@ -183,6 +184,7 @@ export class MarketplaceService {
       shadowBannedAt: null,
       ...(query.category ? { category: query.category } : {}),
       ...(query.subcategory ? { subcategory: query.subcategory } : {}),
+      ...(query.autoDeliver ? { autoDeliver: true } : {}),
       ...(query.search ? {
         OR: [
           { title: { contains: query.search, mode: 'insensitive' } },

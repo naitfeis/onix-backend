@@ -70,7 +70,11 @@ export function SellerIdentityCard({
               {checkout ? 'Написать продавцу' : 'Написать'}
             </Button>
           )}
-          {onOpen && <Button type="button" variant="secondary" onClick={onOpen}>Профиль</Button>}
+          {onOpen && (
+            <Button type="button" variant="secondary" onClick={onOpen}>
+              {checkout ? 'Профиль продавца' : 'Профиль'}
+            </Button>
+          )}
           {showFollow && (
             <Button
               variant="secondary"

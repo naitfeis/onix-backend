@@ -760,6 +760,23 @@ html[data-theme="light"] .product-card__avatar .user-avatar__presence {
   pointer-events: none;
   z-index: 2;
 }
+.product-card__flags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.product-card__bolt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(16, 14, 24, 0.72);
+  border: 1px solid rgba(245, 193, 74, 0.4);
+  font-size: 14px;
+  line-height: 1;
+}
 .product-card__rating {
   display: flex;
   flex-direction: column;
@@ -1858,6 +1875,37 @@ html[data-theme="light"] .select-menu__option.is-active {
   background: color-mix(in srgb, var(--accent-violet) 16%, #fff);
 }
 .search-row { display: grid; grid-template-columns: 1fr; gap: 8px; align-items: stretch; }
+.auto-deliver-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.auto-deliver-filter__dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+.auto-deliver-filter.is-on .auto-deliver-filter__dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
 .search-row .control,
 .search-row select.control,
 .search-row .select-menu__trigger { border-radius: 26px !important; }
@@ -2736,36 +2784,47 @@ html[data-theme="dark"] .stats b { color: #fff; }
   display: none !important;
 }
 .lot-sheet {
-  position: fixed;
-  inset: 0;
-  z-index: calc(var(--z-modal) + 40);
   display: flex;
   flex-direction: column;
-  background: var(--page-bg);
-  isolation: isolate;
-  overflow: hidden;
-}
-body.lot-sheet-open {
-  overflow: hidden;
+  gap: 14px;
+  min-width: 0;
+  width: 100%;
 }
 .lot-sheet__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+}
+.lot-sheet__back {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lot-sheet__back:hover {
+  color: var(--text);
 }
 .lot-sheet__body {
-  flex: 1;
-  overflow: auto;
-  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  padding: 0 0 28px;
 }
-.lot-sheet--suppressed {
-  display: none;
+.lot-island {
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--glass-card-bg, var(--surface, rgba(255,255,255,0.04)));
+}
+.lot-island--seller .seller-identity.profile-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 .lot-sheet__hero h1 { margin: 0 0 8px; font-size: 22px; }
 .lot-sheet__kicker {
@@ -2798,22 +2857,12 @@ body.lot-sheet-open {
 }
 .lot-sheet__title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.35;
 }
-.lot-sheet__summary {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
-}
-.lot-sheet__summary-price {
-  margin: 4px 0 0;
-  font-size: 14px;
-  font-weight: 600;
-}
 .lot-sheet__detail {
-  margin: 0;
+  margin: 10px 0 0;
   font-size: 14px;
   line-height: 1.55;
   color: var(--text);
@@ -2822,33 +2871,21 @@ body.lot-sheet-open {
 html[data-theme="dark"] .lot-sheet__detail {
   color: rgba(255, 255, 255, 0.94);
 }
-.lot-sheet__split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-@media (min-width: 900px) {
-  .lot-sheet__split {
-    grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
-  }
-}
 .lot-sheet__section {
-  margin: 16px 0 6px;
+  margin: 0 0 10px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-secondary);
 }
-.lot-sheet__section:first-child { margin-top: 0; }
+.lot-sheet__badge--auto {
+  color: #f5c14a;
+  border-color: rgba(245, 193, 74, 0.35);
+}
 .lot-checkout {
   display: grid;
   gap: 8px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface, rgba(255,255,255,0.04));
 }
 .lot-checkout__row {
   display: flex;
@@ -2878,7 +2915,7 @@ html[data-theme="dark"] .lot-sheet__detail {
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--surface, rgba(255,255,255,0.04));
+  background: transparent;
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -2910,7 +2947,7 @@ html[data-theme="dark"] .lot-sheet__detail {
 @media (max-width: 899px) {
   .lot-sheet__buy {
     position: sticky;
-    bottom: 0;
+    bottom: calc(72px + env(safe-area-inset-bottom));
     z-index: 2;
     padding: 10px 0 6px;
     background: var(--page-bg);
@@ -3240,7 +3277,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
   .app-shell--chat { padding-inline: 0; }
-  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px); }
+  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto; }
   .search-row select.control,
   .search-row .select-menu__trigger {
     border-radius: 26px !important;

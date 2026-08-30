@@ -68,7 +68,7 @@ function toServerSort(sort: string) {
 
 function catalogBackLabel(category: string, subcategory: string): string {
   if (category === t('market.all')) return 'Назад ко всем лотам';
-  const cat = CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category;
+  const cat = CATEGORY_LABELS[category] ?? category;
   const sub = subcategory ? (SUBCATEGORY_LABELS[subcategory] ?? subcategory) : '';
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
@@ -105,6 +105,7 @@ export function Market({
   const [subcategory, setSubcategory] = useState('');
   const [sort, setSort] = useState('new');
   const [sortOpen, setSortOpen] = useState(false);
+  const [autoDeliverOnly, setAutoDeliverOnly] = useState(false);
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
@@ -156,6 +157,7 @@ export function Market({
     setLotOrigin(origin);
     setSelected(product);
     setDetailReady(false);
+    requestAnimationFrame(() => writeCatalogScroll(0));
     setSellerProfile(null);
     setSellerTrust(null);
     try {
@@ -214,7 +216,7 @@ export function Market({
 
   useEffect(() => {
     const isDefaultBrowse =
-      category === t('market.all') && !subcategory && !query.trim() && sort === 'new';
+      category === t('market.all') && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
 
     // Default home feed: reuse bootstrap catalog — do not fire a second /api/products
     // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
@@ -248,6 +250,7 @@ export function Market({
         category: category === t('market.all') ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
+        autoDeliver: autoDeliverOnly || undefined,
         limit: PAGE,
         offset: 0,
       }, controller.signal).then((data) => {
@@ -264,7 +267,7 @@ export function Market({
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [category, core.listProducts, core.products, core.states.products, query, sort, subcategory]);
+  }, [autoDeliverOnly, category, core.listProducts, core.products, core.states.products, query, sort, subcategory]);
 
   const closeLot = () => {
     const origin = lotOrigin;
@@ -311,6 +314,7 @@ export function Market({
         category: category === t('market.all') ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
+        autoDeliver: autoDeliverOnly || undefined,
         limit: PAGE,
         offset: next,
       });
@@ -436,6 +440,32 @@ export function Market({
   }, [heroSlides.length]);
 
   return <div className="stack">
+    {selected && (
+      <LotSheet
+        product={selected}
+        detailReady={detailReady}
+        trust={sellerTrust}
+        core={core}
+        buying={Boolean(core.actionBusy?.startsWith('purchase'))}
+        backLabel={catalogBackLabel(category, subcategory)}
+        onBack={closeLot}
+        onBuy={() => buySelected(selected)}
+        onToast={setToast}
+        onOpenSeller={async () => {
+          const onixId = selected.seller.onixId;
+          try {
+            setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
+          } catch (error) {
+            setToast(friendlyError(error));
+          }
+        }}
+        onWrite={async () => {
+          setSelected(null);
+          await openDirectChat(selected.seller.onixId);
+        }}
+      />
+    )}
+    {!selected && <>
     <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
       <div className="market-hero__track" ref={heroTrackRef}>
         {heroSlides.map((slide, index) => (
@@ -594,6 +624,16 @@ export function Market({
           </div>
         )}
       </div>
+      <button
+        type="button"
+        className={`auto-deliver-filter${autoDeliverOnly ? ' is-on' : ''}`}
+        aria-pressed={autoDeliverOnly}
+        aria-label="Только лоты с автовыдачей"
+        onClick={() => setAutoDeliverOnly((on) => !on)}
+      >
+        <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
+        <span>Автовыдача</span>
+      </button>
     </div>
 
     {marketSubs.length > 0 && (
@@ -651,32 +691,7 @@ export function Market({
     {marketState === 'success' && hasMore && (
       <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>{t('common.showMore')}</Button>
     )}
-    {selected && (
-      <LotSheet
-        product={selected}
-        detailReady={detailReady}
-        trust={sellerTrust}
-        core={core}
-        buying={Boolean(core.actionBusy?.startsWith('purchase'))}
-        backLabel={catalogBackLabel(category, subcategory)}
-        suppressed={Boolean(sellerProfile)}
-        onBack={closeLot}
-        onBuy={() => buySelected(selected)}
-        onToast={setToast}
-        onOpenSeller={async () => {
-          const onixId = selected.seller.onixId;
-          try {
-            setSellerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(onixId)));
-          } catch (error) {
-            setToast(friendlyError(error));
-          }
-        }}
-        onWrite={async () => {
-          setSelected(null);
-          await openDirectChat(selected.seller.onixId);
-        }}
-      />
-    )}
+    </>}
     <PublicProfileModal
       profile={sellerProfile}
       title={selected ? 'Назад к оформлению' : 'Профиль'}

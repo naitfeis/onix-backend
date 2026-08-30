@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, type Product, type TrustCard,
 } from '../api/contracts';
 import { Button } from '../design-system';
-import { popModal, pushModal } from '../design-system/modalStack';
 import {
-  lotDisplayTitle, lotPayMethodLabel, lotShortDescription, parseCents, quoteLotCheckout, type LotPayMethod,
+  lotDisplayTitle, lotPayMethodLabel, parseCents, quoteLotCheckout, type LotPayMethod,
 } from '../utils/lotCheckout';
 import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
@@ -28,7 +26,6 @@ export function LotSheet({
   core,
   buying,
   backLabel,
-  suppressed,
   onBack,
   onBuy,
   onOpenSeller,
@@ -41,7 +38,6 @@ export function LotSheet({
   core: Core;
   buying: boolean;
   backLabel: string;
-  suppressed?: boolean;
   onBack: () => void;
   onBuy: () => Promise<void> | void;
   onOpenSeller: () => void;
@@ -66,18 +62,17 @@ export function LotSheet({
   const activeMethod = payOptions.includes(method) ? method : payOptions[0]!;
   const activeQuote = quoteLotCheckout(priceCents, balanceCents, activeMethod);
   const title = lotDisplayTitle(product);
-  const summary = lotShortDescription(product);
-  const detail = !detailReady
+  const rawDetail = !detailReady
     ? 'Загрузка описания…'
-    : (product.description?.trim() || 'Продавец не добавил описание.');
+    : (product.description?.trim() || '');
+  const detail = rawDetail && rawDetail !== title ? rawDetail : '';
 
   useEffect(() => {
-    const { id } = pushModal(() => onBackRef.current());
-    document.body.classList.add('lot-sheet-open');
-    return () => {
-      popModal(id);
-      document.body.classList.remove('lot-sheet-open');
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onBackRef.current();
     };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const submit = async () => {
@@ -105,18 +100,12 @@ export function LotSheet({
     }
   };
 
-  if (typeof document === 'undefined') return null;
-
-  return createPortal(
-    <div
-      className={`lot-sheet${suppressed ? ' lot-sheet--suppressed' : ''}`}
-      role="dialog"
-      aria-modal={!suppressed}
-      aria-hidden={suppressed || undefined}
-      aria-label={title}
-    >
+  return (
+    <div className="lot-sheet" role="region" aria-label={title}>
       <div className="lot-sheet__bar">
-        <Button type="button" variant="secondary" onClick={onBack}>{backLabel}</Button>
+        <button type="button" className="lot-sheet__back" onClick={onBack}>
+          ← {backLabel}
+        </button>
         {lot && <span className="onixlot-id">{lot}</span>}
       </div>
       <div className="lot-sheet__body">
@@ -126,104 +115,108 @@ export function LotSheet({
             <span className="lot-sheet__badge">{categoryLabel}</span>
             {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
             {product.warrantyLabel ? <span className="lot-sheet__badge">{product.warrantyLabel}</span> : null}
+            <span className={`lot-sheet__badge${product.autoDeliver ? ' lot-sheet__badge--auto' : ''}`}>
+              {product.autoDeliver ? '⚡ Автовыдача' : 'Без автовыдачи'}
+            </span>
           </div>
         </div>
-        <div className="lot-sheet__split">
-          <section className="lot-sheet__col lot-sheet__col--profile" aria-label="Продавец">
-            <p className="lot-sheet__section">Продавец</p>
-            <SellerIdentityCard
-              seller={product.seller}
-              trust={trust}
-              core={core}
-              checkout
-              onOpen={onOpenSeller}
-              onWrite={onWrite}
-            />
-          </section>
-          <section className="lot-sheet__col lot-sheet__col--pay" aria-label="Оплата">
-            <p className="lot-sheet__section">Название</p>
-            <p className="lot-sheet__title">{title}</p>
-            <p className="lot-sheet__section">Краткое описание</p>
-            <p className="lot-sheet__summary">{summary}</p>
-            <p className="lot-sheet__summary-price">{money(product.priceCents)}</p>
-            <p className="lot-sheet__section">Подробное описание</p>
-            <p className="lot-sheet__detail">{detail}</p>
-            <p className="lot-sheet__section">Сумма заказа</p>
-            <div className="lot-checkout">
-              <div className="lot-checkout__row"><span>Цена товара</span><b>{money(String(activeQuote.priceCents))}</b></div>
-              <div className="lot-checkout__row"><span>Уже на балансе</span><b>{money(String(activeQuote.fromBalanceCents))}</b></div>
-              <div className="lot-checkout__row">
-                <span>Осталось оплатить</span>
-                <b>{money(String(activeQuote.remainingCents))}</b>
-              </div>
-              <div className="lot-checkout__row">
-                <span>
-                  Сервисный сбор
-                  {activeQuote.remainingCents > 0 ? ` · ${lotPayMethodLabel(activeMethod)} ${activeQuote.feeBps / 100}%` : ''}
-                </span>
-                <b>{money(String(activeQuote.feeCents))}</b>
-              </div>
-              <div className="lot-checkout__due">
-                <small>К оплате {activeQuote.coveredByBalance ? 'с баланса' : 'сейчас'}</small>
-                <strong>{money(String(activeQuote.coveredByBalance ? activeQuote.priceCents : activeQuote.externalCents))}</strong>
-              </div>
+
+        <section className="lot-island" aria-label="Описание лота">
+          <p className="lot-sheet__section">Название и описание</p>
+          <p className="lot-sheet__title">{title}</p>
+          {detail ? <p className="lot-sheet__detail">{detail}</p> : null}
+        </section>
+
+        <section className="lot-island" aria-label="Сумма заказа">
+          <p className="lot-sheet__section">Сумма заказа</p>
+          <div className="lot-checkout">
+            <div className="lot-checkout__row"><span>Цена товара</span><b>{money(String(activeQuote.priceCents))}</b></div>
+            <div className="lot-checkout__row"><span>Уже на балансе</span><b>{money(String(activeQuote.fromBalanceCents))}</b></div>
+            <div className="lot-checkout__row">
+              <span>Осталось оплатить</span>
+              <b>{money(String(activeQuote.remainingCents))}</b>
             </div>
-            <p className="lot-sheet__section">Способ оплаты</p>
-            <div className="lot-pay-picker">
-              <button
-                type="button"
-                className="lot-pay-picker__btn"
-                aria-expanded={methodsOpen}
-                onClick={() => setMethodsOpen((open) => !open)}
-              >
-                <span>{lotPayMethodLabel(activeMethod)}</span>
-                <b>
-                  {activeQuote.coveredByBalance
-                    ? money(String(balanceCents))
-                    : `${activeQuote.feeBps / 100}% сбор`}
-                </b>
-              </button>
-              {methodsOpen && (
-                <div className="lot-pay-picker__list" role="list">
-                  {payOptions.map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      role="listitem"
-                      className={item === activeMethod ? 'active' : ''}
-                      onClick={() => {
-                        setMethod(item);
-                        setMethodsOpen(false);
-                      }}
-                    >
-                      {lotPayMethodLabel(item)}
-                      {item !== 'BALANCE' ? ` · сбор ${LOT_FEE_LABEL[item]}` : ' · без сбора'}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="lot-checkout__row">
+              <span>
+                Сервисный сбор
+                {activeQuote.remainingCents > 0 ? ` · ${lotPayMethodLabel(activeMethod)} ${activeQuote.feeBps / 100}%` : ''}
+              </span>
+              <b>{money(String(activeQuote.feeCents))}</b>
             </div>
-            <div className="lot-sheet__buy">
-              <Button
-                variant="buy"
-                busy={busy || buying}
-                disabled={!canBuy}
-                onClick={() => void submit()}
-              >
+            <div className="lot-checkout__due">
+              <small>К оплате {activeQuote.coveredByBalance ? 'с баланса' : 'сейчас'}</small>
+              <strong>{money(String(activeQuote.coveredByBalance ? activeQuote.priceCents : activeQuote.externalCents))}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="lot-island" aria-label="Оплата">
+          <p className="lot-sheet__section">Способ оплаты</p>
+          <div className="lot-pay-picker">
+            <button
+              type="button"
+              className="lot-pay-picker__btn"
+              aria-expanded={methodsOpen}
+              onClick={() => setMethodsOpen((open) => !open)}
+            >
+              <span>{lotPayMethodLabel(activeMethod)}</span>
+              <b>
                 {activeQuote.coveredByBalance
-                  ? `Купить за ${money(String(activeQuote.priceCents))}`
-                  : `Оплатить остаток ${money(String(activeQuote.externalCents))}`}
-              </Button>
-            </div>
-            <p className="lot-sheet__legal">
-              Нажимая «Купить», вы соглашаетесь с правилами площадки и политикой возвратов.
-            </p>
-            <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>
-            <p className="lot-sheet__warn">{SAFE_NOTE}</p>
-          </section>
-        </div>
+                  ? money(String(balanceCents))
+                  : `${activeQuote.feeBps / 100}% сбор`}
+              </b>
+            </button>
+            {methodsOpen && (
+              <div className="lot-pay-picker__list" role="list">
+                {payOptions.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    role="listitem"
+                    className={item === activeMethod ? 'active' : ''}
+                    onClick={() => {
+                      setMethod(item);
+                      setMethodsOpen(false);
+                    }}
+                  >
+                    {lotPayMethodLabel(item)}
+                    {item !== 'BALANCE' ? ` · сбор ${LOT_FEE_LABEL[item]}` : ' · без сбора'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="lot-sheet__buy">
+            <Button
+              variant="buy"
+              busy={busy || buying}
+              disabled={!canBuy}
+              onClick={() => void submit()}
+            >
+              {activeQuote.coveredByBalance
+                ? `Купить за ${money(String(activeQuote.priceCents))}`
+                : `Оплатить остаток ${money(String(activeQuote.externalCents))}`}
+            </Button>
+          </div>
+          <p className="lot-sheet__legal">
+            Нажимая «Купить», вы соглашаетесь с правилами площадки и политикой возвратов.
+          </p>
+          <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>
+          <p className="lot-sheet__warn">{SAFE_NOTE}</p>
+        </section>
+
+        <section className="lot-island lot-island--seller" aria-label="Продавец">
+          <p className="lot-sheet__section">Продавец</p>
+          <SellerIdentityCard
+            seller={product.seller}
+            trust={trust}
+            core={core}
+            checkout
+            onOpen={onOpenSeller}
+            onWrite={onWrite}
+          />
+        </section>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 }

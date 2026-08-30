@@ -305,6 +305,7 @@ export type ProductListQuery = {
   minPriceCents?: string;
   maxPriceCents?: string;
   sort?: ProductListSort;
+  autoDeliver?: boolean;
   limit?: number;
   offset?: number;
 };
@@ -326,6 +327,7 @@ export function productsListPath(query: ProductListQuery = {}): string {
   if (query.minPriceCents) params.set('minPriceCents', query.minPriceCents);
   if (query.maxPriceCents) params.set('maxPriceCents', query.maxPriceCents);
   if (query.sort) params.set('sort', query.sort);
+  if (query.autoDeliver) params.set('autoDeliver', 'true');
   if (query.limit != null) params.set('limit', String(query.limit));
   if (query.offset != null) params.set('offset', String(query.offset));
   const qs = params.toString();
