@@ -95,4 +95,6 @@ export const dealProductSelect = {
   id: true,
   title: true,
   category: true,
+  subcategory: true,
+  autoDeliver: true,
 } as const;

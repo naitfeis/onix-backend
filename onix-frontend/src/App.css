@@ -892,9 +892,7 @@ html[data-theme="light"] .product-card__rating-count {
 .product-card__footer--bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    "warranty warranty"
-    "price buy";
+  grid-template-areas: "price buy";
   align-items: center;
   gap: 8px 10px;
   padding: 0 12px 12px;
@@ -1537,6 +1535,15 @@ html[data-theme="light"] .cat-card__count {
   align-self: start;
   justify-self: start;
 }
+button.user-avatar-wrap--button {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
 .user-avatar {
   flex: 0 0 auto;
   overflow: hidden;
@@ -1912,8 +1919,8 @@ html[data-theme="light"] .select-menu__option.is-active {
   align-items: center;
   gap: 8px;
   min-height: 48px;
-  padding: 0 12px 0 8px;
-  border: 1px solid var(--border);
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--line-strong);
   border-radius: 26px;
   background: transparent;
   color: inherit;
@@ -1921,6 +1928,10 @@ html[data-theme="light"] .select-menu__option.is-active {
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+}
+.auto-deliver-filter.is-on {
+  border-color: rgba(245, 193, 74, 0.55);
+  color: #f5c14a;
 }
 .auto-deliver-filter__dot {
   width: 22px;
@@ -2076,6 +2087,48 @@ html[data-theme="light"] .category-toggle.is-open {
   border-radius: 999px;
   box-shadow: var(--glass-highlight);
 }
+.deal-role-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 0;
+  margin: 0 0 4px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.deal-role-tabs button {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.deal-role-tabs button.active {
+  color: #fff;
+  background: color-mix(in srgb, var(--accent-violet) 40%, rgba(255, 255, 255, 0.12));
+}
+.deal-lot-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  min-width: 0;
+}
+.deal-lot-tags .lot-sheet__badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .form { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; max-width: 100%; align-items: stretch; }
 .field__label {
@@ -2173,9 +2226,12 @@ html[data-theme="light"] .timeline li {
   border-top-color: rgba(40, 32, 60, 0.14);
 }
 .timeline li.done { color: var(--text-primary); border-color: var(--success); }
-.card-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; min-width: 0; }
-.card-actions .button { flex: 1 1 140px; min-width: 0; max-width: 100%; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; min-width: 0; }
+.card-actions .button { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .deal-card .card-actions .button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2980,7 +3036,7 @@ html[data-theme="dark"] .lot-sheet__detail {
 }
 .lot-sheet__badge--auto {
   color: #f5c14a;
-  border-color: rgba(245, 193, 74, 0.35);
+  border: 1px solid rgba(245, 193, 74, 0.55);
   box-shadow: none;
   filter: none;
 }
@@ -3447,6 +3503,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 
 .desktop-only { display: none; }
+
+@media (min-width: 720px) and (max-width: 1099px) {
+  :root { --shell-max: 100%; }
+  .app-shell {
+    width: 100%;
+    max-width: none;
+    padding-inline: 20px;
+  }
+}
 
 @media (min-width: 1100px) {
   :root { --shell-max: 100%; }
@@ -4086,106 +4151,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
       var(--sidebar-left-w, 272px)
       minmax(0, 1fr)
       var(--sidebar-right-w, 320px);
-  }
-}
-
-@media (min-width: 900px) and (max-width: 1099px) {
-  .app-shell {
-    width: 100%;
-    max-width: none;
-    padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
-    display: grid;
-    grid-template-columns: 84px minmax(0, 1fr);
-    gap: 16px;
-  }
-  .mobile-only { display: none !important; }
-  .sidebar-left.desktop-only { display: flex; }
-  .app-shell > .topbar,
-  .app-shell > .bottom-nav { display: none; }
-  .app-shell > .viewport {
-    grid-column: 2;
-    min-width: 0;
-    max-width: 100%;
-    overflow-x: clip;
-  }
-  .sidebar-left {
-    grid-column: 1;
-    position: sticky;
-    top: 20px;
-    width: 84px;
-    max-width: 84px;
-    min-width: 84px;
-    height: calc(100dvh - 40px);
-    padding: 14px 12px;
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-    isolation: isolate;
-    contain: paint;
-    box-sizing: border-box;
-  }
-  .sidebar-left .brand__text,
-  .sidebar-nav button span:not(.icon),
-  .sidebar-nav__badge,
-  .sidebar-cats,
-  .sidebar-divider,
-  .sidebar-theme span { display: none !important; }
-  .sidebar-left__brand {
-    width: 44px;
-    max-width: 44px;
-    margin: 0 auto 12px;
-    padding: 4px 8px;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .sidebar-left__brand .brand {
-    width: 28px;
-    max-width: 28px;
-    gap: 0;
-    overflow: hidden;
-  }
-  .sidebar-nav button,
-  .sidebar-theme {
-    justify-content: center;
-    padding: 0;
-    width: 44px;
-    max-width: 44px;
-    margin-inline: auto;
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
-  }
-  .sidebar-resizer { display: none; }
-  .sidebar-nav button:hover,
-  .sidebar-nav button.active {
-    background: var(--nav-hover-bg) !important;
-    color: var(--icon-color-hover);
-    box-shadow: none !important;
-  }
-  .sidebar-nav button.active {
-    background: var(--nav-active-bg) !important;
-    border-color: var(--nav-active-border);
-  }
-  .sidebar-right { display: none; }
-  .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
-  .product-card { width: 100%; max-width: none; }
-
-  /* Auth banner must span both columns — otherwise it sits in the icon rail
-     and word-break turns "Войдите…" into a vertical glyph stack. */
-  .app-shell--auth > .auth-notice,
-  .app-shell > .auth-notice {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    margin: 0 0 4px;
-    width: 100%;
-    max-width: 100%;
-  }
-  .app-shell--auth > .sidebar-left,
-  .app-shell--auth > .viewport {
-    grid-row: 2;
-  }
-  .app-shell--auth > .viewport {
-    grid-column: 2;
-    min-width: 0;
   }
 }
 

@@ -7,6 +7,7 @@ type UserAvatarProps = {
   userId?: string;
   name: string;
   size?: 'small' | 'medium';
+  onClick?: () => void;
   /**
    * Presence pip on bottom-right of the avatar.
    * true = green (online), false = grey (offline).
@@ -49,7 +50,7 @@ function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): strin
 }
 
 export default function UserAvatar({
-  avatarUrl, userId, name, size = 'small', online,
+  avatarUrl, userId, name, size = 'small', online, onClick,
 }: UserAvatarProps) {
   const usableUrl = resolveAvatarSrc(avatarUrl, userId);
   const [failedUrl, setFailedUrl] = useState<string | null>(
@@ -60,15 +61,14 @@ export default function UserAvatar({
   );
   const showPresence = online === true || online === false;
 
-  return (
-    <span
-      className={[
-        'user-avatar-wrap',
-        size === 'medium' ? 'user-avatar-wrap--medium' : '',
-        showPresence ? (online ? 'is-online' : 'is-offline') : '',
-      ].filter(Boolean).join(' ')}
-      data-online={showPresence ? (online ? 'true' : 'false') : undefined}
-    >
+  const className = [
+    'user-avatar-wrap',
+    size === 'medium' ? 'user-avatar-wrap--medium' : '',
+    showPresence ? (online ? 'is-online' : 'is-offline') : '',
+    onClick ? 'user-avatar-wrap--button' : '',
+  ].filter(Boolean).join(' ');
+  const body = (
+    <>
       <span className={`user-avatar user-avatar--${size}`}>
         {showImage
           ? <img
@@ -85,6 +85,29 @@ export default function UserAvatar({
           : <span aria-hidden="true">{initials(name)}</span>}
       </span>
       {showPresence && <span className="user-avatar__presence" aria-hidden="true" />}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={className}
+        data-online={showPresence ? (online ? 'true' : 'false') : undefined}
+        onClick={onClick}
+        aria-label={`Профиль ${name}`}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <span
+      className={className}
+      data-online={showPresence ? (online ? 'true' : 'false') : undefined}
+    >
+      {body}
     </span>
   );
 }

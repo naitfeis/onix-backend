@@ -582,6 +582,7 @@ export default function App() {
             setToast={setToast}
             focusDealId={focusDealId}
             onFocusDealHandled={() => setFocusDealId(null)}
+            openDirectChat={openDirectChat}
             openDealChat={(chatId: string) => {
               setFocusChatId(chatId);
               switchTo('chat');

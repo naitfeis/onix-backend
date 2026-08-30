@@ -69,7 +69,10 @@ export interface DisputeCard {
 
 export interface Deal {
   id: string;
-  product: Pick<Product, 'id' | 'title' | 'category'>;
+  product: Pick<Product, 'id' | 'title' | 'category'> & {
+    subcategory?: string;
+    autoDeliver?: boolean;
+  };
   totalAmountCents: string;
   status: DealStatus;
   role: 'buyer' | 'seller';

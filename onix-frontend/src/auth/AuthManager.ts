@@ -43,6 +43,8 @@ export type AuthManagerOptions = {
 export class AuthManager {
   private expiresAtMs: number | null = null;
   private refreshInFlight: Promise<string> | null = null;
+  /** Cookie missing/rejected — do not keep POSTing /refresh or wipe a live access token. */
+  private refreshCookieGone = false;
   private proactiveTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribeBroadcast: (() => void) | null = null;
   private disposed = false;
@@ -78,7 +80,9 @@ export class AuthManager {
   }
 
   isAccessExpired(skewMs = 0): boolean {
-    if (!this.getAccessToken() || this.expiresAtMs == null) return true;
+    if (!this.getAccessToken()) return true;
+    // Token in memory without a known expiry is still usable until an API 401.
+    if (this.expiresAtMs == null) return false;
     return this.now() + skewMs >= this.expiresAtMs;
   }
 
@@ -88,6 +92,7 @@ export class AuthManager {
    */
   setSession(accessToken: string, expiresInSeconds: number, options?: { broadcast?: boolean }): void {
     this.assertOpen();
+    this.refreshCookieGone = false;
     writeMemoryAccessToken(accessToken);
     this.expiresAtMs = this.now() + Math.max(1, expiresInSeconds) * 1000;
     this.scheduleProactiveRefresh();
@@ -102,6 +107,7 @@ export class AuthManager {
 
   clearSession(reason: 'logout' | 'force-reauth' | 'refresh-failed' = 'logout'): void {
     this.sessionGeneration += 1;
+    if (reason !== 'refresh-failed') this.refreshCookieGone = false;
     clearMemoryAccessToken();
     this.expiresAtMs = null;
     this.clearProactiveTimer();
@@ -120,6 +126,13 @@ export class AuthManager {
    */
   refreshAccessToken(): Promise<string> {
     this.assertOpen();
+    if (this.refreshCookieGone) {
+      return Promise.reject(new RefreshError(
+        'Refresh cookie is missing.',
+        401,
+        'AUTH_REFRESH_MISSING',
+      ));
+    }
     if (this.refreshInFlight) return this.refreshInFlight;
 
     const generation = this.sessionGeneration;
@@ -151,7 +164,14 @@ export class AuthManager {
             }
           }
           if (generation === this.sessionGeneration && !this.disposed) {
-            this.clearSession('refresh-failed');
+            const live = this.getAccessToken();
+            if (live && !this.isAccessExpired(0)) {
+              this.refreshCookieGone = true;
+              this.clearProactiveTimer();
+            } else {
+              this.clearSession('refresh-failed');
+              this.refreshCookieGone = true;
+            }
           }
         }
         throw error;
@@ -169,10 +189,11 @@ export class AuthManager {
     if (!this.isAccessExpired(0) && this.getAccessToken()) {
       return this.getAccessToken();
     }
+    if (this.refreshCookieGone) return this.getAccessToken();
     try {
       return await this.refreshAccessToken();
     } catch {
-      return null;
+      return this.getAccessToken();
     }
   }
 
@@ -205,6 +226,7 @@ export class AuthManager {
       return await execute(token);
     } catch (error) {
       if (!isUnauthorizedStatus(error)) throw error;
+      if (this.refreshCookieGone) throw error;
       const fresh = await this.refreshAccessToken();
       return execute(fresh);
     }
@@ -240,6 +262,7 @@ export class AuthManager {
     if (event.type === 'token-updated') {
       this.applyingRemoteUpdate = true;
       try {
+        this.refreshCookieGone = false;
         writeMemoryAccessToken(event.accessToken);
         this.expiresAtMs = event.expiresAtMs;
         this.scheduleProactiveRefresh();

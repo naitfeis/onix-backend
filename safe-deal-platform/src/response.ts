@@ -203,7 +203,7 @@ export function dealDto(order: {
   totalAmountCents: bigint;
   status: string;
   createdAt: Date;
-  product: { id: string; title: string; category: string };
+  product: { id: string; title: string; category: string; subcategory?: string | null; autoDeliver?: boolean };
   buyer: PublicUser;
   seller: PublicUser;
   reviews: Array<{ authorId: bigint }>;
@@ -227,7 +227,13 @@ export function dealDto(order: {
     || order.status === 'CANCELED';
   return {
     id: order.id.toString(),
-    product: order.product,
+    product: {
+      id: order.product.id,
+      title: order.product.title,
+      category: order.product.category,
+      ...(order.product.subcategory ? { subcategory: order.product.subcategory } : {}),
+      autoDeliver: Boolean(order.product.autoDeliver),
+    },
     totalAmountCents: order.totalAmountCents.toString(),
     status: order.status,
     role: buyer ? 'buyer' as const : 'seller' as const,

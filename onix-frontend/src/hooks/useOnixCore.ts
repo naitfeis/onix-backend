@@ -57,6 +57,13 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     markBootstrapPhase('telegram', 0);
     return { status: 'authenticated', mode: 'website' };
   }
+  if (getAccessToken()) {
+    markBootstrapPhase('session-check', 0);
+    markBootstrapPhase('cookie-check', 0);
+    markBootstrapPhase('refresh', 0);
+    markBootstrapPhase('telegram', 0);
+    return { status: 'authenticated', mode: 'legacy' };
+  }
 
   markBootstrapPhase('telegram', 0);
   // No cookie-probe hop: production disables /api/session-probe (404 → false "network"
@@ -72,6 +79,10 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     return { status: 'guest' };
   } catch (error) {
     markBootstrapPhase('cookie-check', 0);
+    if (manager.getAccessToken() && !manager.isAccessExpired()) {
+      return { status: 'authenticated', mode: 'website' };
+    }
+    if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
     if (isTransientRefreshFailure(error)) return { status: 'network' };
     return { status: 'guest' };
   }
@@ -113,10 +124,11 @@ async function bootstrapMarketplace(
 
 function warmSecondaryCollections(
   profile: Profile | null,
-  load: <K extends CollectionKey>(key: K, path: string) => Promise<void>,
+  load: <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean }) => Promise<void>,
+  opts?: { silent?: boolean },
 ): void {
-  void bootstrapPhase('orders', () => load('deals', API_PATHS.orders));
-  void bootstrapPhase('chats', () => load('chats', API_PATHS.chats));
+  void bootstrapPhase('orders', () => load('deals', API_PATHS.orders, opts));
+  void bootstrapPhase('chats', () => load('chats', API_PATHS.chats, opts));
   if (profile) {
     // Keep the small Render/Neon pool free for orders/chats immediately after
     // auth. Reviews and notifications are below-the-fold background data.
@@ -233,6 +245,17 @@ export function useOnixCore() {
       // 2) load public products (first paint) + session-check in parallel
       // 3) session OK → profile/orders/chats; 401 → guest (market already visible)
       markBootstrapPhase('telegram', 0);
+      const alreadyAuthed = Boolean(profileRef.current) && Boolean(getAccessToken() || getSharedAuthManager().getAccessToken());
+      if (alreadyAuthed) {
+        const current = profileRef.current;
+        void loadProfile();
+        void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true });
+        void loadCatalog();
+        warmSecondaryCollections(current, load, { silent: true });
+        printBootstrapSummary('bootstrap-settled');
+        markAppReady('bootstrap-settled');
+        return;
+      }
       setStates((previous) => ({
         ...previous,
         products: previous.products === 'success' ? previous.products : 'loading',
@@ -381,19 +404,29 @@ export function useOnixCore() {
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
-    const beat = async () => {
-      if (cancelled) return;
+    let beating = false;
+    let lastBeatAt = 0;
+    const beat = async (force = false) => {
+      if (cancelled || beating) return;
+      if (!force && Date.now() - lastBeatAt < 20_000) return;
+      beating = true;
+      lastBeatAt = Date.now();
       try {
         const res = await api.post<{ lastOnline: string; online: boolean }>(API_PATHS.mePresence, {});
         if (cancelled || !res?.lastOnline) return;
-        setProfile((prev) => (prev ? { ...prev, lastOnline: res.lastOnline } : prev));
+        setProfile((prev) => {
+          if (!prev || prev.lastOnline === res.lastOnline) return prev;
+          return { ...prev, lastOnline: res.lastOnline };
+        });
       } catch {
         /* ignore — offline / guest */
+      } finally {
+        beating = false;
       }
     };
     // getMe() already touched lastSeenAt. Avoid an immediate duplicate write
     // competing with chats/orders on the small production DB pool.
-    const initialBeat = window.setTimeout(() => { void beat(); }, 10_000);
+    const initialBeat = window.setTimeout(() => { void beat(true); }, 10_000);
     const id = window.setInterval(() => { void beat(); }, 45_000);
     const onVis = () => {
       if (document.hidden) return;
@@ -903,7 +936,9 @@ export function useOnixCore() {
   }, []);
 
   const listDeals = useCallback(async (query: OrderListQuery = {}, signal?: AbortSignal) => {
-    setStates(previous => ({ ...previous, deals: 'loading' }));
+    setStates((previous) => (
+      previous.deals === 'success' ? previous : { ...previous, deals: 'loading' }
+    ));
     try {
       const data = await api.get<Deal[]>(API_PATHS.ordersList(query), signal);
       if (signal?.aborted) return null;

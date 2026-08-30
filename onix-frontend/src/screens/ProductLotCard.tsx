@@ -94,7 +94,6 @@ export function ProductLotCard({
       </button>
       {footer ?? (
         <div className="product-card__footer product-card__footer--bar">
-          <span className="product-card__warranty">{product.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
           {!hidePrice && <strong className="product-card__price">{money(product.priceCents)}</strong>}
           <button type="button" className="button button--buy product-card__buy" onClick={onOpen}>{t('market.buy')}</button>
         </div>

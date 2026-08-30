@@ -145,7 +145,6 @@ export function LotSheet({
           <div className="lot-sheet__badges">
             <span className="lot-sheet__badge">{categoryLabel}</span>
             {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
-            {product.warrantyLabel ? <span className="lot-sheet__badge">{product.warrantyLabel}</span> : null}
             <span className={`lot-sheet__badge${product.autoDeliver ? ' lot-sheet__badge--auto' : ''}`}>
               {product.autoDeliver ? '⚡ Автовыдача' : 'Без автовыдачи'}
             </span>

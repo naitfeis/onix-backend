@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { money } from '../api/client';
-import { sellerIsPresent, type Deal, type OrderListQuery } from '../api/contracts';
+import { api, money } from '../api/client';
+import { API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
-import { DEAL_FILTERS, StaffBadge, dealLabels, dealProgress } from './shared';
+import { DEAL_FILTERS, PublicProfileModal, StaffBadge, dealLabels, dealProgress } from './shared';
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [rating, setRating] = useState(5);
@@ -18,7 +18,7 @@ export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | nul
 }
 
 export function Deals({
-  core, switchTo, setToast, focusDealId, onFocusDealHandled, openDealChat,
+  core, switchTo, setToast, focusDealId, onFocusDealHandled, openDealChat, openDirectChat,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -26,6 +26,7 @@ export function Deals({
   focusDealId: string | null;
   onFocusDealHandled: () => void;
   openDealChat: (chatId: string) => void;
+  openDirectChat: (onixId: string) => Promise<boolean>;
 }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [dealFilter, setDealFilter] = useState('all');
@@ -34,6 +35,7 @@ export function Deals({
   const [refundDeal, setRefundDeal] = useState<Deal | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [highlightedDealId, setHighlightedDealId] = useState<string | null>(null);
+  const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
   const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter) ?? DEAL_FILTERS[0];
   const listQuery: OrderListQuery = {
     ...(activeFilter.status ? { status: activeFilter.status } : {}),
@@ -60,13 +62,67 @@ export function Deals({
     onFocusDealHandled();
   }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
+
+  const openPeer = async (deal: Deal) => {
+    try {
+      setPeerProfile(await api.get<PublicProfile>(API_PATHS.userPublic(deal.counterparty.onixId)));
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : 'Не удалось открыть профиль.');
+    }
+  };
+
+  const goToChat = async (deal: Deal) => {
+    if (deal.chatId) {
+      openDealChat(deal.chatId);
+      return;
+    }
+    const ok = await openDirectChat(deal.counterparty.onixId);
+    if (!ok) setToast('Не удалось открыть чат.');
+  };
+
   return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
-    <div className="segmented">{(['buyer', 'seller'] as const).map(item => <button className={role === item ? 'active' : ''} key={item} onClick={() => setRole(item)}>{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>)}</div>
+    <div className="deal-role-tabs" role="tablist" aria-label="Роль в сделках">{(['buyer', 'seller'] as const).map(item => (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={role === item}
+        className={role === item ? 'active' : ''}
+        key={item}
+        onClick={() => setRole(item)}
+      >{item === 'buyer' ? 'Мои покупки' : 'Мои продажи'}</button>
+    ))}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}><div className="seller-row"><div className="user-summary"><UserAvatar userId={deal.counterparty.id} avatarUrl={deal.counterparty.avatarUrl} name={deal.counterparty.username} online={sellerIsPresent(deal.counterparty, core.profile, core.presenceOf(deal.counterparty.onixId))} /><div><h2 title={deal.product.title}>{deal.product.title}</h2><p className="muted">{publicAt(deal.counterparty.username)} <StaffBadge badge={deal.counterparty.badge} /> // {deal.product.category}</p></div></div><strong>{money(deal.totalAmountCents)}</strong></div>
+      deals.map(deal => {
+        const categoryLabel = CATEGORY_LABELS[deal.product.category] ?? deal.product.category;
+        const subLabel = deal.product.subcategory
+          ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)
+          : null;
+        return (
+      <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}>
+        <div className="seller-row">
+          <div className="user-summary">
+            <UserAvatar
+              userId={deal.counterparty.id}
+              avatarUrl={deal.counterparty.avatarUrl}
+              name={deal.counterparty.username}
+              online={sellerIsPresent(deal.counterparty, core.profile, core.presenceOf(deal.counterparty.onixId))}
+              onClick={() => { void openPeer(deal); }}
+            />
+            <div>
+              <h2 title={deal.product.title}>{deal.product.title}</h2>
+              <p className="muted">{publicAt(deal.counterparty.username)} <StaffBadge badge={deal.counterparty.badge} /></p>
+              <div className="deal-lot-tags">
+                <span className="lot-sheet__badge">{categoryLabel}</span>
+                {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
+                {deal.product.autoDeliver ? <span className="lot-sheet__badge lot-sheet__badge--auto">⚡ Автовыдача</span> : null}
+              </div>
+            </div>
+          </div>
+          <strong>{money(deal.totalAmountCents)}</strong>
+        </div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
         <ol className="timeline">{['Оплата', 'Сейф', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item} title={item}>{item}</li>)}</ol>
         {deal.dispute && (
@@ -91,7 +147,8 @@ export function Deals({
             </dl>
           </div>
         )}
-        <div className="card-actions">{role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
+        <div className="card-actions">
+          {role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
           {deal.status === 'PAYMENT_HOLD' && (
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'cancel' })}>Отменить сделку</Button>
@@ -100,6 +157,7 @@ export function Deals({
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>
           )}
           {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
+          <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Перейти в чат</Button>
           {!deal.complaintOpen && (
             <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
               const ticket = await core.openSupport(deal.id);
@@ -108,12 +166,14 @@ export function Deals({
               if (ticket.chatId) openDealChat(ticket.chatId);
               else if (deal.chatId) openDealChat(deal.chatId);
               else switchTo('chat');
-            }}>Обратиться в поддержку</Button>
+            }}>Поддержка</Button>
           )}
           {deal.complaintOpen && !deal.dispute && <span className="muted">Обращение по сделке уже создано</span>}
           {deal.status === 'COMPLETED' && deal.canReview && <Button variant="secondary" onClick={() => setReviewDeal(deal)}>Оставить отзыв</Button>}
         </div>
-      </Card>)}
+      </Card>
+        );
+      })}
     <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute' || confirm?.action === 'cancel'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : confirm?.action === 'cancel' ? 'Отменить сделку?' : 'Подтвердить передачу?'}
       text={confirm?.action === 'complete' ? 'Это действие необратимо. Подтверждайте только после проверки товара.' : confirm?.action === 'dispute' ? 'Сделка будет остановлена и передана администратору.' : confirm?.action === 'cancel' ? 'Отменить можно только до передачи товара, пока деньги ещё в сейфе. Сумма вернётся покупателю, продавец выплату не получит.' : 'Покупатель получит уведомление о передаче.'}
       onCancel={() => setConfirm(null)} onConfirm={async () => { if (confirm && await core.dealAction(confirm.deal, confirm.action)) { setToast(confirm.action === 'cancel' ? 'Сделка отменена, средства возвращены.' : 'Статус сделки обновлён.'); setConfirm(null); } }} />
@@ -124,6 +184,16 @@ export function Deals({
       }}>Отправить</Button></div>
     </div></Modal>
     <ReviewForm deal={reviewDeal} core={core} onClose={() => setReviewDeal(null)} setToast={setToast} />
+    <PublicProfileModal
+      profile={peerProfile}
+      onClose={() => setPeerProfile(null)}
+      core={core}
+      setToast={setToast}
+      onWrite={async (onixId) => {
+        setPeerProfile(null);
+        await openDirectChat(onixId);
+      }}
+    />
   </div>;
 }
 export default Deals;

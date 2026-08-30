@@ -489,7 +489,6 @@ export function Profile({
           onOpen={() => setEditing(item)}
           footer={(
             <div className="product-card__footer product-card__footer--bar">
-              <span className="product-card__warranty">{item.warrantyLabel ?? 'Гарантия: 10 часов'}</span>
               <ListingViews count={item.viewCount ?? 0} />
               <strong className="product-card__price">{money(item.priceCents)}</strong>
               <Button variant="secondary" onClick={() => setEditing(item)}>Редактировать</Button>

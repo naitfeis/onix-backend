@@ -46,6 +46,7 @@ html[data-theme="dark"] {
 
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.22);
+  --border: var(--line-strong);
   --surface: var(--glass-card-bg);
   --surface-2: var(--glass-subtle-bg);
 
@@ -196,6 +197,7 @@ html[data-theme="light"] {
 
   --line: rgb(20 25 35 / 10%);
   --line-strong: rgb(20 25 35 / 16%);
+  --border: var(--line-strong);
   --surface: var(--glass-card-bg);
   --surface-2-legacy: var(--glass-subtle-bg);
 

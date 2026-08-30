@@ -36,6 +36,10 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('does not force a crushed icon rail between 900px and 1099px', () => {
+    expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
+  });
+
   it('keeps AI helper questions as a hideable overlay above the transcript', () => {
     expect(appCss).toMatch(
       /\.ai-actions\s*\{[^}]*position:\s*absolute;/s,

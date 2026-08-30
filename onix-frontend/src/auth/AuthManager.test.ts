@@ -149,7 +149,7 @@ describe('AuthManager Phase B', () => {
     expect(manager.getAccessToken()).toBeNull();
 
     await expect(manager.withAccessToken(async () => 'x')).rejects.toBeInstanceOf(RefreshError);
-    expect(refreshCalls).toBe(2);
+    expect(refreshCalls).toBe(1);
     expect(manager.getAccessToken()).toBeNull();
     manager.dispose();
   });
@@ -183,6 +183,24 @@ describe('AuthManager Phase B', () => {
     });
     expect(refreshCalls).toBe(1);
     expect(manager.getAccessToken()).toBeNull();
+    manager.dispose();
+  });
+
+  it('keeps a live access token when refresh cookie is missing', async () => {
+    let refreshCalls = 0;
+    const manager = new AuthManager({
+      refresh: async () => {
+        refreshCalls += 1;
+        throw new RefreshError('Refresh cookie is missing.', 401, 'AUTH_REFRESH_MISSING');
+      },
+      broadcast: new AuthBroadcast('test-keep-live', () => null),
+    });
+    manager.setSession('live-access', 900, { broadcast: false });
+    await expect(manager.refreshAccessToken()).rejects.toMatchObject({ code: 'AUTH_REFRESH_MISSING' });
+    expect(manager.getAccessToken()).toBe('live-access');
+    await expect(manager.refreshAccessToken()).rejects.toMatchObject({ code: 'AUTH_REFRESH_MISSING' });
+    expect(refreshCalls).toBe(1);
+    expect(await manager.ensureAccessToken()).toBe('live-access');
     manager.dispose();
   });
 
