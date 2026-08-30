@@ -7,8 +7,8 @@
  * (first attempt hung until timeout, second succeeded).
  */
 
-/** Bound hung sockets (Vercel→Render rewrite can stall on RU). */
-export const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
+/** Bound hung sockets (Render CF edge can stall on RU). */
+export const DEFAULT_FETCH_TIMEOUT_MS = 6_000;
 /**
  * Retry only fast network failures (reset) and 502–504.
  * RU ISPs often reset the first TCP attempt; 3 quick retries recover without VPN.

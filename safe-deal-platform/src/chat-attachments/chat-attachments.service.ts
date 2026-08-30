@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { AttachmentStatus, MessageContentType, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { AuthUser, isStaffViewer } from '../common';
+import { AuthUser } from '../common';
 import { createDomainNotification, pushTelegramToChatId } from '../domain-notify';
 import { publicDisplayName } from '../public-username';
 import { PrismaService } from '../prisma.service';
@@ -134,7 +134,7 @@ export class ChatAttachmentsService {
       });
       if (existing) {
         return messageDto(existing, user.id, {
-          staffViewer: isStaffViewer(user),
+          staffViewer: false,
           memberReads: await this.memberReads(chatId),
         });
       }
@@ -250,7 +250,7 @@ export class ChatAttachmentsService {
         });
         if (again?.message) {
           return messageDto(again.message, user.id, {
-            staffViewer: isStaffViewer(user),
+            staffViewer: false,
             memberReads,
           });
         }
@@ -270,7 +270,7 @@ export class ChatAttachmentsService {
     this.fanout(chatId, message, user, others.map((o) => o.userId), memberReads);
 
     return messageDto(message, user.id, {
-      staffViewer: isStaffViewer(user),
+      staffViewer: false,
       memberReads,
     });
   }
@@ -359,7 +359,7 @@ export class ChatAttachmentsService {
       messageByViewer.set(
         viewerId.toString(),
         messageDto(message, viewerId, {
-          staffViewer: viewerId === sender.id ? isStaffViewer(sender) : false,
+          staffViewer: false,
           memberReads: viewerId === sender.id ? memberReads : undefined,
         }) as unknown as Record<string, unknown>,
       );

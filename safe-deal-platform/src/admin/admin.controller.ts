@@ -1,5 +1,5 @@
 ﻿import {
-  Body, Controller, Get, Header, NotFoundException, Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, Header, NotFoundException, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Public } from '../common';
@@ -92,6 +92,13 @@ export class AdminPlaneController {
     return this.security.setUserRole(admin, id, body.role);
   }
 
+  @Patch('users/:id/status')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  setUserStatus(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { status: string }) {
+    return this.security.setUserStatus(admin, id, body.status);
+  }
+
   @Post('users/:id/balance')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
   @UseGuards(AdminRoleGuard)
@@ -100,7 +107,7 @@ export class AdminPlaneController {
   }
   @Get('orders')
   @Header('Cache-Control', 'no-store')
-  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
   @UseGuards(AdminRoleGuard)
   async orders(
     @CurrentAdmin() admin: AdminActor,
@@ -114,13 +121,102 @@ export class AdminPlaneController {
 
   @Get('orders/:id')
   @Header('Cache-Control', 'no-store')
-  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
   @UseGuards(AdminRoleGuard)
   async order(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
     const order = await this.security.getOrderInvestigation(id);
     if (!order) throw new NotFoundException('Сделка не найдена.');
     await this.security.logAction(admin, 'ADMIN_VIEW_ORDER', { type: 'Order', id: order.id });
     return order;
+  }
+
+  @Post('orders/:id/refund')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  refundOrder(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.refundOrder(admin, id, body.reason);
+  }
+
+  @Post('orders/:id/complete')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  completeOrder(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.completeOrder(admin, id, body.reason);
+  }
+
+  @Get('support/queue')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async supportQueue(@CurrentAdmin() admin: AdminActor) {
+    const queue = await this.security.listSupportQueue();
+    await this.security.logAction(admin, 'ADMIN_LIST_SUPPORT_QUEUE', { metadata: { count: queue.length } });
+    return { queue };
+  }
+
+  @Post('support/tickets/:id/close')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  closeTicket(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.closeSupportTicket(admin, id, body.reason);
+  }
+
+  @Get('support/reports')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async reports(@CurrentAdmin() admin: AdminActor) {
+    const reports = await this.security.listReports();
+    await this.security.logAction(admin, 'ADMIN_LIST_REPORTS', { metadata: { count: reports.length } });
+    return { reports };
+  }
+
+  @Post('support/reports/:id/reply')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  replyReport(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { text: string }) {
+    return this.security.replyReport(admin, id, body.text);
+  }
+
+  @Post('support/reports/:id/close')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  closeReport(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.closeReport(admin, id, body.reason);
+  }
+
+  @Get('products')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async products(@CurrentAdmin() admin: AdminActor, @Query('limit') limit?: string, @Query('status') status?: string) {
+    const products = await this.security.listProducts({ limit: limit ? Number(limit) : 100, status });
+    await this.security.logAction(admin, 'ADMIN_LIST_PRODUCTS', { metadata: { count: products.length, status: status ?? 'ALL' } });
+    return { products };
+  }
+
+  @Delete('products/:id')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  removeProduct(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.moderateProduct(admin, id, body.reason);
+  }
+
+  @Get('messages')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async messages(@CurrentAdmin() admin: AdminActor, @Query('limit') limit?: string, @Query('search') search?: string) {
+    const messages = await this.security.listMessages({ limit: limit ? Number(limit) : 100, search });
+    await this.security.logAction(admin, 'ADMIN_LIST_MESSAGES', { metadata: { count: messages.length, search: search ?? null } });
+    return { messages };
+  }
+
+  @Delete('messages/:id')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  removeMessage(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.security.moderateMessage(admin, id, body.reason);
   }
 
   @Get('audit-log')

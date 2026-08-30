@@ -27,7 +27,7 @@ model User {
   trustScore             Int       @default(0)
   /** Cached public trust level 1..5 derived from trustScore. */
   trustLevel             Int       @default(1) @db.SmallInt
-  trustScoreVersion      Int       @default(1)
+  trustScoreVersion      Int       @default(2)
   trustComputedAt        DateTime?
   trustDirty             Boolean   @default(true)
   ratingAverage          Decimal   @default(0) @db.Decimal(3, 2)
@@ -64,7 +64,6 @@ model User {
   orderClawbacks        OrderClawback[]
   paymentIntents        PaymentIntent[]
   trustHistory          TrustHistoryEvent[]
-  verifications         SellerVerification[]
   sellerSubscription    SellerSubscription?
   sellerAnalyticsDaily  SellerAnalyticsDaily[]
   productViewUniques    ProductViewUnique[]  @relation("ViewViewer")
@@ -85,7 +84,6 @@ model User {
   reportsReceived       UserReport[]         @relation("ReportTarget")
   auditLogs             AuditLog[]           @relation("AuditActor")
   supportTickets        SupportTicket[]
-  productCreationSessions ProductCreationSession[]
   identityLinks         IdentityLink[]
   sessions              Session[]
   userRoles             UserRole[]
@@ -188,6 +186,7 @@ model Order {
   @@index([chatId])
   @@index([buyerId, createdAt])
   @@index([sellerId, createdAt])
+  @@index([sellerId, completedAt])
   @@index([chatId, createdAt])
 }
 
@@ -278,32 +277,8 @@ model Chat {
   members   ChatMember[]
   messages  Message[]
   tickets   SupportTicket[]
-  productCreationSessions ProductCreationSession[]
 
   @@index([updatedAt])
-}
-
-/** ONIX AI guided product draft — no LLM; filled via EntityExtractor. */
-model ProductCreationSession {
-  id           String                 @id @default(cuid())
-  userId       BigInt
-  chatId       String
-  title        String?                @db.VarChar(32)
-  category     ProductCategory?
-  subcategory  ProductSubcategory?
-  priceCents   BigInt?
-  quantity     Int?
-  description  String?                @db.Text
-  images       Json?
-  status       ProductCreationStatus  @default(WAIT_TITLE)
-  productId    String?
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
-  user         User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  chat         Chat                   @relation(fields: [chatId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status])
-  @@index([chatId, status])
 }
 
 model ChatMember {
@@ -521,22 +496,6 @@ enum TrustHistoryType {
   RECOMPUTE
 }
 
-enum SellerVerificationKind {
-  PHONE_SMS
-  PHONE_CALL
-  PHONE_VOICE
-  PASSPORT
-  VOICE_IDENTITY
-}
-
-enum SellerVerificationStatus {
-  NONE
-  PENDING
-  VERIFIED
-  REJECTED
-  EXPIRED
-}
-
 enum SellerSubscriptionPlan {
   PRO
 }
@@ -617,27 +576,6 @@ model TrustHistoryEvent {
 
   @@index([userId, createdAt])
   @@index([type, createdAt])
-}
-
-/// Multi-stage seller verification. Never store voice/passport blobs — hash + status only.
-model SellerVerification {
-  id           String                   @id @default(cuid())
-  userId       BigInt
-  kind         SellerVerificationKind
-  status       SellerVerificationStatus @default(NONE)
-  evidenceHash String?                  @db.VarChar(64)
-  providerRef  String?                  @db.VarChar(191)
-  reviewedById BigInt?
-  verifiedAt   DateTime?
-  rejectedAt   DateTime?
-  expiresAt    DateTime?
-  metadata     Json?
-  createdAt    DateTime                 @default(now())
-  updatedAt    DateTime                 @updatedAt
-  user         User                     @relation(fields: [userId], references: [id])
-
-  @@unique([userId, kind])
-  @@index([status, kind])
 }
 
 /// Commercial ONIX PRO — independent of Trust Score / Level.
@@ -1197,17 +1135,6 @@ enum ChatKind {
   DIRECT
   GROUP
   AI
-}
-
-enum ProductCreationStatus {
-  WAIT_TITLE
-  WAIT_CATEGORY
-  WAIT_SUBCATEGORY
-  WAIT_PRICE
-  WAIT_QUANTITY
-  WAIT_DESCRIPTION
-  READY
-  FINISHED
 }
 
 enum MessageKind {

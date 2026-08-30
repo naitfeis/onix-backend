@@ -33,6 +33,16 @@ export type ProviderWebhookVerification = {
  */
 export interface PaymentProvider {
   readonly code: PaymentProviderCode;
+  /**
+   * Compile-time acknowledgement that createIntent deduplicates by
+   * input.idempotencyKey. Required because DB-claim crash recovery can repeat
+   * a provider call after the stale ownership window.
+   */
+  readonly createIntentIsIdempotent: true;
+  /**
+   * MUST return the same provider intent for the same idempotencyKey, including
+   * after process crashes or network timeouts.
+   */
   createIntent(input: CreatePaymentIntentInput): Promise<ProviderCreateResult>;
   /**
    * Confirm a pending intent (Manual/admin or PSP webhook mapping).

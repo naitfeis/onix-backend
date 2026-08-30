@@ -22,8 +22,6 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.meAnalytics(0)).toBe('/api/users/me/analytics');
     expect(API_PATHS.meAnalytics(-1)).toBe('/api/users/me/analytics?weekOffset=-1');
     expect(API_PATHS.userTrustCard('ONIX-000007')).toBe('/api/users/ONIX-000007/trust-card');
-    expect(API_PATHS.adminBan('ONIX-000007')).toBe('/api/admin/users/ONIX-000007/ban');
-    expect(API_PATHS.adminStatus('ONIX-7')).toBe('/api/admin/users/ONIX-7/status');
     expect(API_PATHS.orderRefundRequest('42')).toBe('/api/orders/42/refund-request');
     expect(API_PATHS.dealCancel('42')).toBe('/api/orders/42/cancel');
     expect(API_PATHS.subcategories).toBe('/api/products/catalog/subcategories');

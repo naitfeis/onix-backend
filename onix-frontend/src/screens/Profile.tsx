@@ -12,8 +12,8 @@ import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
+import { t } from '../i18n';
 
-const SupportQueue = lazy(() => import('./SupportQueue'));
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
 
 function openAdminControlPlane() {
@@ -113,7 +113,7 @@ function ListingViews({ count }: { count: number }) {
 }
 
 export function Profile({
-  core, switchTo, setToast, openDirectChat, openProductCard, openDealChat,
+  core, switchTo, setToast, openDirectChat, openProductCard,
   openTopup, onTopupConsumed,
 }: {
   core: Core;
@@ -121,7 +121,6 @@ export function Profile({
   setToast: (text: string) => void;
   openDirectChat: (onixId: string) => Promise<boolean>;
   openProductCard: (productId: string) => void;
-  openDealChat: (chatId: string) => void;
   openTopup?: boolean;
   onTopupConsumed?: () => void;
 }) {
@@ -361,12 +360,10 @@ export function Profile({
   if (core.states.profile === 'loading') return <Card><Skeleton lines={6} /></Card>;
   if (!profile) return <StateView title="Профиль недоступен" text={core.errors.profile || 'Войдите через Telegram.'} action={<Button onClick={core.refreshAll}>Обновить</Button>} />;
   const status = profile.status ?? (profile.roles[0] ?? 'USER');
-  const isStaff = status === 'ADMIN' || status === 'SUPER_ADMIN' || status === 'MODERATOR' || profile.isAdmin;
   const isAdmin = status === 'ADMIN' || status === 'SUPER_ADMIN' || profile.isAdmin
     || profile.roles.includes('ADMIN') || profile.roles.includes('SUPER_ADMIN');
-  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support'> = [
+  const profileSections: Array<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics'> = [
     'overview', 'listings', 'favorites', 'reviews', 'analytics',
-    ...(isStaff ? (['support'] as const) : []),
   ];
   const openAuthorProfile = async (onixId: string) => {
     try {
@@ -438,7 +435,13 @@ export function Profile({
     )}
     <div className="chips profile-tabs">
       {profileSections.map(item =>
-        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({ overview: 'ИСТОРИЯ', listings: 'МОИ ТОВАРЫ', favorites: 'ИЗБРАННОЕ', reviews: 'ОТЗЫВЫ', analytics: 'АНАЛИТИКА', support: 'ПОДДЕРЖКА' })[item]}</button>)}
+        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({
+          overview: t('profile.history'),
+          listings: t('profile.listings'),
+          favorites: t('profile.favorites'),
+          reviews: t('profile.reviews'),
+          analytics: t('profile.analytics'),
+        })[item]}</button>)}
       {isAdmin && (
         <button type="button" key="admin-plane" onClick={openAdminControlPlane}>ADMIN</button>
       )}
@@ -447,7 +450,7 @@ export function Profile({
       <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{money(item.amountCents)}</strong></div>)}</div>
       {historyHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
-          <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>Показать ещё</Button>
+          <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>{t('common.showMore')}</Button>
         </div>
       )}
     </>}</Card>}
@@ -487,7 +490,7 @@ export function Profile({
       ))}</div>
       {listingsHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
-          <Button variant="secondary" busy={listingsLoadingMore} onClick={() => void loadMoreListings()}>Показать ещё</Button>
+          <Button variant="secondary" busy={listingsLoadingMore} onClick={() => void loadMoreListings()}>{t('common.showMore')}</Button>
         </div>
       )}
       </>)}
@@ -501,17 +504,6 @@ export function Profile({
     {section === 'analytics' && (
       <Suspense fallback={<Card><Skeleton lines={6} /></Card>}>
         <SellerAnalyticsPanel />
-      </Suspense>
-    )}
-    {section === 'support' && isStaff && (
-      <Suspense fallback={<Card><Skeleton lines={4} /></Card>}>
-        <SupportQueue
-          core={core}
-          setToast={setToast}
-          openDealChat={openDealChat}
-          openDirectChat={openDirectChat}
-          openUserProfile={(onixId) => void openAuthorProfile(onixId)}
-        />
       </Suspense>
     )}
     <PublicProfileModal
@@ -565,7 +557,7 @@ export function Profile({
           </Field>
         )}
         <div className="modal__actions money-form__actions">
-          <Button variant="secondary" onClick={() => setMoneyModal(null)}>Отмена</Button>
+          <Button variant="secondary" onClick={() => setMoneyModal(null)}>{t('common.cancel')}</Button>
           <Button
             variant="violet"
             busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.actionBusy === 'withdraw')}

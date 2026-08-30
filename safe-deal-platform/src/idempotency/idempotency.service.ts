@@ -4,10 +4,18 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { structuredLog } from '../observability/structured-logger';
 import { MetricsService } from '../observability/metrics.service';
+import { withSerializableTransaction } from '../database/transaction-retry';
 
 export type IdempotentResult<T> =
   | { kind: 'replay'; value: T }
   | { kind: 'fresh'; value: T };
+
+type RunOptions<T> = {
+  ttlMs?: number;
+  userId?: bigint;
+  /** Optional reconciliation for legacy non-transactional side effects left IN_PROGRESS. */
+  recover?: () => Promise<T | undefined>;
+};
 
 /** responseCode conventions on existing IdempotencyRecord: null=IN_PROGRESS, 200=COMPLETED, 0=FAILED */
 const CODE_DONE = 200;
@@ -42,7 +50,7 @@ export class IdempotencyService {
     key: string,
     requestPayload: unknown,
     execute: () => Promise<T>,
-    opts?: { ttlMs?: number; userId?: bigint },
+    opts?: RunOptions<T>,
   ): Promise<IdempotentResult<T>> {
     const requestHash = hashPayload(requestPayload);
     const ttlMs = opts?.ttlMs ?? Number(process.env.IDEMPOTENCY_TTL_MS ?? 24 * 60 * 60 * 1000);
@@ -80,6 +88,16 @@ export class IdempotencyService {
           return { kind: 'replay', value: existing.responseBody as T };
         }
         if (existing.responseCode === null) {
+          const recovered = await opts?.recover?.();
+          if (recovered !== undefined) {
+            const stored = toJsonValue(recovered);
+            await this.prisma.idempotencyRecord.update({
+              where: { id: existing.id },
+              data: { responseCode: CODE_DONE, responseBody: stored },
+            });
+            this.metrics.inc('onix_idempotency_total', { scope: route, result: 'recovered' });
+            return { kind: 'replay', value: stored as T };
+          }
           this.metrics.inc('onix_idempotency_total', { scope: route, result: 'in_progress' });
           throw new ConflictException('Операция с этим ключом ещё выполняется. Повторите позже.');
         }
@@ -124,6 +142,72 @@ export class IdempotencyService {
       this.metrics.inc('onix_idempotency_total', { scope: route, result: 'failed' });
       throw err;
     }
+  }
+
+  /**
+   * Atomically claims the key, executes a database mutation, and stores its response.
+   * A PostgreSQL advisory transaction lock removes the absent-row/P2002 race.
+   */
+  async runTransactional<T>(
+    scope: string,
+    key: string,
+    requestPayload: unknown,
+    execute: (tx: Prisma.TransactionClient) => Promise<T>,
+    opts?: Omit<RunOptions<T>, 'recover'>,
+  ): Promise<IdempotentResult<T>> {
+    const requestHash = hashPayload(requestPayload);
+    const ttlMs = opts?.ttlMs ?? Number(process.env.IDEMPOTENCY_TTL_MS ?? 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + (Number.isFinite(ttlMs) ? ttlMs : 24 * 60 * 60 * 1000));
+    const route = scope.slice(0, 191);
+    const rawKey = key.slice(0, 128);
+    const idKey = opts?.userId
+      ? `${opts.userId.toString()}:${rawKey}`.slice(0, 128)
+      : rawKey;
+    const lockKey = `${route}\u0000${idKey}`;
+
+    const result = await withSerializableTransaction(this.prisma, async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const existing = await tx.idempotencyRecord.findUnique({
+        where: { key_route: { key: idKey, route } },
+      });
+      if (existing?.requestHash !== undefined && existing.requestHash !== requestHash) {
+        throw new ConflictException('Ключ идемпотентности уже использован с другим телом запроса.');
+      }
+      if (existing?.responseCode === CODE_DONE && existing.responseBody !== null) {
+        return { kind: 'replay' as const, value: existing.responseBody as T };
+      }
+      if (existing?.responseCode === null) {
+        // This can only be a legacy record: transactional claims never survive a crash alone.
+        throw new ConflictException('Операция с этим ключом ещё выполняется. Повторите позже.');
+      }
+      if (existing) {
+        await tx.idempotencyRecord.update({
+          where: { id: existing.id },
+          data: {
+            responseCode: null,
+            responseBody: Prisma.DbNull,
+            expiresAt,
+            requestHash,
+            userId: opts?.userId,
+          },
+        });
+      } else {
+        await tx.idempotencyRecord.create({
+          data: { key: idKey, route, requestHash, userId: opts?.userId, expiresAt },
+        });
+      }
+
+      const value = await execute(tx);
+      const stored = toJsonValue(value);
+      await tx.idempotencyRecord.update({
+        where: { key_route: { key: idKey, route } },
+        data: { responseCode: CODE_DONE, responseBody: stored },
+      });
+      return { kind: 'fresh' as const, value: stored as T };
+    });
+
+    this.metrics.inc('onix_idempotency_total', { scope: route, result: result.kind });
+    return result;
   }
 
   /** Purge expired rows — called by worker. */

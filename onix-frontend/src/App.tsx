@@ -35,12 +35,16 @@ const Profile = lazyRetry(() => import('./screens/Profile'));
 
 const LEFT_W_KEY = 'onix-sidebar-left-w';
 const RIGHT_W_KEY = 'onix-sidebar-right-w';
-const LEFT_MIN = 72;
+/** Floor above icon-rail — prevents the crushed 72px rail + brand/icon overlap. */
+const LEFT_MIN = 220;
 const LEFT_DEFAULT = 272;
 const RIGHT_MIN = 64;
 const RIGHT_DEFAULT = 320;
 const RIGHT_ICONS_AT = 88;
-const LEFT_ICONS_AT = 96;
+/** Keep below LEFT_MIN so left never enters icon-only mode via resize. */
+const LEFT_ICONS_AT = 200;
+const DESKTOP_MAIN_MIN = 520;
+const DESKTOP_GAPS = 32;
 const TABS: Array<{ id: Screen; labelKey: Parameters<typeof t>[0]; icon: ReactNode }> = [
   { id: 'market', labelKey: 'navigation.market', icon: <IconMarket /> },
   { id: 'deals', labelKey: 'navigation.deals', icon: <IconDeals /> },
@@ -102,11 +106,16 @@ function ScreenFallback() {
   return <div className="stack"><div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div></div>;
 }
 
-function readStoredWidth(key: string, fallback: number): number {
+function readStoredWidth(key: string, fallback: number, min = 1): number {
   try {
     const raw = localStorage.getItem(key);
     const n = raw ? Number(raw) : NaN;
-    if (Number.isFinite(n) && n > 0) return n;
+    if (Number.isFinite(n) && n >= min) return n;
+    // Migrate crushed sidebar widths from older builds (icon rail ≤96px).
+    if (Number.isFinite(n) && n > 0 && n < min) {
+      try { localStorage.setItem(key, String(fallback)); } catch { /* ignore */ }
+      return fallback;
+    }
   } catch { /* ignore */ }
   return fallback;
 }
@@ -183,8 +192,8 @@ export default function App() {
   const [marketCategory, setMarketCategory] = useState<string>('Все');
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
-  const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT));
-  const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT));
+  const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
+  const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
 
   const leftIcons = leftW <= LEFT_ICONS_AT;
   const rightIcons = rightW <= RIGHT_ICONS_AT;
@@ -201,19 +210,44 @@ export default function App() {
 
     let latest = startW;
     let raf = 0;
+    let iconMode = side === 'left' ? leftIcons : rightIcons;
 
     const applyWidth = (next: number) => {
       latest = next;
       if (!shell) return;
-      if (side === 'left') shell.style.setProperty('--sidebar-left-w', `${next}px`);
-      else shell.style.setProperty('--sidebar-right-w', `${next}px`);
+      if (side === 'left') {
+        shell.style.setProperty('--sidebar-left-w', `${next}px`);
+        const icons = next <= LEFT_ICONS_AT;
+        shell.classList.toggle('app-shell--left-icons', icons);
+        shell.querySelector('.sidebar-left')?.classList.toggle('sidebar-left--icons', icons);
+        if (icons !== iconMode) {
+          iconMode = icons;
+          setLeftW(Math.round(next));
+        }
+      } else {
+        shell.style.setProperty('--sidebar-right-w', `${next}px`);
+        const icons = next <= RIGHT_ICONS_AT;
+        shell.classList.toggle('app-shell--right-icons', icons);
+        shell.querySelector('.sidebar-right')?.classList.toggle('sidebar-right--icons', icons);
+        if (icons !== iconMode) {
+          iconMode = icons;
+          setRightW(Math.round(next));
+        }
+      }
     };
 
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
-      const max = side === 'left'
-        ? Math.floor(window.innerWidth * 0.8)
-        : Math.floor(window.innerWidth * 0.45);
+      const shellWidth = shell?.clientWidth || window.innerWidth;
+      const otherWidth = side === 'left' ? rightW : leftW;
+      const available = shellWidth - otherWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS;
+      const max = Math.max(
+        side === 'left' ? LEFT_MIN : RIGHT_MIN,
+        Math.min(
+          available,
+          side === 'left' ? Math.floor(shellWidth * 0.45) : Math.floor(shellWidth * 0.4),
+        ),
+      );
       const next = clamp(
         side === 'left' ? startW + dx : startW - dx,
         side === 'left' ? LEFT_MIN : RIGHT_MIN,
@@ -241,7 +275,7 @@ export default function App() {
 
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
-  }, [leftW, rightW]);
+  }, [leftIcons, leftW, rightIcons, rightW]);
 
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
@@ -385,6 +419,11 @@ export default function App() {
           >
             {item.icon}
             <span>{t(item.labelKey)}</span>
+            {item.id === 'chat' && core.unread > 0 && (
+              <em className="sidebar-nav__badge" aria-label={`${core.unread} ${t('chat.unread')}`}>
+                {unread}
+              </em>
+            )}
           </button>
         ))}
       </nav>
@@ -515,10 +554,6 @@ export default function App() {
             openProductCard={openProductCard}
             openTopup={openWalletTopup}
             onTopupConsumed={() => setOpenWalletTopup(false)}
-            openDealChat={(chatId: string) => {
-              setFocusChatId(chatId);
-              switchTo('chat');
-            }}
           />}
         </Suspense>
         </SoftErrorBoundary>

@@ -1,7 +1,6 @@
 import {
-  BadRequestException, Body, CanActivate, Controller, Delete, ExecutionContext, ForbiddenException,
-  Get, Header, Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query, Req, Res,
-  UseGuards,
+  BadRequestException, Body, Controller, Delete, Get, Header, Injectable, Module, NotFoundException,
+  Optional, Param, Patch, Post, Query, Req, Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { ProductCategory, ProductStatus, ProductSubcategory, Prisma } from '@prisma/client';
@@ -11,14 +10,12 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, SUBCATEGORIES_BY_CATEGORY } from './catalog';
-import { AuthRequest, AuthUser, CurrentUser, Public } from './common';
+import { AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
-import { isAdminIpAllowed, parseAdminIpAllowlist } from './admin/admin-ip-allowlist';
 import { AuthModule, AuthService } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
 import { pushNewProductToFollowers } from './domain-notify';
-import { resolveClientIp } from './http/client-ip';
 import { onixIdLookupCandidates } from './onix-id';
 import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
@@ -453,29 +450,6 @@ export class MarketplaceService {
     return updated;
   }
 
-  /** Admin-only: force-remove listing from market in one click. */
-  async adminRemove(actor: AuthUser, id: string) {
-    if (!actor.isAdmin) throw new BadRequestException('Удалить объявление может только админ.');
-    const product = await this.prisma.product.findUnique({ where: { id } });
-    if (!product) throw new NotFoundException('Товар не найден.');
-    if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке — сначала завершите заказ.');
-    await this.prisma.$transaction(async (tx) => {
-      await tx.product.update({ where: { id }, data: { status: 'ARCHIVED' } });
-      await tx.favorite.deleteMany({ where: { productId: id } });
-      await tx.auditLog.create({
-        data: {
-          actorId: actor.id,
-          action: 'PRODUCT_ADMIN_REMOVE',
-          entity: 'Product',
-          entityId: id,
-          metadata: { sellerId: product.sellerId.toString(), title: product.title },
-        },
-      });
-    });
-    this.emitProductChanged({ id, status: 'ARCHIVED', quantity: product.quantity });
-    return { ok: true as const, id, status: 'ARCHIVED' as const };
-  }
-
   private async ownedActive(user: AuthUser, id: string) {
     const item = await this.prisma.product.findFirst({
       where: { id, sellerId: user.id, status: { in: ['ACTIVE', 'ARCHIVED'] } },
@@ -598,35 +572,10 @@ export class MarketplaceController {
   }
 }
 
-@Injectable()
-class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<AuthRequest>();
-    if (!req.user?.isAdmin) {
-      throw new ForbiddenException('Требуются права администратора ONIX.');
-    }
-    const allowlist = parseAdminIpAllowlist();
-    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
-      throw new ForbiddenException('Доступ к admin API с этого IP запрещён.');
-    }
-    return true;
-  }
-}
-
-@Controller('admin/products')
-@UseGuards(AdminGuard)
-export class AdminProductsController {
-  constructor(private readonly service: MarketplaceService) {}
-
-  @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.service.adminRemove(user, id);
-  }
-}
-
 @Module({
   imports: [AuthV2Module, AuthModule, RealtimeModule],
-  controllers: [MarketplaceController, AdminProductsController],
+  // Product moderation lives in the separate AdminModule control plane.
+  controllers: [MarketplaceController],
   providers: [MarketplaceService],
   exports: [MarketplaceService],
 })

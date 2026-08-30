@@ -12,7 +12,6 @@ import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
 import { assertNoTrustScore, buildPublicTrustCard } from '../trust/trust-card';
 import { ProSubscriptionService } from '../pro/pro.service';
-import { VerificationService } from '../verification/verification.service';
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
@@ -24,7 +23,6 @@ export class WalletEconomyService {
     private readonly deposit: DepositService,
     private readonly locks: LockService,
     private readonly trust: TrustService,
-    private readonly verification: VerificationService,
     private readonly pro: ProSubscriptionService,
   ) {}
 
@@ -185,7 +183,6 @@ export class WalletEconomyService {
         ratingAverage: true,
         ratingCount: true,
         completedSales: true,
-        verifications: { select: { kind: true, status: true } },
         sellerSubscription: { select: { status: true, endsAt: true } },
       },
     });
@@ -203,7 +200,6 @@ export class WalletEconomyService {
       ratingAverage: full.ratingAverage,
       ratingCount: full.ratingCount,
       completedSales: full.completedSales,
-      verifications: full.verifications,
       proActive,
     });
     assertNoTrustScore(card);
@@ -212,7 +208,7 @@ export class WalletEconomyService {
 
   async getOwnerTrust(user: AuthUser) {
     await this.trust.ensureFresh(user.id);
-    const [profile, history, verifications, pro, deposit] = await Promise.all([
+    const [profile, history, pro, deposit] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: user.id },
         select: {
@@ -233,7 +229,6 @@ export class WalletEconomyService {
         orderBy: { createdAt: 'desc' },
         take: 50,
       }),
-      this.verification.list(user.id),
       this.pro.getStatus(user.id),
       this.getDepositWallet(user),
     ]);
@@ -251,10 +246,8 @@ export class WalletEconomyService {
         ratingAverage: profile.ratingAverage,
         ratingCount: profile.ratingCount,
         completedSales: profile.completedSales,
-        verifications,
         proActive: pro.active,
       }),
-      verifications,
       pro,
       history: history.map((h) => ({
         id: h.id.toString(),

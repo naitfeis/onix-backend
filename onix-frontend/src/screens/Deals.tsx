@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { money } from '../api/client';
-import { isStaffPlatformStatus, sellerIsPresent, type Deal, type OrderListQuery } from '../api/contracts';
+import { sellerIsPresent, type Deal, type OrderListQuery } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import { publicAt } from '../utils/publicAt';
@@ -60,13 +60,6 @@ export function Deals({
     onFocusDealHandled();
   }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
-  const isSupport = Boolean(
-    core.profile?.isAdmin
-    || core.profile?.isSupport
-    || isStaffPlatformStatus(core.profile?.status)
-    || core.profile?.roles.includes('ADMIN')
-    || core.profile?.roles.includes('MODERATOR'),
-  );
   return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
@@ -118,9 +111,6 @@ export function Deals({
             }}>Обратиться в поддержку</Button>
           )}
           {deal.complaintOpen && !deal.dispute && <span className="muted">Обращение по сделке уже создано</span>}
-          {isSupport && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="danger" busy={core.actionBusy === `refund-${deal.id}`} onClick={async () => {
-            if (await core.supportRefund(deal.id, 'Возврат поддержкой')) setToast('Возврат через Escrow выполнен.');
-          }}>Refund</Button>}
         </div>
         {deal.status === 'COMPLETED' && deal.canReview && <Button variant="secondary" onClick={() => setReviewDeal(deal)}>Оставить отзыв</Button>}
       </Card>)}

@@ -14,6 +14,7 @@ import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
 import { PublicProfileModal, StaffBadge } from './shared';
 import { getRealtimeClient } from '../realtime/client';
+import { t } from '../i18n';
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
@@ -74,7 +75,7 @@ export function Market({
   const [confirm, setConfirm] = useState<Product | null>(null);
   const [sellerProfile, setSellerProfile] = useState<PublicProfile | null>(null);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('Все');
+  const [category, setCategory] = useState(t('market.all'));
   const [subcategory, setSubcategory] = useState('');
   const [sort, setSort] = useState('new');
   const [sortOpen, setSortOpen] = useState(false);
@@ -96,11 +97,6 @@ export function Market({
   const CAT_PAGE_SIZE = 10;
   const catsFullyOpen = catVisibleCount >= CATEGORIES.length;
   const visibleCats = catsFullyOpen ? CATEGORIES : CATEGORIES.slice(0, CAT_PAGE_SIZE);
-  const isAdmin = Boolean(
-    core.profile?.isAdmin
-    || core.profile?.status === 'ADMIN'
-    || core.profile?.roles.includes('ADMIN'),
-  );
   const greetName = core.profile ? publicAt(core.profile.username) : 'гость';
   const heroSlides = [
     {
@@ -162,12 +158,12 @@ export function Market({
   const onixLotMatch = query.trim().match(/^ONIXLOT-(\d+)$/i);
   const onixLotNumber = onixLotMatch ? Number(onixLotMatch[1]) : null;
   const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
-  const marketSubs = category !== 'Все'
+  const marketSubs = category !== t('market.all')
     ? (catalog[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
 
   useEffect(() => {
-    if (!externalCategory || externalCategory === 'Все') return;
+    if (!externalCategory || externalCategory === t('market.all')) return;
     setCategory(externalCategory);
     setSubcategory('');
     const idx = CATEGORIES.indexOf(externalCategory as typeof CATEGORIES[number]);
@@ -198,7 +194,7 @@ export function Market({
 
   useEffect(() => {
     const isDefaultBrowse =
-      category === 'Все' && !subcategory && !query.trim() && sort === 'new';
+      category === t('market.all') && !subcategory && !query.trim() && sort === 'new';
 
     // Default home feed: reuse bootstrap catalog — do not fire a second /api/products
     // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
@@ -224,12 +220,12 @@ export function Market({
       setMarketState('loading');
       setOffset(0);
       const q = query.trim();
-      const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
+        const searchCat = category === t('market.all') ? matchCategorySearch(q) : undefined;
       void core.listProducts({
         // Exact category name → filter by category (all lots in that game).
         // Otherwise keep free-text title/seller search.
         search: searchCat ? undefined : (q || undefined),
-        category: category === 'Все' ? searchCat : category,
+        category: category === t('market.all') ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
         limit: PAGE,
@@ -256,10 +252,10 @@ export function Market({
     const next = offset + PAGE;
     try {
       const q = query.trim();
-      const searchCat = category === 'Все' ? matchCategorySearch(q) : undefined;
+      const searchCat = category === t('market.all') ? matchCategorySearch(q) : undefined;
       const data = await core.listProducts({
         search: searchCat ? undefined : (q || undefined),
-        category: category === 'Все' ? searchCat : category,
+        category: category === t('market.all') ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
         limit: PAGE,
@@ -354,8 +350,8 @@ export function Market({
     setHeroSlide(next);
     const track = heroTrackRef.current;
     if (!track) return;
-    const slide = track.children[next] as HTMLElement | undefined;
-    slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+    const width = track.clientWidth || 1;
+    track.scrollTo({ left: next * width, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -377,12 +373,12 @@ export function Market({
         const next = (current + 1) % heroSlides.length;
         const track = heroTrackRef.current;
         if (track) {
-          const slide = track.children[next] as HTMLElement | undefined;
-          slide?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+          const width = track.clientWidth || 1;
+          track.scrollTo({ left: next * width, behavior: 'smooth' });
         }
         return next;
       });
-    }, 6500);
+    }, 10_000);
     return () => window.clearInterval(timer);
   }, [heroSlides.length]);
 
@@ -446,17 +442,17 @@ export function Market({
       <div
         className="cat-row"
         role="list"
-        aria-label="Категории"
+        aria-label={t('market.categories')}
         ref={catRowRef}
       >
         <button
           type="button"
           role="listitem"
-          className={`cat-card${category === 'Все' ? ' active' : ''}`}
-          onClick={() => { setCategory('Все'); setSubcategory(''); }}
+          className={`cat-card${category === t('market.all') ? ' active' : ''}`}
+          onClick={() => { setCategory(t('market.all')); setSubcategory(''); }}
         >
           <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
-          <span className="cat-card__name">Все</span>
+          <span className="cat-card__name">{t('market.all')}</span>
           {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
         </button>
         {visibleCats.map((cat) => {
@@ -503,8 +499,8 @@ export function Market({
           onClick={() => {
             if (catsFullyOpen) {
               const collapsing = CATEGORIES.slice(CAT_PAGE_SIZE);
-              if (category !== 'Все' && collapsing.includes(category as typeof CATEGORIES[number])) {
-                setCategory('Все');
+              if (category !== t('market.all') && collapsing.includes(category as typeof CATEGORIES[number])) {
+                setCategory(t('market.all'));
                 setSubcategory('');
               }
               setCatVisibleCount(CAT_PAGE_SIZE);
@@ -532,8 +528,8 @@ export function Market({
             setCatVisibleCount(CATEGORIES.length);
           }
         }}
-        placeholder="Товар, продавец, ONIX ID или ONIXLOT"
-        aria-label="Поиск"
+        placeholder={t('market.search')}
+        aria-label={t('market.searchAria')}
       />
       <div className="sort-picker">
         <button
@@ -602,8 +598,8 @@ export function Market({
     }}>Открыть профиль</Button>}
 
     {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
-      marketState === 'error' ? <StateView title="Витрина недоступна" text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>Попробовать снова</Button>} /> :
-      items.length === 0 ? <StateView title="Ничего не найдено" text="Измените запрос или фильтры. Можно разместить собственный лот." action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
+      marketState === 'error' ? <StateView title={t('market.unavailable')} text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>{t('common.retry')}</Button>} /> :
+      items.length === 0 ? <StateView title={t('market.emptyTitle')} text={t('market.emptyText')} action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
       <div className="product-grid product-grid--compact">{items.map(product => {
         const rating = product.seller.rating.toFixed(1);
         const showFounder = product.seller.badge === 'SUPER_ADMIN';
@@ -617,10 +613,11 @@ export function Market({
                 aria-label={`Открыть ${product.title}`}
               />
               <div className="product-card__badges">
-                <span className="pill-rating"><IconStar /> {rating}</span>
+                <span className="pill-rating"><IconStar /> {rating} · {product.seller.reviewCount} {t('market.reviews')}</span>
                 {showFounder && <span className="pill-super">Основатель</span>}
               </div>
-              <div className="product-card__avatar">
+              <div className="product-card__seller-float">
+                <div className="product-card__avatar">
                 <UserAvatar
                   userId={product.seller.id}
                   avatarUrl={product.seller.avatarUrl}
@@ -628,6 +625,8 @@ export function Market({
                   size="medium"
                   online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
                 />
+                </div>
+                <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
               </div>
               <button
                 type="button"
@@ -636,7 +635,7 @@ export function Market({
                   setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
                   void core.toggleFavorite(product);
                 }}
-                aria-label={product.favorite ? 'Убрать из избранного' : 'В избранное'}
+                aria-label={product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
               >♥</button>
             </div>
             <button type="button" className="product-main product-main--body" onClick={() => void openProduct(product)} aria-label={`Открыть ${product.title}`}>
@@ -650,13 +649,13 @@ export function Market({
             </button>
             <div className="product-card__footer product-card__footer--bar">
               <strong className="product-card__price">{money(product.priceCents)}</strong>
-              <button type="button" className="button button--buy product-card__buy" onClick={() => setConfirm(product)}>Купить</button>
+              <button type="button" className="button button--buy product-card__buy" onClick={() => setConfirm(product)}>{t('market.buy')}</button>
             </div>
           </Card>
         );
       })}</div>}
     {marketState === 'success' && hasMore && (
-      <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>Показать ещё</Button>
+      <Button variant="secondary" busy={loadingMore} onClick={() => void loadMore()}>{t('common.showMore')}</Button>
     )}
     <Modal open={Boolean(selected)} title={selected?.title || ''} onClose={() => { setSelected(null); setSellerTrust(null); setDetailReady(false); }}>
       {selected && <div className="stack compact">
@@ -673,9 +672,6 @@ export function Market({
           <div className="trust-strip">
             <span><b>Уровень {sellerTrust.level}</b></span>
             <span><b>{money(sellerTrust.depositTotal)}</b> залог</span>
-            {sellerTrust.phoneVerified && <span>Телефон</span>}
-            {sellerTrust.passportVerified && <span>Паспорт</span>}
-            {sellerTrust.voiceVerified && <span>Голос</span>}
           </div>
         )}
         <Card><div className="seller-row"><div className="user-summary"><UserAvatar userId={selected.seller.id} avatarUrl={selected.seller.avatarUrl} name={selected.seller.username} online={sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId))} /><div><b>{publicAt(selected.seller.username)} <StaffBadge badge={selected.seller.badge} /></b><p className="muted">{formatOnixId(selected.seller.onixId)} · {selected.seller.salesCount} сделок · {selected.seller.reviewCount} отзывов · {selected.seller.followersCount} подписчиков · {sellerIsPresent(selected.seller, core.profile, core.presenceOf(selected.seller.onixId)) ? 'Online' : formatLastSeen(core.presenceOf(selected.seller.onixId)?.lastOnline ?? selected.seller.lastOnline)}</p></div></div><span>★ {selected.seller.rating.toFixed(1)}</span></div>
@@ -723,18 +719,6 @@ export function Market({
             >{selected.seller.followed ? 'Отписаться' : '+ Подписаться'}</Button>
           </div></Card>
         <div className="modal__actions">
-          {isAdmin && (
-            <Button variant="danger" busy={core.actionBusy === `admin-del-${selected.id}`} onClick={async () => {
-              try {
-                await api.delete(API_PATHS.adminProductRemove(selected.id));
-                setItems((prev) => prev.filter((p) => p.id !== selected.id));
-                setSelected(null);
-                setToast('Объявление удалено админом.');
-              } catch (error) {
-                setToast(friendlyError(error));
-              }
-            }}>Удалить</Button>
-          )}
           <Button variant="secondary" onClick={async () => {
           setSelected(null);
           await openDirectChat(selected.seller.onixId);

@@ -12,7 +12,8 @@ import {
   buildAdminRefreshCookieHeader,
   readAdminRefreshTokenFromCookie,
 } from '../src/admin/admin-cookie';
-import { AdminRoleGuard } from '../src/admin/admin.guard';
+import { AdminAccessGuard, AdminRoleGuard } from '../src/admin/admin.guard';
+import { AuthPlatformError } from '../src/auth-v2/auth-errors';
 
 test('admin password hash verifies', () => {
   const stored = hashPassword('correct-horse-battery');
@@ -72,4 +73,38 @@ test('admin role guard permits only configured admin roles', () => {
     () => guard.canActivate(contextFor('SUPPORT_ADMIN')),
     /Недостаточно прав admin-роли/,
   );
+});
+
+test('admin access guard rejects a customer JWT', async () => {
+  let received = '';
+  const guard = new AdminAccessGuard({
+    validateAccess: async (token: string) => {
+      received = token;
+      throw new AuthPlatformError('AUTH_INVALID_TOKEN', 'Customer JWT is not an admin access token.');
+    },
+  } as never);
+  const context = {
+    switchToHttp: () => ({
+      getRequest: () => ({ headers: { authorization: 'Bearer customer.jwt.token' } }),
+    }),
+  } as unknown as ExecutionContext;
+
+  await assert.rejects(() => guard.canActivate(context), /Customer JWT is not an admin access token/);
+  assert.equal(received, 'customer.jwt.token');
+});
+
+test('admin role matrix separates support, security and finance', () => {
+  const contextFor = (role: string) => ({
+    getHandler: () => function handler() {},
+    getClass: () => class TestController {},
+    switchToHttp: () => ({ getRequest: () => ({ admin: { id: 1n, email: 'a@b.c', role, sessionId: 's' } }) }),
+  } as unknown as ExecutionContext);
+  const guardFor = (roles: string[]) => new AdminRoleGuard({
+    getAllAndOverride: () => roles,
+  } as never);
+
+  assert.equal(guardFor(['SUPER_ADMIN', 'SUPPORT_ADMIN']).canActivate(contextFor('SUPPORT_ADMIN')), true);
+  assert.throws(() => guardFor(['SUPER_ADMIN', 'SUPPORT_ADMIN']).canActivate(contextFor('SECURITY_ADMIN')));
+  assert.equal(guardFor(['SUPER_ADMIN', 'FINANCE_ADMIN']).canActivate(contextFor('FINANCE_ADMIN')), true);
+  assert.throws(() => guardFor(['SUPER_ADMIN', 'SECURITY_ADMIN']).canActivate(contextFor('FINANCE_ADMIN')));
 });

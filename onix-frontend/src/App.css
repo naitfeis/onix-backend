@@ -456,12 +456,15 @@
   margin-bottom: 16px;
   padding: 0;
   border-radius: var(--radius-hero);
-  background: var(--glass-bg);
+  background: rgba(18, 16, 28, 0.96);
   border: var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
+  box-shadow: none;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   overflow: clip;
+}
+html[data-theme="light"] .market-hero {
+  background: rgba(255, 255, 255, 0.96);
 }
 .market-hero__track {
   display: flex;
@@ -638,8 +641,8 @@ html[data-theme="dark"] .button--secondary {
 }
 @media (min-width: 1100px) {
   .product-grid {
-    /* Drop columns when the center rail is squeezed by sidebars */
-    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    /* Preserve legible prices/actions when either rail is resized. */
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
     gap: 16px;
   }
 }
@@ -705,6 +708,26 @@ html[data-theme="dark"] .button--secondary {
   place-items: center;
   pointer-events: none;
 }
+.product-card__seller-float {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.product-card__seller-float > span {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 55%);
+}
 .product-card__avatar .user-avatar-wrap {
   width: 56px;
   height: 56px;
@@ -732,6 +755,7 @@ html[data-theme="light"] .product-card__avatar .user-avatar__presence {
   justify-content: space-between;
   align-items: flex-start;
   gap: 6px;
+  max-width: calc(100% - 54px);
   pointer-events: none;
   z-index: 2;
 }
@@ -753,6 +777,8 @@ html[data-theme="light"] .product-card__avatar .user-avatar__presence {
   background: rgba(20, 18, 30, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: none !important;
+  max-width: 100%;
+  white-space: nowrap;
 }
 .pill-rating svg { width: 11px; height: 11px; color: var(--accent-star); fill: currentColor; }
 .pill-super {
@@ -819,6 +845,8 @@ html[data-theme="light"] .product-card__avatar .user-avatar__presence {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
   color: var(--text);
+  min-width: max-content;
+  white-space: nowrap;
 }
 .product-card__buy {
   min-height: 32px;
@@ -2023,9 +2051,9 @@ html[data-theme="light"] .timeline li {
 }
 .app-shell--chat .viewport {
   margin: 0;
-  height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  height: calc(var(--tg-viewport-height, 100dvh) - 88px - env(safe-area-inset-bottom));
   min-height: 0;
-  max-height: calc(100dvh - 88px - env(safe-area-inset-bottom));
+  max-height: calc(var(--tg-viewport-height, 100dvh) - 88px - env(safe-area-inset-bottom));
   overflow: hidden;
   display: flex;
   align-items: flex-start;
@@ -2100,6 +2128,45 @@ html[data-theme="light"] .timeline li {
   padding: 12px;
   flex: 1 1 auto;
   min-height: 0;
+}
+.app-shell--chat .messages.messages--virtual {
+  display: block;
+  position: relative;
+  padding: 12px 0;
+  overflow-anchor: none;
+}
+.messages__virtual-list {
+  width: 100%;
+  min-height: 100%;
+}
+.messages__virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0 12px 8px;
+  box-sizing: border-box;
+}
+.messages__virtual-row > .message-row.mine {
+  margin-left: auto;
+}
+.messages__virtual-row > .message-row.system {
+  width: 100%;
+}
+.support-virtual-list {
+  position: relative;
+  width: 100%;
+}
+.support-scroll {
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.support-virtual-row {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  padding-bottom: 10px;
 }
 .app-shell--chat .message {
   border: var(--glass-border);
@@ -2237,8 +2304,8 @@ body.is-resizing-chat * {
   min-width: 18px;
   height: 18px;
   padding: 3px;
-  color: #fff;
-  background: var(--accent-coral);
+  color: var(--text-on-accent);
+  background: var(--accent-coral-deep);
   border-radius: 50%;
   font-style: normal;
   font-size: 9px;
@@ -2842,14 +2909,19 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 @media (max-width: 699px) {
   .chat-layout .mobile-hidden { display: none; }
 
+  /* Keep the end of each screen clear of the fixed navigation dock. */
+  .app-shell:not(.app-shell--chat) .viewport {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
   /* Mini-app chat: fill down to the bottom nav */
   .app-shell--chat {
     padding: 0;
     padding-bottom: calc(78px + env(safe-area-inset-bottom));
   }
   .app-shell--chat .viewport {
-    height: calc(100dvh - 78px - env(safe-area-inset-bottom));
-    max-height: calc(100dvh - 78px - env(safe-area-inset-bottom));
+    height: calc(var(--tg-viewport-height, 100dvh) - 78px - env(safe-area-inset-bottom));
+    max-height: calc(var(--tg-viewport-height, 100dvh) - 78px - env(safe-area-inset-bottom));
     min-height: 0;
     overflow: hidden;
   }
@@ -2923,25 +2995,19 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     min-height: 100dvh;
     padding: 24px;
     display: grid;
-    grid-template-columns: var(--sidebar-left-w, 272px) minmax(0, 1fr);
-    gap: 20px;
+    grid-template-columns:
+      var(--sidebar-left-w, 272px)
+      minmax(0, 1fr);
+    gap: 16px;
     justify-content: center;
     align-items: start;
   }
-  .app-shell--market {
-    grid-template-columns: var(--sidebar-left-w, 272px) minmax(0, 1fr) var(--sidebar-right-w, 320px);
-  }
-  .app-shell--chat {
-    grid-template-columns: var(--sidebar-left-w, 272px) minmax(0, 1fr);
-    padding: 12px 12px 16px;
-    gap: 12px;
-  }
   .app-shell--chat .viewport {
-    height: calc(100dvh - 28px);
-    max-height: calc(100dvh - 28px);
+    height: calc(var(--tg-viewport-height, 100dvh) - 48px);
+    max-height: calc(var(--tg-viewport-height, 100dvh) - 48px);
   }
   .app-shell--chat .chat-layout {
-    max-height: calc(100dvh - 28px);
+    max-height: calc(var(--tg-viewport-height, 100dvh) - 48px);
   }
   .app-shell--auth > .auth-notice {
     grid-column: 1 / -1;
@@ -3056,6 +3122,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-left--icons .sidebar-nav button span,
   .sidebar-left--icons .sidebar-cats__label,
   .sidebar-left--icons .sidebar-cats__count,
+  .sidebar-left--icons .sidebar-nav__badge,
   .sidebar-left--icons .sidebar-theme span,
   .sidebar-left--icons .sidebar-divider {
     display: none !important;
@@ -3129,6 +3196,24 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+  }
+  .sidebar-nav__badge {
+    flex: 0 0 auto;
+    min-width: 22px;
+    max-width: 38px;
+    height: 22px;
+    margin-left: auto;
+    padding: 0 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--accent-coral-deep);
+    color: var(--text-on-accent);
+    font-size: 10px;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+    line-height: 22px;
+    text-align: center;
+    white-space: nowrap;
   }
   .sidebar-nav button svg {
     width: 20px; height: 20px;
@@ -3478,7 +3563,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     height: 72px;
   }
   .product-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
     gap: 16px;
     justify-content: stretch;
   }
@@ -3513,13 +3598,22 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-right { display: none; }
 }
 
+@media (min-width: 1280px) {
+  .app-shell.app-shell--market {
+    grid-template-columns:
+      var(--sidebar-left-w, 272px)
+      minmax(0, 1fr)
+      var(--sidebar-right-w, 320px);
+  }
+}
+
 @media (min-width: 900px) and (max-width: 1099px) {
   .app-shell {
     width: 100%;
     max-width: none;
     padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 84px minmax(0, 1fr);
     gap: 16px;
   }
   .mobile-only { display: none !important; }
@@ -3536,11 +3630,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     grid-column: 1;
     position: sticky;
     top: 20px;
-    width: 72px;
-    max-width: 72px;
-    min-width: 72px;
+    width: 84px;
+    max-width: 84px;
+    min-width: 84px;
     height: calc(100dvh - 40px);
-    padding: 14px 8px;
+    padding: 14px 12px;
     border-radius: var(--radius-xl);
     overflow: hidden;
     isolation: isolate;
@@ -3549,9 +3643,24 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .sidebar-left .brand__text,
   .sidebar-nav button span:not(.icon),
+  .sidebar-nav__badge,
   .sidebar-cats,
   .sidebar-divider,
   .sidebar-theme span { display: none !important; }
+  .sidebar-left__brand {
+    width: 44px;
+    max-width: 44px;
+    margin: 0 auto 12px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .sidebar-left__brand .brand {
+    width: 28px;
+    max-width: 28px;
+    gap: 0;
+    overflow: hidden;
+  }
   .sidebar-nav button,
   .sidebar-theme {
     justify-content: center;
@@ -3563,6 +3672,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     border: 0 !important;
     box-shadow: none !important;
   }
+  .sidebar-resizer { display: none; }
   .sidebar-nav button:hover,
   .sidebar-nav button.active {
     background: var(--nav-hover-bg) !important;
@@ -3577,7 +3687,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-content: stretch; }
   .product-card { width: 100%; max-width: none; }
 
-  /* Auth banner must span both columns — otherwise it sits in the 72px rail
+  /* Auth banner must span both columns — otherwise it sits in the icon rail
      and word-break turns "Войдите…" into a vertical glyph stack. */
   .app-shell--auth > .auth-notice,
   .app-shell > .auth-notice {

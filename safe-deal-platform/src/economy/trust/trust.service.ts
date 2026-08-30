@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Prisma, SellerVerificationKind, TrustHistoryType } from '@prisma/client';
+import type { Prisma, TrustHistoryType } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
 import type { Tx } from '../wallet/deposit.service';
 
@@ -9,7 +9,6 @@ export type TrustBreakdown = {
   reviews: number;
   successRate: number;
   deposit: number;
-  verification: number;
   activity: number;
   penalties: number;
   raw: number;
@@ -17,7 +16,7 @@ export type TrustBreakdown = {
   level: number;
 };
 
-const FORMULA_VERSION = 1;
+const FORMULA_VERSION = 2;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -81,13 +80,9 @@ export class TrustService {
       },
     });
 
-    const [refunded, disputed, verifications] = await Promise.all([
+    const [refunded, disputed] = await Promise.all([
       tx.order.count({ where: { sellerId: userId, status: 'REFUNDED' } }),
       tx.order.count({ where: { sellerId: userId, status: 'DISPUTE' } }),
-      tx.sellerVerification.findMany({
-        where: { userId, status: 'VERIFIED' },
-        select: { kind: true },
-      }),
     ]);
 
     const ageDays = Math.max(0, (Date.now() - user.createdAt.getTime()) / (86400 * 1000));
@@ -105,8 +100,6 @@ export class TrustService {
     const depositRub = Number(user.depositAvailableCents + user.depositLockedCents) / 100;
     const deposit = logCap(depositRub, 100_000, 150);
 
-    const verification = scoreVerifications(verifications.map((v) => v.kind));
-
     const daysSinceSeen = Math.max(0, (Date.now() - user.lastSeenAt.getTime()) / (86400 * 1000));
     const activity = daysSinceSeen <= 3 ? 70 : daysSinceSeen <= 14 ? 40 : daysSinceSeen <= 45 ? 15 : 0;
 
@@ -114,7 +107,7 @@ export class TrustService {
     if (user.banReason) penalties += 200;
     penalties = clamp(penalties, 0, 1000);
 
-    const raw = accountAge + completedSales + reviews + successRate + deposit + verification + activity;
+    const raw = accountAge + completedSales + reviews + successRate + deposit + activity;
     const score = clamp(raw - penalties, 0, 1000);
     const level = levelFromScore(score);
 
@@ -139,7 +132,7 @@ export class TrustService {
     }
 
     const breakdown: TrustBreakdown = {
-      accountAge, completedSales, reviews, successRate, deposit, verification, activity, penalties, raw, score, level,
+      accountAge, completedSales, reviews, successRate, deposit, activity, penalties, raw, score, level,
     };
     return breakdown;
   }
@@ -154,14 +147,4 @@ export class TrustService {
     if (user.trustDirty || stale) return this.recompute(userId);
     return null;
   }
-}
-
-function scoreVerifications(kinds: SellerVerificationKind[]): number {
-  let n = 0;
-  if (kinds.includes('PHONE_SMS')) n += 25;
-  if (kinds.includes('PHONE_CALL')) n += 20;
-  if (kinds.includes('PHONE_VOICE')) n += 20;
-  if (kinds.includes('PASSPORT')) n += 50;
-  if (kinds.includes('VOICE_IDENTITY')) n += 35;
-  return clamp(n, 0, 150);
 }

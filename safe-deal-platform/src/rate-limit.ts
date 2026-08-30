@@ -1,4 +1,5 @@
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { SharedCoordinationService } from './coordination/shared-coordination.service';
 
 type Bucket = { count: number; resetAt: number };
 
@@ -12,12 +13,32 @@ export function assertRateLimit(key: string, limit: number, windowMs: number): v
   const now = Date.now();
   const cur = buckets.get(key);
   if (!cur || now >= cur.resetAt) {
+    if (!cur && buckets.size >= 10_000) {
+      const oldest = buckets.keys().next().value as string | undefined;
+      if (oldest) buckets.delete(oldest);
+    }
     buckets.set(key, { count: 1, resetAt: now + windowMs });
     return;
   }
   cur.count += 1;
   if (cur.count > limit) {
     const retrySec = Math.max(1, Math.ceil((cur.resetAt - now) / 1000));
+    throw new HttpException(
+      { message: `Слишком много запросов. Подождите ${retrySec} с.`, retryAfterSec: retrySec },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+}
+
+/** Shared fixed-window limiter for security-sensitive, scale-out request paths. */
+@Injectable()
+export class DistributedRateLimiter {
+  constructor(private readonly coordination: SharedCoordinationService) {}
+
+  async assert(key: string, limit: number, windowMs: number): Promise<void> {
+    const result = await this.coordination.consumeFixedWindow(key, limit, windowMs);
+    if (result.allowed) return;
+    const retrySec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
     throw new HttpException(
       { message: `Слишком много запросов. Подождите ${retrySec} с.`, retryAfterSec: retrySec },
       HttpStatus.TOO_MANY_REQUESTS,

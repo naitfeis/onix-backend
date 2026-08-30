@@ -26,26 +26,18 @@ test('public trust card never exposes trustScore and has buyer aliases', () => {
     ratingAverage: 4.8,
     ratingCount: 120,
     completedSales: 200,
-    verifications: [
-      { kind: 'PHONE_SMS', status: 'VERIFIED' },
-      { kind: 'PASSPORT', status: 'REJECTED' },
-      { kind: 'VOICE_IDENTITY', status: 'VERIFIED' },
-    ],
     proActive: true,
   });
   assert.equal(card.level, 4);
   assert.equal(card.trustLevel, 4);
   assert.equal(card.depositTotal, '5000000');
   assert.equal(card.depositTotalCents, '5000000');
-  assert.equal(card.phoneVerified, true);
-  assert.equal(card.passportVerified, false);
-  assert.equal(card.voiceVerified, true);
   assert.equal('trustScore' in card, false);
   assertNoTrustScore(card);
   const json = JSON.stringify(card);
   assert.equal(json.includes('trustScore'), false);
   assert.match(json, /"level":4/);
-  assert.match(json, /"phoneVerified":true/);
+  assert.equal(json.includes('phoneVerified'), false);
 });
 
 test('assertNoTrustScore rejects leaked score', () => {

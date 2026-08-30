@@ -4,6 +4,7 @@ import { AiModule } from './ai/ai.module';
 import { AuthGuard, AuthModule } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { ApiExceptionFilter } from './common';
+import { CoordinationModule } from './coordination/coordination.module';
 import { DatabaseModule } from './database.module';
 import { EngagementModule } from './engagement.module';
 import { EscrowModule } from './escrow.module';
@@ -26,6 +27,7 @@ import { spaServeModules } from './spa-static';
 @Module({
   imports: [
     ...spaServeModules(),
+    CoordinationModule,
     DatabaseModule,
     ObservabilityModule,
     IdempotencyModule,

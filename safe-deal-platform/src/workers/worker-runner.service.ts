@@ -122,19 +122,27 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     const started = Date.now();
     const run = await this.prisma.workerJobRun.create({
       data: { jobName: job.name },
+      select: { id: true },
+    }).catch((error) => {
+      structuredLog.warn('worker job-run create failed', { job: job.name }, error);
+      return null;
     });
     try {
       const processed = await this.locks.withLease(job.name, job.leaseTtlMs, () => job.run());
       const durationMs = Date.now() - started;
-      await this.prisma.workerJobRun.update({
-        where: { id: run.id },
-        data: {
-          finishedAt: new Date(),
-          ok: true,
-          processed,
-          metadata: { durationMs, leased: true } as Prisma.InputJsonValue,
-        },
-      });
+      if (run) {
+        await this.prisma.workerJobRun.update({
+          where: { id: run.id },
+          data: {
+            finishedAt: new Date(),
+            ok: true,
+            processed,
+            metadata: { durationMs, leased: true } as Prisma.InputJsonValue,
+          },
+        }).catch((error) => {
+          structuredLog.warn('worker job-run success persistence failed', { job: job.name }, error);
+        });
+      }
       this.metrics.recordWorkerJob(job.name, processed, true, durationMs);
       if (processed > 0) {
         structuredLog.info('worker job ok', { job: job.name, processed, durationMs });
@@ -142,15 +150,19 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       const durationMs = Date.now() - started;
       const message = err instanceof Error ? err.message.slice(0, 1000) : 'error';
-      await this.prisma.workerJobRun.update({
-        where: { id: run.id },
-        data: {
-          finishedAt: new Date(),
-          ok: false,
-          error: message,
-          metadata: { durationMs } as Prisma.InputJsonValue,
-        },
-      }).catch(() => undefined);
+      if (run) {
+        await this.prisma.workerJobRun.update({
+          where: { id: run.id },
+          data: {
+            finishedAt: new Date(),
+            ok: false,
+            error: message,
+            metadata: { durationMs } as Prisma.InputJsonValue,
+          },
+        }).catch((error) => {
+          structuredLog.warn('worker job-run failure persistence failed', { job: job.name }, error);
+        });
+      }
       this.metrics.recordWorkerJob(job.name, 0, false, durationMs);
       this.errors.capture(err, { tags: { job: job.name }, route: `worker:${job.name}` });
     }

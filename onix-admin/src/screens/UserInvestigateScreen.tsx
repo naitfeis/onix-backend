@@ -25,7 +25,7 @@ type Investigation = {
   chats: Array<{ id: string; kind: string; title?: string | null; updatedAt: string; memberIds: string[]; lastMessage?: { text: string; createdAt: string } | null }>;
 };
 
-export function UserInvestigateScreen() {
+export function UserInvestigateScreen({ adminRole }: { adminRole: string }) {
   const [query, setQuery] = useState('');
   const [data, setData] = useState<Investigation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function UserInvestigateScreen() {
   const [reason, setReason] = useState('MISCONDUCT');
   const [comment, setComment] = useState('');
   const [days, setDays] = useState('');
-  const [role, setRole] = useState('USER');
+  const [status, setStatus] = useState('USER');
   const [balance, setBalance] = useState('');
 
   async function onSubmit(e: FormEvent) {
@@ -42,9 +42,11 @@ export function UserInvestigateScreen() {
     setBusy(true);
     setError(null);
     setData(null);
+    setStatus('USER');
     try {
       const result = await adminApi<Investigation>(`/api/admin/users/${encodeURIComponent(query.trim())}`);
       setData(result);
+      setStatus(result.profile.platformStatus || 'USER');
     } catch (err) {
       setError(err instanceof AdminApiError ? err.message : 'Failed');
     } finally {
@@ -81,11 +83,19 @@ export function UserInvestigateScreen() {
             {data.profile.bannedAt ? 'BANNED' : (data.profile.platformStatus || 'active')}
           </p>
           <div className="admin-actions">
-            <h3>Founder controls</h3>
+            <h3>Moderation controls</h3>
             <div className="row"><label>Ban reason<select value={reason} onChange={(e) => setReason(e.target.value)}><option value="MISCONDUCT">Misconduct</option><option value="THIRD_PARTY_ADS">Third-party ads</option><option value="OFF_PLATFORM_DEAL">Off-platform deal</option><option value="FRAUD">Fraud</option><option value="OTHER">Other</option></select></label><label>Duration days<input value={days} onChange={(e) => setDays(e.target.value)} inputMode="numeric" /></label></div>
             <label>Public reason / comment<textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} required /></label>
             <div className="row"><button className="danger" type="button" disabled={actionBusy} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/ban`, { method: 'PATCH', body: JSON.stringify({ reason, comment, ...(days ? { durationDays: Number(days) } : {}) }) })}>Ban account</button><button className="ghost" type="button" disabled={actionBusy} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/sell-ban`, { method: 'PATCH', body: JSON.stringify({ banned: !data.profile.sellBannedAt, comment }) })}>{data.profile.sellBannedAt ? 'Allow sales' : 'Ban sales'}</button></div>
-            <div className="row"><label>Role<select value={role} onChange={(e) => setRole(e.target.value)}><option>USER</option><option>VERIFIED_SELLER</option><option>MODERATOR</option><option>ADMIN</option><option>SUPER_ADMIN</option><option>VIP</option></select></label><button className="primary" type="button" disabled={actionBusy} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/role`, { method: 'PATCH', body: JSON.stringify({ role }) })}>Set role</button><label>Balance adjustment (cents)<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 or -1000" /></label><button className="primary" type="button" disabled={actionBusy || !balance} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/balance`, { method: 'POST', body: JSON.stringify({ amountCents: balance, reason: comment, idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}` }) })}>Adjust balance</button></div>
+            <div className="row">
+              {adminRole === 'SUPER_ADMIN' && (
+                <>
+                  <label>Platform status<select value={status} onChange={(e) => setStatus(e.target.value)}><option>USER</option><option>VERIFIED_SELLER</option><option>MODERATOR</option><option>ADMIN</option><option>SUPER_ADMIN</option><option>VIP</option></select></label>
+                  <button className="primary" type="button" disabled={actionBusy || status === data.profile.platformStatus} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })}>Set status</button>
+                </>
+              )}
+              <label>Balance adjustment (cents)<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 or -1000" /></label><button className="primary" type="button" disabled={actionBusy || !balance} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/balance`, { method: 'POST', body: JSON.stringify({ amountCents: balance, reason: comment, idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}` }) })}>Adjust balance</button>
+            </div>
           </div>
           <p className="muted">Balance {data.profile.balanceCents}¢ · trust L{data.profile.trustLevel ?? '—'} / {data.profile.trustScore ?? '—'}</p>
           <h3>Purchases</h3>

@@ -16,7 +16,6 @@ const SAMPLE_TOC = `
 255; 1259 74019 TABLE public UserRole neondb_owner
 265; 1259 139271 TABLE public UserReport neondb_owner
 274; 1259 188705 TABLE public ProductViewUnique neondb_owner
-278; 1259 204825 TABLE public ProductCreationSession neondb_owner
 300; 0 0 TABLE DATA public User neondb_owner
 301; 0 0 TABLE DATA public Order neondb_owner
 `;

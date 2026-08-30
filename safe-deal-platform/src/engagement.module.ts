@@ -10,7 +10,7 @@ import {
 import { AIService } from './ai/ai.service';
 import { AiModule } from './ai/ai.module';
 import { ensurePairChat, pairChatKey } from './chat-pair';
-import { AuthUser, CurrentUser, isStaffViewer, parseId } from './common';
+import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -159,7 +159,7 @@ export class ChatService {
       )) ?? chat.members.find((member) => member.userId !== user.id);
       const latestOrder = chat.orders[0];
       const subtitleRaw = chat.messages[0];
-      const subtitle = subtitleRaw?.deletedAt && !isStaffViewer(user)
+      const subtitle = subtitleRaw?.deletedAt
         ? 'Сообщение удалено'
         : subtitleRaw?.text;
       const peerOnix = other?.user.onixId ? formatOnixId(other.user.onixId) : undefined;
@@ -361,7 +361,6 @@ export class ChatService {
     await this.member(user.id, chatId);
     const take = Math.min(Math.max(limit, 1), 100);
     const beforeId = before ? parseId(before) : undefined;
-    const staffViewer = isStaffViewer(user);
 
     const memberRows = await this.prisma.chatMember.findMany({
       where: { chatId },
@@ -399,7 +398,7 @@ export class ChatService {
     });
 
     return rows.reverse().map((message) => messageDto(message, user.id, {
-      staffViewer,
+      staffViewer: false,
       memberReads,
     }));
   }
@@ -430,7 +429,7 @@ export class ChatService {
       });
       await this.ai.reply(user, chatId, body);
       return messageDto(message, user.id, {
-        staffViewer: isStaffViewer(user),
+        staffViewer: false,
       });
     }
 
@@ -489,7 +488,7 @@ export class ChatService {
     );
 
     return messageDto(message, user.id, {
-      staffViewer: isStaffViewer(user),
+      staffViewer: false,
       memberReads,
     });
   }
@@ -523,7 +522,7 @@ export class ChatService {
       messageByViewer.set(
         viewerId.toString(),
         messageDto(message, viewerId, {
-          staffViewer: viewerId === sender.id ? isStaffViewer(sender) : false,
+          staffViewer: false,
           memberReads: viewerId === sender.id ? memberReads : undefined,
         }) as unknown as Record<string, unknown>,
       );
@@ -563,7 +562,7 @@ export class ChatService {
     return { ok: true, scope: 'SELF' as const };
   }
 
-  /** Soft-delete globally. Sender may delete own; admin may delete any. */
+  /** Soft-delete globally. Only the sender may delete their own message. */
   async softDelete(user: AuthUser, chatId: string, messageId: bigint, reason?: string) {
     await this.member(user.id, chatId);
     const message = await this.prisma.message.findFirst({
@@ -571,8 +570,8 @@ export class ChatService {
     });
     if (!message) throw new NotFoundException('Сообщение не найдено.');
     const own = message.senderId === user.id;
-    if (!user.isAdmin && !own) {
-      throw new ForbiddenException('Удалить у всех может только отправитель или админ.');
+    if (!own) {
+      throw new ForbiddenException('Удалить у всех может только отправитель.');
     }
     if (message.deletedAt) return { ok: true, scope: 'GLOBAL' as const };
     await this.prisma.message.update({

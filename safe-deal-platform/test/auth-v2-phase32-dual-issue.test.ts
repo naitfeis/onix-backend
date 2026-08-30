@@ -17,6 +17,8 @@ import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
 import { RiskEngineService } from '../src/risk/risk-engine.service';
+import { MemoryCoordinationAdapter } from '../src/coordination/memory-coordination.adapter';
+import { SharedCoordinationService } from '../src/coordination/shared-coordination.service';
 
 function installKeys(): void {
   const pair = generateEd25519PemPair();
@@ -126,7 +128,16 @@ function buildOrchestrator(store: Store): AuthOrchestrator {
   keys.clearCache();
   const tokens = new TokenService(keys);
   const prisma = createSessionPrisma(store) as never;
-  const sessions = new SessionService(prisma, tokens, new DeviceTrustService(), new RiskEngineService(prisma));
+  const sessions = new SessionService(
+    prisma,
+    tokens,
+    new DeviceTrustService(),
+    new RiskEngineService(prisma),
+    new SharedCoordinationService(
+      new MemoryCoordinationAdapter(),
+      { backend: 'memory', instanceId: 'phase32-test' },
+    ),
+  );
   return new AuthOrchestrator(
     prisma,
     {} as never,

@@ -13,19 +13,24 @@ export function registerPwa(opts?: {
     /* ignore */
   }
 
-  const updateSW = registerSW({
-    immediate: true,
-    onRegisteredSW(_swUrl, registration) {
-      // Pull updates so stale SW (old auth interceptors) do not linger after deploy.
-      void registration?.update();
-    },
-    onNeedRefresh() {
-      opts?.onNeedRefresh?.(() => {
-        void updateSW(true);
-      });
-    },
-    onOfflineReady() {
-      opts?.onOfflineReady?.();
-    },
-  });
+  try {
+    const updateSW = registerSW({
+      immediate: true,
+      onRegisteredSW(_swUrl, registration) {
+        // Pull updates so stale SW (old auth interceptors) do not linger after deploy.
+        // RU CF timeouts on sw.js must not surface as unhandledrejection.
+        void registration?.update().catch(() => { /* offline / timed out */ });
+      },
+      onNeedRefresh() {
+        opts?.onNeedRefresh?.(() => {
+          void Promise.resolve(updateSW(true)).catch(() => { /* ignore */ });
+        });
+      },
+      onOfflineReady() {
+        opts?.onOfflineReady?.();
+      },
+    });
+  } catch {
+    /* SW unsupported or blocked — app still works online */
+  }
 }

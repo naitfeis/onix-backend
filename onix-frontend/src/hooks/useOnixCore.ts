@@ -10,7 +10,7 @@ import {
   telegramHaptic,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
-import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type PlatformStatus, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
+import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
 import {
   bootstrapPhase,
   bootstrapPhaseSync,
@@ -308,11 +308,13 @@ export function useOnixCore() {
         return;
       }
 
-      // Session OK: profile loads without waiting for products (already in flight).
-      void catalogReady;
+      // Session OK: profile may load alongside the public catalog, but the
+      // personalized catalog must start only after that request settles.
+      // This prevents two identical product bootstraps racing each other.
       const current = await bootstrapPhase('profile-load', () => loadProfile());
       markBootstrapPhase('profile', 0);
-      // Re-fetch first page with Bearer so favorites/followed personalize — no preload of 100.
+      await catalogReady;
+      // Re-fetch first page with Bearer so favorites/followed personalize.
       void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
@@ -344,6 +346,25 @@ export function useOnixCore() {
     bootstrapStart();
     void refreshAll();
   }, [refreshAll]);
+
+  // Ping origin while the tab is open — Render free tier sleeps after idle;
+  // a warm instance cuts RU cold-start hangs on refresh/products.
+  useEffect(() => {
+    if (isTelegramMiniApp()) return;
+    const ping = () => {
+      void fetch('/api/health/live', { method: 'GET', cache: 'no-store', credentials: 'omit' })
+        .catch(() => { /* offline */ });
+    };
+    const id = window.setInterval(ping, 4 * 60_000);
+    const onVis = () => {
+      if (!document.hidden) ping();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
 
   // Keep lastSeenAt fresh while the shell is open — including background tabs
   // (browsers throttle timers, but we must not skip beats solely because document.hidden).
@@ -802,14 +823,6 @@ export function useOnixCore() {
       void load('deals', API_PATHS.orders);
     }), [load, run]);
 
-  const supportRefund = useCallback((dealId: string, reason?: string) => run(`refund-${dealId}`, () =>
-    api.post(API_PATHS.supportRefund(dealId), { ...(reason ? { reason } : {}) }),
-  () => void load('deals', API_PATHS.orders)), [load, run]);
-
-  const supportComplete = useCallback((dealId: string, reason?: string) => run(`complete-${dealId}`, () =>
-    api.post(API_PATHS.supportComplete(dealId), { ...(reason ? { reason } : {}) }),
-  () => void load('deals', API_PATHS.orders)), [load, run]);
-
   const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => run('withdraw', () =>
     api.post(API_PATHS.walletWithdraw, {
       amountCents: cents(amountRubles),
@@ -851,45 +864,6 @@ export function useOnixCore() {
     api.post(API_PATHS.orderRefundRequest(dealId), { reason, idempotencyKey: crypto.randomUUID() }),
   () => void load('deals', API_PATHS.orders)), [load, run]);
 
-  const adminAction = useCallback((
-    action: 'ban' | 'unban',
-    userId: string,
-    ban?: { reason: BanReasonCode; comment: string; durationDays?: number },
-  ) => run(`admin-${action}`, () => {
-    if (action === 'ban' && ban) {
-      return api.patch(API_PATHS.adminBan(userId), {
-        banned: true,
-        reason: ban.reason,
-        comment: ban.comment,
-        ...(ban.durationDays ? { durationDays: ban.durationDays } : {}),
-      });
-    }
-    return api.patch(API_PATHS.adminBan(userId), { banned: false });
-  }), [run]);
-
-  const setUserStatus = useCallback((userId: string, status: PlatformStatus) =>
-    run('admin-status', () => api.patch(API_PATHS.adminStatus(userId), { status })), [run]);
-
-  const loadSecurityFlags = useCallback(async (onixId: string) => {
-    try {
-      return await api.get<{
-        onixId: string;
-        userId: string;
-        flags: Array<{
-          code: string;
-          severity: string;
-          userId: string;
-          accountAgeDays: number;
-          restrictedAccountSaleCents: string;
-          protectionUntil: string;
-        }>;
-      }>(API_PATHS.adminSecurityFlags(onixId));
-    } catch (error) {
-      notify('error');
-      throw error;
-    }
-  }, []);
-
   /** Website / PWA only — revoke session and return to AuthGate. Hidden in Telegram Mini App. */
   const signOut = useCallback(async () => {
     if (isTelegramMiniApp()) return;
@@ -928,8 +902,8 @@ export function useOnixCore() {
     profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, supportRefund, supportComplete, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
-    markNotificationRead, adminAction, setUserStatus, loadSecurityFlags, reportUser, signOut,
+    toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
+    markNotificationRead, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping,
   };
 }

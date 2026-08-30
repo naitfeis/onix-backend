@@ -9,6 +9,8 @@ import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
 import { getRealtimeClient } from '../realtime/client';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { t } from '../i18n';
 
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
@@ -35,7 +37,7 @@ function chatViewportH(): number {
   if (typeof window === 'undefined') return 800;
   const desktop = window.matchMedia('(min-width: 1100px)').matches;
   const chrome = desktop ? 24 : 88;
-  return Math.max(320, window.innerHeight - chrome);
+  return Math.max(320, (window.visualViewport?.height ?? window.innerHeight) - chrome);
 }
 
 function defaultChatPanelSize(): { w: number; h: number } {
@@ -84,27 +86,15 @@ export function Chats({
   const prevChatQueryRef = useRef('');
   const lastSeenMsgIdRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
-  const isStaff = Boolean(
-    core.profile?.isAdmin
-    || core.profile?.status === 'ADMIN'
-    || core.profile?.status === 'SUPER_ADMIN'
-    || core.profile?.status === 'MODERATOR'
-    || core.profile?.roles.includes('ADMIN')
-    || core.profile?.roles.includes('SUPER_ADMIN')
-    || core.profile?.roles.includes('MODERATOR'),
-  );
-  const canSeeReadReceipts = Boolean(
-    core.profile?.isAdmin
-    || core.profile?.status === 'ADMIN'
-    || core.profile?.status === 'SUPER_ADMIN'
-    || core.profile?.status === 'MODERATOR'
-    || core.profile?.roles.includes('ADMIN')
-    || core.profile?.roles.includes('SUPER_ADMIN')
-    || core.profile?.roles.includes('MODERATOR'),
-  );
-  const isAdmin = Boolean(core.profile?.roles.includes('ADMIN'));
   const thread = core.chats.find(item => item.id === threadId);
   const messages = threadId ? core.messages[threadId] || [] : [];
+  const messageVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => messagesRef.current,
+    estimateSize: () => 92,
+    overscan: 10,
+    getItemKey: (index) => messages[index]?.id ?? index,
+  });
   const { loadMessages, searchChats, refreshChats, sendMessage } = core;
   const memberPickerOpen = groupOpen || addMembersOpen;
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
@@ -288,6 +278,9 @@ export function Chats({
     const lastId = messages[messages.length - 1]?.id ?? null;
     if (stickToBottomRef.current) {
       el.scrollTop = el.scrollHeight;
+      if (lastId) {
+        requestAnimationFrame(() => messageVirtualizer.scrollToIndex(messages.length - 1, { align: 'end' }));
+      }
       lastSeenMsgIdRef.current = lastId;
       setPendingNewCount(0);
       return;
@@ -447,6 +440,7 @@ export function Chats({
     if (!el) return;
     stickToBottomRef.current = true;
     el.scrollTop = el.scrollHeight;
+    if (messages.length > 0) messageVirtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
     lastSeenMsgIdRef.current = messages[messages.length - 1]?.id ?? null;
     setPendingNewCount(0);
   };
@@ -516,12 +510,12 @@ export function Chats({
         <Input
           value={chatQuery}
           onChange={(event) => setChatQuery(event.target.value)}
-          placeholder="🔍 Поиск: ONIX ID, ник"
-          aria-label="Поиск чатов"
+          placeholder={t('chat.search')}
+          aria-label={t('chat.searchAria')}
         />
         <Button type="button" variant="secondary" aria-label="Создать группу" onClick={() => { resetMemberPicker(); setGroupOpen(true); }}>+</Button>
       </div>
-      {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title="Нет диалогов" text="Напишите продавцу из карточки товара." /> :
+      {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
         core.chats.map(chat => <button
           className="thread"
           key={chat.id}
@@ -629,7 +623,7 @@ export function Chats({
       </div>}
       <div className="messages-wrap">
       <div
-        className="messages"
+        className="messages messages--virtual"
         ref={messagesRef}
         onScroll={() => {
           const el = messagesRef.current;
@@ -642,8 +636,18 @@ export function Chats({
           }
         }}
         onClick={() => setMenuMessageId(null)}
-      >{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> : messages.map(message =>
-        <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`} key={message.id}>
+      >{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> :
+        <div className="messages__virtual-list" style={{ height: messageVirtualizer.getTotalSize(), position: 'relative' }}>
+        {messageVirtualizer.getVirtualItems().map((virtualRow) => {
+          const message = messages[virtualRow.index]!;
+          return <div
+            className="messages__virtual-row"
+            key={message.id}
+            data-index={virtualRow.index}
+            ref={messageVirtualizer.measureElement}
+            style={{ transform: `translateY(${virtualRow.start}px)` }}
+          >
+        <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
           {!message.mine && <UserAvatar userId={message.kind === 'SYSTEM' ? undefined : message.sender.id} avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
           <div
             className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''} ${message.deleted ? 'deleted' : ''}`}
@@ -663,11 +667,10 @@ export function Chats({
             {message.kind !== 'SYSTEM' && <small>{publicAt(message.sender.username)} <StaffBadge badge={message.sender.badge} /></small>}
             {message.kind === 'SYSTEM' && <small>{thread.kind === 'AI' ? 'ONIX AI' : '🛡 ONIX'}</small>}
             <p><MessageText
-              text={isStaff && message.deleted && message.originalText ? message.originalText : message.text}
+              text={message.text}
               onOpenOnix={openOnixProfile}
               onOpenLot={(lot) => void openLot(lot)}
             /></p>
-            {isStaff && message.deleted && <small className="receipt-admin">удалено · {message.deletedAt ? new Date(message.deletedAt).toLocaleString('ru-RU') : ''}</small>}
             {message.kind === 'SYSTEM' && message.text.includes('Заказ создан') && (() => {
               const orderId = message.text.match(/Заказ #(\d+)/)?.[1]
                 || thread.dealId
@@ -675,23 +678,12 @@ export function Chats({
               if (!orderId) return null;
               return <Button variant="primary" onClick={() => openDeal(orderId)}>Открыть заказ</Button>;
             })()}
-            {thread.kind === 'AI' && message.kind === 'SYSTEM' && /Опубликовать|Изменить/i.test(message.text) && message.text.includes('Проверьте карточку') && (
-              <div className="card-actions">
-                <Button busy={core.actionBusy === `message-${thread.id}`} onClick={() => void sendMessage(thread.id, 'Опубликовать').then((ok) => { if (ok) void loadMessages(thread.id); })}>Опубликовать</Button>
-                <Button variant="secondary" busy={core.actionBusy === `message-${thread.id}`} onClick={() => void sendMessage(thread.id, 'Изменить').then((ok) => { if (ok) void loadMessages(thread.id); })}>Изменить</Button>
-              </div>
-            )}
-            {thread.kind === 'AI' && message.kind === 'SYSTEM' && /Товар опубликован/i.test(message.text) && (() => {
-              const lot = message.text.match(/ONIXLOT-(\d+)/i)?.[1];
-              if (!lot) return null;
-              return <Button variant="secondary" onClick={() => void openLot(Number(lot))}>Открыть товар</Button>;
-            })()}
             {menuMessageId === message.id && message.kind !== 'SYSTEM' && !message.deleted && (
               <div className="message-menu" role="menu" onClick={(e) => e.stopPropagation()}>
                 <button type="button" role="menuitem" onClick={() => void deleteMessage(message.id, 'self')}>
                   Удалить у меня
                 </button>
-                {(message.mine || isAdmin) && (
+                {message.mine && (
                   <button type="button" role="menuitem" onClick={() => void deleteMessage(message.id, 'global')}>
                     Удалить у всех
                   </button>
@@ -699,14 +691,14 @@ export function Chats({
               </div>
             )}
             <div className="message__meta">
-              {(message.mine && message.deliveryStatus) || (canSeeReadReceipts && message.mine && message.deliveryStatus === 'READ') ? (
+              {message.mine && message.deliveryStatus ? (
                 <div className="message__meta-status">
                   {message.mine && message.deliveryStatus ? (
                     <span className="receipt" aria-label={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
                       {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
                     </span>
                   ) : null}
-                  {canSeeReadReceipts && message.mine && message.deliveryStatus === 'READ' ? (
+                  {message.deliveryStatus === 'READ' ? (
                     <span
                       className="receipt-admin"
                       title={
@@ -728,10 +720,13 @@ export function Chats({
               </time>
             </div>
           </div>
-        </div>)}</div>
+        </div>
+        </div>;
+        })}
+        </div>}</div>
       {pendingNewCount > 0 && (
         <button type="button" className="new-messages-pill" onClick={scrollToLatest}>
-          ↓ Новые ({pendingNewCount})
+          ↓ {t('chat.newMessages')} ({pendingNewCount})
         </button>
       )}
       </div>
@@ -751,8 +746,6 @@ export function Chats({
             <div className="ai-quick-replies" id={`ai-actions-${thread.id}`} role="group" aria-label="Быстрые действия">
               {[
                 { label: 'О площадке ONIX', send: 'О площадке ONIX' },
-                { label: 'Добавить товар', send: 'Добавить товар' },
-                { label: 'Вывести деньги', send: 'Вывести деньги' },
                 { label: 'Написать в поддержку', send: 'Написать в поддержку' },
                 { label: 'Как работает система гаранта', send: 'Как работает система гаранта' },
                 { label: 'Сколько ждать вывод', send: 'Сколько ждать вывод' },
@@ -789,13 +782,13 @@ export function Chats({
             }
           }}
           maxLength={1000}
-          placeholder="Введите сообщение..."
-          aria-label="Сообщение"
+          placeholder={t('chat.messagePlaceholder')}
+          aria-label={t('chat.messageAria')}
         />
-        <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>Отправить</Button>
+        <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>{t('chat.send')}</Button>
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
-    </> : <StateView title="Выберите диалог" text="Переписка откроется здесь." />}</div>
+    </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
     <button
       type="button"
       className="chat-edge-resizer chat-edge-resizer--x desktop-only"

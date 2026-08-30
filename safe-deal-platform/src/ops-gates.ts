@@ -1,15 +1,14 @@
 /**
- * Scale-out / ops gates — not implemented until needed.
+ * Scale-out / ops gates.
  *
  * Refresh grace (SessionService.rotationGraceCache):
  *   WEB_CONCURRENCY > 1  OR  >1 API instance
- *     → shared refresh grace required (Redis / DB)
- *   Single node (current Render free): in-memory grace is intentional and sufficient.
+ *     → Redis coordination is required at startup.
+ *   Memory is limited to local development/tests on one process.
  *
  * Realtime bus (RealtimeBus / RealtimeHubService):
  *   WEB_CONCURRENCY > 1  OR  >1 API instance
- *     → shared pub/sub required (Redis)
- *   Single node: in-memory EventEmitter is OK for Stage 5.6 slice 1.
+ *     → Redis pub/sub is required at startup.
  *
  * Backup:
  *   Prefer Neon/Render PITR + `npm run ops:backup-drill -- verify`
@@ -19,6 +18,6 @@
  *   Stay MANUAL until Payment Launch Gate (signature, replay, amount-from-DB).
  */
 export const SCALE_OUT_GATES = {
-  sharedRefreshGraceWhen: 'WEB_CONCURRENCY > 1 or multi-instance API',
-  sharedRealtimeBusWhen: 'WEB_CONCURRENCY > 1 or multi-instance API',
+  redisRequiredWhen: 'production, WEB_CONCURRENCY > 1, or SCALE_OUT=true',
+  memoryAllowedWhen: 'development/test and one API process only',
 } as const;

@@ -10,8 +10,9 @@ html[data-theme="dark"] {
 
   --text: rgba(255, 255, 255, 0.92);
   --text-primary: rgba(255, 255, 255, 0.92);
-  --text-secondary: rgba(255, 255, 255, 0.58);
-  --text-caption: rgba(255, 255, 255, 0.42);
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-caption: rgba(255, 255, 255, 0.58);
+  --text-on-accent: #ffffff;
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
 
@@ -31,7 +32,7 @@ html[data-theme="dark"] {
   --glass-thick-bg: rgba(18, 16, 28, 0.94);
   --glass-card-bg: rgba(18, 16, 28, 0.9);
 
-  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
   --glass-highlight: none;
   --glass-inner-shadow: none;
   --glass-drop-shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
@@ -43,7 +44,7 @@ html[data-theme="dark"] {
   --glass-recessed-border: 1px solid rgba(255, 255, 255, 0.1);
   --glass-recessed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 
-  --line: rgba(255, 255, 255, 0.12);
+  --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.22);
   --surface: var(--glass-card-bg);
   --surface-2: var(--glass-subtle-bg);
@@ -93,8 +94,8 @@ html[data-theme="dark"] {
   --radius-hero: 24px;
   --radius-nav: 28px;
 
-  --font-display: Syne, "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: system-ui, "Segoe UI", Syne, "DM Sans", sans-serif;
+  --font-body: system-ui, "Segoe UI", "DM Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
   --direction: 1;
@@ -154,8 +155,9 @@ html[data-theme="light"] {
 
   --text: #141820;
   --text-primary: #141820;
-  --text-secondary: rgba(20, 24, 32, 0.62);
-  --text-caption: rgba(20, 24, 32, 0.45);
+  --text-secondary: rgba(20, 24, 32, 0.74);
+  --text-caption: rgba(20, 24, 32, 0.6);
+  --text-on-accent: #ffffff;
   --muted: var(--text-secondary);
   --dim: var(--text-caption);
   --bg-elevated: rgba(232, 238, 246, 0.98);
@@ -241,22 +243,18 @@ html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
 html[data-theme="light"] .wallet-hero,
 html[data-theme="light"] .desktop-hero,
-html[data-theme="light"] .sidebar-left,
 html[data-theme="light"] .section-head,
 html[data-theme="light"] .topbar,
 html[data-theme="light"] .modal__panel,
 html[data-theme="light"] .product-card,
-html[data-theme="light"] .market-hero,
 html[data-theme="dark"] .card,
 html[data-theme="dark"] .widget,
 html[data-theme="dark"] .wallet-hero,
 html[data-theme="dark"] .desktop-hero,
-html[data-theme="dark"] .sidebar-left,
 html[data-theme="dark"] .section-head,
 html[data-theme="dark"] .topbar,
 html[data-theme="dark"] .modal__panel,
-html[data-theme="dark"] .product-card,
-html[data-theme="dark"] .market-hero {
+html[data-theme="dark"] .product-card {
   color: var(--text);
   text-shadow: none;
   background: var(--glass-card-bg);
@@ -284,18 +282,30 @@ html[data-theme="dark"] .public-profile .product-card {
 }
 
 /*
- * Sidebar: one blur layer on the panel only.
- * Nav hover uses solid fill (no nested blur) — avoids stripe repaints.
- * overflow:hidden clips nav highlights inside the frame.
+ * Sidebars: opaque fill, no backdrop blur.
+ * Acrylic blur + bright glass borders read as vertical «потеки» / white streaks.
  */
 .sidebar-left,
 .sidebar-right,
 html[data-theme="light"] .sidebar-left,
 html[data-theme="dark"] .sidebar-left {
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   isolation: isolate;
   contain: paint;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .sidebar-left,
+html[data-theme="light"] .sidebar-right {
+  border-color: rgba(20, 25, 35, 0.06);
+  background: rgba(255, 255, 255, 0.97);
+}
+
+html[data-theme="dark"] .sidebar-left,
+html[data-theme="dark"] .sidebar-right {
+  background: rgba(14, 12, 22, 0.97);
 }
 
 /* No edge glints — they read as stripes through stacked glass */
@@ -350,11 +360,9 @@ html[data-theme="light"] .topbar::after {
 .glass-thick,
 .glass-card,
 .card,
-.sidebar-left,
 .widget,
 .wallet-hero,
 .desktop-hero,
-.market-hero,
 .section-head,
 .modal__panel,
 .auth-notice,
@@ -375,6 +383,19 @@ html[data-theme="light"] .topbar::after {
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
   border-radius: var(--radius-card);
+}
+
+/* Sidebars are opaque panels — listed separately to avoid acrylic banding */
+.sidebar-left,
+.sidebar-right {
+  position: relative;
+  overflow: hidden;
+  background: var(--glass-bg);
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 
 /* Auth banner: allow wrapped actions; do not clip the Telegram button */

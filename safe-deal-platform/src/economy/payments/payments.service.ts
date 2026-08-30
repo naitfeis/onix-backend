@@ -2,8 +2,9 @@ import {
   BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PaymentProviderCode, PaymentWallet, Prisma } from '@prisma/client';
+import { PaymentProviderCode, PaymentWallet, Prisma, type PaymentIntent } from '@prisma/client';
 import { AuthUser } from '../../common';
+import { withSerializableTransaction } from '../../database/transaction-retry';
 import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
@@ -14,8 +15,6 @@ import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
 import { DepositService } from '../wallet/deposit.service';
 import { TrustService } from '../trust/trust.service';
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
-
 export type ProviderEventInput = {
   eventId: string;
   providerPaymentId: string;
@@ -25,6 +24,10 @@ export type ProviderEventInput = {
   claimedAmountCents?: bigint;
   claimedCurrency?: string;
 };
+
+const TOP_UP_CLAIM_STALE_MS = 30_000;
+const TOP_UP_CLAIM_POLL_ATTEMPTS = 20;
+const TOP_UP_CLAIM_POLL_MS = 25;
 
 @Injectable()
 export class PaymentsService {
@@ -76,35 +79,125 @@ export class PaymentsService {
     const provider = this.provider(dto.provider);
     const amountCents = BigInt(dto.amountCents);
 
-    return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.paymentIntent.findUnique({ where: { idempotencyKey: dto.idempotencyKey } });
-      if (existing) {
-        if (existing.userId !== user.id || existing.amountCents !== amountCents || existing.wallet !== dto.wallet) {
-          throw new ConflictException('Ключ идемпотентности уже использован.');
-        }
-        return existing;
+    const assertMatchingIntent = <T extends {
+      userId: bigint;
+      amountCents: bigint;
+      wallet: PaymentWallet;
+      provider: PaymentProviderCode;
+    }>(existing: T): T => {
+      if (
+        existing.userId !== user.id
+        || existing.amountCents !== amountCents
+        || existing.wallet !== dto.wallet
+        || existing.provider !== dto.provider
+      ) {
+        throw new ConflictException('Ключ идемпотентности уже использован.');
       }
-      const created = await provider.createIntent({
-        userId: user.id,
-        wallet: dto.wallet,
-        amountCents,
-        idempotencyKey: dto.idempotencyKey,
+      return existing;
+    };
+
+    let claim: PaymentIntent;
+    let ownsClaim = false;
+    try {
+      claim = await withSerializableTransaction(this.prisma, (tx) =>
+        tx.paymentIntent.create({
+          data: {
+            userId: user.id,
+            wallet: dto.wallet,
+            provider: dto.provider,
+            amountCents,
+            currency: 'RUB',
+            status: 'CREATED',
+            idempotencyKey: dto.idempotencyKey,
+          },
+        }));
+      ownsClaim = true;
+    } catch (error) {
+      if (!this.isUniqueConflict(error)) throw error;
+      const existing = await this.prisma.paymentIntent.findUnique({
+        where: { idempotencyKey: dto.idempotencyKey },
       });
-      return tx.paymentIntent.create({
-        data: {
-          userId: user.id,
-          wallet: dto.wallet,
-          provider: dto.provider,
-          amountCents,
-          currency: 'RUB',
-          status: created.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
-          idempotencyKey: dto.idempotencyKey,
-          providerRef: created.providerRef,
-          metadata: (created.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
-          succeededAt: created.status === 'SUCCEEDED' ? new Date() : undefined,
-        },
+      if (!existing) throw error;
+      claim = existing;
+    }
+
+    assertMatchingIntent(claim);
+    if (!ownsClaim && claim.status === 'CREATED') {
+      const observed = await this.observeOrTakeOverTopUpClaim(claim, assertMatchingIntent);
+      claim = observed.intent;
+      ownsClaim = observed.ownsClaim;
+    }
+    if (!ownsClaim || claim.status !== 'CREATED') return claim;
+
+    // This is deliberately outside every retryable transaction callback.
+    // A stale-owner recovery may repeat it after a crash, so the provider MUST
+    // deduplicate the stable idempotency key required by PaymentProvider.
+    const created = await provider.createIntent({
+      userId: user.id,
+      wallet: dto.wallet,
+      amountCents,
+      idempotencyKey: dto.idempotencyKey,
+    });
+
+    const finalized = await this.prisma.paymentIntent.updateMany({
+      where: {
+        id: claim.id,
+        status: 'CREATED',
+        updatedAt: claim.updatedAt,
+      },
+      data: {
+        status: created.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
+        providerRef: created.providerRef,
+        metadata: (created.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+        succeededAt: created.status === 'SUCCEEDED' ? new Date() : undefined,
+      },
+    });
+    const current = await this.prisma.paymentIntent.findUnique({
+      where: { idempotencyKey: dto.idempotencyKey },
+    });
+    if (!current) throw new NotFoundException('Платёж не найден после создания.');
+    // A stale takeover can fence an earlier owner. Provider-side idempotency
+    // makes both recovery calls resolve to the same provider intent.
+    if (finalized.count === 0) return assertMatchingIntent(current);
+    return current;
+  }
+
+  private isUniqueConflict(error: unknown): boolean {
+    return Boolean(
+      error
+      && typeof error === 'object'
+      && (error as { code?: unknown }).code === 'P2002',
+    );
+  }
+
+  private async observeOrTakeOverTopUpClaim(
+    initial: PaymentIntent,
+    assertMatching: (intent: PaymentIntent) => PaymentIntent,
+  ): Promise<{ intent: PaymentIntent; ownsClaim: boolean }> {
+    let intent = initial;
+    for (let attempt = 0; attempt < TOP_UP_CLAIM_POLL_ATTEMPTS; attempt += 1) {
+      if (intent.status !== 'CREATED') return { intent, ownsClaim: false };
+      if (Date.now() - intent.updatedAt.getTime() >= TOP_UP_CLAIM_STALE_MS) {
+        const claimedAt = new Date();
+        const takeover = await this.prisma.paymentIntent.updateMany({
+          where: { id: intent.id, status: 'CREATED', updatedAt: intent.updatedAt },
+          data: { updatedAt: claimedAt },
+        });
+        if (takeover.count === 1) {
+          return {
+            intent: { ...intent, updatedAt: claimedAt },
+            ownsClaim: true,
+          };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, TOP_UP_CLAIM_POLL_MS));
+      const current = await this.prisma.paymentIntent.findUnique({
+        where: { idempotencyKey: intent.idempotencyKey },
       });
-    }, SERIALIZABLE);
+      if (!current) throw new NotFoundException('Заявка на платёж не найдена.');
+      intent = assertMatching(current);
+    }
+    return { intent, ownsClaim: false };
   }
 
   async confirmManual(user: AuthUser, intentId: string) {
@@ -119,6 +212,7 @@ export class PaymentsService {
       intentId,
       { intentId, actorId: user.id.toString(), provider: 'MANUAL' },
       () => this.settleIntentOnce(intentId, { expectProvider: 'MANUAL' }),
+      { recover: () => this.recoverProviderEvent('MANUAL', intentId, 'SUCCEEDED') },
     );
     return result.value;
   }
@@ -181,6 +275,14 @@ export class PaymentsService {
           providerPaymentId: event.providerPaymentId,
         });
       },
+      {
+        recover: () => this.recoverProviderEvent(
+          provider,
+          event.intentId,
+          event.status,
+          event.providerPaymentId,
+        ),
+      },
     );
     logMoneyEvent('payment_webhook', {
       status: result.kind === 'replay' ? 'replay' : 'success',
@@ -192,6 +294,24 @@ export class PaymentsService {
     return result.value;
   }
 
+  private async recoverProviderEvent(
+    provider: PaymentProviderCode,
+    intentId: string,
+    status: 'SUCCEEDED' | 'FAILED' | 'CANCELED',
+    providerPaymentId?: string,
+  ) {
+    const intent = await this.prisma.paymentIntent.findUnique({ where: { id: intentId } });
+    if (
+      !intent
+      || intent.provider !== provider
+      || intent.status !== status
+      || (providerPaymentId && intent.providerRef !== providerPaymentId)
+    ) {
+      return undefined;
+    }
+    return intent;
+  }
+
   private async settleIntentOnce(
     intentId: string,
     opts: {
@@ -201,7 +321,7 @@ export class PaymentsService {
       claimedCurrency?: string;
     },
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');
       if (intent.provider !== opts.expectProvider) {
@@ -270,7 +390,7 @@ export class PaymentsService {
         where: { id: intent.id },
         data: { status: 'SUCCEEDED', succeededAt: new Date() },
       });
-    }, SERIALIZABLE);
+    });
   }
 
   private async markTerminal(
@@ -278,7 +398,7 @@ export class PaymentsService {
     status: 'FAILED' | 'CANCELED',
     opts: { expectProvider: PaymentProviderCode; providerPaymentId?: string },
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');
       if (intent.provider !== opts.expectProvider) {
@@ -300,7 +420,7 @@ export class PaymentsService {
         where: { id: intent.id },
         data: { status },
       });
-    }, SERIALIZABLE);
+    });
   }
 
   async getIntent(user: AuthUser, intentId: string) {

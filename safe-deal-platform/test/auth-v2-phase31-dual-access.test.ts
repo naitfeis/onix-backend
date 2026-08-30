@@ -14,6 +14,8 @@ import { SessionService } from '../src/auth-v2/session.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
 import { RiskEngineService } from '../src/risk/risk-engine.service';
+import { MemoryCoordinationAdapter } from '../src/coordination/memory-coordination.adapter';
+import { SharedCoordinationService } from '../src/coordination/shared-coordination.service';
 
 function sessionService(prisma: unknown, tokens: TokenService): SessionService {
   return new SessionService(
@@ -21,6 +23,10 @@ function sessionService(prisma: unknown, tokens: TokenService): SessionService {
     tokens,
     new DeviceTrustService(),
     new RiskEngineService(prisma as never),
+    new SharedCoordinationService(
+      new MemoryCoordinationAdapter(),
+      { backend: 'memory', instanceId: 'phase31-test' },
+    ),
   );
 }
 

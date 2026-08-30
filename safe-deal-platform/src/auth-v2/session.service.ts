@@ -17,6 +17,7 @@ import {
 import { type AccessTokenClaims, TokenService } from './token.service';
 import { DeviceTrustService } from './device-trust.service';
 import type { RiskEventDraft } from '../risk/risk-engine.types';
+import { SharedCoordinationService } from '../coordination/shared-coordination.service';
 
 export interface DeviceContext {
   deviceName?: string | null;
@@ -58,30 +59,22 @@ export interface SessionAuthResult {
   trustedDevice: boolean;
 }
 
-type RotationGraceEntry = {
-  presentedHash: string;
-  result: SessionAuthResult;
-  cachedAt: number;
-};
-
 @Injectable()
 export class SessionService {
-  /** In-process idempotency for concurrent refresh (same previous token).
-   * Scale-out gate: WEB_CONCURRENCY > 1 or multi-instance → shared store required
-   * (see ops-gates.ts). Single-node Render: in-memory grace is intentional.
-   */
-  private readonly rotationGraceCache = new Map<string, RotationGraceEntry>();
+  private readonly graceKeys = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly deviceTrust: DeviceTrustService,
     private readonly riskEngine: RiskEngineService,
+    private readonly coordination: SharedCoordinationService,
   ) {}
 
   /** Test helper — simulate grace expiry / multi-instance without shared cache. */
-  clearRotationGraceCache(): void {
-    this.rotationGraceCache.clear();
+  async clearRotationGraceCache(): Promise<void> {
+    await Promise.all([...this.graceKeys].map((key) => this.coordination.delete(key)));
+    this.graceKeys.clear();
   }
 
   async createSession(input: CreateSessionInput): Promise<SessionAuthResult> {
@@ -713,37 +706,42 @@ export class SessionService {
       refreshToken: nextRefresh.token,
       trustedDevice,
     };
-    this.rememberGraceRotation(session.id, presentedHash, result);
+    await this.rememberGraceRotation(session.id, presentedHash, result);
     return result;
   }
 
-  private rememberGraceRotation(
+  private async rememberGraceRotation(
     sessionId: string,
     presentedHash: string,
     result: SessionAuthResult,
-  ): void {
-    this.rotationGraceCache.set(sessionId, {
+  ): Promise<void> {
+    const key = this.graceKey(sessionId, presentedHash);
+    if (!this.graceKeys.has(key) && this.graceKeys.size >= 500) {
+      const oldest = this.graceKeys.values().next().value as string | undefined;
+      if (oldest) this.graceKeys.delete(oldest);
+    }
+    this.graceKeys.add(key);
+    await this.coordination.setJson(key, {
       presentedHash,
       result,
       cachedAt: Date.now(),
-    });
-    if (this.rotationGraceCache.size > 500) {
-      const cutoff = Date.now() - refreshReuseGraceMs();
-      for (const [id, entry] of this.rotationGraceCache) {
-        if (entry.cachedAt < cutoff) this.rotationGraceCache.delete(id);
-      }
-    }
+    }, refreshReuseGraceMs());
   }
 
-  private takeGraceRotation(
+  private async takeGraceRotation(
     sessionId: string,
     presentedHash: string,
-  ): SessionAuthResult | null {
-    const entry = this.rotationGraceCache.get(sessionId);
+  ): Promise<SessionAuthResult | null> {
+    const key = this.graceKey(sessionId, presentedHash);
+    const entry = await this.coordination.getJson<{
+      presentedHash: string;
+      result: SessionAuthResult;
+      cachedAt: number;
+    }>(key);
     if (!entry) return null;
     if (entry.presentedHash !== presentedHash) return null;
     if (Date.now() - entry.cachedAt > refreshReuseGraceMs()) {
-      this.rotationGraceCache.delete(sessionId);
+      await this.coordination.delete(key);
       return null;
     }
     return entry.result;
@@ -757,13 +755,17 @@ export class SessionService {
     delayMs = 25,
   ): Promise<SessionAuthResult | null> {
     for (let i = 0; i < attempts; i += 1) {
-      const hit = this.takeGraceRotation(sessionId, presentedHash);
+      const hit = await this.takeGraceRotation(sessionId, presentedHash);
       if (hit) return hit;
       if (i + 1 < attempts) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
     return null;
+  }
+
+  private graceKey(sessionId: string, presentedHash: string): string {
+    return `auth:refresh-grace:${sessionId}:${presentedHash}`;
   }
 
   private async handleRefreshReuse(

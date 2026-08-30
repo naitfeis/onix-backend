@@ -1,6 +1,5 @@
 import {
-  BadRequestException, Body, CanActivate, Controller, ExecutionContext,
-  ForbiddenException, Get, Header, Injectable, Module, NotFoundException, Param, Patch, Post, Req, Res, UseGuards,
+  BadRequestException, Body, Controller, ForbiddenException, Get, Header, Injectable, Module, NotFoundException, Post, Req, Res,
 } from '@nestjs/common';
 import { BanReason, PlatformStatus, Prisma } from '@prisma/client';
 import {
@@ -10,17 +9,15 @@ import { Type } from 'class-transformer';
 import type { Request, Response } from 'express';
 import { hostname as osHostname } from 'node:os';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays, banPublicInfo } from './ban-policy';
-import { AuthRequest, AuthUser, CurrentUser, Public, canActAsSupport, parseId } from './common';
+import { AuthUser, CurrentUser, Public } from './common';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
-import { isAdminIpAllowed, parseAdminIpAllowlist } from './admin/admin-ip-allowlist';
-import { EscrowModule, EscrowService } from './escrow.module';
+import { EscrowModule } from './escrow.module';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { resolveCorrelationId } from './economy/wallet/correlation-id';
 import type { LedgerWriteMeta, WithdrawAssertInput } from './economy/wallet/ledger-write.types';
 import { WithdrawVelocityService } from './economy/wallet/withdraw-velocity';
-import { resolveClientIp } from './http/client-ip';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -33,6 +30,8 @@ import { PrismaService } from './prisma.service';
 import { RiskScoreService } from './risk-score.service';
 import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
+import { CoordinationModule } from './coordination/coordination.module';
+import { SharedCoordinationService } from './coordination/shared-coordination.service';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -46,53 +45,12 @@ class BanDto {
   /** Required when reason=OTHER (1–3650 days). Ignored for fixed-duration reasons. */
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(3650) durationDays?: number;
 }
-class SellBanDto {
-  @IsBoolean() banned!: boolean;
-  @IsOptional() @IsString() @MaxLength(1000) comment?: string;
-}
-class RefundDto { @IsOptional() @IsString() @MaxLength(1000) reason?: string; }
 class WithdrawalDto {
   @IsString() @Matches(/^[1-9]\d*$/) amountCents!: string;
   @IsString() @Length(16, 100) idempotencyKey!: string;
   /** Slice 3 — CONFIRMED Telegram MFA challenge id */
   @IsOptional() @IsString() @Length(8, 64) stepUpChallengeId?: string;
 }
-class PlatformStatusDto {
-  @IsEnum(PlatformStatus) status!: PlatformStatus;
-}
-
-@Injectable()
-class AdminGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<AuthRequest>();
-    if (!req.user?.isAdmin) {
-      throw new ForbiddenException('Требуются права администратора ONIX.');
-    }
-    const allowlist = parseAdminIpAllowlist();
-    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
-      throw new ForbiddenException('Доступ к admin API с этого IP запрещён.');
-    }
-    return true;
-  }
-}
-
-/** Admin or SUPPORT staff — Escrow refund only (no direct balance edits). */
-@Injectable()
-class SupportGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<AuthRequest>();
-    const user = req.user;
-    if (!user || !canActAsSupport(user)) {
-      throw new ForbiddenException('Требуются права поддержки ONIX.');
-    }
-    const allowlist = parseAdminIpAllowlist();
-    if (allowlist && !isAdminIpAllowed(resolveClientIp(req), allowlist)) {
-      throw new ForbiddenException('Доступ к support/admin ops с этого IP запрещён.');
-    }
-    return true;
-  }
-}
-
 @Injectable()
 class OperationsService {
   constructor(
@@ -441,11 +399,11 @@ class OperationsService {
 
     // Idempotency first: completed retries return without velocity/debit.
     // Velocity runs inside the Serializable TX under User FOR UPDATE (no parallel bypass).
-    const result = await this.idempotency.run(
+    const result = await this.idempotency.runTransactional(
       'wallet.withdraw',
       dto.idempotencyKey,
       { userId: user.id.toString(), amountCents: dto.amountCents },
-      () => this.prisma.$transaction(async (tx) => {
+      async (tx) => {
         const assertInput: WithdrawAssertInput = {
           userId: user.id,
           amountCents: amount,
@@ -488,7 +446,7 @@ class OperationsService {
           balanceAfterCents: entry.balanceAfterCents.toString(),
           type: entry.type,
         };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }),
+      },
       { userId: user.id },
     );
     return result.value;
@@ -504,72 +462,12 @@ class WalletController {
   }
 }
 
-@Controller('admin')
-@UseGuards(AdminGuard)
-class AdminController {
-  constructor(private readonly service: OperationsService) {}
-  @Post('users/:onixId/balance')
-  balance(
-    @CurrentUser() actor: AuthUser,
-    @Param('onixId') id: string,
-    @Body() dto: BalanceDto,
-    @Req() req: Request,
-  ) {
-    return this.service.adjust(actor, id, dto, resolveCorrelationId(req));
-  }
-  @Patch('users/:onixId/ban')
-  ban(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: BanDto) {
-    return this.service.ban(actor, id, dto);
-  }
-  @Patch('users/:onixId/status')
-  setStatus(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: PlatformStatusDto) {
-    return this.service.setPlatformStatus(actor, id, dto.status);
-  }
-  @Patch('users/:onixId/sell-ban')
-  sellBan(@CurrentUser() actor: AuthUser, @Param('onixId') id: string, @Body() dto: SellBanDto) {
-    return this.service.setSellBan(actor, id, dto.banned, dto.comment);
-  }
-
-  /** Slice 6 — YELLOW security-review flags (ledger provenance). */
-  @Get('users/:onixId/security-flags')
-  @Header('Cache-Control', 'no-store')
-  securityFlags(@Param('onixId') id: string) {
-    return this.service.securityFlags(id);
-  }
-}
-
-@Controller('support')
-@UseGuards(SupportGuard)
-class SupportOpsController {
-  constructor(private readonly escrow: EscrowService) {}
-
-  /** Refund via Escrow ledger only (incl. COMPLETED clawback). */
-  @Post('orders/:id/refund')
-  refund(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
-    return this.escrow.refundByAdmin(actor, parseId(id), dto.reason);
-  }
-
-  /** Confirm deal for seller — release escrow payout. */
-  @Post('orders/:id/complete')
-  complete(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
-    return this.escrow.completeByAdmin(actor, parseId(id), dto.reason);
-  }
-}
-
-/** Backward-compatible admin refund path (same Escrow service). */
-@Controller('admin')
-@UseGuards(SupportGuard)
-class AdminRefundController {
-  constructor(private readonly escrow: EscrowService) {}
-  @Post('orders/:id/refund')
-  refund(@CurrentUser() actor: AuthUser, @Param('id') id: string, @Body() dto: RefundDto) {
-    return this.escrow.refundByAdmin(actor, parseId(id), dto.reason);
-  }
-}
-
 @Controller('health')
 class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly coordination: SharedCoordinationService,
+  ) {}
 
   @Public()
   @Get('live')
@@ -589,11 +487,18 @@ class HealthController {
   @Get('ready')
   @Header('Cache-Control', 'no-store')
   async ready() {
-    await this.prisma.$queryRaw`SELECT 1`;
+    const [, coordinationReady] = await Promise.all([
+      this.prisma.$queryRaw`SELECT 1`,
+      this.coordination.isHealthy(),
+    ]);
+    if (!coordinationReady) {
+      throw new Error('Shared coordination is not ready.');
+    }
     const info = buildInfo();
     return {
       status: 'ready',
       database: 'ok',
+      coordination: this.coordination.backend,
       version: info.version,
       commit: info.commitShort,
     };
@@ -688,8 +593,9 @@ class HealthController {
 }
 
 @Module({
-  controllers: [AdminController, AdminRefundController, SupportOpsController, HealthController, WalletController],
-  providers: [AdminGuard, SupportGuard, OperationsService],
-  imports: [EscrowModule, AuthV2Module, EconomyModule, RiskModule],
+  // Privileged operations are exposed only by AdminModule with separate admin sessions.
+  controllers: [HealthController, WalletController],
+  providers: [OperationsService],
+  imports: [CoordinationModule, EscrowModule, AuthV2Module, EconomyModule, RiskModule],
 })
 export class OperationsModule {}

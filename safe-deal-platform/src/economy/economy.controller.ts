@@ -1,13 +1,13 @@
 import {
-  BadRequestException, Body, CanActivate, Controller, ExecutionContext, ForbiddenException,
+  Body, CanActivate, Controller, ExecutionContext, ForbiddenException,
   Get, Header, Injectable, Param, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import {
   IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
 } from 'class-validator';
-import type { PaymentProviderCode, PaymentWallet, SellerVerificationKind } from '@prisma/client';
-import { AuthRequest, AuthUser, CurrentUser, parseId } from '../common';
+import type { PaymentProviderCode, PaymentWallet } from '@prisma/client';
+import { AuthRequest, AuthUser, CurrentUser } from '../common';
 import { PrismaService } from '../prisma.service';
 import { requireUserByOnixId } from '../onix-id-lookup';
 import { assertRateLimit } from '../rate-limit';
@@ -16,7 +16,6 @@ import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
-import { VerificationService } from './verification/verification.service';
 import { WalletEconomyService } from './wallet/wallet-economy.service';
 
 class CreatePaymentIntentDto {
@@ -37,12 +36,6 @@ class FundDepositDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
 }
 
-class ConfirmVerificationDto {
-  @IsOptional() @IsString() @MaxLength(2000) evidencePayload?: string;
-  @IsOptional() @IsString() @MaxLength(191) providerRef?: string;
-  @IsOptional() @IsBoolean() approve?: boolean;
-}
-
 class ProductViewDto {
   @IsOptional() @IsString() @MaxLength(64) fingerprintHash?: string;
   @IsOptional() @IsString() @MaxLength(512) userAgent?: string;
@@ -52,17 +45,6 @@ class ProductViewDto {
 
 class GrantProDto {
   @IsOptional() @IsString() endsAt?: string;
-}
-
-const VERIFICATION_KINDS: readonly SellerVerificationKind[] = [
-  'PHONE_SMS', 'PHONE_CALL', 'PHONE_VOICE', 'PASSPORT', 'VOICE_IDENTITY',
-];
-
-function parseVerificationKind(kind: string): SellerVerificationKind {
-  if (!(VERIFICATION_KINDS as readonly string[]).includes(kind)) {
-    throw new BadRequestException('Неизвестный тип верификации.');
-  }
-  return kind as SellerVerificationKind;
 }
 
 class SellerAnalyticsQueryDto {
@@ -75,7 +57,6 @@ export class EconomyController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly wallet: WalletEconomyService,
-    private readonly verification: VerificationService,
     private readonly pro: ProSubscriptionService,
     private readonly analytics: AnalyticsFoundationService,
     private readonly sellerAnalytics: SellerAnalyticsService,
@@ -166,30 +147,6 @@ export class EconomyController {
   trustCard(@CurrentUser() user: AuthUser, @Param('onixId') onixId: string) {
     assertRateLimit(`trust-card:${user.id}`, 60, 60_000);
     return this.wallet.getPublicTrustCard(onixId);
-  }
-
-  @Get('users/me/verifications')
-  @Header('Cache-Control', 'private, no-store')
-  listVerifications(@CurrentUser() user: AuthUser) {
-    return this.verification.list(user.id);
-  }
-
-  @Post('users/me/verifications/:kind/start')
-  startVerification(@CurrentUser() user: AuthUser, @Param('kind') kind: string) {
-    return this.verification.start(user, parseVerificationKind(kind));
-  }
-
-  @Post('users/me/verifications/:kind/confirm')
-  confirmVerification(
-    @CurrentUser() user: AuthUser,
-    @Param('kind') kind: string,
-    @Body() dto: ConfirmVerificationDto,
-    @Query('userId') targetUserId?: string,
-  ) {
-    const uid = targetUserId && (user.isAdmin || user.isSupport)
-      ? parseId(targetUserId, 'userId')
-      : user.id;
-    return this.verification.confirm(user, uid, parseVerificationKind(kind), dto);
   }
 
   @Get('users/me/pro')

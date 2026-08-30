@@ -14,7 +14,7 @@ import {
   readRefreshTokenFromCookie,
 } from './refresh-cookie';
 import { SessionService } from './session.service';
-import { assertRateLimit } from '../rate-limit';
+import { DistributedRateLimiter } from '../rate-limit';
 import { resolveClientIp } from '../http/client-ip';
 
 /**
@@ -29,6 +29,7 @@ export class AuthV2Controller {
   constructor(
     private readonly orchestrator: AuthOrchestrator,
     private readonly sessions: SessionService,
+    private readonly rateLimit: DistributedRateLimiter,
   ) {}
 
   @Post('login')
@@ -40,7 +41,7 @@ export class AuthV2Controller {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
-    assertRateLimit(`auth:v2:login:${clientIp ?? 'unknown'}`, 20, 60_000);
+    await this.rateLimit.assert(`auth:v2:login:${clientIp ?? 'unknown'}`, 20, 60_000);
     const result = await this.orchestrator.loginWithTelegram({
       telegram: body.telegram,
       rememberMe: body.rememberMe,
@@ -91,7 +92,7 @@ export class AuthV2Controller {
   ) {
     const t0 = process.hrtime.bigint();
     const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
-    assertRateLimit(`auth:v2:refresh:${clientIp ?? 'unknown'}`, 60, 60_000);
+    await this.rateLimit.assert(`auth:v2:refresh:${clientIp ?? 'unknown'}`, 60, 60_000);
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     if (!refreshToken) {
@@ -147,7 +148,7 @@ export class AuthV2Controller {
     @Req() req: { ip?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
-    assertRateLimit(`auth:v2:session:${req.ip ?? 'unknown'}`, 90, 60_000);
+    await this.rateLimit.assert(`auth:v2:session:${req.ip ?? 'unknown'}`, 90, 60_000);
     const t0 = performance.now();
 
     const tCookie = performance.now();

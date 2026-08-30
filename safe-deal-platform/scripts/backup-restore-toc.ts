@@ -73,7 +73,7 @@ export function parsePgRestoreList(text: string): DumpTocInfo {
   const hasProduct = defs.some((t) => t.schema === 'public' && t.name === 'Product');
   const hasPrismaMigrations = defs.some((t) => t.schema === 'public' && t.name === '_prisma_migrations');
   const sample = defs
-    .filter((t) => ['User', 'Order', 'Product', '_prisma_migrations', 'UserBlock', 'OrderTransition', 'ProductViewUnique', 'ProductCreationSession', 'UserRole', 'UserReport'].includes(t.name))
+    .filter((t) => ['User', 'Order', 'Product', '_prisma_migrations', 'UserBlock', 'OrderTransition', 'ProductViewUnique', 'UserRole', 'UserReport'].includes(t.name))
     .map((t) => t.line)
     .slice(0, 20);
 

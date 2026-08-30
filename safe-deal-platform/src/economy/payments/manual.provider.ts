@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 import type { CreatePaymentIntentInput, PaymentProvider, ProviderCreateResult } from './payment-provider';
 
 /**
@@ -9,12 +10,16 @@ import type { CreatePaymentIntentInput, PaymentProvider, ProviderCreateResult } 
 @Injectable()
 export class ManualPaymentProvider implements PaymentProvider {
   readonly code = 'MANUAL' as const;
+  readonly createIntentIsIdempotent = true as const;
 
-  async createIntent(_input: CreatePaymentIntentInput): Promise<ProviderCreateResult> {
+  async createIntent(input: CreatePaymentIntentInput): Promise<ProviderCreateResult> {
+    const idempotencyDigest = createHash('sha256')
+      .update(input.idempotencyKey)
+      .digest('hex');
     return {
       status: 'PENDING',
-      providerRef: `manual:${Date.now()}`,
-      metadata: { channel: 'manual' },
+      providerRef: `manual:${idempotencyDigest.slice(0, 40)}`,
+      metadata: { channel: 'manual', idempotency: 'sha256' },
     };
   }
 
@@ -26,6 +31,8 @@ export class ManualPaymentProvider implements PaymentProvider {
 /** Stub providers — registered so selection works; create throws until configured. */
 @Injectable()
 export class UnconfiguredPaymentProvider implements PaymentProvider {
+  readonly createIntentIsIdempotent = true as const;
+
   constructor(readonly code: PaymentProvider['code']) {}
 
   async createIntent(): Promise<ProviderCreateResult> {

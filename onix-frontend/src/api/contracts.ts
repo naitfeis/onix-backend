@@ -215,15 +215,6 @@ export interface TrustCard {
   reviewCount: number;
   salesCount: number;
   rating: number;
-  phoneVerified: boolean;
-  passportVerified: boolean;
-  voiceVerified: boolean;
-  verifications: {
-    phone: boolean;
-    phoneStages: { sms: boolean; call: boolean; voice: boolean };
-    passport: boolean;
-    voiceIdentity: boolean;
-  };
   proActive: boolean;
 }
 
@@ -381,18 +372,8 @@ export const API_PATHS = {
   dealDispute: (id: string) => `/api/orders/${encodeURIComponent(id)}/dispute`,
   orderRefundRequest: (id: string) => `/api/orders/${encodeURIComponent(id)}/refund-request`,
   orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
-  supportRefund: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/refund`,
-  supportComplete: (id: string) => `/api/support/orders/${encodeURIComponent(id)}/complete`,
-  /** @status DEPRECATED — ticket close is driven by refund/complete; UI uses report close. */
-  supportClose: (id: string) => `/api/support/tickets/${encodeURIComponent(id)}/close`,
-  supportQueue: '/api/support/queue',
-  supportReports: '/api/support/reports',
-  supportReportReply: (id: string) => `/api/support/reports/${encodeURIComponent(id)}/reply`,
-  supportReportClose: (id: string) => `/api/support/reports/${encodeURIComponent(id)}/close`,
   mePresence: '/api/users/me/presence',
   leaveGroupChat: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members/me`,
-  adminProductRemove: (id: string) => `/api/admin/products/${encodeURIComponent(id)}`,
-  adminSellBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/sell-ban`,
   chats: '/api/chats',
   chatsSearch: (q: string) => `/api/chats?q=${encodeURIComponent(q)}`,
   chatUserSearch: (q: string) => `/api/chats/users/search?q=${encodeURIComponent(q)}`,
@@ -428,17 +409,12 @@ export const API_PATHS = {
       : '/api/users/me/analytics'
   ),
   userTrustCard: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/trust-card`,
-  /** @status FUTURE — economy verification surface not wired in UI yet. */
-  meVerifications: '/api/users/me/verifications',
   /** @status FUTURE — Pro seller plan surface not wired in UI yet. */
   mePro: '/api/users/me/pro',
   productView: (id: string) => `/api/products/${encodeURIComponent(id)}/views`,
   notifications: '/api/notifications',
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
   subcategories: '/api/products/catalog/subcategories',
-  adminBan: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/ban`,
-  adminStatus: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/status`,
-  adminSecurityFlags: (onixId: string) => `/api/admin/users/${encodeURIComponent(onixId)}/security-flags`,
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
   /** @status FUTURE — AI chat entry is via Chats list, not this path. */
   aiChat: '/api/ai/chat',
@@ -612,33 +588,6 @@ export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
 
 export function ledgerTypeLabel(type: string): string {
   return LEDGER_TYPE_LABELS[type as WalletOperation['type']] ?? type;
-}
-
-export interface SupportQueueItem {
-  orderId: string;
-  status: string;
-  productTitle: string;
-  totalAmountCents: string;
-  chatId: string | null;
-  ticketId: string | null;
-  reason: string | null;
-  buyer: { onixId: string; username: string };
-  seller: { onixId: string; username: string };
-  createdAt: string;
-  kind: 'SUPPORT' | 'DISPUTE';
-}
-
-export interface UserReportItem {
-  id: string;
-  /** USER = person complaint; AI_SUPPORT = from ONIX AI support widget. */
-  kind?: 'USER' | 'AI_SUPPORT';
-  reason: string;
-  comment: string;
-  adminReply?: string;
-  repliedAt?: string;
-  createdAt: string;
-  reporter: { onixId: string; username: string; avatarUrl?: string };
-  target: { onixId: string; username: string; avatarUrl?: string };
 }
 
 /** lastSeen display — precise online arrives with WebSocket (5.6). */

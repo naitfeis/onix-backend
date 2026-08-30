@@ -57,3 +57,6 @@ code { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
 .admin-actions { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 10px; }
 textarea { background: #0e1117; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 0.55rem 0.7rem; min-height: 80px; min-width: 320px; }
 button.danger { background: var(--danger); color: #fff; border: 0; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; font-weight: 600; }
+.actions-cell { display: flex; gap: 0.4rem; flex-wrap: wrap; min-width: 240px; }
+.actions-cell button { white-space: nowrap; }
+.message-text { max-width: 520px; white-space: pre-wrap; overflow-wrap: anywhere; }

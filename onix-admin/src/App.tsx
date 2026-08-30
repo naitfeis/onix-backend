@@ -8,10 +8,13 @@ import { UserInvestigateScreen } from './screens/UserInvestigateScreen';
 import { RiskEventsScreen } from './screens/RiskEventsScreen';
 import { OrdersScreen } from './screens/OrdersScreen';
 import { AuditLogScreen } from './screens/AuditLogScreen';
+import { SupportScreen } from './screens/SupportScreen';
+import { ProductsScreen } from './screens/ProductsScreen';
+import { MessagesScreen } from './screens/MessagesScreen';
 
 type AdminMe = { id: string; email: string; role: string; sessionId?: string };
 function adminRoleLabel(role: string) { return role === 'SUPER_ADMIN' ? 'FOUNDER' : role; }
-type Screen = 'dashboard' | 'orders' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk';
+type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk';
 
 export function App() {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
@@ -66,12 +69,15 @@ export function App() {
         <h1>ONIX Admin</h1>
         <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{adminRoleLabel(admin.role)}</p>
         <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Dashboard</button>
-        <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Deals</button>
+        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Deals</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Support & Reports</button>}
+        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'products' ? 'active' : ''} onClick={() => setScreen('products')}>Products</button>}
+        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'messages' ? 'active' : ''} onClick={() => setScreen('messages')}>Messages</button>}
         <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Audit Log</button>
-        <button type="button" className={screen === 'flags' ? 'active' : ''} onClick={() => setScreen('flags')}>Security Alerts</button>
-        <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Withdrawals</button>
-        <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>User Investigate</button>
-        <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Events</button>
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'flags' ? 'active' : ''} onClick={() => setScreen('flags')}>Security Alerts</button>}
+        {admin.role !== 'SUPPORT_ADMIN' && <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Withdrawals</button>}
+        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>User Investigate</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Events</button>}
         <div style={{ marginTop: '1.5rem' }}>
           <button
             type="button"
@@ -89,10 +95,13 @@ export function App() {
       <main className="admin-main">
         {screen === 'dashboard' && <DashboardScreen />}
         {screen === 'orders' && <OrdersScreen />}
+        {screen === 'support' && <SupportScreen />}
+        {screen === 'products' && <ProductsScreen />}
+        {screen === 'messages' && <MessagesScreen />}
         {screen === 'audit' && <AuditLogScreen />}
         {screen === 'flags' && <SecurityFlagsScreen />}
         {screen === 'withdrawals' && <WithdrawalsScreen />}
-        {screen === 'users' && <UserInvestigateScreen />}
+        {screen === 'users' && <UserInvestigateScreen adminRole={admin.role} />}
         {screen === 'risk' && <RiskEventsScreen />}
       </main>
     </div>

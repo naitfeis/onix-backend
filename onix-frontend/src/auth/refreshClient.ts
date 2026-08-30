@@ -141,17 +141,17 @@ async function executeAuthV2Refresh(
 }
 
 /**
- * Cap hung RU→CF→Render sockets so bootstrap does not sit ~30s.
- * Fast connection-reset retries stay enabled; timeout itself is not retried here —
+ * Cap hung RU→CF→Render sockets so bootstrap does not sit on a dead socket.
+ * Fast connection-reset retries stay enabled; timeout itself is not retried —
  * useOnixCore soft-retries after showing the shell.
  */
-export const AUTH_REFRESH_TIMEOUT_MS = 7_000;
+export const AUTH_REFRESH_TIMEOUT_MS = 3_500;
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
   return resilientFetch(url, {
     ...init,
     timeoutMs: AUTH_REFRESH_TIMEOUT_MS,
-    maxRetries: 2,
+    maxRetries: 1,
     maxTimeoutRetries: 0,
   });
 }

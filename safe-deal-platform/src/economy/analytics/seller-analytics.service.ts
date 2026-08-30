@@ -161,42 +161,8 @@ export class SellerAnalyticsService {
     const toExclusive = new Date(to);
     toExclusive.setUTCDate(toExclusive.getUTCDate() + 1);
 
-    // Cap raw rows — rollup is weekly; unbounded findMany was a DB DoS vector.
-    const ROLLUP_ROW_CAP = 20_000;
-    const [views, orders, favorites] = await Promise.all([
-      this.prisma.productViewUnique.findMany({
-        where: {
-          sellerId,
-          firstSeenAt: { gte: from, lt: toExclusive },
-        },
-        select: { firstSeenAt: true },
-        take: ROLLUP_ROW_CAP,
-      }),
-      this.prisma.order.findMany({
-        where: {
-          sellerId,
-          createdAt: { gte: from, lt: toExclusive },
-        },
-        select: {
-          status: true,
-          totalAmountCents: true,
-          payoutCents: true,
-          createdAt: true,
-          completedAt: true,
-        },
-        take: ROLLUP_ROW_CAP,
-      }),
-      this.prisma.favorite.findMany({
-        where: {
-          createdAt: { gte: from, lt: toExclusive },
-          product: { sellerId },
-        },
-        select: { createdAt: true },
-        take: ROLLUP_ROW_CAP,
-      }),
-    ]);
-
-    type Acc = {
+    type AggregateRow = {
+      day: Date;
       uniqueViews: number;
       ordersCount: number;
       completedCount: number;
@@ -204,40 +170,61 @@ export class SellerAnalyticsService {
       profitCents: bigint;
       favoritesAdded: number;
     };
-    const acc = new Map<string, Acc>();
-    const bump = (key: string): Acc => {
-      let row = acc.get(key);
-      if (!row) {
-        row = {
-          uniqueViews: 0,
-          ordersCount: 0,
-          completedCount: 0,
-          revenueCents: 0n,
-          profitCents: 0n,
-          favoritesAdded: 0,
-        };
-        acc.set(key, row);
-      }
-      return row;
-    };
-
-    for (const v of views) bump(dayKey(v.firstSeenAt)).uniqueViews += 1;
-    for (const o of orders) {
-      const row = bump(dayKey(o.createdAt));
-      row.ordersCount += 1;
-      if (o.status === 'COMPLETED') {
-        const cKey = dayKey(o.completedAt ?? o.createdAt);
-        const cRow = bump(cKey);
-        cRow.completedCount += 1;
-        cRow.revenueCents += o.totalAmountCents;
-        cRow.profitCents += o.payoutCents;
-      }
-    }
-    for (const f of favorites) bump(dayKey(f.createdAt)).favoritesAdded += 1;
+    const rows = await this.prisma.$queryRaw<AggregateRow[]>`
+      WITH days AS (
+        SELECT generate_series(${from}::timestamp, ${to}::timestamp, interval '1 day')::date AS day
+      ),
+      views AS (
+        SELECT ("firstSeenAt" AT TIME ZONE 'UTC')::date AS day, COUNT(*)::int AS count
+        FROM "ProductViewUnique"
+        WHERE "sellerId" = ${sellerId} AND "firstSeenAt" >= ${from} AND "firstSeenAt" < ${toExclusive}
+        GROUP BY 1
+      ),
+      created_orders AS (
+        SELECT ("createdAt" AT TIME ZONE 'UTC')::date AS day, COUNT(*)::int AS count
+        FROM "Order"
+        WHERE "sellerId" = ${sellerId} AND "createdAt" >= ${from} AND "createdAt" < ${toExclusive}
+        GROUP BY 1
+      ),
+      completed_orders AS (
+        SELECT
+          ("completedAt" AT TIME ZONE 'UTC')::date AS day,
+          COUNT(*)::int AS count,
+          COALESCE(SUM("totalAmountCents"), 0)::bigint AS revenue,
+          COALESCE(SUM("payoutCents"), 0)::bigint AS profit
+        FROM "Order"
+        WHERE "sellerId" = ${sellerId}
+          AND "status" = 'COMPLETED'
+          AND "completedAt" >= ${from}
+          AND "completedAt" < ${toExclusive}
+        GROUP BY 1
+      ),
+      favorites AS (
+        SELECT (f."createdAt" AT TIME ZONE 'UTC')::date AS day, COUNT(*)::int AS count
+        FROM "Favorite" f
+        JOIN "Product" p ON p."id" = f."productId"
+        WHERE p."sellerId" = ${sellerId} AND f."createdAt" >= ${from} AND f."createdAt" < ${toExclusive}
+        GROUP BY 1
+      )
+      SELECT
+        days.day,
+        COALESCE(views.count, 0)::int AS "uniqueViews",
+        COALESCE(created_orders.count, 0)::int AS "ordersCount",
+        COALESCE(completed_orders.count, 0)::int AS "completedCount",
+        COALESCE(completed_orders.revenue, 0)::bigint AS "revenueCents",
+        COALESCE(completed_orders.profit, 0)::bigint AS "profitCents",
+        COALESCE(favorites.count, 0)::int AS "favoritesAdded"
+      FROM days
+      LEFT JOIN views USING (day)
+      LEFT JOIN created_orders USING (day)
+      LEFT JOIN completed_orders USING (day)
+      LEFT JOIN favorites USING (day)
+      ORDER BY days.day
+    `;
 
     const ops: Prisma.PrismaPromise<unknown>[] = [];
-    for (const [key, row] of acc) {
-      const day = new Date(`${key}T00:00:00.000Z`);
+    for (const row of rows) {
+      const day = utcDay(row.day);
       ops.push(
         this.prisma.sellerAnalyticsDaily.upsert({
           where: { sellerId_day: { sellerId, day } },

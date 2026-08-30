@@ -1,12 +1,24 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import type { PlatformStatus, Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
+import type { AuthUser } from '../common';
 import { BalanceService } from '../economy/wallet/balance.service';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
+import { EscrowService } from '../escrow.module';
 import { formatOnixId } from '../onix-id';
+import { flagsFromPlatformStatus, isPlatformStatus } from '../platform-status';
 import { PrismaService } from '../prisma.service';
 import type { AdminActor } from './admin-session.service';
+
+const ALLOWED_PLATFORM_STATUS_TRANSITIONS: Readonly<Record<PlatformStatus, ReadonlySet<PlatformStatus>>> = {
+  USER: new Set(['VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP']),
+  VERIFIED_SELLER: new Set(['USER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP']),
+  MODERATOR: new Set(['USER', 'VERIFIED_SELLER', 'ADMIN', 'SUPER_ADMIN', 'VIP']),
+  ADMIN: new Set(['USER', 'VERIFIED_SELLER', 'MODERATOR', 'SUPER_ADMIN', 'VIP']),
+  SUPER_ADMIN: new Set(['USER', 'VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'VIP']),
+  VIP: new Set(['USER', 'VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN']),
+};
 
 @Injectable()
 export class AdminSecurityService {
@@ -14,6 +26,7 @@ export class AdminSecurityService {
     private readonly prisma: PrismaService,
     private readonly withdrawVelocity: WithdrawVelocityService,
     private readonly balance: BalanceService,
+    private readonly escrow: EscrowService,
   ) {}
 
   async dashboard() {
@@ -163,6 +176,8 @@ export class AdminSecurityService {
         balanceCents: user.balanceCents.toString(),
         platformStatus: user.platformStatus,
         bannedAt: user.bannedAt?.toISOString() ?? null,
+        bannedUntil: user.bannedUntil?.toISOString() ?? null,
+        sellBannedAt: user.sellBannedAt?.toISOString() ?? null,
       },
       flags: yellow ? [yellow] : [],
       sessions: sessions.map((s) => ({
@@ -266,6 +281,401 @@ export class AdminSecurityService {
     return { ledgerId: entry.id.toString(), amountCents: entry.amountCents.toString() };
   }
 
+  async setUserStatus(actor: AdminActor, targetId: string, status: string) {
+    if (actor.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Изменять статус платформы может только SUPER_ADMIN.');
+    }
+    if (!isPlatformStatus(status)) throw new BadRequestException('Некорректный статус.');
+    const target = await this.resolveTarget(targetId);
+    if (!ALLOWED_PLATFORM_STATUS_TRANSITIONS[target.platformStatus].has(status)) {
+      throw new BadRequestException(`Переход ${target.platformStatus} → ${status} не разрешён.`);
+    }
+    const flags = flagsFromPlatformStatus(status as PlatformStatus);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.user.update({
+        where: { id: target.id },
+        data: {
+          platformStatus: status as PlatformStatus,
+          ...flags,
+          permissionVersion: { increment: 1 },
+        },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_STATUS_CHANGED',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: {
+            onixId: formatOnixId(target.onixId),
+            from: target.platformStatus,
+            to: status,
+          },
+        },
+      });
+      return row;
+    });
+    return {
+      onixId: formatOnixId(updated.onixId),
+      status: updated.platformStatus,
+      isAdmin: updated.isAdmin,
+      isSupport: updated.isSupport,
+    };
+  }
+
+  async listSupportQueue() {
+    const [tickets, disputes] = await Promise.all([
+      this.prisma.supportTicket.findMany({
+        where: { status: 'OPEN' },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true, chatId: true, createdAt: true,
+          order: {
+            select: {
+              id: true, status: true, totalAmountCents: true, disputeReason: true,
+              product: { select: { title: true } },
+              buyer: { select: { onixId: true, displayName: true } },
+              seller: { select: { onixId: true, displayName: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.order.findMany({
+        where: { status: 'DISPUTE', supportTickets: { none: { status: 'OPEN' } } },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        select: {
+          id: true, status: true, totalAmountCents: true, disputeReason: true, createdAt: true,
+          chatId: true, product: { select: { title: true } },
+          buyer: { select: { onixId: true, displayName: true } },
+          seller: { select: { onixId: true, displayName: true } },
+        },
+      }),
+    ]);
+    const party = (user: { onixId: string; displayName: string | null }) => ({
+      onixId: formatOnixId(user.onixId),
+      username: user.displayName ?? formatOnixId(user.onixId),
+    });
+    return [
+      ...tickets.map((ticket) => ({
+        ticketId: ticket.id,
+        orderId: ticket.order.id.toString(),
+        chatId: ticket.chatId,
+        kind: ticket.order.status === 'DISPUTE' ? 'DISPUTE' : 'SUPPORT',
+        status: ticket.order.status,
+        productTitle: ticket.order.product.title,
+        totalAmountCents: ticket.order.totalAmountCents.toString(),
+        reason: ticket.order.disputeReason,
+        buyer: party(ticket.order.buyer),
+        seller: party(ticket.order.seller),
+        createdAt: ticket.createdAt.toISOString(),
+      })),
+      ...disputes.map((order) => ({
+        ticketId: null,
+        orderId: order.id.toString(),
+        chatId: order.chatId,
+        kind: 'DISPUTE',
+        status: order.status,
+        productTitle: order.product.title,
+        totalAmountCents: order.totalAmountCents.toString(),
+        reason: order.disputeReason,
+        buyer: party(order.buyer),
+        seller: party(order.seller),
+        createdAt: order.createdAt.toISOString(),
+      })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async closeSupportTicket(actor: AdminActor, ticketId: string, reason?: string) {
+    const ticket = await this.prisma.supportTicket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Обращение не найдено.');
+    if (ticket.status === 'CLOSED') return { ticketId, closed: true as const };
+    await this.prisma.$transaction(async (tx) => {
+      await tx.supportTicket.update({
+        where: { id: ticketId },
+        data: { status: 'CLOSED', closedAt: new Date() },
+      });
+      await tx.message.create({
+        data: {
+          chatId: ticket.chatId,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: reason?.trim()
+            ? `Обращение закрыто поддержкой.\n${reason.trim().slice(0, 1000)}`
+            : 'Обращение закрыто поддержкой.',
+        },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_SUPPORT_TICKET_CLOSE',
+          targetType: 'SupportTicket',
+          targetId: ticketId,
+          metadataJson: reason?.trim() ? { reason: reason.trim().slice(0, 500) } : undefined,
+        },
+      });
+    });
+    return { ticketId, closed: true as const };
+  }
+
+  async listReports() {
+    const rows = await this.prisma.userReport.findMany({
+      where: { closedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true, kind: true, reason: true, comment: true, createdAt: true,
+        reporter: { select: { onixId: true, displayName: true } },
+        target: { select: { onixId: true, displayName: true } },
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      reporter: { onixId: formatOnixId(row.reporter.onixId), username: row.reporter.displayName },
+      target: { onixId: formatOnixId(row.target.onixId), username: row.target.displayName },
+    }));
+  }
+
+  async closeReport(actor: AdminActor, reportId: string, reason?: string) {
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Жалоба не найдена.');
+    if (!report.closedAt) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.userReport.update({ where: { id: reportId }, data: { closedAt: new Date() } });
+        await tx.adminActionLog.create({
+          data: {
+            adminUserId: actor.id,
+            action: 'ADMIN_REPORT_CLOSE',
+            targetType: 'UserReport',
+            targetId: reportId,
+            metadataJson: reason?.trim() ? { reason: reason.trim().slice(0, 500) } : undefined,
+          },
+        });
+      });
+    }
+    return { id: reportId, closed: true as const };
+  }
+
+  async replyReport(actor: AdminActor, reportId: string, text: string) {
+    const reply = text.trim().slice(0, 2000);
+    if (!reply) throw new BadRequestException('Введите текст ответа.');
+    const report = await this.prisma.userReport.findUnique({ where: { id: reportId } });
+    if (!report) throw new NotFoundException('Жалоба не найдена.');
+    if (report.kind !== 'AI_SUPPORT') throw new BadRequestException('Ответ доступен только для AI_SUPPORT.');
+    if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
+    const pairKey = `ai:${report.reporterId}`;
+    await this.prisma.$transaction(async (tx) => {
+      const chat = await tx.chat.upsert({
+        where: { pairKey },
+        create: {
+          pairKey, kind: 'AI', title: 'ONIX AI',
+          members: { create: { userId: report.reporterId } },
+        },
+        update: { kind: 'AI', title: 'ONIX AI' },
+      });
+      await tx.message.create({
+        data: { chatId: chat.id, kind: 'SYSTEM', text: `💬 Ответ поддержки ONIX\n\n${reply}` },
+      });
+      await tx.userReport.update({
+        where: { id: reportId },
+        data: { adminReply: reply, repliedAt: new Date(), closedAt: new Date() },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_REPORT_REPLY',
+          targetType: 'UserReport',
+          targetId: reportId,
+        },
+      });
+    });
+    return { id: reportId, replied: true as const, closed: true as const };
+  }
+
+  private async legacyEscrowActor(actor: AdminActor): Promise<AuthUser> {
+    const admin = await this.prisma.adminUser.findUnique({
+      where: { id: actor.id },
+      select: { telegramId: true },
+    });
+    if (!admin?.telegramId) {
+      throw new BadRequestException('Для Escrow-действия привяжите Telegram ID к admin-профилю.');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { telegramId: admin.telegramId },
+      select: { id: true, telegramId: true, onixId: true, platformStatus: true },
+    });
+    if (!user) throw new BadRequestException('Для Escrow-действия нужен связанный пользователь платформы.');
+    return { ...user, isAdmin: true, isSupport: true };
+  }
+
+  private async createEscrowAuditIntent(
+    actor: AdminActor,
+    action: 'ADMIN_ORDER_REFUND' | 'ADMIN_ORDER_COMPLETE',
+    orderId: string,
+    reason?: string,
+  ) {
+    return this.prisma.adminActionLog.create({
+      data: {
+        adminUserId: actor.id,
+        action: `${action}_PENDING`,
+        targetType: 'Order',
+        targetId: orderId,
+        metadataJson: {
+          state: 'PENDING',
+          reason: reason?.trim().slice(0, 500) ?? null,
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  private async finishEscrowAudit(
+    auditId: bigint,
+    action: 'ADMIN_ORDER_REFUND' | 'ADMIN_ORDER_COMPLETE',
+    state: 'COMPLETED' | 'FAILED',
+    reason?: string,
+    error?: unknown,
+  ): Promise<void> {
+    await this.prisma.adminActionLog.update({
+      where: { id: auditId },
+      data: {
+        action,
+        metadataJson: {
+          state,
+          reason: reason?.trim().slice(0, 500) ?? null,
+          ...(state === 'FAILED'
+            ? { error: error instanceof Error ? error.message.slice(0, 500) : 'Escrow mutation failed' }
+            : {}),
+        },
+      },
+    });
+  }
+
+  async refundOrder(actor: AdminActor, orderId: string, reason?: string) {
+    if (!/^\d+$/.test(orderId)) throw new BadRequestException('Некорректный id сделки.');
+    const escrowActor = await this.legacyEscrowActor(actor);
+    const audit = await this.createEscrowAuditIntent(actor, 'ADMIN_ORDER_REFUND', orderId, reason);
+    try {
+      const result = await this.escrow.refundByAdmin(escrowActor, BigInt(orderId), reason);
+      await this.finishEscrowAudit(audit.id, 'ADMIN_ORDER_REFUND', 'COMPLETED', reason)
+        .catch(() => undefined);
+      return result;
+    } catch (error) {
+      await this.finishEscrowAudit(audit.id, 'ADMIN_ORDER_REFUND', 'FAILED', reason, error)
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async completeOrder(actor: AdminActor, orderId: string, reason?: string) {
+    if (!/^\d+$/.test(orderId)) throw new BadRequestException('Некорректный id сделки.');
+    const escrowActor = await this.legacyEscrowActor(actor);
+    const audit = await this.createEscrowAuditIntent(actor, 'ADMIN_ORDER_COMPLETE', orderId, reason);
+    try {
+      const result = await this.escrow.completeByAdmin(escrowActor, BigInt(orderId), reason);
+      await this.finishEscrowAudit(audit.id, 'ADMIN_ORDER_COMPLETE', 'COMPLETED', reason)
+        .catch(() => undefined);
+      return result;
+    } catch (error) {
+      await this.finishEscrowAudit(audit.id, 'ADMIN_ORDER_COMPLETE', 'FAILED', reason, error)
+        .catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async listProducts(opts?: { limit?: number; status?: string }) {
+    const take = Math.min(Math.max(opts?.limit ?? 100, 1), 200);
+    const allowed = ['ACTIVE', 'ARCHIVED', 'RESERVED', 'SOLD_OUT'];
+    const status = opts?.status && allowed.includes(opts.status) ? opts.status as any : undefined;
+    const rows = await this.prisma.product.findMany({
+      where: status ? { status } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true, lotNumber: true, title: true, status: true, priceCents: true,
+        quantity: true, createdAt: true,
+        seller: { select: { onixId: true, displayName: true } },
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      priceCents: row.priceCents.toString(),
+      createdAt: row.createdAt.toISOString(),
+      seller: { ...row.seller, onixId: formatOnixId(row.seller.onixId) },
+    }));
+  }
+
+  async moderateProduct(actor: AdminActor, productId: string, reason?: string) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Товар не найден.');
+    if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке.');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.update({ where: { id: productId }, data: { status: 'ARCHIVED' } });
+      await tx.favorite.deleteMany({ where: { productId } });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_PRODUCT_ARCHIVE',
+          targetType: 'Product',
+          targetId: productId,
+          metadataJson: { sellerId: product.sellerId.toString(), title: product.title, reason: reason?.trim().slice(0, 500) ?? null },
+        },
+      });
+    });
+    return { id: productId, status: 'ARCHIVED' as const };
+  }
+
+  async listMessages(opts?: { limit?: number; search?: string }) {
+    const take = Math.min(Math.max(opts?.limit ?? 100, 1), 200);
+    const rows = await this.prisma.message.findMany({
+      where: opts?.search?.trim() ? { text: { contains: opts.search.trim(), mode: 'insensitive' } } : undefined,
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true, chatId: true, senderId: true, kind: true, text: true,
+        deletedAt: true, deletedReason: true, createdAt: true,
+      },
+    });
+    return rows.map((row) => ({
+      ...row,
+      id: row.id.toString(),
+      senderId: row.senderId?.toString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      deletedAt: row.deletedAt?.toISOString() ?? null,
+    }));
+  }
+
+  async moderateMessage(actor: AdminActor, messageId: string, reason?: string) {
+    if (!/^\d+$/.test(messageId)) throw new BadRequestException('Некорректный id сообщения.');
+    const id = BigInt(messageId);
+    const message = await this.prisma.message.findUnique({ where: { id } });
+    if (!message) throw new NotFoundException('Сообщение не найдено.');
+    if (!message.deletedAt) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.message.update({
+          where: { id },
+          data: {
+            deletedAt: new Date(),
+            deletedForAll: true,
+            deletedReason: reason?.trim().slice(0, 500) || 'Удалено администратором',
+          },
+        });
+        await tx.adminActionLog.create({
+          data: {
+            adminUserId: actor.id,
+            action: 'ADMIN_MESSAGE_DELETE',
+            targetType: 'Message',
+            targetId: messageId,
+            metadataJson: { chatId: message.chatId, reason: reason?.trim().slice(0, 500) ?? null },
+          },
+        });
+      });
+    }
+    return { id: messageId, deleted: true as const };
+  }
+
   async listOrders(opts?: { limit?: number; status?: string }) {
     const take = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
     const status = opts?.status && ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED', 'CANCELED', 'REFUNDED'].includes(opts.status)
@@ -299,7 +709,7 @@ export class AdminSecurityService {
   }
 
   async getOrderInvestigation(id: string) {
-    const orderId = /^\\d+$/.test(id) ? BigInt(id) : null;
+    const orderId = /^\d+$/.test(id) ? BigInt(id) : null;
     if (!orderId) return null;
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },

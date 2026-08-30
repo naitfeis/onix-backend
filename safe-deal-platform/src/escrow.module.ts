@@ -7,6 +7,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
+import { withSerializableTransaction } from './database/transaction-retry';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
@@ -41,8 +42,6 @@ class OrderQuery {
   /** all (omit) | open | completed | active | canceled | dispute | archive */
   @IsOptional() @IsIn(['open', 'active', 'completed', 'canceled', 'dispute', 'archive']) status?: string;
 }
-
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 /**
  * Escrow state machine (canonical Prisma OrderStatus):
@@ -144,7 +143,7 @@ export class EscrowService {
    * all call POST /orders/product/:productId → this method only.
    */
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
-    const order = await this.prisma.$transaction(async (tx) => {
+    const order = await withSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
       if (existing) {
         if (existing.buyerId !== user.id || existing.productId !== productId || existing.quantity !== quantity) {
@@ -281,7 +280,7 @@ export class EscrowService {
       await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
       await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
       return created;
-    }, SERIALIZABLE);
+    });
 
     // Best-effort Telegram (after commit).
     void this.prisma.user.findUnique({ where: { id: order.sellerId }, select: { telegramId: true } })
@@ -411,7 +410,7 @@ export class EscrowService {
     key: string,
     opts: { allowedFrom: OrderStatus[]; requireBuyer: boolean; supportReason?: string },
   ) {
-    await this.prisma.$transaction(async (tx) => {
+    await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== 'COMPLETED') {
@@ -485,7 +484,7 @@ export class EscrowService {
         ...(opts.supportReason ? { reason: opts.supportReason } : {}),
         fromStatus: order.status,
       });
-    }, SERIALIZABLE);
+    });
   }
 
   async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
@@ -503,7 +502,7 @@ export class EscrowService {
     if (priorTicket) {
       throw new BadRequestException('По этой сделке обращение уже было создано.');
     }
-    await this.prisma.$transaction(async (tx) => {
+    await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== 'DISPUTE') {
@@ -529,7 +528,7 @@ export class EscrowService {
       });
       await this.locks.holdForDispute(tx, id);
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
-    }, SERIALIZABLE);
+    });
     invalidateArbitrationContextCache();
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id },
@@ -586,7 +585,7 @@ export class EscrowService {
     reason?: string,
     opts?: { sellerInitiated?: boolean },
   ) {
-    await this.prisma.$transaction(async (tx) => {
+    await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== target) {
@@ -655,7 +654,7 @@ export class EscrowService {
         ...(support ? { support: true } : {}),
         fromStatus: order.status,
       });
-    }, SERIALIZABLE);
+    });
 
     const live = await this.prisma.order.findUnique({
       where: { id },
@@ -715,7 +714,7 @@ export class EscrowService {
     id: bigint, actor: AuthUser, from: OrderStatus, to: OrderStatus,
     role: 'seller' | 'buyer', key: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== to) {
@@ -736,7 +735,7 @@ export class EscrowService {
         data: { orderId: id, from, to, actorId: actor.id, idempotencyKey: key },
       });
       return tx.order.findUniqueOrThrow({ where: { id } });
-    }, SERIALIZABLE);
+    });
   }
 
   private async one(user: AuthUser, id: bigint) {

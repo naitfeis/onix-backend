@@ -23,6 +23,11 @@ services:
         value: "false"
       - key: WEB_CONCURRENCY
         value: "1"
+      - key: COORDINATION_BACKEND
+        value: redis
+      # Secret Redis connection string; configure in Render, never commit it.
+      - key: REDIS_URL
+        sync: false
       - key: RENDER_REGION
         value: frankfurt
       - key: OTEL_SERVICE_NAME

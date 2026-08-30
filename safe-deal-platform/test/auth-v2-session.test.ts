@@ -9,6 +9,8 @@ import { DeviceTrustService } from '../src/auth-v2/device-trust.service';
 import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair, TokenService } from '../src/auth-v2/token.service';
 import { RiskEngineService } from '../src/risk/risk-engine.service';
+import { MemoryCoordinationAdapter } from '../src/coordination/memory-coordination.adapter';
+import { SharedCoordinationService } from '../src/coordination/shared-coordination.service';
 
 type Store = {
   users: Map<string, User>;
@@ -205,13 +207,21 @@ function createPrismaMock(store: Store) {
   return api;
 }
 
-function buildService(store: Store): SessionService {
+function buildService(
+  store: Store,
+  adapter = new MemoryCoordinationAdapter(),
+  instanceId = 'session-test',
+): SessionService {
   installKeys();
   const keys = new SigningKeyService(new EnvSecretsProvider());
   keys.clearCache();
   const tokens = new TokenService(keys);
   const prisma = createPrismaMock(store) as never;
-  return new SessionService(prisma, tokens, new DeviceTrustService(), new RiskEngineService(prisma));
+  const coordination = new SharedCoordinationService(
+    adapter,
+    { backend: 'memory', instanceId },
+  );
+  return new SessionService(prisma, tokens, new DeviceTrustService(), new RiskEngineService(prisma), coordination);
 }
 
 test('SessionService createSession stores refresh hash only and returns opaque token', async () => {
@@ -320,6 +330,26 @@ test('SessionService concurrent previous-token refresh returns grace copy (no re
   assert.equal(store.users.get('7')!.sessionVersion, 0);
 });
 
+test('SessionService refresh grace is shared between instances', async () => {
+  const store: Store = {
+    users: new Map([['7', baseUser()]]),
+    sessions: new Map(),
+    trusted: new Map(),
+    audits: [],
+    securityEvents: [],
+  };
+  const adapter = new MemoryCoordinationAdapter();
+  const firstInstance = buildService(store, adapter, 'one');
+  const secondInstance = buildService(store, adapter, 'two');
+  const created = await firstInstance.createSession({ userId: 7n });
+  const first = await firstInstance.rotateRefresh(created.refreshToken);
+  const second = await secondInstance.rotateRefresh(created.refreshToken);
+
+  assert.equal(second.refreshToken, first.refreshToken);
+  assert.equal(second.accessToken, first.accessToken);
+  assert.equal(store.securityEvents.length, 0);
+});
+
 test('SessionService detects refresh reuse and revokes family with SecurityEvent', async () => {
   const store: Store = {
     users: new Map([['7', baseUser()]]),
@@ -333,7 +363,7 @@ test('SessionService detects refresh reuse and revokes family with SecurityEvent
   const oldRefresh = created.refreshToken;
   await service.rotateRefresh(oldRefresh);
   // Outside grace (or other instance without shared cache) → real theft signal.
-  service.clearRotationGraceCache();
+  await service.clearRotationGraceCache();
 
   await assert.rejects(
     () => service.rotateRefresh(oldRefresh),

@@ -6,7 +6,6 @@ import { ManualPaymentProvider } from './payments/manual.provider';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
-import { VerificationService } from './verification/verification.service';
 import { BalanceService } from './wallet/balance.service';
 import { ClawbackService } from './wallet/clawback.service';
 import { DepositService } from './wallet/deposit.service';
@@ -26,7 +25,6 @@ import { WithdrawVelocityService } from './wallet/withdraw-velocity';
     WalletEconomyService,
     WithdrawVelocityService,
     TrustService,
-    VerificationService,
     ProSubscriptionService,
     AnalyticsFoundationService,
     SellerAnalyticsService,
@@ -38,7 +36,6 @@ import { WithdrawVelocityService } from './wallet/withdraw-velocity';
     LockService,
     TrustService,
     PaymentsService,
-    VerificationService,
     ProSubscriptionService,
     AnalyticsFoundationService,
     SellerAnalyticsService,

@@ -7,7 +7,8 @@ export function pairChatKey(a: bigint, b: bigint): string {
 
 /**
  * Find or create the single personal chat for a user pair inside an open transaction.
- * Caller should run under Serializable (or handle P2002) to avoid duplicates under races.
+ * Locking both users in stable order serializes pair creation without trying to recover
+ * from P2002 inside an already-aborted PostgreSQL transaction.
  */
 export async function ensurePairChat(
   tx: Prisma.TransactionClient,
@@ -17,6 +18,15 @@ export async function ensurePairChat(
   if (userA === userB) {
     throw new Error('pair chat requires two distinct users');
   }
+  const first = userA < userB ? userA : userB;
+  const second = userA < userB ? userB : userA;
+  await tx.$queryRaw`
+    SELECT "id"
+    FROM "User"
+    WHERE "id" IN (${first}, ${second})
+    ORDER BY "id"
+    FOR UPDATE
+  `;
   const pairKey = pairChatKey(userA, userB);
   const existing = await tx.chat.findUnique({ where: { pairKey } });
   if (existing) {
@@ -32,33 +42,10 @@ export async function ensurePairChat(
     });
     return existing;
   }
-  try {
-    return await tx.chat.create({
-      data: {
-        pairKey,
-        members: { create: [{ userId: userA }, { userId: userB }] },
-      },
-    });
-  } catch (error) {
-    if (
-      typeof error === 'object'
-      && error !== null
-      && 'code' in error
-      && (error as { code: string }).code === 'P2002'
-    ) {
-      const raced = await tx.chat.findUniqueOrThrow({ where: { pairKey } });
-      await tx.chatMember.upsert({
-        where: { chatId_userId: { chatId: raced.id, userId: userA } },
-        create: { chatId: raced.id, userId: userA },
-        update: {},
-      });
-      await tx.chatMember.upsert({
-        where: { chatId_userId: { chatId: raced.id, userId: userB } },
-        create: { chatId: raced.id, userId: userB },
-        update: {},
-      });
-      return raced;
-    }
-    throw error;
-  }
+  return tx.chat.create({
+    data: {
+      pairKey,
+      members: { create: [{ userId: userA }, { userId: userB }] },
+    },
+  });
 }

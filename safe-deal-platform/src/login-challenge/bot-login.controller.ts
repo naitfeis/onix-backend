@@ -13,13 +13,16 @@ import {
   buildLoginSessionCookieHeader,
   readLoginSessionId,
 } from './login-session-cookie';
-import { assertRateLimit } from '../rate-limit';
+import { DistributedRateLimiter } from '../rate-limit';
 import { resolveClientIp } from '../http/client-ip';
 
 @Public()
 @Controller('v2/auth/telegram-bot')
 export class BotLoginController {
-  constructor(private readonly challenges: LoginChallengeService) {}
+  constructor(
+    private readonly challenges: LoginChallengeService,
+    private readonly rateLimit: DistributedRateLimiter,
+  ) {}
 
   @Get('provider')
   provider() {
@@ -34,7 +37,7 @@ export class BotLoginController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
-    assertRateLimit(`auth:bot:start:${clientIp ?? 'unknown'}`, 10, 60_000);
+    await this.rateLimit.assert(`auth:bot:start:${clientIp ?? 'unknown'}`, 10, 60_000);
     const existing = readLoginSessionId(headerString(headers, 'cookie'));
     const started = await this.challenges.start({
       loginSessionId: existing,
@@ -67,7 +70,7 @@ export class BotLoginController {
     @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
   ) {
     const clientIp = resolveClientIp(req);
-    assertRateLimit(`auth:bot:status:${clientIp ?? 'unknown'}`, 60, 60_000);
+    await this.rateLimit.assert(`auth:bot:status:${clientIp ?? 'unknown'}`, 60, 60_000);
     return this.challenges.status(challengeId);
   }
 
@@ -84,7 +87,7 @@ export class BotLoginController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
-    assertRateLimit(`auth:bot:complete:${clientIp ?? 'unknown'}`, 20, 60_000);
+    await this.rateLimit.assert(`auth:bot:complete:${clientIp ?? 'unknown'}`, 20, 60_000);
     const loginSessionId = readLoginSessionId(headerString(headers, 'cookie'));
     if (!loginSessionId) {
       throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Login session cookie is required.');

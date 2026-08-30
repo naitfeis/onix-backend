@@ -71,7 +71,6 @@ export class ProfilesService {
           ratingAverage: true, ratingCount: true, completedSales: true,
           lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
           _count: { select: { followers: true } },
-          verifications: { select: { kind: true, status: true } },
           sellerSubscription: { select: { status: true, endsAt: true } },
         },
       }),
@@ -104,7 +103,6 @@ export class ProfilesService {
         ratingAverage: profile.ratingAverage,
         ratingCount: profile.ratingCount,
         completedSales: profile.completedSales,
-        verifications: profile.verifications,
         proActive,
       }),
     };

@@ -19,6 +19,7 @@ import { SigningKeyService } from './signing-key.service';
 import { TelegramLoginVerifier } from './telegram-login.verifier';
 import { TokenService } from './token.service';
 import { debugEndpointsEnabled } from '../debug-endpoints';
+import { CoordinationModule } from '../coordination/coordination.module';
 
 const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
   ? [DebugSessionController, SessionProbeController]
@@ -32,7 +33,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
  * Phase 3.3: AuthRolloutService canary % + mode ladder (USE_NEW_AUTH stays false until ops gate).
  */
 @Module({
-  imports: [AvatarsModule, RiskModule],
+  imports: [AvatarsModule, CoordinationModule, RiskModule],
   controllers: [AuthV2Controller, ...debugControllers],
   providers: [
     { provide: SECRETS_PROVIDER, useClass: EnvSecretsProvider },
