@@ -71,6 +71,7 @@ export function LotSheet({
   const [method, setMethod] = useState<LotPayMethod>('BALANCE');
   const [methodsOpen, setMethodsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const payLockRef = useRef(false);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
   const balanceCents = parseCents(core.profile?.balanceCents);
@@ -103,6 +104,7 @@ export function LotSheet({
   }, []);
 
   const submit = async () => {
+    if (payLockRef.current || busy) return;
     if (!canBuy) {
       onToast('Войдите, чтобы купить лот.');
       return;
@@ -111,6 +113,7 @@ export function LotSheet({
       onToast('Этот способ пока тестовый. Выберите баланс, СБП или карту.');
       return;
     }
+    payLockRef.current = true;
     setBusy(true);
     try {
       if (!activeQuote.coveredByBalance) {
@@ -127,6 +130,7 @@ export function LotSheet({
     } catch (error) {
       onToast(friendlyError(error));
     } finally {
+      payLockRef.current = false;
       setBusy(false);
     }
   };

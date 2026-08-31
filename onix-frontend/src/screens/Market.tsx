@@ -14,6 +14,7 @@ import type { Core, Screen } from './types';
 import { PublicProfileModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 import { t } from '../i18n';
+import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
@@ -237,8 +238,9 @@ export function Market({
     // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
     if (isDefaultBrowse) {
       if (core.states.products === 'success') {
-        setItems(core.products);
-        setHasMore(core.products.length >= PAGE);
+        const next = visibleProducts(core.products);
+        setItems(next);
+        setHasMore(next.length >= PAGE);
         setMarketError(undefined);
         setMarketState('success');
         setOffset(0);
@@ -269,8 +271,9 @@ export function Market({
         limit: PAGE,
         offset: 0,
       }, controller.signal).then((data) => {
-        setItems(data);
-        setHasMore(data.length >= PAGE);
+        const next = visibleProducts(data);
+        setItems(next);
+        setHasMore(next.length >= PAGE);
         setMarketError(undefined);
         setMarketState('success');
       }).catch((error: unknown) => {
@@ -297,11 +300,23 @@ export function Market({
   };
 
   const buySelected = async (product: Product) => {
-    const deal = await core.purchase(product.id);
-    if (!deal) return;
+    hideCatalogProduct(product.id);
+    setItems((prev) => prev.filter((p) => p.id !== product.id));
     setSelected(null);
     setSellerTrust(null);
     setDetailReady(false);
+    const deal = await core.purchase(product.id);
+    if (!deal) {
+      // In-flight pay still owns the hide; a busy/double-click null must not restore the lot.
+      if (!isCatalogHidden(product.id)) {
+        setItems((prev) => {
+          if (prev.some((p) => p.id === product.id)) return prev;
+          return visibleProducts([product, ...prev]);
+        });
+        setToast('Не удалось оплатить заказ.');
+      }
+      return;
+    }
     setToast('Сделка создана. Деньги хранятся на платформе до передачи товара.');
     if (deal.chatId) openDealChat(deal.chatId);
     else switchTo('deals');
@@ -333,7 +348,7 @@ export function Market({
         limit: PAGE,
         offset: next,
       });
-      setItems((prev) => [...prev, ...data]);
+      setItems((prev) => [...prev, ...visibleProducts(data)]);
       setOffset(next);
       setHasMore(data.length >= PAGE);
     } catch (error) {
@@ -345,6 +360,12 @@ export function Market({
 
   useEffect(() => {
     if (!selected) return;
+    if (isCatalogHidden(selected.id) || selected.status !== 'ACTIVE') {
+      setSelected(null);
+      setSellerTrust(null);
+      setDetailReady(false);
+      return;
+    }
     const fresh = items.find((item) => item.id === selected.id)
       ?? core.products.find((item) => item.id === selected.id);
     if (!fresh || fresh.favorite === selected.favorite) return;
@@ -366,9 +387,9 @@ export function Market({
         p.id === msg.productId ? { ...p, status: msg.status as Product['status'], quantity: msg.quantity } : p
       )));
       if (msg.created) {
-        // New listing — pull first page for current browse filters.
-        void core.listProducts({ limit: 15, offset: 0 }).then((data) => {
-          if (Array.isArray(data) && data.length) setItems(data);
+        // New listing — pull first page for current browse filters; drop stale/hidden rows.
+        void core.listProducts({ limit: 15, offset: 0 }, new AbortController().signal).then((data) => {
+          if (Array.isArray(data) && data.length) setItems(visibleProducts(data));
         }).catch(() => { /* ignore */ });
       }
     });
@@ -395,10 +416,12 @@ export function Market({
           ?? core.products.find((item) => item.id === focusProductId);
         if (fromList) {
           if (cancelled) return;
+          if (isCatalogHidden(fromList.id) || fromList.status !== 'ACTIVE') return;
           await openProduct(fromList);
         } else {
           const product = await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(focusProductId)}`);
           if (cancelled) return;
+          if (isCatalogHidden(product.id) || product.status !== 'ACTIVE') return;
           await openProduct(product);
         }
       } catch { /* ignore */ }

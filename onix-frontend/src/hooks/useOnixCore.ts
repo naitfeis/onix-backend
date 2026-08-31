@@ -21,6 +21,12 @@ import {
 import { markAppReady } from '../perf/timing';
 import { getRealtimeClient } from '../realtime/client';
 import { isOrderNotification, playSound } from '../audio/sounds';
+import {
+  hideCatalogProduct,
+  isCatalogHidden,
+  showCatalogProduct,
+  visibleProducts,
+} from '../catalogVisibility';
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
 type AuthBootstrap =
@@ -206,14 +212,19 @@ export function useOnixCore() {
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const activeChatIdRef = useRef<string | null>(null);
+  const actionBusyRef = useRef<string | null>(null);
+  const purchaseLockRef = useRef(new Set<string>());
 
-  const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean }) => {
+  const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean; fresh?: boolean }) => {
     if (!opts?.silent) {
       setStates(previous => ({ ...previous, [key]: 'loading' }));
     }
     try {
-      const data = await api.get<Store[K]>(path);
-      setStore(previous => ({ ...previous, [key]: data }));
+      // `fresh` passes a dummy AbortSignal so this GET does not join an in-flight
+      // pre-mutation request (client GET dedupe is keyed by path and skipped when signal is set).
+      const data = await api.get<Store[K]>(path, opts?.fresh ? new AbortController().signal : undefined);
+      const next = key === 'products' ? visibleProducts(data as Product[]) as Store[K] : data;
+      setStore(previous => ({ ...previous, [key]: next }));
       setErrors(previous => ({ ...previous, [key]: undefined }));
       setStates(previous => ({ ...previous, [key]: 'success' }));
     } catch (error) {
@@ -609,25 +620,29 @@ export function useOnixCore() {
         return;
       }
       if (msg.type === 'product.changed') {
-        if (msg.created || msg.status === 'ACTIVE') {
-          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true });
-        }
-        setStore((previous) => {
-          if (msg.status !== 'ACTIVE') {
-            return {
-              ...previous,
-              products: previous.products.filter((p) => p.id !== msg.productId),
-            };
-          }
-          return {
+        if (msg.status !== 'ACTIVE') {
+          hideCatalogProduct(msg.productId);
+          setStore((previous) => ({
             ...previous,
-            products: previous.products.map((p) => (
-              p.id === msg.productId
-                ? { ...p, status: 'ACTIVE' as const, quantity: msg.quantity }
-                : p
-            )),
-          };
-        });
+            products: previous.products.filter((p) => p.id !== msg.productId),
+          }));
+          return;
+        }
+        const wasHidden = isCatalogHidden(msg.productId);
+        showCatalogProduct(msg.productId);
+        if (msg.created || wasHidden) {
+          // New listing or restore after reserve/cancel — fetch a post-commit snapshot.
+          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
+          return;
+        }
+        setStore((previous) => ({
+          ...previous,
+          products: previous.products.map((p) => (
+            p.id === msg.productId
+              ? { ...p, status: 'ACTIVE' as const, quantity: msg.quantity }
+              : p
+          )),
+        }));
         return;
       }
       if (msg.type === 'notification') {
@@ -678,7 +693,8 @@ export function useOnixCore() {
   }, []);
 
   const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {
-    if (actionBusy) return null;
+    if (actionBusyRef.current) return null;
+    actionBusyRef.current = key;
     setActionBusy(key);
     try {
       const result = await request();
@@ -690,14 +706,15 @@ export function useOnixCore() {
       setErrors(previous => ({ ...previous, [key]: friendlyError(error) }));
       return null;
     } finally {
+      actionBusyRef.current = null;
       setActionBusy(null);
     }
-  }, [actionBusy]);
+  }, []);
 
   const cents = (rubles: string | number) => Math.round(Number(rubles) * 100).toString();
 
   const listProducts = useCallback((query: ProductListQuery = {}, signal?: AbortSignal) =>
-    api.get<Product[]>(API_PATHS.productsList(query), signal), []);
+    api.get<Product[]>(API_PATHS.productsList(query), signal).then(visibleProducts), []);
 
   const listFavorites = useCallback(() =>
     api.get<Product[]>(API_PATHS.favorites), []);
@@ -817,13 +834,33 @@ export function useOnixCore() {
     });
   }, [run]);
 
-  const purchase = useCallback((productId: string) => run(`purchase-${productId}`, () =>
-    api.post<Deal>(API_PATHS.productPurchase(productId), { idempotencyKey: crypto.randomUUID(), quantity: 1 }), () => {
-      // Sold-out listing: refresh market; deals/chats needed for Escrow + SYSTEM message.
-      void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
-      void load('deals', API_PATHS.orders);
-      void load('chats', API_PATHS.chats);
-    }), [load, run]);
+  const purchase = useCallback(async (productId: string) => {
+    if (!productId || purchaseLockRef.current.has(productId) || actionBusyRef.current) return null;
+    purchaseLockRef.current.add(productId);
+    hideCatalogProduct(productId);
+    setStore((previous) => ({
+      ...previous,
+      products: previous.products.filter((p) => p.id !== productId),
+    }));
+    try {
+      const result = await run(`purchase-${productId}`, () =>
+        api.post<Deal>(API_PATHS.productPurchase(productId), {
+          idempotencyKey: crypto.randomUUID(),
+          quantity: 1,
+        }), () => {
+          void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
+          void load('deals', API_PATHS.orders, { silent: true, fresh: true });
+          void load('chats', API_PATHS.chats, { silent: true, fresh: true });
+        });
+      if (!result) {
+        showCatalogProduct(productId);
+        void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
+      }
+      return result;
+    } finally {
+      purchaseLockRef.current.delete(productId);
+    }
+  }, [load, run]);
 
   const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
     const path = action === 'deliver'
