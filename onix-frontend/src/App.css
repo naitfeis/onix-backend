@@ -3020,14 +3020,14 @@ html[data-theme="dark"] .stats b { color: #fff; }
 }
 .lot-island {
   padding: 16px 16px 18px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: transparent;
+  border-radius: var(--radius-hero, 24px);
+  border: var(--glass-border);
+  background: var(--glass-card-bg);
   overflow: visible;
 }
 html[data-theme="light"] .lot-island {
-  background: transparent;
-  border-color: rgba(20, 24, 32, 0.12);
+  background: var(--glass-card-bg);
+  border: var(--glass-border);
 }
 .lot-island--seller .seller-identity.profile-card {
   background: transparent;
@@ -3993,13 +3993,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     display: flex;
     flex-direction: column;
     gap: 16px;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden;
     background: transparent;
     border: 0;
     border-radius: 0;
     box-shadow: none;
     padding: 0;
+  }
+  .app-shell--market > .sidebar-right {
+    overflow: hidden;
   }
   .sidebar-right--icons {
     align-items: center;
@@ -4061,6 +4063,22 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     min-width: 0;
     overflow: hidden;
   }
+  .sidebar-right > .widget:last-child {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-right > .widget:last-child > h3 {
+    flex-shrink: 0;
+  }
+  .sidebar-right > .widget:last-child .widget-trend {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   .widget--glass {
     background: var(--glass-card-bg);
   }
@@ -4075,7 +4093,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .widget-notify { display: grid; gap: 10px; }
+  .widget-notify { display: grid; gap: 10px; max-height: min(320px, 42vh); overflow-y: auto; }
   .widget-notify__row {
     display: grid;
     grid-template-columns: 36px 1fr auto;

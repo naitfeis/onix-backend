@@ -61,6 +61,18 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('stretches the new-lots widget to the bottom of the right rail', () => {
+    expect(appCss).toMatch(
+      /\.sidebar-right > \.widget:last-child\s*\{[^}]*flex:\s*1 1 auto;/s,
+    );
+    expect(appCss).toMatch(
+      /\.app-shell--market > \.sidebar-right\s*\{[^}]*overflow:\s*hidden;/s,
+    );
+    expect(appCss).toMatch(
+      /\.sidebar-right > \.widget:last-child \.widget-trend\s*\{[^}]*overflow-y:\s*auto;/s,
+    );
+  });
+
   it('keeps checkout and deal lot badges outlined without fill', () => {
     expect(appCss).toMatch(
       /\.lot-sheet__badge\s*\{[^}]*background:\s*transparent;/s,
