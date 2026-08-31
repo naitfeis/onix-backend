@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
+import { API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
+import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
 import { DEAL_FILTERS, PublicProfileModal, dealLabels, dealProgress } from './shared';
 
@@ -99,6 +100,7 @@ export function Deals({
         const subLabel = deal.product.subcategory
           ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)
           : null;
+        const present = sellerIsPresent(deal.counterparty, core.profile, core.presenceOf(deal.counterparty.onixId));
         return (
       <Card key={deal.id} className={`deal-card${highlightedDealId === deal.id ? ' deal-card--focus' : ''}`}>
         <div className="seller-row">
@@ -107,19 +109,22 @@ export function Deals({
               userId={deal.counterparty.id}
               avatarUrl={deal.counterparty.avatarUrl}
               name={deal.counterparty.username}
-              online={sellerIsPresent(deal.counterparty, core.profile, core.presenceOf(deal.counterparty.onixId))}
+              online={present}
               onClick={() => { void openPeer(deal); }}
             />
             <div>
               <h2 title={deal.product.title}>{deal.product.title}</h2>
+              <p className="muted deal-peer-name">
+                {publicAt(deal.counterparty.username)} · {present ? 'Online' : formatLastSeen(core.presenceOf(deal.counterparty.onixId)?.lastOnline ?? deal.counterparty.lastOnline)}
+              </p>
+              <div className="deal-peer-actions">
+                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
+                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
+              </div>
               <div className="deal-lot-tags">
                 <span className="lot-sheet__badge">{categoryLabel}</span>
                 {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
                 {deal.product.autoDeliver ? <span className="lot-sheet__badge lot-sheet__badge--auto">⚡ Автовыдача</span> : null}
-              </div>
-              <div className="deal-peer-actions">
-                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
-                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
               </div>
             </div>
           </div>

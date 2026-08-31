@@ -29,6 +29,9 @@ class LedgerQueryDto {
 }
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
+/** Skip DB/WS fan-out if the same user already pinged within this window. */
+const PRESENCE_MIN_MS = 45_000;
+const lastPresenceWriteAt = new Map<string, { at: number; lastOnline: string }>();
 
 @Injectable()
 export class ProfilesService {
@@ -183,6 +186,13 @@ export class ProfilesService {
   /** Lightweight presence ping — keeps lastSeenAt fresh while the Mini App is open. */
   async touchPresence(user: AuthUser) {
     const now = new Date();
+    const key = String(user.id);
+    const recent = lastPresenceWriteAt.get(key);
+    if (recent && now.getTime() - recent.at < PRESENCE_MIN_MS) {
+      return { lastOnline: recent.lastOnline, online: true as const };
+    }
+    const lastOnline = now.toISOString();
+    lastPresenceWriteAt.set(key, { at: now.getTime(), lastOnline });
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: now },
@@ -191,7 +201,6 @@ export class ProfilesService {
       where: { sellerId: user.id, shadowBannedAt: { not: null }, status: 'ACTIVE' },
       data: { shadowBannedAt: null },
     });
-    const lastOnline = now.toISOString();
     const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`
       SELECT DISTINCT cm2."userId" AS "userId"
       FROM "ChatMember" cm1
@@ -208,6 +217,11 @@ export class ProfilesService {
       lastOnline,
       watchers: peers.map((p) => p.userId),
     });
+    lastPresenceWriteAt.set(key, { at: now.getTime(), lastOnline });
+    if (lastPresenceWriteAt.size > 8_000) {
+      const oldest = lastPresenceWriteAt.keys().next().value;
+      if (oldest) lastPresenceWriteAt.delete(oldest);
+    }
     return { lastOnline, online: true as const };
   }
 

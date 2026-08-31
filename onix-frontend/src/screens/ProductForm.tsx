@@ -26,7 +26,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
     const nextSubs = catalog[category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
     setDraft({ ...draft, category, subcategory: nextSubs[0] });
   };
-  return <div className="stack narrow">
+  return <div className="stack narrow lot-form">
     <Card><form className="form" onSubmit={submit}>
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
       {core.errors['product-form'] && <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>}
@@ -96,7 +96,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
         <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
       )}
       <div className="summary-line"><span>К получению (после 5%)</span><strong>{payout ? `${payout} ₽` : '—'}</strong></div>
-      <Button type="submit" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
+      <Button type="submit" variant="violet" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
     </form></Card></div>;
 }
 export default ProductForm;

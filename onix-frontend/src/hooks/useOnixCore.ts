@@ -38,6 +38,9 @@ type Store = {
 const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [], reviews: [] };
 /** Module-level — survives React StrictMode remount (useRef would reset). */
 let coldBootstrapOnce = false;
+/** Presence HTTP beat — not per click/route. 45s is within the 30–60s TZ window. */
+const PRESENCE_MIN_MS = 45_000;
+let lastPresenceBeatAt = 0;
 const notify = (kind: 'success' | 'error') => {
   telegramHaptic(kind);
 };
@@ -399,18 +402,18 @@ export function useOnixCore() {
     };
   }, []);
 
-  // Keep lastSeenAt fresh while the shell is open — including background tabs
-  // (browsers throttle timers, but we must not skip beats solely because document.hidden).
+  // Keep lastSeenAt fresh on a timer — not on every click, focus, or screen switch.
+  // getMe() already writes lastSeenAt; WS auth also announces online.
   useEffect(() => {
     if (!profile) return;
     let cancelled = false;
     let beating = false;
-    let lastBeatAt = 0;
-    const beat = async (force = false) => {
+    if (lastPresenceBeatAt === 0) lastPresenceBeatAt = Date.now();
+    const beat = async () => {
       if (cancelled || beating) return;
-      if (!force && Date.now() - lastBeatAt < 20_000) return;
+      if (Date.now() - lastPresenceBeatAt < PRESENCE_MIN_MS) return;
       beating = true;
-      lastBeatAt = Date.now();
+      lastPresenceBeatAt = Date.now();
       try {
         const res = await api.post<{ lastOnline: string; online: boolean }>(API_PATHS.mePresence, {});
         if (cancelled || !res?.lastOnline) return;
@@ -424,13 +427,9 @@ export function useOnixCore() {
         beating = false;
       }
     };
-    // getMe() already touched lastSeenAt. Avoid an immediate duplicate write
-    // competing with chats/orders on the small production DB pool.
-    const initialBeat = window.setTimeout(() => { void beat(true); }, 10_000);
-    const id = window.setInterval(() => { void beat(); }, 45_000);
+    const id = window.setInterval(() => { void beat(); }, PRESENCE_MIN_MS);
     const onVis = () => {
       if (document.hidden) return;
-      void beat();
       const rt = getRealtimeClient();
       if (!rt.isReady()) {
         const freshToken = async () => {
@@ -441,15 +440,13 @@ export function useOnixCore() {
         };
         rt.connect(freshToken);
       }
+      void beat();
     };
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', onVis);
     return () => {
       cancelled = true;
-      window.clearTimeout(initialBeat);
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', onVis);
     };
   }, [profile?.onixId]);
 
