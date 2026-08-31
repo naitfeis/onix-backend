@@ -228,7 +228,7 @@ export function LotSheet({
           </div>
           <div className="lot-sheet__buy">
             <Button
-              variant="buy"
+              variant="violet"
               busy={busy || buying}
               disabled={!canBuy}
               onClick={() => void submit()}

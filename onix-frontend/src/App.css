@@ -2145,14 +2145,13 @@ html[data-theme="light"] .category-toggle.is-open {
   font-size: 12px;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  color: var(--text);
+  border: 0;
+  background: #6B5FE0;
+  color: #fff;
 }
 .deal-peer-actions .button:hover {
-  border-color: #8B7FF5;
+  background: #8B7FF5;
   color: #fff;
-  background: color-mix(in srgb, #6B5FE0 35%, transparent);
 }
 .deal-lot-tags {
   display: flex;
@@ -3119,7 +3118,7 @@ html[data-theme="dark"] .lot-sheet__detail {
 .lot-pay-option.is-open,
 .lot-pay-option.is-active,
 .lot-pay-picker__list .lot-pay-option:hover {
-  border-color: var(--accent);
+  border-color: #8B7FF5;
   box-shadow: none;
   filter: none;
 }
@@ -3130,8 +3129,8 @@ html[data-theme="dark"] .lot-sheet__detail {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(69, 115, 213, 0.16);
-  color: var(--accent);
+  background: color-mix(in srgb, #6B5FE0 28%, transparent);
+  color: #8B7FF5;
   font-size: 18px;
 }
 .lot-pay-option__text {
@@ -3147,7 +3146,7 @@ html[data-theme="dark"] .lot-sheet__detail {
   font-size: 12px;
 }
 .lot-pay-option__value {
-  color: var(--accent);
+  color: #8B7FF5;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -3165,8 +3164,13 @@ html[data-theme="dark"] .lot-sheet__detail {
 }
 .lot-sheet__buy .button {
   width: 100%;
+  color: #fff;
+  background: #6B5FE0;
   box-shadow: none !important;
   filter: none;
+}
+.lot-sheet__buy .button:hover:not(:disabled) {
+  background: #8B7FF5;
 }
 @media (max-width: 899px) {
   .lot-sheet__buy {
@@ -3209,29 +3213,28 @@ html[data-theme="dark"] .lot-sheet__detail {
   margin-top: 14px;
   padding-bottom: 2px;
 }
-.seller-identity__actions .button {
+.seller-identity__actions .button,
+html[data-theme="dark"] .seller-identity__actions .button,
+html[data-theme="light"] .seller-identity__actions .button {
   flex: 1 1 140px;
   min-height: 40px;
   min-width: 0;
   width: auto;
   padding: 8px 12px;
-  border: 1px solid var(--line-strong);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text);
+  background: #6B5FE0;
+  color: #fff;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
 }
-.seller-identity__actions .button:hover {
-  border-color: #8B7FF5;
-  background: #6B5FE0;
+.seller-identity__actions .button:hover:not(:disabled),
+html[data-theme="dark"] .seller-identity__actions .button:hover:not(:disabled),
+html[data-theme="light"] .seller-identity__actions .button:hover:not(:disabled) {
+  background: #8B7FF5;
   color: #fff;
-}
-html[data-theme="light"] .seller-identity__actions .button {
-  border-color: rgba(20, 24, 32, 0.14);
-  background: rgba(20, 24, 32, 0.04);
 }
 .lot-sheet__warn {
   margin: 10px 0 0;

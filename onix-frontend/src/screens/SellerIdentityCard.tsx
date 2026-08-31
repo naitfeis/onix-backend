@@ -29,7 +29,6 @@ export function SellerIdentityCard({
   onToggleFollow?: () => void;
 }) {
   const present = sellerIsPresent(seller, core.profile, core.presenceOf(seller.onixId));
-  const isSelf = Boolean(core.profile && core.profile.onixId === seller.onixId);
   const showFollow = Boolean(onToggleFollow) && !checkout;
 
   return (
@@ -63,15 +62,15 @@ export function SellerIdentityCard({
           </div>
         )}
       </div>
-      {(onOpen || (!isSelf && onWrite) || showFollow) && (
+      {(onOpen || onWrite || showFollow) && (
         <div className={`card-actions${checkout ? ' seller-identity__actions' : ''}`}>
-          {!isSelf && onWrite && (
-            <Button type="button" variant="secondary" onClick={onWrite}>
+          {onWrite && (
+            <Button type="button" variant={checkout ? 'violet' : 'secondary'} onClick={onWrite}>
               Написать
             </Button>
           )}
           {onOpen && (
-            <Button type="button" variant="secondary" onClick={onOpen}>
+            <Button type="button" variant={checkout ? 'violet' : 'secondary'} onClick={onOpen}>
               Профиль
             </Button>
           )}
