@@ -10,6 +10,7 @@ import {
 } from '../utils/lotCheckout';
 import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
+import { lotWarrantyBadge } from '../utils/warranty';
 
 const PAYMENT_WARNING =
   'Не подтверждайте заказ, пока продавец не передал товар. Снимите передачу на видео — так проще решить спор.';
@@ -155,6 +156,7 @@ export function LotSheet({
             <span className={`lot-sheet__badge${product.autoDeliver ? ' lot-sheet__badge--auto' : ''}`}>
               {product.autoDeliver ? '⚡ Автовыдача' : 'Без автовыдачи'}
             </span>
+            <span className="lot-sheet__badge">{lotWarrantyBadge(product)}</span>
           </div>
         </div>
 

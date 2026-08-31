@@ -698,17 +698,16 @@ export default function App() {
                         onClick={() => openProductCard(product.id)}
                       >
                         {image ? (
-                          <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
+                          <span className="widget-trend__emblem widget-trend__emblem--photo">
                             <img src={image} alt="" width={28} height={28} loading="lazy" decoding="async" />
                           </span>
                         ) : (
-                          <span
-                            className="cat-card__emblem"
-                            style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
-                          >{style.letter}</span>
+                          <span className="widget-trend__emblem" style={{ background: style.bg }}>{style.letter}</span>
                         )}
-                        <span className="widget-trend__title">{product.title}</span>
-                        <strong>{money(product.priceCents)}</strong>
+                        <span className="widget-trend__copy">
+                          <span className="widget-trend__title">{product.title}</span>
+                          <strong>{money(product.priceCents)}</strong>
+                        </span>
                       </button>
                     );
                   })

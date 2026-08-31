@@ -1487,14 +1487,22 @@ html[data-theme="light"] .cat-card__count {
 .widget-notify__row.is-unread p b { color: var(--accent); }
 .widget-trend__row--btn {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
   text-align: left;
   font: inherit;
+  box-sizing: border-box;
+}
+.widget-trend__copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 .widget-trend__title {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3059,6 +3067,11 @@ html[data-theme="light"] .lot-island {
   font-weight: 600;
   line-height: 1;
 }
+.lot-sheet__badges .lot-sheet__badge {
+  background: #6B5FE0;
+  border-color: #6B5FE0;
+  color: #fff;
+}
 .lot-sheet__title {
   margin: 0 0 18px;
   font-size: 22px;
@@ -3091,6 +3104,15 @@ html[data-theme="dark"] .lot-sheet__detail {
   border: 1px solid rgba(245, 193, 74, 0.55);
   box-shadow: none;
   filter: none;
+}
+.lot-sheet__badges .lot-sheet__badge--auto {
+  color: #f5c14a;
+  background: color-mix(in srgb, #f5c14a 14%, #1a1a22);
+  border-color: rgba(245, 193, 74, 0.55);
+}
+html[data-theme="light"] .lot-sheet__badges .lot-sheet__badge--auto {
+  color: #8a5a00;
+  background: color-mix(in srgb, #f5c14a 22%, #fff);
 }
 .lot-checkout {
   display: grid;
@@ -4099,17 +4121,47 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     transition: gap 160ms;
   }
   .widget-link:hover { gap: 8px; }
-  .widget-trend { display: grid; }
+  .widget-trend { display: grid; min-width: 0; }
   .widget-trend__row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 10px 0;
     border-bottom: 0;
     font-size: 13px;
     color: var(--text-primary);
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
-  .widget-trend__row strong { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent); }
+  .widget-trend__emblem {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .widget-trend__emblem--photo {
+    background: #111;
+    padding: 0;
+  }
+  .widget-trend__emblem img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .widget-trend__row strong {
+    justify-self: start;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
   .desktop-search { margin-bottom: 16px; gap: 12px; }
   .desktop-hero:not(.market-hero) {
     min-height: 0;

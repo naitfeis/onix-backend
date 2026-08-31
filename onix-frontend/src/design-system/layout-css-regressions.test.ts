@@ -49,6 +49,24 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('keeps new-lot titles ellipsized and prices fully visible in the right rail', () => {
+    expect(appCss).toMatch(
+      /\.widget-trend__title\s*\{[^}]*text-overflow:\s*ellipsis;/s,
+    );
+    expect(appCss).toMatch(
+      /\.widget-trend__copy\s*\{[^}]*min-width:\s*0;/s,
+    );
+    expect(appCss).toMatch(
+      /\.widget-trend__row strong\s*\{[^}]*white-space:\s*nowrap;/s,
+    );
+  });
+
+  it('paints checkout lot badges in brand violet', () => {
+    expect(appCss).toMatch(
+      /\.lot-sheet__badges \.lot-sheet__badge\s*\{[^}]*background:\s*#6B5FE0;/s,
+    );
+  });
+
   it('uses the deeper semantic accent behind unread counts', () => {
     expect(appCss).toMatch(
       /\.thread em, \.nav-count\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,
