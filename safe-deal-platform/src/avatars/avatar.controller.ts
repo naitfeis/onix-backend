@@ -26,7 +26,9 @@ export class AvatarController {
     assertRateLimit(`avatar:${req.ip ?? 'unknown'}`, 90, 60_000);
 
     if (!/^\d+$/.test(userIdRaw)) {
-      res.status(404).end();
+      res.status(204);
+      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.end();
       return;
     }
 
@@ -44,7 +46,9 @@ export class AvatarController {
       res.setHeader('Content-Disposition', 'inline');
       stream.pipe(res);
     } catch {
-      res.status(404).end();
+      res.status(204);
+      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600');
+      res.end();
     }
   }
 }

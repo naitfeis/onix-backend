@@ -60,12 +60,16 @@ export async function timedApi<T>(name: string, run: () => Promise<T>): Promise<
     push({ name: `api:${name}`, durationMs: performance.now() - started, at: Date.now(), detail: 'ok' });
     return result;
   } catch (error) {
-    push({
-      name: `api:${name}`,
-      durationMs: performance.now() - started,
-      at: Date.now(),
-      detail: error instanceof Error ? error.name : 'error',
-    });
+    const aborted = (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError')
+      || (error instanceof Error && error.name === 'AbortError');
+    if (!aborted) {
+      push({
+        name: `api:${name}`,
+        durationMs: performance.now() - started,
+        at: Date.now(),
+        detail: error instanceof Error ? error.name : 'error',
+      });
+    }
     throw error;
   }
 }

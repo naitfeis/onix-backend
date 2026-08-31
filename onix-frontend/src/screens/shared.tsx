@@ -47,7 +47,7 @@ export function staffBadgeFromRoles(roles: PlatformStatus[]): PlatformStatus | u
 }
 
 export function StaffBadge({ badge }: { badge?: PlatformStatus | 'SUPPORT' }) {
-  if (!badge || badge === 'USER') return null;
+  if (!badge || badge === 'USER' || badge === 'VERIFIED_SELLER' || badge === 'VIP') return null;
   const status: PlatformStatus = badge === 'SUPPORT' ? 'MODERATOR' : badge;
   const tone = status === 'ADMIN' || status === 'SUPER_ADMIN' || status === 'MODERATOR'
     ? 'staff'

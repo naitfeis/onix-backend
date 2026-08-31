@@ -3,9 +3,8 @@ import { api, money } from '../api/client';
 import { API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
-import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
-import { DEAL_FILTERS, PublicProfileModal, StaffBadge, dealLabels, dealProgress } from './shared';
+import { DEAL_FILTERS, PublicProfileModal, dealLabels, dealProgress } from './shared';
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [rating, setRating] = useState(5);
@@ -83,7 +82,7 @@ export function Deals({
   return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
-    <div className="deal-role-tabs" role="tablist" aria-label="Роль в сделках">{(['buyer', 'seller'] as const).map(item => (
+    <div className="chips deal-role-tabs" role="tablist" aria-label="Роль в сделках">{(['buyer', 'seller'] as const).map(item => (
       <button
         type="button"
         role="tab"
@@ -91,7 +90,7 @@ export function Deals({
         className={role === item ? 'active' : ''}
         key={item}
         onClick={() => setRole(item)}
-      >{item === 'buyer' ? 'Мои покупки' : 'Мои продажи'}</button>
+      >{item === 'buyer' ? 'МОИ ПОКУПКИ' : 'МОИ ПРОДАЖИ'}</button>
     ))}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
@@ -113,11 +112,14 @@ export function Deals({
             />
             <div>
               <h2 title={deal.product.title}>{deal.product.title}</h2>
-              <p className="muted">{publicAt(deal.counterparty.username)} <StaffBadge badge={deal.counterparty.badge} /></p>
               <div className="deal-lot-tags">
                 <span className="lot-sheet__badge">{categoryLabel}</span>
                 {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
                 {deal.product.autoDeliver ? <span className="lot-sheet__badge lot-sheet__badge--auto">⚡ Автовыдача</span> : null}
+              </div>
+              <div className="deal-peer-actions">
+                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
+                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
               </div>
             </div>
           </div>
@@ -157,7 +159,6 @@ export function Deals({
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>
           )}
           {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
-          <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Перейти в чат</Button>
           {!deal.complaintOpen && (
             <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
               const ticket = await core.openSupport(deal.id);

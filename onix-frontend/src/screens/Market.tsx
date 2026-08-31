@@ -79,6 +79,22 @@ function formatCatCount(n: number): string {
   return String(n);
 }
 
+const VIEWED_LOTS_KEY = 'onix-viewed-lots';
+function readViewedLots(): Set<string> {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(VIEWED_LOTS_KEY) ?? '[]') as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+function rememberViewedLot(id: string, store: Set<string>) {
+  store.add(id);
+  try {
+    sessionStorage.setItem(VIEWED_LOTS_KEY, JSON.stringify([...store].slice(-200)));
+  } catch { /* ignore */ }
+}
+
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
   externalCategory, onExternalCategoryConsumed,
@@ -145,8 +161,7 @@ export function Market({
     },
   ];
 
-  /** One view ping per product per browser tab — kills StrictMode/focus re-open spam → 429. */
-  const viewedIdsRef = useRef<Set<string>>(new Set());
+  const viewedIdsRef = useRef<Set<string>>(readViewedLots());
 
   const openProduct = async (product: Product, origin: 'catalog' | 'profile' = 'catalog') => {
     if (origin === 'catalog') {
@@ -169,7 +184,7 @@ export function Market({
       setDetailReady(true);
       if (trust) setSellerTrust(trust);
       if (core.profile && !viewedIdsRef.current.has(full.id)) {
-        viewedIdsRef.current.add(full.id);
+        rememberViewedLot(full.id, viewedIdsRef.current);
         void api.post(API_PATHS.productView(full.id), {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
         }).catch(() => { /* ignore view errors */ });

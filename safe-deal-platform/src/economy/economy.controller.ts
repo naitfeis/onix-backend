@@ -149,7 +149,7 @@ export class EconomyController {
     @Body() dto: ProductViewDto,
   ) {
     assertRateLimit(`view:${user.id}`, 60, 60_000);
-    assertRateLimit(`view:${user.id}:${productId}`, 1, 10_000);
+    assertRateLimit(`view:${user.id}:${productId}`, 8, 60_000);
     return this.analytics.recordUniqueProductView({
       productId,
       viewerUserId: user.id,

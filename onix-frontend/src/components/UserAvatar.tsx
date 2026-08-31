@@ -16,8 +16,24 @@ type UserAvatarProps = {
   online?: boolean;
 };
 
-/** Avoid repeating known-missing avatar requests across component remounts. */
-const failedAvatarUrls = new Set<string>();
+/** Avoid repeating known-missing avatar requests across remounts and reloads. */
+const FAILED_AVATARS_KEY = 'onix-avatar-miss';
+const failedAvatarUrls = new Set<string>((() => {
+  try {
+    const raw = sessionStorage.getItem(FAILED_AVATARS_KEY);
+    const parsed = raw ? JSON.parse(raw) as unknown : [];
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+})());
+
+function rememberFailedAvatar(url: string) {
+  failedAvatarUrls.add(url);
+  try {
+    sessionStorage.setItem(FAILED_AVATARS_KEY, JSON.stringify([...failedAvatarUrls].slice(-80)));
+  } catch { /* ignore */ }
+}
 
 function initials(name: string): string {
   const value = name.replace(/^@/, '').trim();
@@ -77,8 +93,14 @@ export default function UserAvatar({
             loading="lazy"
             decoding="async"
             referrerPolicy="no-referrer"
+            onLoad={(event) => {
+              if (event.currentTarget.naturalWidth === 0 && usableUrl) {
+                rememberFailedAvatar(usableUrl);
+                setFailedUrl(usableUrl);
+              }
+            }}
             onError={() => {
-              if (usableUrl) failedAvatarUrls.add(usableUrl);
+              if (usableUrl) rememberFailedAvatar(usableUrl);
               setFailedUrl(usableUrl ?? null);
             }}
           />
