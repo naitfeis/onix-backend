@@ -257,6 +257,16 @@ export function useOnixCore() {
       setStates(previous => ({ ...previous, profile: 'success' }));
       return complete;
     } catch (error) {
+      const authRejected = error instanceof ApiError && (error.status === 401 || error.status === 403);
+      if (!authRejected && isTransientRefreshFailure(error)) {
+        const kept = profileRef.current;
+        setErrors((previous) => ({
+          ...previous,
+          profile: 'Нет связи с сервером. Сессия сохранена — обновите страницу.',
+        }));
+        setStates((previous) => ({ ...previous, profile: kept ? 'success' : 'error' }));
+        return kept;
+      }
       setProfile(null);
       setErrors(previous => ({ ...previous, profile: friendlyError(error) }));
       setStates(previous => ({ ...previous, profile: 'error' }));

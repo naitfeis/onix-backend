@@ -75,11 +75,12 @@ async function executeApiRequest<T>(path: string, options: RequestInit, token: s
     && !options.signal
     && (pathOnly === '/api/products' || pathOnly.startsWith('/api/products/')
       || pathOnly.includes('/catalog/'));
+  const meGet = method === 'GET' && !options.signal && pathOnly === '/api/users/me';
   const response = await resilientFetch(url, {
     ...options,
     headers,
     credentials: shouldIncludeCredentials() ? 'include' : (options.credentials ?? 'same-origin'),
-    maxTimeoutRetries: catalogGet ? 1 : 0,
+    maxTimeoutRetries: catalogGet || meGet ? 1 : 0,
   });
   let payload: ApiEnvelope<T> | undefined;
   try {
