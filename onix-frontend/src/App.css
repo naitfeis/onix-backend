@@ -1938,8 +1938,8 @@ html[data-theme="light"] .select-menu__option.is-active {
   white-space: nowrap;
 }
 .auto-deliver-filter.is-on {
-  border-color: rgba(245, 193, 74, 0.55);
-  color: #f5c14a;
+  border-color: var(--line-strong);
+  color: inherit;
 }
 .auto-deliver-filter__dot {
   width: 22px;
@@ -1959,7 +1959,14 @@ html[data-theme="light"] .select-menu__option.is-active {
 }
 .search-row .control,
 .search-row select.control,
-.search-row .select-menu__trigger { border-radius: 26px !important; }
+.search-row .select-menu__trigger {
+  border-radius: 26px !important;
+  background-color: transparent;
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 .search-row .select-menu { min-width: 0; }
 .search-row .sort-picker {
   position: relative;
@@ -3015,11 +3022,11 @@ html[data-theme="dark"] .stats b { color: #fff; }
   padding: 16px 16px 18px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #1a1a22;
+  background: transparent;
   overflow: visible;
 }
 html[data-theme="light"] .lot-island {
-  background: #fff;
+  background: transparent;
   border-color: rgba(20, 24, 32, 0.12);
 }
 .lot-island--seller .seller-identity.profile-card {
@@ -3059,18 +3066,13 @@ html[data-theme="light"] .lot-island {
   align-items: center;
   min-height: 28px;
   padding: 4px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: var(--surface, rgba(255,255,255,0.04));
-  color: var(--text);
+  background: transparent;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
-}
-.lot-sheet__badges .lot-sheet__badge {
-  background: #6B5FE0;
-  border-color: #6B5FE0;
-  color: #fff;
 }
 .lot-sheet__title {
   margin: 0 0 18px;
@@ -3098,21 +3100,6 @@ html[data-theme="dark"] .lot-sheet__detail {
 }
 .lot-sheet__section--next {
   margin-top: 4px;
-}
-.lot-sheet__badge--auto {
-  color: #f5c14a;
-  border: 1px solid rgba(245, 193, 74, 0.55);
-  box-shadow: none;
-  filter: none;
-}
-.lot-sheet__badges .lot-sheet__badge--auto {
-  color: #f5c14a;
-  background: color-mix(in srgb, #f5c14a 14%, #1a1a22);
-  border-color: rgba(245, 193, 74, 0.55);
-}
-html[data-theme="light"] .lot-sheet__badges .lot-sheet__badge--auto {
-  color: #8a5a00;
-  background: color-mix(in srgb, #f5c14a 22%, #fff);
 }
 .lot-checkout {
   display: grid;
@@ -3144,9 +3131,9 @@ html[data-theme="light"] .lot-sheet__badges .lot-sheet__badge--auto {
   gap: 12px;
   min-height: 64px;
   padding: 12px 14px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: var(--surface, rgba(255,255,255,0.04));
+  background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
@@ -3227,13 +3214,13 @@ html[data-theme="light"] .lot-sheet__badges .lot-sheet__badge--auto {
     z-index: 2;
     margin: 0 -16px;
     padding: 10px 16px 6px;
-    background: #1a1a22;
+    background: var(--page-bg, #0a0812);
     border: 0;
     box-shadow: none;
     outline: none;
   }
   html[data-theme="light"] .lot-sheet__buy {
-    background: #fff;
+    background: var(--page-bg, #e8eef6);
   }
   .lot-sheet__buy .button {
     border: 1px solid #6B5FE0;

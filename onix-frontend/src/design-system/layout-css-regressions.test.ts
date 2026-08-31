@@ -61,9 +61,15 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('paints checkout lot badges in brand violet', () => {
+  it('keeps checkout and deal lot badges outlined without fill', () => {
     expect(appCss).toMatch(
+      /\.lot-sheet__badge\s*\{[^}]*background:\s*transparent;/s,
+    );
+    expect(appCss).not.toMatch(
       /\.lot-sheet__badges \.lot-sheet__badge\s*\{[^}]*background:\s*#6B5FE0;/s,
+    );
+    expect(appCss).not.toMatch(
+      /\.lot-sheet__badge--auto\s*\{[^}]*color:\s*#f5c14a;/s,
     );
   });
 
