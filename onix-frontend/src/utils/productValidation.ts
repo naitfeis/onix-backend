@@ -1,4 +1,5 @@
 import type { ProductDraft } from '../api/contracts';
+import { parseRublesToCents } from './moneyCents';
 
 const SOFT_MIN_SUB = new Set(['STANDOFF_GOLD', 'ROBLOX_ROBUX', 'STEAM_TOPUP', 'RP_VIRTS']);
 
@@ -14,11 +15,10 @@ export function validateDraft(
   const title = draft.title.trim();
   if (title.length < 5) errors.push('Название должно содержать минимум 5 символов');
   if (title.length > 32) errors.push('Название не длиннее 32 символов');
-  const price = Number(draft.priceRubles);
+  const priceCents = parseRublesToCents(draft.priceRubles);
   const minRub = minPriceRubles(draft.subcategory);
-  const priceCents = Math.round(price * 100);
-  const minCents = Math.round(minRub * 100);
-  if (!Number.isFinite(price) || priceCents < minCents || price > 50_000) {
+  const minCents = parseRublesToCents(minRub);
+  if (!Number.isSafeInteger(priceCents) || priceCents < minCents || priceCents > 5_000_000) {
     errors.push(`Цена должна быть от ${minRub} до 50 000 ₽`);
   }
   if (!Number.isInteger(draft.quantity) || draft.quantity < 1) errors.push('Укажите корректное количество');

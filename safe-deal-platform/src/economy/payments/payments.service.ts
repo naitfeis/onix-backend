@@ -5,6 +5,7 @@ import {
 import { PaymentProviderCode, PaymentWallet, Prisma, type PaymentIntent } from '@prisma/client';
 import { AuthUser } from '../../common';
 import { withSerializableTransaction } from '../../database/transaction-retry';
+import { lockUsersInIdOrder, lockPaymentIntentForUpdate } from '../../database/money-locks';
 import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
@@ -225,12 +226,11 @@ export class PaymentsService {
     if (!isManualPaymentsEnabled()) {
       throw new ForbiddenException('Manual-пополнение отключено (MANUAL_PAYMENTS_ENABLED).');
     }
-    const result = await this.idempotency.run(
+    const result = await this.idempotency.runTransactional(
       'payment.confirm',
       intentId,
       { intentId, adminUserId: adminUserId.toString(), provider: 'MANUAL' },
-      () => this.settleIntentOnce(intentId, { expectProvider: 'MANUAL' }),
-      { recover: () => this.recoverProviderEvent('MANUAL', intentId, 'SUCCEEDED') },
+      (tx) => this.settleIntentInTx(tx, intentId, { expectProvider: 'MANUAL' }),
     );
     return result.value;
   }
@@ -269,7 +269,7 @@ export class PaymentsService {
    * Never trusts amount/userId from payload for credit.
    */
   async applyProviderEvent(provider: PaymentProviderCode, event: ProviderEventInput) {
-    const result = await this.idempotency.run(
+    const result = await this.idempotency.runTransactional(
       `payment.webhook.${provider}`,
       event.eventId,
       {
@@ -279,27 +279,19 @@ export class PaymentsService {
         claimedAmountCents: event.claimedAmountCents?.toString() ?? null,
         claimedCurrency: event.claimedCurrency ?? null,
       },
-      async () => {
+      async (tx) => {
         if (event.status === 'SUCCEEDED') {
-          return this.settleIntentOnce(event.intentId, {
+          return this.settleIntentInTx(tx, event.intentId, {
             expectProvider: provider,
             providerPaymentId: event.providerPaymentId,
             claimedAmountCents: event.claimedAmountCents,
             claimedCurrency: event.claimedCurrency,
           });
         }
-        return this.markTerminal(event.intentId, event.status, {
+        return this.markTerminalInTx(tx, event.intentId, event.status, {
           expectProvider: provider,
           providerPaymentId: event.providerPaymentId,
         });
-      },
-      {
-        recover: () => this.recoverProviderEvent(
-          provider,
-          event.intentId,
-          event.status,
-          event.providerPaymentId,
-        ),
       },
     );
     logMoneyEvent('payment_webhook', {
@@ -312,25 +304,8 @@ export class PaymentsService {
     return result.value;
   }
 
-  private async recoverProviderEvent(
-    provider: PaymentProviderCode,
-    intentId: string,
-    status: 'SUCCEEDED' | 'FAILED' | 'CANCELED',
-    providerPaymentId?: string,
-  ) {
-    const intent = await this.prisma.paymentIntent.findUnique({ where: { id: intentId } });
-    if (
-      !intent
-      || intent.provider !== provider
-      || intent.status !== status
-      || (providerPaymentId && intent.providerRef !== providerPaymentId)
-    ) {
-      return undefined;
-    }
-    return intent;
-  }
-
-  private async settleIntentOnce(
+  private async settleIntentInTx(
+    tx: Prisma.TransactionClient,
     intentId: string,
     opts: {
       expectProvider: PaymentProviderCode;
@@ -339,7 +314,7 @@ export class PaymentsService {
       claimedCurrency?: string;
     },
   ) {
-    return withSerializableTransaction(this.prisma, async (tx) => {
+      await lockPaymentIntentForUpdate(tx, intentId);
       const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
       if (!intent) throw new NotFoundException('Платёж не найден.');
       if (intent.provider !== opts.expectProvider) {
@@ -355,6 +330,7 @@ export class PaymentsService {
       if (intent.status !== 'CREATED' && intent.status !== 'PENDING') {
         throw new ConflictException('Платёж нельзя подтвердить в текущем статусе.');
       }
+      await lockUsersInIdOrder(tx, [intent.userId]);
 
       // Optional claims — must match DB; never used as credit source.
       if (opts.claimedAmountCents !== undefined && opts.claimedAmountCents !== intent.amountCents) {
@@ -408,36 +384,35 @@ export class PaymentsService {
         where: { id: intent.id },
         data: { status: 'SUCCEEDED', succeededAt: new Date() },
       });
-    });
   }
 
-  private async markTerminal(
+  private async markTerminalInTx(
+    tx: Prisma.TransactionClient,
     intentId: string,
     status: 'FAILED' | 'CANCELED',
     opts: { expectProvider: PaymentProviderCode; providerPaymentId?: string },
   ) {
-    return withSerializableTransaction(this.prisma, async (tx) => {
-      const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
-      if (!intent) throw new NotFoundException('Платёж не найден.');
-      if (intent.provider !== opts.expectProvider) {
-        throw new BadRequestException('Провайдер не совпадает с PaymentIntent.');
-      }
-      if (intent.status === 'SUCCEEDED') {
-        throw new ConflictException('success → failed/canceled невозможен.');
-      }
-      if (intent.status === status || intent.status === 'FAILED' || intent.status === 'CANCELED' || intent.status === 'EXPIRED') {
-        return intent;
-      }
-      if (opts.providerPaymentId && !intent.providerRef) {
-        await tx.paymentIntent.update({
-          where: { id: intent.id },
-          data: { providerRef: opts.providerPaymentId },
-        });
-      }
-      return tx.paymentIntent.update({
+    await lockPaymentIntentForUpdate(tx, intentId);
+    const intent = await tx.paymentIntent.findUnique({ where: { id: intentId } });
+    if (!intent) throw new NotFoundException('Платёж не найден.');
+    if (intent.provider !== opts.expectProvider) {
+      throw new BadRequestException('Провайдер не совпадает с PaymentIntent.');
+    }
+    if (intent.status === 'SUCCEEDED') {
+      throw new ConflictException('success → failed/canceled невозможен.');
+    }
+    if (intent.status === status || intent.status === 'FAILED' || intent.status === 'CANCELED' || intent.status === 'EXPIRED') {
+      return intent;
+    }
+    if (opts.providerPaymentId && !intent.providerRef) {
+      await tx.paymentIntent.update({
         where: { id: intent.id },
-        data: { status },
+        data: { providerRef: opts.providerPaymentId },
       });
+    }
+    return tx.paymentIntent.update({
+      where: { id: intent.id },
+      data: { status },
     });
   }
 

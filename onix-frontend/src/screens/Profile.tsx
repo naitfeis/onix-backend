@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { api, ApiError, friendlyError, money } from '../api/client';
 import {
   API_PATHS, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
@@ -10,6 +10,7 @@ import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textar
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
+import { parseRublesToCents } from '../utils/moneyCents';
 import type { Core, Screen } from './types';
 import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
@@ -28,11 +29,12 @@ type StepUpState = {
   challengeId: string;
   webDeepLink?: string;
   expiresAt?: string;
-  amountRubles: number;
+  amountCents: number;
 };
 
-function rublesToCents(rubles: number): number {
-  return Math.round(rubles * 100);
+function rublesToCents(rubles: string | number): number {
+  const cents = parseRublesToCents(rubles);
+  return Number.isSafeInteger(cents) ? cents : Number.NaN;
 }
 
 export function EditProduct({ product, core, onClose, setToast }: { product: Product | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
@@ -129,6 +131,8 @@ export function Profile({
   const [moneyOpen, setMoneyOpen] = useState(false);
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
+  const moneyLockRef = useRef(false);
+  const moneyKeyRef = useRef(crypto.randomUUID());
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
   const [payMethod, setPayMethod] = useState<'MANUAL' | 'TELEGRAM' | 'YOOKASSA'>('MANUAL');
@@ -239,6 +243,7 @@ export function Profile({
     setAmount('');
     setPayMethod('MANUAL');
     setMoneyOpen(true);
+    moneyKeyRef.current = crypto.randomUUID();
     setMoneyModal(kind);
   };
 
@@ -268,10 +273,10 @@ export function Profile({
     };
   }, [stepUp]);
 
-  const completeWithdraw = async (rubles: number, stepUpChallengeId?: string) => {
+  const completeWithdraw = async (amountCents: number, stepUpChallengeId?: string) => {
     await api.post(API_PATHS.walletWithdraw, {
-      amountCents: String(rublesToCents(rubles)),
-      idempotencyKey: crypto.randomUUID(),
+      amountCents: String(amountCents),
+      idempotencyKey: moneyKeyRef.current,
       ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
     });
     await core.loadProfile();
@@ -282,15 +287,16 @@ export function Profile({
   };
 
   const submitMoney = async () => {
-    const rubles = Number(amount);
-    if (!moneyModal || !(rubles >= 1)) return;
+    if (moneyLockRef.current || moneyBusy) return;
+    const amountCents = rublesToCents(amount);
+    if (!moneyModal || !Number.isSafeInteger(amountCents) || amountCents < 100) return;
+    moneyLockRef.current = true;
     setMoneyBusy(true);
     try {
-      const amountCents = rublesToCents(rubles);
-      const key = crypto.randomUUID();
+      const key = moneyKeyRef.current;
       if (moneyModal === 'MAIN_WITHDRAW') {
         try {
-          await completeWithdraw(rubles);
+          await completeWithdraw(amountCents);
         } catch (error) {
           if (error instanceof ApiError && error.code === 'AUTH_STEP_UP_REQUIRED') {
             const details = error.details as {
@@ -303,7 +309,7 @@ export function Profile({
                 challengeId: details.challengeId,
                 webDeepLink: details.webDeepLink,
                 expiresAt: details.expiresAt,
-                amountRubles: rubles,
+                amountCents,
               });
               setStepUpStatus('PENDING');
               setToast('Подтвердите вывод в Telegram.');
@@ -342,18 +348,21 @@ export function Profile({
         setToast(message);
       }
     } finally {
+      moneyLockRef.current = false;
       setMoneyBusy(false);
     }
   };
 
   const retryWithdrawAfterStepUp = async () => {
-    if (!stepUp) return;
+    if (!stepUp || moneyLockRef.current) return;
+    moneyLockRef.current = true;
     setMoneyBusy(true);
     try {
-      await completeWithdraw(stepUp.amountRubles, stepUp.challengeId);
+      await completeWithdraw(stepUp.amountCents, stepUp.challengeId);
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Не удалось завершить вывод.');
     } finally {
+      moneyLockRef.current = false;
       setMoneyBusy(false);
     }
   };
@@ -569,7 +578,7 @@ export function Profile({
           <Button
             variant="violet"
             busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.actionBusy === 'withdraw')}
-            disabled={Number(amount) < 1}
+            disabled={!Number.isSafeInteger(rublesToCents(amount)) || rublesToCents(amount) < 100}
             onClick={() => void submitMoney()}
           >Продолжить</Button>
         </div>

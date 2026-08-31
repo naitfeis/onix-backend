@@ -72,6 +72,8 @@ export function LotSheet({
   const [methodsOpen, setMethodsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const payLockRef = useRef(false);
+  const intentKeyRef = useRef(crypto.randomUUID());
+  const toppedUpRef = useRef(false);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
   const balanceCents = parseCents(core.profile?.balanceCents);
@@ -116,14 +118,15 @@ export function LotSheet({
     payLockRef.current = true;
     setBusy(true);
     try {
-      if (!activeQuote.coveredByBalance) {
+      if (!activeQuote.coveredByBalance && !toppedUpRef.current) {
         const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
           wallet: 'MAIN',
           amountCents: activeQuote.externalCents,
           provider: activeMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: intentKeyRef.current,
         });
         await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
+        toppedUpRef.current = true;
         await core.loadProfile();
       }
       await onBuy();

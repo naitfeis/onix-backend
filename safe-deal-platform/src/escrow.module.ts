@@ -8,6 +8,11 @@ import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from '
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { withSerializableTransaction } from './database/transaction-retry';
+import {
+  lockOrderForUpdate,
+  lockProductForUpdate,
+  lockUsersInIdOrder,
+} from './database/money-locks';
 import { decryptDeliverySecret } from './delivery-crypto';
 import { pushTelegramToChatId } from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
@@ -153,12 +158,15 @@ export class EscrowService {
         }
         return existing;
       }
+      // Listing first, then both parties in id order — before debit or chat upserts.
+      await lockProductForUpdate(tx, productId);
       const product = await tx.product.findUnique({ where: { id: productId } });
       if (!product || product.status !== 'ACTIVE' || product.expiresAt <= new Date() || product.quantity < quantity) {
         throw new ConflictException('Товар недоступен.');
       }
       if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
       if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
+      await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
       const totalAmountCents = product.priceCents * BigInt(quantity);
       const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
       // Optimistic lock: only one buyer can reserve an ACTIVE listing.
@@ -420,12 +428,15 @@ export class EscrowService {
         }
         return;
       }
+      await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       if (opts.requireBuyer && order.buyerId !== actor.id) {
         throw new BadRequestException('Только покупатель подтверждает получение.');
       }
       if (order.status === 'COMPLETED') return;
+      await lockProductForUpdate(tx, order.productId);
+      await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
         where: { id, status: { in: opts.allowedFrom } },
         data: { status: 'COMPLETED', completedAt: new Date() },
@@ -512,6 +523,7 @@ export class EscrowService {
         }
         return;
       }
+      await lockOrderForUpdate(tx, id);
       const order = await tx.order.findFirst({
         where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
       });
@@ -520,6 +532,7 @@ export class EscrowService {
       if (!['PAYMENT_HOLD', 'DELIVERING'].includes(order.status)) {
         throw new ConflictException('Спор сейчас открыть нельзя.');
       }
+      await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
         where: { id, status: order.status },
         data: { status: 'DISPUTE', disputeReason: reason },
@@ -595,6 +608,7 @@ export class EscrowService {
         }
         return;
       }
+      await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const participant = order.buyerId === actor.id || order.sellerId === actor.id;
@@ -612,6 +626,8 @@ export class EscrowService {
         throw new BadRequestException('Возврат может инициировать только продавец.');
       }
       if (order.status === target) return;
+      await lockProductForUpdate(tx, order.productId);
+      await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
         where: { id, status: { in: allowed } },
         data: { status: target, canceledAt: new Date(), disputeReason: reason },
@@ -727,6 +743,7 @@ export class EscrowService {
         }
         return tx.order.findUniqueOrThrow({ where: { id } });
       }
+      await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const ownerId = role === 'seller' ? order.sellerId : order.buyerId;

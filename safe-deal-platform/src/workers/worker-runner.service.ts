@@ -169,6 +169,11 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
           },
         }).catch((error) => {
           structuredLog.warn('worker job-run failure persistence failed', { job: job.name }, error);
+          try {
+            process.stderr.write(`worker ${job.name} persist-fail ${String(error)}\n`);
+          } catch {
+            /* ignore */
+          }
         });
       }
       this.metrics.recordWorkerJob(job.name, 0, false, durationMs);

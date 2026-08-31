@@ -1,7 +1,7 @@
 /**
  * Scale-out / ops gates.
  *
- * Refresh grace (SessionService.rotationGraceCache):
+ * Refresh grace (SessionService via SharedCoordinationService):
  *   WEB_CONCURRENCY > 1  OR  >1 API instance
  *     → Redis coordination is required at startup.
  *   Memory is limited to local development/tests on one process.

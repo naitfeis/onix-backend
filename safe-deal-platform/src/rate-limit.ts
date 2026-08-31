@@ -4,6 +4,18 @@ import { SharedCoordinationService } from './coordination/shared-coordination.se
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
+const MAX_BUCKETS = 10_000;
+
+function pruneRateLimitBuckets(now: number): void {
+  for (const [k, v] of buckets) {
+    if (now >= v.resetAt) buckets.delete(k);
+  }
+  while (buckets.size >= MAX_BUCKETS) {
+    const oldest = buckets.keys().next().value as string | undefined;
+    if (!oldest) break;
+    buckets.delete(oldest);
+  }
+}
 
 /**
  * Simple in-process sliding window. Enough for single-node Stage 1.
@@ -13,10 +25,7 @@ export function assertRateLimit(key: string, limit: number, windowMs: number): v
   const now = Date.now();
   const cur = buckets.get(key);
   if (!cur || now >= cur.resetAt) {
-    if (!cur && buckets.size >= 10_000) {
-      const oldest = buckets.keys().next().value as string | undefined;
-      if (oldest) buckets.delete(oldest);
-    }
+    if (buckets.size >= MAX_BUCKETS) pruneRateLimitBuckets(now);
     buckets.set(key, { count: 1, resetAt: now + windowMs });
     return;
   }

@@ -27,6 +27,7 @@ import {
   showCatalogProduct,
   visibleProducts,
 } from '../catalogVisibility';
+import { rublesToCentsString } from '../utils/moneyCents';
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
 type AuthBootstrap =
@@ -214,6 +215,7 @@ export function useOnixCore() {
   const activeChatIdRef = useRef<string | null>(null);
   const actionBusyRef = useRef<string | null>(null);
   const purchaseLockRef = useRef(new Set<string>());
+  const purchaseKeyRef = useRef(new Map<string, string>());
 
   const load = useCallback(async <K extends CollectionKey>(key: K, path: string, opts?: { silent?: boolean; fresh?: boolean }) => {
     if (!opts?.silent) {
@@ -386,7 +388,7 @@ export function useOnixCore() {
             if (manager.getAccessToken() && !manager.isAccessExpired()) {
               const current = await loadProfile();
               setErrors((previous) => ({ ...previous, profile: undefined }));
-              void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+              void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
               warmSecondaryCollections(current, load);
               return;
             }
@@ -394,7 +396,7 @@ export function useOnixCore() {
             if (again.status !== 'authenticated') continue;
             const current = await loadProfile();
             setErrors((previous) => ({ ...previous, profile: undefined }));
-            void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+            void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
             warmSecondaryCollections(current, load);
             return;
           }
@@ -408,8 +410,8 @@ export function useOnixCore() {
       const current = await bootstrapPhase('profile-load', () => loadProfile());
       markBootstrapPhase('profile', 0);
       await catalogReady;
-      // Re-fetch first page with Bearer so favorites/followed personalize.
-      void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }));
+      // Guest catalog already painted; refresh silently so favorites personalize without a second loading race.
+      void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
       printBootstrapSummary('bootstrap-settled');
       markAppReady('bootstrap-settled');
       warmSecondaryCollections(current, load);
@@ -711,7 +713,7 @@ export function useOnixCore() {
     }
   }, []);
 
-  const cents = (rubles: string | number) => Math.round(Number(rubles) * 100).toString();
+  const cents = (rubles: string | number) => rublesToCentsString(rubles);
 
   const listProducts = useCallback((query: ProductListQuery = {}, signal?: AbortSignal) =>
     api.get<Product[]>(API_PATHS.productsList(query), signal).then(visibleProducts), []);
@@ -843,15 +845,21 @@ export function useOnixCore() {
       products: previous.products.filter((p) => p.id !== productId),
     }));
     try {
+      let key = purchaseKeyRef.current.get(productId);
+      if (!key) {
+        key = crypto.randomUUID();
+        purchaseKeyRef.current.set(productId, key);
+      }
       const result = await run(`purchase-${productId}`, () =>
         api.post<Deal>(API_PATHS.productPurchase(productId), {
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: key,
           quantity: 1,
         }), () => {
           void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
           void load('deals', API_PATHS.orders, { silent: true, fresh: true });
           void load('chats', API_PATHS.chats, { silent: true, fresh: true });
         });
+      if (result) purchaseKeyRef.current.delete(productId);
       if (!result) {
         showCatalogProduct(productId);
         void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
@@ -862,6 +870,8 @@ export function useOnixCore() {
     }
   }, [load, run]);
 
+  const dealIdempotencyRef = useRef(new Map<string, string>());
+
   const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
     const path = action === 'deliver'
       ? API_PATHS.dealDeliver(deal.id)
@@ -870,11 +880,17 @@ export function useOnixCore() {
         : action === 'cancel'
           ? API_PATHS.dealCancel(deal.id)
           : API_PATHS.dealDispute(deal.id);
+    const stamp = `${deal.id}:${action}`;
+    let key = dealIdempotencyRef.current.get(stamp);
+    if (!key) {
+      key = crypto.randomUUID();
+      dealIdempotencyRef.current.set(stamp, key);
+    }
     return run(`deal-${deal.id}`, () => api.post(path, {
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: key,
       ...(action === 'dispute' ? { reason: 'Открыто пользователем' } : {}),
       ...(action === 'cancel' ? { reason: 'Отменено пользователем' } : {}),
-    }), () => void load('deals', API_PATHS.orders));
+    }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
   }, [load, run]);
 
   const loadMessages = useCallback(async (threadId: string) => {
@@ -1013,7 +1029,7 @@ export function useOnixCore() {
 
   const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => run('withdraw', () =>
     api.post(API_PATHS.walletWithdraw, {
-      amountCents: cents(amountRubles),
+      amountCents: rublesToCentsString(amountRubles),
       idempotencyKey: crypto.randomUUID(),
       ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
     }), loadProfile), [loadProfile, run]);
@@ -1050,9 +1066,17 @@ export function useOnixCore() {
     }
   }, []);
 
-  const sellerRefund = useCallback((dealId: string, reason: string) => run(`seller-refund-${dealId}`, () =>
-    api.post(API_PATHS.orderRefundRequest(dealId), { reason, idempotencyKey: crypto.randomUUID() }),
-  () => void load('deals', API_PATHS.orders)), [load, run]);
+  const sellerRefund = useCallback((dealId: string, reason: string) => {
+    const stamp = `${dealId}:seller-refund`;
+    let key = dealIdempotencyRef.current.get(stamp);
+    if (!key) {
+      key = crypto.randomUUID();
+      dealIdempotencyRef.current.set(stamp, key);
+    }
+    return run(`seller-refund-${dealId}`, () =>
+      api.post(API_PATHS.orderRefundRequest(dealId), { reason, idempotencyKey: key }),
+    () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
+  }, [load, run]);
 
   /** Website / PWA only — revoke session and return to AuthGate. Hidden in Telegram Mini App. */
   const signOut = useCallback(async () => {
