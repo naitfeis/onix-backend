@@ -38,6 +38,53 @@ type Store = {
 const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [], reviews: [] };
 /** Module-level — survives React StrictMode remount (useRef would reset). */
 let coldBootstrapOnce = false;
+
+function messageKey(id: unknown): string {
+  return String(id ?? '');
+}
+
+function appendUniqueMessage(list: Message[], incoming: Message): Message[] {
+  const incomingId = messageKey(incoming.id);
+  if (!incomingId) return list;
+  const normalized = { ...incoming, id: incomingId };
+  const idx = list.findIndex((row) => messageKey(row.id) === incomingId);
+  if (idx === -1) {
+    const echo = list.findIndex((row) => (
+      row.mine === normalized.mine
+      && row.sender.id === normalized.sender.id
+      && (row.text || '') === (normalized.text || '')
+      && Math.abs(new Date(row.createdAt).getTime() - new Date(normalized.createdAt).getTime()) < 4000
+    ));
+    if (echo >= 0) {
+      const copy = list.slice();
+      copy[echo] = { ...list[echo]!, ...normalized, id: messageKey(list[echo]!.id) };
+      return copy;
+    }
+    return [...list, normalized];
+  }
+  const prev = list[idx]!;
+  const nextText = normalized.text?.trim() ? normalized.text : prev.text;
+  const nextReadBy = (normalized.readBy?.length ?? 0) > (prev.readBy?.length ?? 0) ? normalized.readBy : prev.readBy;
+  const nextStatus = normalized.deliveryStatus === 'READ' || prev.deliveryStatus === 'READ'
+    ? 'READ' as const
+    : (normalized.deliveryStatus ?? prev.deliveryStatus);
+  if (nextText === prev.text && nextReadBy === prev.readBy && nextStatus === prev.deliveryStatus) return list;
+  const copy = list.slice();
+  copy[idx] = { ...prev, ...normalized, text: nextText, readBy: nextReadBy, deliveryStatus: nextStatus };
+  return copy;
+}
+
+function uniqueMessages(list: Message[]): Message[] {
+  const seen = new Set<string>();
+  const out: Message[] = [];
+  for (const row of list) {
+    const id = messageKey(row.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ ...row, id });
+  }
+  return out;
+}
 /** Presence HTTP beat — not per click/route. 45s is within the 30–60s TZ window. */
 const PRESENCE_MIN_MS = 45_000;
 let lastPresenceBeatAt = 0;
@@ -470,8 +517,9 @@ export function useOnixCore() {
         if (!incoming?.id) return;
         setMessages((previous) => {
           const list = previous[msg.chatId] ?? [];
-          if (list.some((row) => row.id === incoming.id)) return previous;
-          return { ...previous, [msg.chatId]: [...list, incoming] };
+          const next = appendUniqueMessage(list, incoming);
+          if (next === list) return previous;
+          return { ...previous, [msg.chatId]: next };
         });
         const viewing = activeChatIdRef.current === msg.chatId;
         setStore((previous) => ({
@@ -797,15 +845,15 @@ export function useOnixCore() {
       const data = await api.get<Message[]>(API_PATHS.messages(threadId));
       setMessages((previous) => {
         const existing = previous[threadId] ?? [];
-        // Merge: keep any optimistic/pending rows not yet on server; prefer server order.
-        const serverIds = new Set(data.map((m) => m.id));
+        const server = uniqueMessages(data);
+        const serverIds = new Set(server.map((m) => m.id));
         const pendingOnly = existing.filter((m) => m.pending && !serverIds.has(m.id));
+        const merged = pendingOnly.length ? [...server, ...pendingOnly] : server;
         const same =
-          pendingOnly.length === 0
-          && existing.length === data.length
-          && existing.every((m, i) => m.id === data[i]?.id);
+          existing.length === merged.length
+          && existing.every((m, i) => m.id === merged[i]?.id);
         if (same) return previous;
-        return { ...previous, [threadId]: pendingOnly.length ? [...data, ...pendingOnly] : data };
+        return { ...previous, [threadId]: merged };
       });
     } catch (error) {
       setErrors(previous => ({ ...previous, [`messages-${threadId}`]: friendlyError(error) }));
@@ -821,15 +869,28 @@ export function useOnixCore() {
     await load('chats', trimmed ? API_PATHS.chatsSearch(trimmed) : API_PATHS.chats, { silent: true });
   }, [load]);
 
+  const sendLock = useRef(new Set<string>());
   const sendMessage = useCallback(async (threadId: string, text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return false;
-    const result = await run(`message-${threadId}`, () => api.post<Message>(API_PATHS.messages(threadId), { text: trimmed }));
-    if (result) {
-      setMessages(previous => ({ ...previous, [threadId]: [...(previous[threadId] || []), result] }));
-      return true;
+    const lockKey = `message-${threadId}`;
+    if (sendLock.current.has(lockKey)) return false;
+    sendLock.current.add(lockKey);
+    try {
+      const result = await run(lockKey, () => api.post<Message>(API_PATHS.messages(threadId), { text: trimmed }));
+      if (result) {
+        setMessages((previous) => {
+          const list = previous[threadId] || [];
+          const next = appendUniqueMessage(list, result);
+          if (next === list) return previous;
+          return { ...previous, [threadId]: next };
+        });
+        return true;
+      }
+      return false;
+    } finally {
+      sendLock.current.delete(lockKey);
     }
-    return false;
   }, [run]);
 
   const sendChatAttachment = useCallback(async (
@@ -881,8 +942,9 @@ export function useOnixCore() {
     if (result) {
       setMessages((previous) => {
         const list = previous[threadId] || [];
-        if (list.some((m) => m.id === result.id)) return previous;
-        return { ...previous, [threadId]: [...list, result] };
+        const next = appendUniqueMessage(list, result);
+        if (next === list) return previous;
+        return { ...previous, [threadId]: next };
       });
       return true;
     }

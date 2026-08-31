@@ -307,6 +307,8 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     if (event.kind === 'chat.message') {
       for (const [viewerKey, dto] of event.messageByViewer) {
         const viewerId = BigInt(viewerKey);
+        // Sender already appended the HTTP response — echoing it over WS duplicates the bubble.
+        if (viewerId === event.senderId) continue;
         const unreadDelta = viewerId === event.senderId ? undefined : 1;
         this.sendToUser(viewerId, {
           type: 'chat.message',

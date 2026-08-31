@@ -475,8 +475,17 @@ export function Market({
           }
         }}
         onWrite={async () => {
+          const onixId = selected.seller.onixId;
+          if (core.profile?.onixId === onixId) {
+            setToast('Нельзя открыть чат с собой.');
+            return;
+          }
+          const ok = await openDirectChat(onixId);
+          if (!ok) {
+            setToast('Не удалось открыть чат.');
+            return;
+          }
           setSelected(null);
-          await openDirectChat(selected.seller.onixId);
         }}
       />
     )}

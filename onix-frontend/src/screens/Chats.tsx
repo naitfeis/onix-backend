@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import { API_PATHS, formatLastSeen, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -87,7 +87,31 @@ export function Chats({
   const lastSeenMsgIdRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const thread = core.chats.find(item => item.id === threadId);
-  const messages = threadId ? core.messages[threadId] || [] : [];
+  const rawMessages = threadId ? core.messages[threadId] || [] : [];
+  const messages = useMemo(() => {
+    const seenIds = new Set<string>();
+    const out: typeof rawMessages = [];
+    for (const row of rawMessages) {
+      const id = String(row.id);
+      if (!id || seenIds.has(id)) continue;
+      if (row.kind !== 'SYSTEM' && !row.text?.trim() && !row.attachment) continue;
+      const prev = out[out.length - 1];
+      if (
+        prev
+        && prev.kind !== 'SYSTEM'
+        && row.kind !== 'SYSTEM'
+        && prev.mine === row.mine
+        && prev.sender.id === row.sender.id
+        && prev.text === row.text
+        && Math.abs(new Date(prev.createdAt).getTime() - new Date(row.createdAt).getTime()) < 4000
+      ) {
+        continue;
+      }
+      seenIds.add(id);
+      out.push({ ...row, id });
+    }
+    return out;
+  }, [rawMessages]);
   const messageVirtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => messagesRef.current,
@@ -664,10 +688,16 @@ export function Chats({
           const message = messages[virtualRow.index]!;
           return <div
             className="messages__virtual-row"
-            key={message.id}
+            key={`${virtualRow.index}-${message.id}`}
             data-index={virtualRow.index}
             ref={messageVirtualizer.measureElement}
-            style={{ transform: `translateY(${virtualRow.start}px)` }}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              transform: `translateY(${virtualRow.start}px)`,
+            }}
           >
         <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
           {!message.mine && <UserAvatar userId={message.kind === 'SYSTEM' ? undefined : message.sender.id} avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
@@ -715,11 +745,9 @@ export function Chats({
             <div className="message__meta">
               {message.mine && message.deliveryStatus ? (
                 <div className="message__meta-status">
-                  {message.mine && message.deliveryStatus ? (
-                    <span className="receipt" aria-label={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
-                      {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
-                    </span>
-                  ) : null}
+                  <span className="receipt" aria-label={message.deliveryStatus === 'READ' ? 'Прочитано' : 'Отправлено'}>
+                    {message.deliveryStatus === 'READ' ? '✓✓' : '✓'}
+                  </span>
                   {message.deliveryStatus === 'READ' ? (
                     <span
                       className="receipt-admin"
@@ -730,9 +758,6 @@ export function Chats({
                       }
                     >
                       прочитано
-                      {message.readBy && message.readBy.length > 0
-                        ? ` ${new Date(message.readBy[message.readBy.length - 1]!.readAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`
-                        : ''}
                     </span>
                   ) : null}
                 </div>
@@ -790,20 +815,23 @@ export function Chats({
       </div>
       <form className="composer" onSubmit={async event => {
         event.preventDefault();
+        const payload = text.trim();
+        if (!payload) return;
+        setText('');
         if (thread.kind === 'AI') {
           try {
             unlockSounds();
-            await api.post(API_PATHS.aiMessages, { text });
-            setText('');
+            await api.post(API_PATHS.aiMessages, { text: payload });
             if (!getRealtimeClient().isReady()) playSound('notify');
             await loadMessages(thread.id);
           } catch (error) {
+            setText(payload);
             setToast(friendlyError(error));
           }
           return;
         }
-        if (await sendMessage(thread.id, text)) {
-          setText('');
+        if (!(await sendMessage(thread.id, payload))) {
+          setText(payload);
         }
       }}>
         <Input

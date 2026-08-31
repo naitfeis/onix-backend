@@ -118,8 +118,8 @@ export function Deals({
                 {publicAt(deal.counterparty.username)} · {present ? 'Online' : formatLastSeen(core.presenceOf(deal.counterparty.onixId)?.lastOnline ?? deal.counterparty.lastOnline)}
               </p>
               <div className="deal-peer-actions">
-                <Button variant="violet" onClick={() => { void goToChat(deal); }}>Написать</Button>
-                <Button variant="violet" onClick={() => { void openPeer(deal); }}>Профиль</Button>
+                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
+                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
               </div>
               <div className="deal-lot-tags">
                 <span className="lot-sheet__badge">{categoryLabel}</span>

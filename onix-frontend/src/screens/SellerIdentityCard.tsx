@@ -65,12 +65,12 @@ export function SellerIdentityCard({
       {(onOpen || onWrite || showFollow) && (
         <div className={`card-actions${checkout ? ' seller-identity__actions' : ''}`}>
           {onWrite && (
-            <Button type="button" variant={checkout ? 'violet' : 'secondary'} onClick={onWrite}>
+            <Button type="button" variant="secondary" onClick={onWrite}>
               Написать
             </Button>
           )}
           {onOpen && (
-            <Button type="button" variant={checkout ? 'violet' : 'secondary'} onClick={onOpen}>
+            <Button type="button" variant="secondary" onClick={onOpen}>
               Профиль
             </Button>
           )}
