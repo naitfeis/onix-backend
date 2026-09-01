@@ -4,10 +4,9 @@ NestJS API for the ONIX marketplace. PostgreSQL is accessed only through Prisma;
 
 **Production (2026-09):** public origin is **Amvera Moscow** at
 [`https://www.onixtg.shop`](https://www.onixtg.shop) (SPA + API, same origin).
-Render `onix-api-47tj` is staging only. Agent/ops map:
-[docs/architecture/ONIX-AMVERA-PRODUCTION.md](docs/architecture/ONIX-AMVERA-PRODUCTION.md),
+This branch deploys **Render staging** (`onix-api-47tj`). Agent/ops map:
 [docs/Documentation/Onix-Notes.md](docs/Documentation/Onix-Notes.md) §0.1.
-Deploy Moscow from git branch `v1.3-amvera`.
+Deploy staging from git branch `v1.4-render`.
 
 ## Configuration
 

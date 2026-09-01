@@ -3,7 +3,7 @@
 > **CURRENT (2026-09):** still same-origin on `https://www.onixtg.shop`, but the
 > public host is **Amvera Moscow**, not Vercel rewrite → Render. Webhook is
 > `https://www.onixtg.shop/api/telegram/webhook`. See
-> [ONIX-AMVERA-PRODUCTION.md](./ONIX-AMVERA-PRODUCTION.md).
+> [Onix-Notes.md](../Documentation/Onix-Notes.md) §0.1.
 > Tables below are the **2026-07** migration report and are historically useful
 > for *why* the browser must not call Render; do not copy the webhook/Vercel
 > rows into new ops.

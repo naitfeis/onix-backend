@@ -138,7 +138,7 @@ flow до изменения UI.
 
 # 0.1 PRODUCTION OPS (2026-09) — READ THIS FIRST
 
-Подробный runbook: `docs/architecture/ONIX-AMVERA-PRODUCTION.md`.
+Подробный runbook: этот раздел (§0.1). Amvera yaml живёт только на ветке `v1.4-amvera`.
 
 Исторические docs (`ONIX-SINGLE-ORIGIN-MIGRATION.md`, cutover с Vercel→Render
 webhook) описывают **июль 2026**. С сентября публичный origin — **Amvera Moscow**,
@@ -172,7 +172,6 @@ Git Amvera: v1.3-amvera   (merge v1.3 → v1.3-amvera → push to deploy Moscow)
 - `TELEGRAM_WEBHOOK_SECRET` в Amvera = `secret_token` в `setWebhook`.
 - R2 — вложения чата, не сайт. Без `R2_*` upload недоступен. Browser PUT идёт на
   Cloudflare R2 — из РФ может не открыться.
-- Не Apply пустую форму Configuration в Amvera (затирает `amvera.yaml`).
 - Реплики Amvera = 1, пока `www` смотрит сюда.
 
 DNS сайт (плюс почта reg.ru не трогать):
@@ -1438,7 +1437,7 @@ Backend должен предполагать:
 
 # 32. INFRASTRUCTURE
 
-Текущая схема (2026-09): `docs/architecture/ONIX-AMVERA-PRODUCTION.md`.
+Текущая схема (2026-09): §0.1 выше.
 
 ```text
 Browser (RU)

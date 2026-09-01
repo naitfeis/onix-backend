@@ -16,9 +16,8 @@
 > - The repository contains generated/build output and IDE metadata; these are not primary source code.
 >
 > PRODUCTION (2026-09): public site is Amvera Moscow at https://www.onixtg.shop.
-> Full ops map: `docs/architecture/ONIX-AMVERA-PRODUCTION.md` and
-> `docs/Documentation/Onix-Notes.md` §0.1. Do not follow Vercel→Render webhook
-> URLs in older architecture reports.
+> This branch is Render staging. Ops map: `docs/Documentation/Onix-Notes.md` §0.1.
+> Do not follow Vercel→Render webhook URLs in older architecture reports.
 
 ---
 
@@ -121,11 +120,9 @@ The following is the CURRENT repository inventory. It is intentionally grouped f
 package.json
 package-lock.json
 prisma.config.ts
-amvera.yaml / amvera.yml     # Moscow deploy (Amvera reads this; do not overwrite via empty UI form)
 render.yaml                  # Render staging only
 README.md
 tsconfig.json
-scripts/start-amvera.mjs     # migrate deploy + start (DATABASE_URL required at runtime)
 ```
 
 Additional root artifacts may exist for temporary diagnostics/build output. Do not treat files such as `api_ready.tmp`, `build-out.txt`, `typecheck-out.txt`, `tsc-*.txt` as architectural source.
@@ -185,14 +182,14 @@ Database is critical infrastructure. Schema changes can affect backend, workers,
 
 ```text
 docs/
-├── architecture/          # includes ONIX-AMVERA-PRODUCTION.md
+├── architecture/
 ├── Documentation/         # Onix-Notes.md, PS_Onix-FileStructure.md
 ├── audit/
 └── learning/
 ```
 
 `docs/architecture/` contains architecture and operational decisions, including:
-- **current prod:** `ONIX-AMVERA-PRODUCTION.md`
+- **current prod notes:** `docs/Documentation/Onix-Notes.md` §0.1
 - auth;
 - identity;
 - privacy/security;
@@ -1111,7 +1108,7 @@ safe-deal-platform/src/auth-v2/telegram-login.verifier.ts
 safe-deal-platform/src/auth-v2/auth-orchestrator.service.ts
 onix-frontend/src/auth/botLogin.ts
 onix-frontend/src/screens/AuthGate.tsx
-docs/architecture/ONIX-AMVERA-PRODUCTION.md
+docs/Documentation/Onix-Notes.md          # §0.1 webhook
 ```
 
 Bare `/start` is ignored. Webhook is POST-only on www.onixtg.shop. Confirm
@@ -1132,10 +1129,8 @@ Amvera: `GOOGLE_CLIENT_ID` only (no Client Secret). SPA reads
 ### "Прод / Amvera / DNS / сертификат"
 Start:
 ```text
-docs/architecture/ONIX-AMVERA-PRODUCTION.md
 docs/Documentation/Onix-Notes.md          # §0.1
-amvera.yaml
-scripts/start-amvera.mjs
+render.yaml
 ```
 
 ### "Исправь чат"
