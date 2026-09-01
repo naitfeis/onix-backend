@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
-  getSharedAuthManager, getWebsiteAuthProvider,
+  consumeGoogleOAuthRedirect,
+  getSharedAuthManager,
+  getWebsiteAuthProvider,
+  postAuthV2Google,
 } from '../auth';
 import {
   ensureTelegramMiniAppReady,
@@ -107,6 +110,34 @@ const notify = (kind: 'success' | 'error') => {
  */
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
+  const googleReturn = consumeGoogleOAuthRedirect();
+  if (googleReturn) {
+    if (googleReturn.ok) {
+      try {
+        const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
+        manager.setSession(login.accessToken, login.expiresIn);
+        markBootstrapPhase('session-check', 0);
+        markBootstrapPhase('cookie-check', 1);
+        markBootstrapPhase('refresh', 0);
+        markBootstrapPhase('telegram', 0);
+        return { status: 'authenticated', mode: 'website' };
+      } catch {
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google`);
+        }
+        markBootstrapPhase('session-check', 0);
+        markBootstrapPhase('cookie-check', 0);
+        markBootstrapPhase('refresh', 0);
+        markBootstrapPhase('telegram', 0);
+        return { status: 'guest' };
+      }
+    }
+    markBootstrapPhase('session-check', 0);
+    markBootstrapPhase('cookie-check', 0);
+    markBootstrapPhase('refresh', 0);
+    markBootstrapPhase('telegram', 0);
+    return { status: 'guest' };
+  }
   if (manager.getAccessToken() && !manager.isAccessExpired()) {
     markBootstrapPhase('session-check', 0);
     markBootstrapPhase('cookie-check', 0);

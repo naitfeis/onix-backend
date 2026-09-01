@@ -3,14 +3,13 @@ import { loginWithTelegram as legacyLoginWithTelegram, ApiError } from '../api/c
 import {
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
-  getSharedAuthManager,
   isWebsiteAuthV2,
   openTelegramBotLogin,
   startBotLogin,
   waitAndCompleteBotLogin,
   AuthV2ApiError,
-  postAuthV2Google,
   getAuthV2PublicConfig,
+  startGoogleOAuth,
 } from '../auth';
 import { BotLoginError } from '../auth/botLogin';
 import { formatBanRemaining, refreshBanInfo, type BanInfo } from '../api/contracts';
@@ -111,17 +110,17 @@ function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => 
   );
 }
 
-function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
+function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [clientId, setClientId] = useState<string | null>(
     () => import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || null,
   );
-  const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('auth_error') === 'google') {
-      setError('Google вход не выполнен. Закройте пустое окно Google и нажмите кнопку ещё раз.');
+      setError('Google вход не выполнен. Попробуйте ещё раз.');
     }
   }, []);
 
@@ -139,52 +138,21 @@ function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => 
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    if (!clientId || !hostRef.current) return;
-    const host = hostRef.current;
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.onload = () => {
-      const google = (window as unknown as { google?: { accounts?: { id?: {
-        initialize: (opts: Record<string, unknown>) => void;
-        renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void;
-      } } } }).google;
-      if (!google?.accounts?.id) return;
-      google.accounts.id.initialize({
-        client_id: clientId,
-        // Edge GIS popup often lands on /gsi/transform blank unless COOP allows popups.
-        // Redirect avoids that window entirely (needs Authorized redirect URI in Google Console).
-        ux_mode: 'redirect',
-        login_uri: `${window.location.origin}/api/v2/auth/google/callback`,
-        use_fedcm_for_button: false,
-        use_fedcm_for_prompt: false,
-        itp_support: true,
-        auto_select: false,
-        callback: async (response: { credential?: string }) => {
-          if (!response.credential) return;
-          try {
-            const login = await postAuthV2Google({ idToken: response.credential, rememberMe: true });
-            getSharedAuthManager().setSession(login.accessToken, login.expiresIn);
-            onAuthenticated();
-            location.reload();
-          } catch (err) {
-            const ban = extractBanFromError(err);
-            if (ban) onBan?.(ban);
-            setError('Google вход не выполнен.');
-          }
-        },
-      });
-      google.accounts.id.renderButton(host, { theme: 'outline', size: 'large', text: 'signin_with', width: 280 });
-    };
-    document.head.appendChild(script);
-    return () => { script.remove(); host.replaceChildren(); };
-  }, [clientId, onAuthenticated, onBan]);
   if (!clientId) {
     return null;
   }
   return <div>
-    <div ref={hostRef} />
+    <Button
+      variant="secondary"
+      disabled={busy}
+      onClick={() => {
+        setError('');
+        setBusy(true);
+        startGoogleOAuth(clientId);
+      }}
+    >
+      {busy ? 'Переход в Google…' : 'Войти через Google'}
+    </Button>
     {error && <small>{error}</small>}
   </div>;
 }

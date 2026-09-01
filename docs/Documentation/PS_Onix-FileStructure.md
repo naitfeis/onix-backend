@@ -1119,12 +1119,15 @@ Start:
 ```text
 safe-deal-platform/src/auth-v2/google-login.verifier.ts
 safe-deal-platform/src/auth-v2/auth-v2.controller.ts   # GET public-config, POST google
+onix-frontend/src/auth/googleOAuth.ts                 # full-page id_token, no GIS popup
 onix-frontend/src/screens/AuthGate.tsx
 onix-frontend/src/auth/v2AuthApi.ts
+onix-frontend/src/hooks/useOnixCore.ts                # consume hash on bootstrap
 ```
 
 Amvera: `GOOGLE_CLIENT_ID` only (no Client Secret). SPA reads
 `GET /api/v2/auth/public-config` because Vite env is not baked on Amvera builds.
+Google Console Authorized redirect URI must be `https://www.onixtg.shop/`.
 
 ### "Прод / Amvera / DNS / сертификат"
 Start:
