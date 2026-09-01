@@ -4,6 +4,13 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 
+if (!process.env.DATABASE_URL?.trim()) {
+  console.error(
+    '[amvera] DATABASE_URL is missing. Add the Neon URL in Amvera → Variables, then restart.',
+  );
+  process.exit(1);
+}
+
 const migrate = spawnSync('npx', ['prisma', 'migrate', 'deploy'], {
   stdio: 'inherit',
   shell: true,
