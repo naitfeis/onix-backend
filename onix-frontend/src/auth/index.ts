@@ -28,7 +28,7 @@ export { AuthManager } from './AuthManager';
 export type { AuthManagerOptions } from './AuthManager';
 
 export { AuthBroadcast, MemoryAuthBroadcastBus } from './authBroadcast';
-export type { AuthBroadcastEvent } from './authBroadcast';
+export type { AuthBroadcastEvent, AuthBroadcastHandler } from './authBroadcast';
 
 export { postAuthV2Refresh, RefreshError, isDefinitiveAuthRefreshFailure, isTransientRefreshFailure } from './refreshClient';
 export type { RefreshSuccess, RefreshTransport } from './refreshClient';
@@ -40,9 +40,10 @@ export {
   writeMemoryAccessToken,
 } from './memoryAccessToken';
 
+export { readJwtSub } from './jwtSub';
 export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
 
-export { startGoogleOAuth, consumeGoogleOAuthRedirect, GOOGLE_OAUTH_CALLBACK_PATH } from './googleOAuth';
+export { startGoogleOAuth, consumeGoogleOAuthRedirect, GOOGLE_OAUTH_CALLBACK_PATH, PRODUCTION_GOOGLE_REDIRECT_URI } from './googleOAuth';
 
 export {
   AuthV2ApiError,

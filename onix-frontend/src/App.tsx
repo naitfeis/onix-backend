@@ -413,12 +413,13 @@ export default function App() {
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
   const showAuth = Boolean(banNotice)
-    || core.states.profile === 'error'
-    || (core.states.profile !== 'loading' && !core.profile);
+    || core.sessionRestore === 'guest'
+    || (core.sessionRestore === 'network' && !core.profile && core.states.profile === 'error');
   const shellReady = core.states.products === 'success'
     || core.states.products === 'error'
     || Boolean(core.profile)
-    || core.states.profile === 'error';
+    || core.sessionRestore === 'guest'
+    || core.sessionRestore === 'network';
   const chatImmersive = screen === 'chat';
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
   const showMarketRail = screen === 'market' && !chatImmersive;

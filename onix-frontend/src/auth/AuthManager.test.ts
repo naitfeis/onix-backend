@@ -256,6 +256,27 @@ describe('AuthManager Phase B', () => {
     tabB.dispose();
   });
 
+  it('subscribe notifies peer token-updated', () => {
+    const bus = new MemoryAuthBroadcastBus();
+    const tabA = new AuthManager({
+      refresh: async () => ({ accessToken: 'a', expiresIn: 900 }),
+      broadcast: new AuthBroadcast('onix-sub', (name) => bus.create(name)),
+    });
+    const tabB = new AuthManager({
+      refresh: async () => ({ accessToken: 'b', expiresIn: 900 }),
+      broadcast: new AuthBroadcast('onix-sub', (name) => bus.create(name)),
+    });
+    const seen: string[] = [];
+    const unsub = tabB.subscribe((event) => {
+      if (event.type === 'token-updated') seen.push(event.accessToken);
+    });
+    tabA.setSession('switched', 900);
+    expect(seen).toEqual(['switched']);
+    unsub();
+    tabA.dispose();
+    tabB.dispose();
+  });
+
   it('silent refresh after reload restores session', async () => {
     let refreshCalls = 0;
     const manager = new AuthManager({

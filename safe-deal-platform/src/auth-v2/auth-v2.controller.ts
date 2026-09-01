@@ -180,7 +180,9 @@ export class AuthV2Controller {
   @Header('Cache-Control', 'no-store')
   publicConfig() {
     const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || null;
-    return { googleClientId };
+    const googleRedirectUri = process.env.GOOGLE_REDIRECT_URI?.trim()
+      || (process.env.NODE_ENV === 'production' ? 'https://www.onixtg.shop/auth/google' : null);
+    return { googleClientId, googleRedirectUri };
   }
 
   @UseGuards(AuthV2Guard)

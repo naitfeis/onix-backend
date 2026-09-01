@@ -59,9 +59,17 @@ export interface SessionAuthResult {
   trustedDevice: boolean;
 }
 
+type GraceCacheEntry = {
+  presentedHash: string;
+  result: SessionAuthResult;
+  cachedAt: number;
+};
+
 @Injectable()
 export class SessionService {
   private readonly graceKeys = new Set<string>();
+  /** Same-process L1 so grace wait does not round-trip Redis (MSK→FRA). */
+  private readonly graceLocal = new Map<string, GraceCacheEntry>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -75,6 +83,7 @@ export class SessionService {
   async clearRotationGraceCache(): Promise<void> {
     await Promise.all([...this.graceKeys].map((key) => this.coordination.delete(key)));
     this.graceKeys.clear();
+    this.graceLocal.clear();
   }
 
   async createSession(input: CreateSessionInput): Promise<SessionAuthResult> {
@@ -718,14 +727,19 @@ export class SessionService {
     const key = this.graceKey(sessionId, presentedHash);
     if (!this.graceKeys.has(key) && this.graceKeys.size >= 500) {
       const oldest = this.graceKeys.values().next().value as string | undefined;
-      if (oldest) this.graceKeys.delete(oldest);
+      if (oldest) {
+        this.graceKeys.delete(oldest);
+        this.graceLocal.delete(oldest);
+      }
     }
     this.graceKeys.add(key);
-    await this.coordination.setJson(key, {
+    const entry: GraceCacheEntry = {
       presentedHash,
       result,
       cachedAt: Date.now(),
-    }, refreshReuseGraceMs());
+    };
+    this.graceLocal.set(key, entry);
+    await this.coordination.setJson(key, entry, refreshReuseGraceMs());
   }
 
   private async takeGraceRotation(
@@ -733,17 +747,20 @@ export class SessionService {
     presentedHash: string,
   ): Promise<SessionAuthResult | null> {
     const key = this.graceKey(sessionId, presentedHash);
-    const entry = await this.coordination.getJson<{
-      presentedHash: string;
-      result: SessionAuthResult;
-      cachedAt: number;
-    }>(key);
+    const local = this.graceLocal.get(key);
+    if (local && local.presentedHash === presentedHash) {
+      if (Date.now() - local.cachedAt <= refreshReuseGraceMs()) return local.result;
+      this.graceLocal.delete(key);
+    }
+    const entry = await this.coordination.getJson<GraceCacheEntry>(key);
     if (!entry) return null;
     if (entry.presentedHash !== presentedHash) return null;
     if (Date.now() - entry.cachedAt > refreshReuseGraceMs()) {
+      this.graceLocal.delete(key);
       await this.coordination.delete(key);
       return null;
     }
+    this.graceLocal.set(key, entry);
     return entry.result;
   }
 

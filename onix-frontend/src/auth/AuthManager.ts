@@ -1,4 +1,4 @@
-import { AuthBroadcast, type AuthBroadcastEvent } from './authBroadcast';
+import { AuthBroadcast, type AuthBroadcastEvent, type AuthBroadcastHandler } from './authBroadcast';
 import {
   clearMemoryAccessToken,
   readMemoryAccessToken,
@@ -77,6 +77,11 @@ export class AuthManager {
   /** Test/ops helper — current logout/dispose generation. */
   getSessionGeneration(): number {
     return this.sessionGeneration;
+  }
+
+  /** Peer-tab auth events (same BroadcastChannel as this manager). */
+  subscribe(handler: AuthBroadcastHandler): () => void {
+    return this.broadcast.subscribe(handler);
   }
 
   isAccessExpired(skewMs = 0): boolean {
