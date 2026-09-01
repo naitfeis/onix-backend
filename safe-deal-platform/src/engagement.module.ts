@@ -164,25 +164,28 @@ export class ChatService {
         ? 'Сообщение удалено'
         : subtitleRaw?.text;
       const peerOnix = other?.user.onixId ? formatOnixId(other.user.onixId) : undefined;
+      const isAi = chat.kind === 'AI';
       return {
         id: chat.id,
         kind: chat.kind,
-        title: isGroup
+        title: isAi
+            ? (chat.title?.trim() || 'Onix AI')
+            : isGroup
             ? (chat.title ?? 'Группа')
             : (other
               ? publicDisplayName(other.user.displayName, peerOnix ?? other.user.onixId)
               : (peerOnix ?? 'Диалог')),
         subtitle,
         unreadCount: unreadByChat.get(chat.id) ?? 0,
-        peerOnixId: isGroup ? undefined : peerOnix,
-        peerLastOnline: isGroup ? undefined : other?.user.lastSeenAt?.toISOString(),
-        ...(!isGroup && other
+        peerOnixId: isGroup || isAi ? undefined : peerOnix,
+        peerLastOnline: isGroup || isAi ? undefined : other?.user.lastSeenAt?.toISOString(),
+        ...(!isGroup && !isAi && other
           ? {
             peerAvatarUrl: clientAvatarUrl(other.user.id, other.user.avatarUrl),
             peerUserId: other.user.id.toString(),
           }
           : {}),
-        ...(!isGroup && other
+        ...(!isGroup && !isAi && other
           ? (() => {
             const b = statusBadge(other.user.platformStatus
               ?? (other.user.isAdmin ? 'ADMIN' : other.user.isSupport ? 'MODERATOR' : 'USER'));

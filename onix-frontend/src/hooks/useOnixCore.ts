@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
+  consumeGoogleOAuthIntent,
   consumeGoogleOAuthRedirect,
   getSharedAuthManager,
   postAuthV2Google,
+  postAuthV2LinkGoogle,
   postAuthV2Logout,
   readJwtSub,
 } from '../auth';
@@ -113,7 +115,38 @@ const notify = (kind: 'success' | 'error') => {
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   const googleReturn = consumeGoogleOAuthRedirect();
+  const googleIntent = consumeGoogleOAuthIntent();
   if (googleReturn) {
+    if (googleIntent === 'link') {
+      try {
+        await manager.refreshAccessToken();
+        const access = manager.getAccessToken();
+        if (googleReturn.ok && access) {
+          await postAuthV2LinkGoogle({ idToken: googleReturn.idToken }, access);
+        } else if (googleReturn.ok) {
+          throw new Error('missing_session');
+        }
+        markBootstrapPhase('session-check', 0);
+        markBootstrapPhase('cookie-check', 1);
+        markBootstrapPhase('refresh', 0);
+        markBootstrapPhase('telegram', 0);
+        return { status: 'authenticated', mode: 'website' };
+      } catch {
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google_link`);
+        }
+        try {
+          await manager.refreshAccessToken();
+        } catch { /* keep whatever session remains */ }
+        markBootstrapPhase('session-check', 0);
+        markBootstrapPhase('cookie-check', manager.getAccessToken() ? 1 : 0);
+        markBootstrapPhase('refresh', 0);
+        markBootstrapPhase('telegram', 0);
+        return manager.getAccessToken()
+          ? { status: 'authenticated', mode: 'website' }
+          : { status: 'guest' };
+      }
+    }
     if (googleReturn.ok) {
       try {
         const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
@@ -680,6 +713,7 @@ export function useOnixCore() {
               chat.id === msg.chatId ? { ...chat, unreadCount: 0 } : chat
             )),
           }));
+          return;
         }
         setMessages((previous) => {
           const list = previous[msg.chatId];
@@ -1019,7 +1053,11 @@ export function useOnixCore() {
         const merged = pendingOnly.length ? [...server, ...pendingOnly] : server;
         const same =
           existing.length === merged.length
-          && existing.every((m, i) => m.id === merged[i]?.id);
+          && existing.every((m, i) => (
+            m.id === merged[i]?.id
+            && m.deliveryStatus === merged[i]?.deliveryStatus
+            && (m.readBy?.length ?? 0) === (merged[i]?.readBy?.length ?? 0)
+          ));
         if (same) return previous;
         return { ...previous, [threadId]: merged };
       });

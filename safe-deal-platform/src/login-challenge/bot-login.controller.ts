@@ -1,9 +1,10 @@
 import {
-  Body, Controller, Get, Headers, Post, Query, Req, Res,
+  Body, Controller, Get, Headers, Post, Query, Req, Res, UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { Public } from '../common';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { AuthV2Guard, type AuthV2RequestUser } from '../auth-v2/auth-v2.guards';
 import {
   buildRefreshCookieHeader,
 } from '../auth-v2/refresh-cookie';
@@ -127,6 +128,26 @@ export class BotLoginController {
         rememberMe: result.session.rememberMe,
       },
     };
+  }
+
+  @UseGuards(AuthV2Guard)
+  @Post('link')
+  async linkToCurrentUser(
+    @Req() req: { user: AuthV2RequestUser; ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
+    @Body() body: { challengeId: string },
+    @Headers() headers: Record<string, string | string[] | undefined>,
+  ) {
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    await this.rateLimit.assert(`auth:bot:link:${clientIp ?? 'unknown'}`, 20, 60_000);
+    const loginSessionId = readLoginSessionId(headerString(headers, 'cookie'));
+    if (!loginSessionId) {
+      throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Login session cookie is required.');
+    }
+    return this.challenges.linkConfirmedChallengeToUser({
+      challengeId: body.challengeId,
+      loginSessionId,
+      userId: req.user.id,
+    });
   }
 
   @Post('continue')

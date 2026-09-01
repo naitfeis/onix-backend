@@ -195,6 +195,18 @@ export class AuthV2Controller {
     return this.orchestrator.linkTelegramToCurrentUser(req.user.id, body.telegram);
   }
 
+  @UseGuards(AuthV2Guard)
+  @Post('link/google')
+  @Header('Cache-Control', 'no-store')
+  linkGoogle(
+    @Req() req: { user: AuthV2RequestUser },
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body() body: GoogleLoginDto,
+  ) {
+    assertCsrfHeader(headers);
+    return this.orchestrator.linkGoogleToCurrentUser(req.user.id, body.idToken);
+  }
+
   @Post('refresh')
   @Header('Cache-Control', 'no-store')
   async refresh(

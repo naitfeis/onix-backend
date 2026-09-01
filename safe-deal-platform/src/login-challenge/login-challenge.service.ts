@@ -246,6 +246,29 @@ export class LoginChallengeService {
     return session;
   }
 
+  /** Attach the confirmed Telegram identity to the already-signed-in Website user. */
+  async linkConfirmedChallengeToUser(input: {
+    challengeId: string;
+    loginSessionId: string;
+    userId: bigint;
+  }): Promise<{ linked: true; hasTelegram: true; canSell: true }> {
+    const challenge = await this.requireFresh(input.challengeId);
+    this.assertLoginSession(challenge, input.loginSessionId);
+    if (challenge.status === 'CONSUMED') {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_CONSUMED', 'Challenge already consumed.');
+    }
+    if (challenge.status !== 'CONFIRMED' || !challenge.telegramId) {
+      throw new AuthPlatformError(
+        'AUTH_LOGIN_CHALLENGE_PENDING',
+        'Challenge is not confirmed yet.',
+      );
+    }
+    const identity = identityFromChallenge(challenge);
+    const result = await this.orchestrator.linkVerifiedTelegramToCurrentUser(input.userId, identity);
+    await this.challenges.markConsumed(challenge.id);
+    return result;
+  }
+
   /**
    * @deprecated Exchange / return-URL login removed. Use poll → POST /complete on the same SPA URL.
    * Return type matches `/complete` for call-site compatibility; runtime always throws.

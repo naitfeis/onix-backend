@@ -57,8 +57,8 @@ export function SellerIdentityCard({
         </div>
         {checkout && (
           <div className="seller-identity__trust">
-            <p><span>Уровень доверия</span><b>{trust ? `Уровень ${trust.level}` : '—'}</b></p>
-            <p><span>Размер залога</span><b>{trust ? money(trust.depositTotal) : '—'}</b></p>
+            <p>Уровень доверия: <b>{trust ? `Уровень ${trust.level}` : '—'}</b></p>
+            <p>Размер залога: <b>{trust ? money(trust.depositTotal) : '—'}</b></p>
           </div>
         )}
       </div>

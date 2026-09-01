@@ -280,4 +280,73 @@ export class IdentityService {
     });
     return user;
   }
+
+  async linkGoogleToUser(
+    tx: Prisma.TransactionClient,
+    userId: bigint,
+    identity: VerifiedGoogleIdentity,
+  ): Promise<User> {
+    const current = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    const taken = await tx.identityLink.findFirst({
+      where: { provider: 'GOOGLE', providerUserId: identity.sub, deletedAt: null },
+    });
+    if (taken && taken.userId !== userId) {
+      throw new AuthPlatformError(
+        'AUTH_IDENTITY_CONFLICT',
+        'Этот Google уже привязан к другому профилю ONIX.',
+      );
+    }
+    const own = await tx.identityLink.findFirst({
+      where: { userId, provider: 'GOOGLE', deletedAt: null },
+    });
+    if (own && own.providerUserId !== identity.sub) {
+      throw new AuthPlatformError('AUTH_IDENTITY_CONFLICT', 'Google уже привязан к этому профилю.');
+    }
+    const displayName = identity.name?.slice(0, 120);
+    const picture = identity.picture?.slice(0, 500);
+    const keepTelegramFace = current.telegramId != null;
+    const user = keepTelegramFace
+      ? current
+      : await tx.user.update({
+        where: { id: userId },
+        data: {
+          ...(displayName ? { displayName } : {}),
+          ...(identity.givenName ? { firstName: identity.givenName } : {}),
+          ...(identity.familyName ? { lastName: identity.familyName } : {}),
+          ...(picture ? { avatarUrl: picture } : {}),
+        },
+      });
+    await tx.identityLink.upsert({
+      where: {
+        provider_providerUserId: { provider: 'GOOGLE', providerUserId: identity.sub },
+      },
+      create: {
+        userId,
+        provider: 'GOOGLE',
+        providerUserId: identity.sub,
+        email: identity.email,
+        displayName,
+        avatarUrl: picture,
+        lastUsedAt: new Date(),
+      },
+      update: {
+        userId,
+        email: identity.email,
+        displayName,
+        avatarUrl: picture,
+        lastUsedAt: new Date(),
+        deletedAt: null,
+      },
+    });
+    await tx.identityHistory.create({
+      data: {
+        userId,
+        provider: 'GOOGLE',
+        providerUserId: identity.sub,
+        action: 'LINKED',
+        metadata: { source: 'auth_v2_link_google' },
+      },
+    });
+    return user;
+  }
 }

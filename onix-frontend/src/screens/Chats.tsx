@@ -579,10 +579,11 @@ export function Chats({
         >
           <span className="thread-peer">
             <UserAvatar
-              userId={chat.peerUserId}
-              avatarUrl={chat.peerAvatarUrl}
-              name={chat.title}
-              online={chat.kind === 'GROUP' || !chat.peerOnixId
+              userId={chat.kind === 'AI' ? undefined : chat.peerUserId}
+              avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
+              name={chat.kind === 'AI' ? 'Onix AI' : chat.title}
+              initials={chat.kind === 'AI' ? 'AI' : undefined}
+              online={chat.kind === 'GROUP' || chat.kind === 'AI' || !chat.peerOnixId
                 ? undefined
                 : sellerIsPresent(
                   { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
@@ -591,9 +592,11 @@ export function Chats({
                 )}
             />
             <span>
-              <b title={chat.title}>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
+              <b title={chat.kind === 'AI' ? 'Onix AI' : chat.title}>
+                {chat.kind === 'AI' ? 'Onix AI' : chat.title} <StaffBadge badge={chat.peerBadge} />
+              </b>
               <small>
-                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник ONIX') : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
+                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
               </small>
             </span>
           </span>
@@ -626,12 +629,13 @@ export function Chats({
           await openOnixProfile(thread.peerOnixId);
         }}
       >
-        {(thread.peerAvatarUrl !== undefined || thread.title) ? (
+        {(thread.kind === 'AI' || thread.peerAvatarUrl !== undefined || thread.title) ? (
           <UserAvatar
-            userId={thread.peerUserId}
-            avatarUrl={thread.peerAvatarUrl}
-            name={thread.title}
-            online={thread.kind === 'GROUP' || !thread.peerOnixId
+            userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
+            avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
+            name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
+            initials={thread.kind === 'AI' ? 'AI' : undefined}
+            online={thread.kind === 'GROUP' || thread.kind === 'AI' || !thread.peerOnixId
               ? undefined
               : sellerIsPresent(
                 { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
@@ -641,12 +645,14 @@ export function Chats({
           />
         ) : null}
         <div>
-          <b title={thread.title}>{thread.title} <StaffBadge badge={thread.peerBadge} /></b>
+          <b title={thread.kind === 'AI' ? 'Onix AI' : thread.title}>
+            {thread.kind === 'AI' ? 'Onix AI' : thread.title} <StaffBadge badge={thread.peerBadge} />
+          </b>
           <small>
             {thread.kind === 'GROUP'
               ? 'Группа'
               : thread.kind === 'AI'
-                ? 'Помощник ONIX'
+                ? 'Помощник'
                 : `${thread.peerOnixId ? `${formatOnixId(thread.peerOnixId)} · ` : ''}${formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}`}
           </small>
         </div>
@@ -700,7 +706,7 @@ export function Chats({
             }}
           >
         <div className={`message-row ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''}`}>
-          {!message.mine && <UserAvatar userId={message.kind === 'SYSTEM' ? undefined : message.sender.id} avatarUrl={message.kind === 'SYSTEM' ? undefined : message.sender.avatarUrl} name={message.sender.username} />}
+          {!message.mine && <UserAvatar userId={message.kind === 'SYSTEM' || thread.kind === 'AI' ? undefined : message.sender.id} avatarUrl={message.kind === 'SYSTEM' || thread.kind === 'AI' ? undefined : message.sender.avatarUrl} name={thread.kind === 'AI' ? 'Onix AI' : message.sender.username} initials={thread.kind === 'AI' ? 'AI' : undefined} />}
           <div
             className={`message ${message.mine ? 'mine' : ''} ${message.kind === 'SYSTEM' ? 'system' : ''} ${message.deleted ? 'deleted' : ''}`}
             onContextMenu={(event) => {
@@ -717,7 +723,7 @@ export function Chats({
             onPointerCancel={clearLongPress}
           >
             {message.kind !== 'SYSTEM' && <small>{publicAt(message.sender.username)} <StaffBadge badge={message.sender.badge} /></small>}
-            {message.kind === 'SYSTEM' && <small>🛡 ONIX</small>}
+            {message.kind === 'SYSTEM' && <small>{thread.kind === 'AI' ? 'Onix AI' : '🛡 ONIX'}</small>}
             <p><MessageText
               text={message.text}
               onOpenOnix={openOnixProfile}

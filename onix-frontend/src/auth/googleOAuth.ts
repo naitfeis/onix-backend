@@ -11,6 +11,9 @@ export const PRODUCTION_GOOGLE_REDIRECT_URI = 'https://www.onixtg.shop/auth/goog
 
 const STATE_KEY = 'onix_google_oauth_state';
 const NONCE_KEY = 'onix_google_oauth_nonce';
+const INTENT_KEY = 'onix_google_oauth_intent';
+
+export type GoogleOAuthIntent = 'login' | 'link';
 
 export type GoogleOAuthReturn =
   | { ok: true; idToken: string }
@@ -52,11 +55,16 @@ export function buildGoogleOAuthUrl(
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export function startGoogleOAuth(clientId: string, redirectOverride?: string | null): void {
+export function startGoogleOAuth(
+  clientId: string,
+  redirectOverride?: string | null,
+  options?: { intent?: GoogleOAuthIntent },
+): void {
   const state = randomToken();
   const nonce = randomToken();
   sessionStorage.setItem(STATE_KEY, state);
   sessionStorage.setItem(NONCE_KEY, nonce);
+  sessionStorage.setItem(INTENT_KEY, options?.intent === 'link' ? 'link' : 'login');
   window.location.assign(
     buildGoogleOAuthUrl(clientId, window.location.origin, state, nonce, redirectOverride),
   );
@@ -117,6 +125,14 @@ export function consumeGoogleOAuthRedirect(): GoogleOAuthReturn {
   if (result === null) return null;
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(NONCE_KEY);
-  window.history.replaceState(null, '', result.ok ? '/' : '/?auth_error=google');
+  const linking = sessionStorage.getItem(INTENT_KEY) === 'link';
+  window.history.replaceState(null, '', result.ok ? '/' : (linking ? '/' : '/?auth_error=google'));
   return result;
+}
+
+export function consumeGoogleOAuthIntent(): GoogleOAuthIntent {
+  if (typeof window === 'undefined') return 'login';
+  const raw = sessionStorage.getItem(INTENT_KEY);
+  sessionStorage.removeItem(INTENT_KEY);
+  return raw === 'link' ? 'link' : 'login';
 }

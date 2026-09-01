@@ -8,7 +8,7 @@ import { AuthRolloutService } from './auth-rollout.service';
 import { IdentityService } from './identity.service';
 import { SESSION_ABSOLUTE_TTL_MS, SESSION_IDLE_TTL_MS, SESSION_REMEMBER_IDLE_TTL_MS } from './session.constants';
 import { type DeviceContext, type SessionAuthResult, SessionService } from './session.service';
-import { TelegramLoginVerifier, type TelegramLoginPayload } from './telegram-login.verifier';
+import { TelegramLoginVerifier, type TelegramLoginPayload, type VerifiedTelegramIdentity } from './telegram-login.verifier';
 import { GoogleLoginVerifier } from './google-login.verifier';
 
 export interface LoginTelegramCommand {
@@ -69,7 +69,7 @@ export class AuthOrchestrator {
    * Does not change SessionService / TokenService — reuses createSessionInTransaction + issueTokens.
    */
   async loginWithVerifiedTelegramIdentity(
-    identity: import('./telegram-login.verifier').VerifiedTelegramIdentity,
+    identity: VerifiedTelegramIdentity,
     options?: { rememberMe?: boolean; device?: DeviceContext; amr?: string[] },
   ): Promise<SessionAuthResult & { refreshMaxAgeSeconds: number }> {
     const amr = options?.amr ?? ['telegram'];
@@ -300,10 +300,33 @@ export class AuthOrchestrator {
     telegram: TelegramLoginPayload,
   ): Promise<{ linked: true; hasTelegram: true; canSell: true }> {
     const identity = this.telegram.verify(telegram);
-    await this.prisma.$transaction(async (tx) => {
-      await this.identities.linkTelegramToUser(tx, userId, identity);
+    return this.linkVerifiedTelegramToCurrentUser(userId, identity);
+  }
+
+  async linkVerifiedTelegramToCurrentUser(
+    userId: bigint,
+    identity: VerifiedTelegramIdentity,
+  ): Promise<{ linked: true; hasTelegram: true; canSell: true }> {
+    const user = await this.prisma.$transaction(async (tx) => {
+      return this.identities.linkTelegramToUser(tx, userId, identity);
     });
+    this.avatars?.warmFromSource(user.id, user.avatarUrl);
     return { linked: true, hasTelegram: true, canSell: true };
+  }
+
+  async linkGoogleToCurrentUser(
+    userId: bigint,
+    idToken: string,
+  ): Promise<{ linked: true; hasGoogle: true }> {
+    if (!this.google) {
+      throw new AuthPlatformError('AUTH_INTERNAL', 'Google login is not configured.');
+    }
+    const identity = await this.google.verify(idToken);
+    const user = await this.prisma.$transaction(async (tx) => {
+      return this.identities.linkGoogleToUser(tx, userId, identity);
+    });
+    this.avatars?.warmFromSource(user.id, identity.picture ?? user.avatarUrl);
+    return { linked: true, hasGoogle: true };
   }
 
   async logoutAll(userId: bigint): Promise<{ revoked: number; sessionVersion: number }> {
