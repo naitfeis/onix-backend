@@ -6,6 +6,7 @@
 
 Связанные файлы (не дублируй их, а открывай по делу):
 
+- [Урок 31](./31-onix-web-stack-vite-react-nest.md) — origin, SPA, Vite, React, NestJS, Google Console, CSP
 - `docs/Documentation/Onix-Notes.md` — ops, DNS, прод, что нельзя упрощать
 - `docs/Documentation/PS_Onix-FileStructure.md` — карта файлов
 - `docs/architecture/ONIX-PRIVACY-FIRST-SECURITY.md` — privacy / device trust
@@ -259,11 +260,30 @@ __Host-onix_rt=...; Path=/; HttpOnly; Secure; SameSite=Lax
 - таймаут сети ≠ гость (cookie жива);
 - неуспешный Google не должен стирать уже открытую сессию.
 
-Google OAuth: `response_type=id_token`, redirect **точно**
+Google OAuth: браузер уходит на `accounts.google.com` с параметром
+`redirect_uri=https://www.onixtg.shop/auth/google` (`response_type=id_token`).
+Google **сверяет эту строку буква в букву** со списком **Authorized redirect URIs**.
 
-`https://www.onixtg.shop/auth/google`
+В Google Cloud Console у Web client два **разных** списка:
 
-В Google Console: JS origin `https://www.onixtg.shop` и Authorized redirect URI **тот же путь**. Иначе `redirect_uri_mismatch`. Client ID с API: `GET /api/v2/auth/public-config`.
+| Поле | Что это | Что должно быть у ONIX |
+| --- | --- | --- |
+| Authorized **JavaScript origins** | с какого хоста можно начать OAuth | `https://www.onixtg.shop` и `https://onixtg.shop` |
+| Authorized **redirect URIs** | куда Google имеет право вернуть токен | **`https://www.onixtg.shop/auth/google`** |
+
+Origins у тебя уже стоят. **Redirect URIs пустые** — поэтому `400: redirect_uri_mismatch`. Origins недостаточно: для этого потока Google требует именно redirect URI.
+
+Нажми **+ Add URI**, вставь ровно:
+
+```text
+https://www.onixtg.shop/auth/google
+```
+
+без слэша на конце, без `www` vs без `www` путаницы. Save. Подожди 5–15 минут (в консоли пишут, что может быть до нескольких часов). Client secret Google **не нужен**: мы проверяем `id_token` по Client ID.
+
+Не добавляй корень `https://www.onixtg.shop` как единственный redirect: код шлёт путь `/auth/google`. Если добавить только корень — снова mismatch.
+
+Client ID сайт берёт с `GET /api/v2/auth/public-config` (`GOOGLE_CLIENT_ID` в Amvera).
 
 Telegram website: challenge `start` → deep link `?start=login_<id>` (голое `/start` игнор) → webhook → `complete` → та же cookie.
 
@@ -275,7 +295,14 @@ Mini App: отдельный путь `POST /api/auth/telegram-mini` с `initDat
 
 **Транспорт:** HTTPS, HSTS на www, серый Cloudflare.
 
-**Заголовки:** Helmet CSP без `unsafe-eval`. Предупреждение Chrome Self-XSS и ошибки `content.js` — расширения, не дыры ONIX.
+**Заголовки:** Helmet CSP. `script-src` с nonce, **без** `unsafe-eval`. Это правильно: страница не должна выполнять `eval` / `new Function`.
+
+В консоли Chrome ты увидишь два шума, которые **не про ONIX**:
+
+1. Синее **«ВНИМАНИЕ! … Self-XSS»** — стандартный текст Chrome на любом сайте. Он говорит *тебе* не вставлять чужой JS в консоль. Это не ошибка приложения.
+2. Красное `content.js` + `unsafe-eval` blocked — **расширение браузера** (adblock, переводчик, «content script») пытается сделать `eval`. CSP сайта это режет. Расширение виновато, не код ONIX. Не добавляй `unsafe-eval` в CSP «чтобы консоль была чистая».
+
+Подробно про origin, Vite, React, Nest: **[урок 31](./31-onix-web-stack-vite-react-nest.md)**.
 
 **IP:** на Amvera (`AMVERA=1`) не доверять `CF-Connecting-IP` / leftmost XFF. `trust proxy 1`, `req.ip`. Клиентский `device.ipAddress` игнор.
 

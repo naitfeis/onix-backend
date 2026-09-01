@@ -10,6 +10,8 @@ import {
   AuthV2ApiError,
   getAuthV2PublicConfig,
   startGoogleOAuth,
+  postAuthV2Logout,
+  getSharedAuthManager,
 } from '../auth';
 import { BotLoginError } from '../auth/botLogin';
 import { formatBanRemaining, refreshBanInfo, type BanInfo } from '../api/contracts';
@@ -150,7 +152,13 @@ function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: 
       onClick={() => {
         setError('');
         setBusy(true);
-        startGoogleOAuth(clientId, redirectUri);
+        void (async () => {
+          try {
+            await postAuthV2Logout();
+          } catch { /* previous cookie may already be gone */ }
+          getSharedAuthManager().clearSession('logout');
+          startGoogleOAuth(clientId, redirectUri);
+        })();
       }}
     >
       {busy ? 'Переход в Google…' : 'Войти через Google'}
@@ -179,6 +187,10 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     const controller = new AbortController();
     abortRef.current = controller;
     try {
+      try {
+        await postAuthV2Logout();
+      } catch { /* switch-account: ignore missing cookie */ }
+      getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
       openTelegramBotLogin(started.deepLink, started.webDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });

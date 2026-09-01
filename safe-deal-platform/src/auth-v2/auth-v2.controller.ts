@@ -355,7 +355,9 @@ export class AuthV2Controller {
     assertCsrfHeader(headers);
     const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
     await this.orchestrator.logoutCurrentCookie(refreshToken);
-    res.setHeader('Set-Cookie', buildClearRefreshCookieHeaders());
+    for (const cookie of buildClearRefreshCookieHeaders()) {
+      res.append('Set-Cookie', cookie);
+    }
     return { ok: true };
   }
 
@@ -368,7 +370,9 @@ export class AuthV2Controller {
   ) {
     assertCsrfHeader(headers);
     const result = await this.orchestrator.logoutAll(req.user.id);
-    res.setHeader('Set-Cookie', buildClearRefreshCookieHeaders());
+    for (const cookie of buildClearRefreshCookieHeaders()) {
+      res.append('Set-Cookie', cookie);
+    }
     return result;
   }
 

@@ -3,8 +3,8 @@ import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, Ap
 import {
   consumeGoogleOAuthRedirect,
   getSharedAuthManager,
-  getWebsiteAuthProvider,
   postAuthV2Google,
+  postAuthV2Logout,
   readJwtSub,
 } from '../auth';
 import {
@@ -113,21 +113,34 @@ const notify = (kind: 'success' | 'error') => {
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   const googleReturn = consumeGoogleOAuthRedirect();
-  if (googleReturn?.ok) {
-    try {
-      const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
-      manager.setSession(login.accessToken, login.expiresIn);
-      markBootstrapPhase('session-check', 0);
-      markBootstrapPhase('cookie-check', 1);
-      markBootstrapPhase('refresh', 0);
-      markBootstrapPhase('telegram', 0);
-      return { status: 'authenticated', mode: 'website' };
-    } catch {
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google`);
+  if (googleReturn) {
+    if (googleReturn.ok) {
+      try {
+        const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
+        manager.setSession(login.accessToken, login.expiresIn);
+        markBootstrapPhase('session-check', 0);
+        markBootstrapPhase('cookie-check', 1);
+        markBootstrapPhase('refresh', 0);
+        markBootstrapPhase('telegram', 0);
+        return { status: 'authenticated', mode: 'website' };
+      } catch {
+        if (typeof window !== 'undefined') {
+          window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google`);
+        }
       }
-      // Keep an existing cookie session — do not flash guest after a failed Google hop.
     }
+    // Google hop finished (cancel, mismatch, or API error). Do not revive the
+    // previous Telegram cookie — that looks like "I signed in with Google and
+    // landed on the old account".
+    try {
+      await postAuthV2Logout();
+    } catch { /* cookie may already be gone */ }
+    manager.clearSession('logout');
+    markBootstrapPhase('session-check', 0);
+    markBootstrapPhase('cookie-check', 0);
+    markBootstrapPhase('refresh', 0);
+    markBootstrapPhase('telegram', 0);
+    return { status: 'guest' };
   }
   if (manager.getAccessToken() && !manager.isAccessExpired()) {
     markBootstrapPhase('session-check', 0);
@@ -1184,11 +1197,12 @@ export function useOnixCore() {
   const signOut = useCallback(async () => {
     if (isTelegramMiniApp()) return;
     try {
-      await getWebsiteAuthProvider().logout();
+      await postAuthV2Logout();
     } catch {
-      clearAccessToken();
-      getSharedAuthManager().clearSession('logout');
+      /* still drop local tokens — cookie clear is best-effort */
     }
+    clearAccessToken();
+    getSharedAuthManager().clearSession('logout');
     setProfile(null);
     setStore(emptyStore);
     setMessages({});
