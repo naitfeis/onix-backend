@@ -42,6 +42,8 @@ export {
 
 export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
 
+export { startGoogleOAuth, consumeGoogleOAuthRedirect } from './googleOAuth';
+
 export {
   AuthV2ApiError,
   getAuthV2Me,

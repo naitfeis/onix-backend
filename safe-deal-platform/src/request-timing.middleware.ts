@@ -5,6 +5,37 @@ type AuthedRequest = Request & {
   user?: { id?: bigint | string };
 };
 
+export function shouldQuietHttpAccessLog(input: {
+  method: string;
+  pathOnly: string;
+  status: number;
+  durationMs: number;
+}): boolean {
+  const method = input.method.toUpperCase();
+  const pathOnly = input.pathOnly;
+  const { status, durationMs } = input;
+  if (durationMs >= 1500 || status >= 500) return false;
+  const isHealthProbe = pathOnly === '/api/health/live'
+    || pathOnly === '/api/health/ready'
+    || pathOnly === '/api/health'
+    || (pathOnly === '/' && method === 'HEAD');
+  if (isHealthProbe && status < 500) return true;
+  if (method === 'GET' && status < 400 && (
+    pathOnly === '/api/session-probe'
+    || pathOnly === '/api/v2/auth/session'
+    || pathOnly === '/api/realtime'
+    || pathOnly.startsWith('/api/notifications')
+    || pathOnly.startsWith('/api/avatars/')
+    || pathOnly.startsWith('/api/chats')
+  )) {
+    return true;
+  }
+  if (method === 'POST' && status < 400 && pathOnly === '/api/users/me/presence') {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Access log + Server-Timing / X-Response-Time.
  * Emits: requestId, userId, route, status, duration — never secrets.
@@ -43,24 +74,12 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
       status: res.statusCode,
       durationMs: Number(durationMs.toFixed(1)),
     };
-    // Render health + LB probes — log only when slow or failing.
-    const isHealthProbe = pathOnly === '/api/health/live'
-      || pathOnly === '/api/health/ready'
-      || pathOnly === '/api/health'
-      || (pathOnly === '/' && req.method === 'HEAD');
-    if (isHealthProbe && res.statusCode < 500 && durationMs < 2000) {
-      return (originalEnd as any)(...args);
-    }
-    const isQuietPoll = req.method === 'GET'
-      && res.statusCode < 400
-      && durationMs < 1500
-      && (
-        pathOnly === '/api/session-probe'
-        || pathOnly === '/api/v2/auth/session'
-        || pathOnly.startsWith('/api/notifications')
-        || pathOnly.startsWith('/api/avatars/')
-      );
-    if (isQuietPoll) {
+    if (shouldQuietHttpAccessLog({
+      method: req.method,
+      pathOnly,
+      status: res.statusCode,
+      durationMs,
+    })) {
       return (originalEnd as any)(...args);
     }
     // Skip access log for empty scanner 404s (middleware already ended).

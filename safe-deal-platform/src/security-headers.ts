@@ -14,8 +14,8 @@ export function createSecurityMiddleware(): (
   return helmet({
     // SPA + Nest on one origin — no cross-origin embed needed.
     crossOriginEmbedderPolicy: false,
-    // GIS popup (accounts.google.com/gsi/transform) needs to postMessage the id_token
-    // back to this origin. Helmet's default `same-origin` leaves a white Edge popup.
+    // GIS popup is not used; Telegram widget is an iframe. Keep allow-popups
+    // so oauth.telegram.org / future account pickers are not COOP-blocked.
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     crossOriginResourcePolicy: { policy: 'same-origin' },
     contentSecurityPolicy: {

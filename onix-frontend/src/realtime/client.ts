@@ -202,7 +202,6 @@ export class RealtimeClient {
     if (this.visibilityBound) return;
     this.visibilityBound = true;
     document.addEventListener('visibilitychange', this.onVisibility);
-    window.addEventListener('focus', this.onVisibility);
     window.addEventListener('online', this.onOnline);
     window.addEventListener('pageshow', this.onPageShow);
   }
@@ -211,7 +210,6 @@ export class RealtimeClient {
     if (!this.visibilityBound) return;
     this.visibilityBound = false;
     document.removeEventListener('visibilitychange', this.onVisibility);
-    window.removeEventListener('focus', this.onVisibility);
     window.removeEventListener('online', this.onOnline);
     window.removeEventListener('pageshow', this.onPageShow);
   }
