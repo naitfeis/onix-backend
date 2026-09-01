@@ -5,6 +5,7 @@ import {
   getSharedAuthManager,
   getWebsiteAuthProvider,
   postAuthV2Google,
+  readJwtSub,
 } from '../auth';
 import {
   ensureTelegramMiniAppReady,
@@ -37,6 +38,7 @@ type AuthBootstrap =
   | { status: 'authenticated'; mode: AuthMode }
   | { status: 'guest' }
   | { status: 'network' };
+type SessionRestore = 'pending' | 'guest' | 'authenticated' | 'network';
 type Store = {
   products: Product[];
   deals: Deal[];
@@ -111,32 +113,21 @@ const notify = (kind: 'success' | 'error') => {
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   const googleReturn = consumeGoogleOAuthRedirect();
-  if (googleReturn) {
-    if (googleReturn.ok) {
-      try {
-        const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
-        manager.setSession(login.accessToken, login.expiresIn);
-        markBootstrapPhase('session-check', 0);
-        markBootstrapPhase('cookie-check', 1);
-        markBootstrapPhase('refresh', 0);
-        markBootstrapPhase('telegram', 0);
-        return { status: 'authenticated', mode: 'website' };
-      } catch {
-        if (typeof window !== 'undefined') {
-          window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google`);
-        }
-        markBootstrapPhase('session-check', 0);
-        markBootstrapPhase('cookie-check', 0);
-        markBootstrapPhase('refresh', 0);
-        markBootstrapPhase('telegram', 0);
-        return { status: 'guest' };
+  if (googleReturn?.ok) {
+    try {
+      const login = await postAuthV2Google({ idToken: googleReturn.idToken, rememberMe: true });
+      manager.setSession(login.accessToken, login.expiresIn);
+      markBootstrapPhase('session-check', 0);
+      markBootstrapPhase('cookie-check', 1);
+      markBootstrapPhase('refresh', 0);
+      markBootstrapPhase('telegram', 0);
+      return { status: 'authenticated', mode: 'website' };
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', `${window.location.pathname || '/'}?auth_error=google`);
       }
+      // Keep an existing cookie session — do not flash guest after a failed Google hop.
     }
-    markBootstrapPhase('session-check', 0);
-    markBootstrapPhase('cookie-check', 0);
-    markBootstrapPhase('refresh', 0);
-    markBootstrapPhase('telegram', 0);
-    return { status: 'guest' };
   }
   if (manager.getAccessToken() && !manager.isAccessExpired()) {
     markBootstrapPhase('session-check', 0);
@@ -229,6 +220,7 @@ function warmSecondaryCollections(
 
 export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [sessionRestore, setSessionRestore] = useState<SessionRestore>('pending');
   const [catalogSubcategories, setCatalogSubcategories] = useState<SubcategoryCatalog>(SUBCATEGORIES_BY_CATEGORY);
   const [store, setStore] = useState<Store>(emptyStore);
   const [states, setStates] = useState<Record<CollectionKey | 'profile', AsyncState>>({
@@ -279,11 +271,12 @@ export function useOnixCore() {
     }
   }, []);
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (opts?: { keepOnTransient?: boolean }) => {
     setStates(previous => ({ ...previous, profile: 'loading' }));
     try {
       const complete = await api.get<Profile>(API_PATHS.me);
       setProfile(complete);
+      setSessionRestore('authenticated');
       setErrors(previous => ({ ...previous, profile: undefined }));
       setStates(previous => ({ ...previous, profile: 'success' }));
       return complete;
@@ -291,13 +284,16 @@ export function useOnixCore() {
       const authRejected = error instanceof ApiError && (error.status === 401 || error.status === 403);
       if (!authRejected && isTransientRefreshFailure(error)) {
         const kept = profileRef.current;
-        setErrors((previous) => ({
-          ...previous,
-          profile: 'Нет связи с сервером. Сессия сохранена — обновите страницу.',
-        }));
-        setStates((previous) => ({ ...previous, profile: kept ? 'success' : 'error' }));
-        return kept;
+        if (kept || opts?.keepOnTransient) {
+          setErrors((previous) => ({
+            ...previous,
+            profile: 'Нет связи с сервером. Сессия сохранена — обновите страницу.',
+          }));
+          setStates((previous) => ({ ...previous, profile: kept ? 'success' : 'loading' }));
+          return kept;
+        }
       }
+      if (authRejected) setSessionRestore('guest');
       setProfile(null);
       setErrors(previous => ({ ...previous, profile: friendlyError(error) }));
       setStates(previous => ({ ...previous, profile: 'error' }));
@@ -312,7 +308,8 @@ export function useOnixCore() {
       // Mini App: Telegram auto-login, then market (unchanged).
       if (isTelegramMiniApp()) {
         const boot = await ensureWebsiteOrMiniAuth();
-        if (boot.status !== 'authenticated') {
+      if (boot.status !== 'authenticated') {
+          setSessionRestore('guest');
           setProfile(null);
           setStore(emptyStore);
           setStates((previous) => ({
@@ -352,6 +349,7 @@ export function useOnixCore() {
       const alreadyAuthed = Boolean(profileRef.current) && Boolean(getAccessToken() || getSharedAuthManager().getAccessToken());
       if (alreadyAuthed) {
         const current = profileRef.current;
+        setSessionRestore('authenticated');
         void loadProfile();
         void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true });
         void loadCatalog();
@@ -381,6 +379,7 @@ export function useOnixCore() {
       const boot = await sessionPromise;
 
       if (boot.status === 'guest') {
+        setSessionRestore('guest');
         setProfile(null);
         setStates((previous) => ({
           ...previous,
@@ -402,17 +401,18 @@ export function useOnixCore() {
       }
 
       if (boot.status === 'network') {
-        // Transient refresh failure — keep HttpOnly cookie; show guest shell; soft retries.
-        // Same AuthManager single-flight (no parallel refresh storm).
-        setProfile(null);
-        setStates((previous) => ({
-          ...previous,
-          profile: 'error',
-          deals: 'idle',
-          chats: 'idle',
-          notifications: 'idle',
-          reviews: 'idle',
-        }));
+        // Transient refresh failure — keep HttpOnly cookie; do not flash guest login.
+        setSessionRestore('network');
+        if (!profileRef.current) {
+          setStates((previous) => ({
+            ...previous,
+            profile: 'loading',
+            deals: 'idle',
+            chats: 'idle',
+            notifications: 'idle',
+            reviews: 'idle',
+          }));
+        }
         setErrors((previous) => ({
           ...previous,
           profile: 'Нет связи с сервером. Сессия ONIX сохранена — подождите или обновите страницу.',
@@ -427,7 +427,8 @@ export function useOnixCore() {
             await new Promise((r) => setTimeout(r, wait));
             const manager = getSharedAuthManager();
             if (manager.getAccessToken() && !manager.isAccessExpired()) {
-              const current = await loadProfile();
+              const current = await loadProfile({ keepOnTransient: true });
+              if (current) setSessionRestore('authenticated');
               setErrors((previous) => ({ ...previous, profile: undefined }));
               void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
               warmSecondaryCollections(current, load);
@@ -435,12 +436,18 @@ export function useOnixCore() {
             }
             const again = await restoreWebsiteSession();
             if (again.status !== 'authenticated') continue;
-            const current = await loadProfile();
+            const current = await loadProfile({ keepOnTransient: true });
+            if (current) setSessionRestore('authenticated');
             setErrors((previous) => ({ ...previous, profile: undefined }));
             void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
             warmSecondaryCollections(current, load);
             return;
           }
+          setSessionRestore((prev) => (prev === 'authenticated' ? prev : 'network'));
+          setStates((previous) => ({
+            ...previous,
+            profile: profileRef.current ? 'success' : 'error',
+          }));
         })();
         return;
       }
@@ -448,7 +455,12 @@ export function useOnixCore() {
       // Session OK: profile may load alongside the public catalog, but the
       // personalized catalog must start only after that request settles.
       // This prevents two identical product bootstraps racing each other.
-      const current = await bootstrapPhase('profile-load', () => loadProfile());
+      setSessionRestore('authenticated');
+      let current = await bootstrapPhase('profile-load', () => loadProfile({ keepOnTransient: true }));
+      if (!current && getSharedAuthManager().getAccessToken()) {
+        await new Promise((r) => setTimeout(r, 800));
+        current = await loadProfile({ keepOnTransient: true });
+      }
       markBootstrapPhase('profile', 0);
       await catalogReady;
       // Guest catalog already painted; refresh silently so favorites personalize without a second loading race.
@@ -457,7 +469,16 @@ export function useOnixCore() {
       markAppReady('bootstrap-settled');
       warmSecondaryCollections(current, load);
     } catch (error) {
+      if (isTransientRefreshFailure(error)) {
+        setSessionRestore('network');
+        setStates(previous => ({ ...previous, profile: profileRef.current ? 'success' : 'loading' }));
+        setErrors(previous => ({ ...previous, profile: friendlyError(error) }));
+        printBootstrapSummary('bootstrap-error');
+        markAppReady('bootstrap-settled');
+        return;
+      }
       setProfile(null);
+      setSessionRestore('guest');
       setStates(previous => ({ ...previous, profile: 'error' }));
       if (error instanceof ApiError && error.code === 'AUTH_ACCOUNT_LOCKED') {
         const ban = (error.details as { ban?: BanInfo } | undefined)?.ban;
@@ -483,6 +504,46 @@ export function useOnixCore() {
     bootstrapStart();
     void refreshAll();
   }, [refreshAll]);
+
+  // Peer tab login/logout shares the refresh cookie — keep this tab's profile in sync.
+  useEffect(() => {
+    if (isTelegramMiniApp()) return;
+    const manager = getSharedAuthManager();
+    return manager.subscribe((event: { type: string; accessToken?: string }) => {
+      if (event.type === 'logout' || event.type === 'force-reauth') {
+        setProfile(null);
+        setStore(emptyStore);
+        setMessages({});
+        setPresenceByOnixId({});
+        setSessionRestore('guest');
+        setStates((previous) => ({
+          ...previous,
+          profile: 'error',
+          deals: 'idle',
+          chats: 'idle',
+          notifications: 'idle',
+          reviews: 'idle',
+        }));
+        setErrors((previous) => ({
+          ...previous,
+          profile: 'Вы вышли из аккаунта. Войдите через Telegram, чтобы продолжить.',
+        }));
+        return;
+      }
+      if (event.type !== 'token-updated' || !event.accessToken) return;
+      const sub = readJwtSub(event.accessToken);
+      const currentId = profileRef.current?.id;
+      if (sub && currentId && sub === currentId) return;
+      void (async () => {
+        setStore(emptyStore);
+        setMessages({});
+        const next = await loadProfile({ keepOnTransient: true });
+        if (!next) return;
+        warmSecondaryCollections(next, load);
+        void load('products', API_PATHS.productsList({ limit: 15, offset: 0 }), { silent: true, fresh: true });
+      })();
+    });
+  }, [load, loadProfile]);
 
   // Ping origin while the tab is open — Render free tier sleeps after idle;
   // a warm instance cuts RU cold-start hangs on refresh/products.
@@ -1132,6 +1193,7 @@ export function useOnixCore() {
     setStore(emptyStore);
     setMessages({});
     setPresenceByOnixId({});
+    setSessionRestore('guest');
     setStates((previous) => ({
       ...previous,
       profile: 'error',
@@ -1155,6 +1217,7 @@ export function useOnixCore() {
 
   return {
     profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    sessionRestore,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,

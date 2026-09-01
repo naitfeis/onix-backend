@@ -17,9 +17,13 @@ describe('google OAuth redirect', () => {
   it('uses /auth/google so Google Console keeps the path', () => {
     expect(googleRedirectUri('https://www.onixtg.shop')).toBe('https://www.onixtg.shop/auth/google');
     expect(googleRedirectUri('https://www.onixtg.shop/')).toBe('https://www.onixtg.shop/auth/google');
+    expect(googleRedirectUri('https://onixtg.shop')).toBe('https://www.onixtg.shop/auth/google');
+    expect(googleRedirectUri('http://localhost:5173')).toBe('http://localhost:5173/auth/google');
+    expect(googleRedirectUri('https://www.onixtg.shop', 'https://www.onixtg.shop/auth/google/'))
+      .toBe('https://www.onixtg.shop/auth/google');
     const url = buildGoogleOAuthUrl(
       'abc.apps.googleusercontent.com',
-      'https://www.onixtg.shop',
+      'https://onixtg.shop',
       'st',
       'nn',
     );

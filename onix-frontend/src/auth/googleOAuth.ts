@@ -1,11 +1,13 @@
 /**
  * Google Sign-In without GIS popup. Full-page OAuth id_token.
- * Redirect URI is a real path so Google Console does not strip a trailing slash
- * (origin `/` is stored as `https://www.onixtg.shop` → redirect_uri_mismatch).
- * Add Authorized redirect URI exactly: `https://www.onixtg.shop/auth/google`
+ * Production always uses www + `/auth/google` so apex / trailing-slash Console
+ * entries cannot cause redirect_uri_mismatch. Add this URI in Google Console:
+ *   https://www.onixtg.shop/auth/google
+ * Also add Authorized JavaScript origin: https://www.onixtg.shop
  */
 
 export const GOOGLE_OAUTH_CALLBACK_PATH = '/auth/google';
+export const PRODUCTION_GOOGLE_REDIRECT_URI = 'https://www.onixtg.shop/auth/google';
 
 const STATE_KEY = 'onix_google_oauth_state';
 const NONCE_KEY = 'onix_google_oauth_nonce';
@@ -21,8 +23,13 @@ function randomToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function googleRedirectUri(origin: string): string {
+export function googleRedirectUri(origin: string, override?: string | null): string {
+  const configured = override?.trim();
+  if (configured) return configured.replace(/\/+$/, '');
   const base = origin.replace(/\/+$/, '');
+  if (base === 'https://www.onixtg.shop' || base === 'https://onixtg.shop') {
+    return PRODUCTION_GOOGLE_REDIRECT_URI;
+  }
   return `${base}${GOOGLE_OAUTH_CALLBACK_PATH}`;
 }
 
@@ -31,10 +38,11 @@ export function buildGoogleOAuthUrl(
   origin: string,
   state: string,
   nonce: string,
+  redirectOverride?: string | null,
 ): string {
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: googleRedirectUri(origin),
+    redirect_uri: googleRedirectUri(origin, redirectOverride),
     response_type: 'id_token',
     scope: 'openid email profile',
     nonce,
@@ -44,12 +52,14 @@ export function buildGoogleOAuthUrl(
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
 
-export function startGoogleOAuth(clientId: string): void {
+export function startGoogleOAuth(clientId: string, redirectOverride?: string | null): void {
   const state = randomToken();
   const nonce = randomToken();
   sessionStorage.setItem(STATE_KEY, state);
   sessionStorage.setItem(NONCE_KEY, nonce);
-  window.location.assign(buildGoogleOAuthUrl(clientId, window.location.origin, state, nonce));
+  window.location.assign(
+    buildGoogleOAuthUrl(clientId, window.location.origin, state, nonce, redirectOverride),
+  );
 }
 
 function decodeJwtPayload(idToken: string): { nonce?: string } | null {

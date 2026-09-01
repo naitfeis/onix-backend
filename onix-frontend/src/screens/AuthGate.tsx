@@ -116,6 +116,7 @@ function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: 
   const [clientId, setClientId] = useState<string | null>(
     () => import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || null,
   );
+  const [redirectUri, setRedirectUri] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -131,6 +132,7 @@ function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: 
         if (cancelled) return;
         const fromApi = cfg.googleClientId?.trim() || null;
         if (fromApi) setClientId(fromApi);
+        if (cfg.googleRedirectUri?.trim()) setRedirectUri(cfg.googleRedirectUri.trim());
       })
       .catch(() => {
         /* keep baked VITE_GOOGLE_CLIENT_ID if present */
@@ -148,7 +150,7 @@ function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: 
       onClick={() => {
         setError('');
         setBusy(true);
-        startGoogleOAuth(clientId);
+        startGoogleOAuth(clientId, redirectUri);
       }}
     >
       {busy ? 'Переход в Google…' : 'Войти через Google'}

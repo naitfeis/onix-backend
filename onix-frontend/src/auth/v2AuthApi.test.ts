@@ -45,9 +45,13 @@ describe('fast refresh cookie probe', () => {
 describe('auth public config', () => {
   it('reads googleClientId from /api/v2/auth/public-config', async () => {
     const { getAuthV2PublicConfig } = await import('./v2AuthApi');
-    const fetchImpl = vi.fn(async () => envelope({ googleClientId: 'abc.apps.googleusercontent.com' }));
+    const fetchImpl = vi.fn(async () => envelope({
+      googleClientId: 'abc.apps.googleusercontent.com',
+      googleRedirectUri: 'https://www.onixtg.shop/auth/google',
+    }));
     await expect(getAuthV2PublicConfig(fetchImpl, '')).resolves.toEqual({
       googleClientId: 'abc.apps.googleusercontent.com',
+      googleRedirectUri: 'https://www.onixtg.shop/auth/google',
     });
     expect(fetchImpl).toHaveBeenCalledWith('/api/v2/auth/public-config', expect.objectContaining({
       method: 'GET',

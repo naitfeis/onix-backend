@@ -141,11 +141,11 @@ async function executeAuthV2Refresh(
 }
 
 /**
- * Cap hung RU→CF→Render sockets so bootstrap does not sit on a dead socket.
+ * Same-origin Amvera: cap hung sockets without flashing guest at 3.5s.
  * Fast connection-reset retries stay enabled; timeout itself is not retried —
  * useOnixCore soft-retries after showing the shell.
  */
-export const AUTH_REFRESH_TIMEOUT_MS = 3_500;
+export const AUTH_REFRESH_TIMEOUT_MS = 8_000;
 
 async function defaultTransport({ url, init }: { url: string; init: RequestInit }): Promise<Response> {
   return resilientFetch(url, {

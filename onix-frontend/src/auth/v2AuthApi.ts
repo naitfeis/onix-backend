@@ -151,6 +151,7 @@ export async function postAuthV2Google(
 
 export type AuthV2PublicConfig = {
   googleClientId: string | null;
+  googleRedirectUri: string | null;
 };
 
 /** GET /api/v2/auth/public-config — Google Client ID for GIS (runtime, not Vite bake). */
@@ -163,7 +164,11 @@ export async function getAuthV2PublicConfig(
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  return readEnvelope<AuthV2PublicConfig>(response);
+  const data = await readEnvelope<AuthV2PublicConfig>(response);
+  return {
+    googleClientId: data.googleClientId?.trim() || null,
+    googleRedirectUri: data.googleRedirectUri?.trim() || null,
+  };
 }
 
 /**

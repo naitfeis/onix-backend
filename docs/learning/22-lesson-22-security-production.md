@@ -3,9 +3,11 @@
 ## Цель
 Понимать auth ONIX и развёртывание.
 
-Изучи sessions, HttpOnly/Secure/SameSite cookies, JWT, refresh rotation, CSRF, XSS, CORS, rate limit, MFA, audit log, device trust. Затем Ed25519/EdDSA и `kid`: приватный ключ подписывает на backend, публичный проверяет, ротация идёт по key id.
+Полная карта (ветки, Ed25519, cookie, ledger, что нельзя упрощать): **[урок 30](./30-onix-owner-architecture-security.md)**.
 
-Инфраструктура: Vercel — frontend/rewrite, Render — Nest API, Neon — PostgreSQL, Cloudflare — DNS/edge.
+Изучи sessions, HttpOnly/Secure/SameSite cookies, JWT EdDSA vs opaque refresh, rotation + family revoke, CSRF (`X-ONIX-CSRF`), XSS, CORS, rate limit, audit log, device trust HMAC. Приватный ключ подписывает на backend, публичный проверяет, ротация по `kid` (`AUTH_ED25519_CURRENT_*` / `PREVIOUS_*`).
+
+Прод (2026-09): Amvera Moscow `www.onixtg.shop` (SPA+API). Staging — Render. Neon — PostgreSQL. Cloudflare — только серый DNS. Старые схемы Vercel rewrite больше не канон.
 
 ## Самостоятельно
-Опиши поток login → access token → refresh cookie → session → permission check. Добавь тесты на отзыв сессии, отрицательный баланс и повторную оплату.
+Опиши поток login → access token → refresh cookie → session → `sv`/`pv` check. Добавь тесты на отзыв сессии, отрицательный баланс и повторную оплату.
