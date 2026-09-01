@@ -49,6 +49,8 @@ export {
   probeRefreshCookiePresence,
   probeAuthV2Session,
   postAuthV2Login,
+  postAuthV2Google,
+  getAuthV2PublicConfig,
   postAuthV2Logout,
 } from './v2AuthApi';
 export type {

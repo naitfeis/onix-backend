@@ -149,6 +149,23 @@ export async function postAuthV2Google(
   return data;
 }
 
+export type AuthV2PublicConfig = {
+  googleClientId: string | null;
+};
+
+/** GET /api/v2/auth/public-config — Google Client ID for GIS (runtime, not Vite bake). */
+export async function getAuthV2PublicConfig(
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<AuthV2PublicConfig> {
+  const response = await fetchImpl(`${apiBase}/api/v2/auth/public-config`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  return readEnvelope<AuthV2PublicConfig>(response);
+}
+
 /**
  * GET /api/v2/auth/me — Bearer Ed25519 access (AuthV2Guard).
  */

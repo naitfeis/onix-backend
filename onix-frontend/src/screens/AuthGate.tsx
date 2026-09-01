@@ -3,11 +3,14 @@ import { loginWithTelegram as legacyLoginWithTelegram, ApiError } from '../api/c
 import {
   getWebsiteAuthProvider,
   getWebsiteLoginProvider,
+  getSharedAuthManager,
   isWebsiteAuthV2,
   openTelegramBotLogin,
   startBotLogin,
   waitAndCompleteBotLogin,
   AuthV2ApiError,
+  postAuthV2Google,
+  getAuthV2PublicConfig,
 } from '../auth';
 import { BotLoginError } from '../auth/botLogin';
 import { formatBanRemaining, refreshBanInfo, type BanInfo } from '../api/contracts';
@@ -110,8 +113,25 @@ function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => 
 
 function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const [error, setError] = useState('');
+  const [clientId, setClientId] = useState<string | null>(
+    () => import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || null,
+  );
   const hostRef = useRef<HTMLDivElement>(null);
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim();
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAuthV2PublicConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        const fromApi = cfg.googleClientId?.trim() || null;
+        if (fromApi) setClientId(fromApi);
+      })
+      .catch(() => {
+        /* keep baked VITE_GOOGLE_CLIENT_ID if present */
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     if (!clientId || !hostRef.current) return;
     const host = hostRef.current;
@@ -129,13 +149,8 @@ function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => 
         callback: async (response: { credential?: string }) => {
           if (!response.credential) return;
           try {
-            const auth = getWebsiteAuthProvider() as { loginWithGoogle?: (token: string) => Promise<void> };
-            if (auth.loginWithGoogle) {
-              await auth.loginWithGoogle(response.credential);
-            } else {
-              setError('Google вход доступен только в режиме auth_v2.');
-              return;
-            }
+            const login = await postAuthV2Google({ idToken: response.credential, rememberMe: true });
+            getSharedAuthManager().setSession(login.accessToken, login.expiresIn);
             onAuthenticated();
             location.reload();
           } catch (err) {

@@ -408,6 +408,7 @@ export const API_PATHS = {
   aiFaqs: '/api/ai/faqs',
   aiMessages: '/api/ai/messages',
   authGoogle: '/api/v2/auth/google',
+  authPublicConfig: '/api/v2/auth/public-config',
   authLinkTelegram: '/api/v2/auth/link/telegram',
   walletWithdraw: '/api/wallet/withdrawals',
   mfaStatus: (challengeId: string) =>

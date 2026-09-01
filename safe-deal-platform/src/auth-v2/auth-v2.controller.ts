@@ -129,6 +129,14 @@ export class AuthV2Controller {
     };
   }
 
+  /** Public Client ID for Google GIS. Safe to expose; Amvera cannot bake VITE_* at build. */
+  @Get('public-config')
+  @Header('Cache-Control', 'no-store')
+  publicConfig() {
+    const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim() || null;
+    return { googleClientId };
+  }
+
   @UseGuards(AuthV2Guard)
   @Post('link/telegram')
   @Header('Cache-Control', 'no-store')

@@ -41,3 +41,16 @@ describe('fast refresh cookie probe', () => {
     });
   });
 });
+
+describe('auth public config', () => {
+  it('reads googleClientId from /api/v2/auth/public-config', async () => {
+    const { getAuthV2PublicConfig } = await import('./v2AuthApi');
+    const fetchImpl = vi.fn(async () => envelope({ googleClientId: 'abc.apps.googleusercontent.com' }));
+    await expect(getAuthV2PublicConfig(fetchImpl, '')).resolves.toEqual({
+      googleClientId: 'abc.apps.googleusercontent.com',
+    });
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v2/auth/public-config', expect.objectContaining({
+      method: 'GET',
+    }));
+  });
+});
