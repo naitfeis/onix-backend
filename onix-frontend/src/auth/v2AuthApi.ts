@@ -186,10 +186,9 @@ export async function getAuthV2Me(
 }
 
 /**
- * POST /api/v2/auth/logout — revokes session + clears HttpOnly refresh cookie.
+ * POST /api/v2/auth/logout — cookie + CSRF. No Bearer required.
  */
 export async function postAuthV2Logout(
-  accessToken: string,
   fetchImpl: AuthV2Fetch = fetch,
   apiBase = '',
 ): Promise<{ ok: true }> {
@@ -198,7 +197,6 @@ export async function postAuthV2Logout(
     credentials: 'include',
     headers: {
       Accept: 'application/json',
-      Authorization: `Bearer ${accessToken}`,
       'X-ONIX-CSRF': '1',
     },
   });

@@ -14,9 +14,9 @@ function jwtWithNonce(nonce: string): string {
 }
 
 describe('google OAuth redirect', () => {
-  it('uses origin slash as redirect_uri', () => {
-    expect(googleRedirectUri('https://www.onixtg.shop')).toBe('https://www.onixtg.shop/');
-    expect(googleRedirectUri('https://www.onixtg.shop/')).toBe('https://www.onixtg.shop/');
+  it('uses /auth/google so Google Console keeps the path', () => {
+    expect(googleRedirectUri('https://www.onixtg.shop')).toBe('https://www.onixtg.shop/auth/google');
+    expect(googleRedirectUri('https://www.onixtg.shop/')).toBe('https://www.onixtg.shop/auth/google');
     const url = buildGoogleOAuthUrl(
       'abc.apps.googleusercontent.com',
       'https://www.onixtg.shop',
@@ -25,7 +25,7 @@ describe('google OAuth redirect', () => {
     );
     expect(url.startsWith('https://accounts.google.com/o/oauth2/v2/auth?')).toBe(true);
     expect(url.includes('response_type=id_token')).toBe(true);
-    expect(url.includes(encodeURIComponent('https://www.onixtg.shop/'))).toBe(true);
+    expect(url.includes(encodeURIComponent('https://www.onixtg.shop/auth/google'))).toBe(true);
     expect(url.includes('gsi/transform')).toBe(false);
   });
 
@@ -35,7 +35,7 @@ describe('google OAuth redirect', () => {
 
   it('accepts hash id_token when state and nonce match', () => {
     const token = jwtWithNonce('nn');
-    const href = `https://www.onixtg.shop/#id_token=${token}&state=st`;
+    const href = `https://www.onixtg.shop/auth/google#id_token=${token}&state=st`;
     expect(interpretGoogleOAuthReturn(href, 'st', 'nn')).toEqual({ ok: true, idToken: token });
   });
 

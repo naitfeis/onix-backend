@@ -19,7 +19,7 @@ import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
 import { createSecurityMiddleware, resolveCorsOrigins, canonicalWwwHostMiddleware } from './security-headers';
 import { RealtimeHubService } from './realtime/realtime-hub.service';
-import { spaIndexExists } from './spa-static';
+import { spaAuthGoogleCallbackMiddleware, spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
 
 /** Same-process guard — Nest must bootstrap exactly once per Node process. */
@@ -67,6 +67,7 @@ async function bootstrap(): Promise<void> {
   app.use(canonicalWwwHostMiddleware);
   // Scanners before ServeStatic / Nest (clean 404, never 500).
   app.use(httpNoiseMiddleware);
+  app.use(spaAuthGoogleCallbackMiddleware);
   // gzip only in production (Render NODE_ENV=production). Dev stays uncompressed for easier debugging.
   if (process.env.NODE_ENV === 'production') {
     app.use(compression());

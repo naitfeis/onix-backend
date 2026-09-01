@@ -1,8 +1,11 @@
 /**
- * Google Sign-In without GIS (`/gsi/client`, `/gsi/transform` popup).
- * Full-page OAuth id_token → same origin `/` → POST /api/v2/auth/google.
- * Add Authorized redirect URI: `{origin}/` (e.g. https://www.onixtg.shop/).
+ * Google Sign-In without GIS popup. Full-page OAuth id_token.
+ * Redirect URI is a real path so Google Console does not strip a trailing slash
+ * (origin `/` is stored as `https://www.onixtg.shop` → redirect_uri_mismatch).
+ * Add Authorized redirect URI exactly: `https://www.onixtg.shop/auth/google`
  */
+
+export const GOOGLE_OAUTH_CALLBACK_PATH = '/auth/google';
 
 const STATE_KEY = 'onix_google_oauth_state';
 const NONCE_KEY = 'onix_google_oauth_nonce';
@@ -19,7 +22,8 @@ function randomToken(): string {
 }
 
 export function googleRedirectUri(origin: string): string {
-  return origin.endsWith('/') ? origin : `${origin}/`;
+  const base = origin.replace(/\/+$/, '');
+  return `${base}${GOOGLE_OAUTH_CALLBACK_PATH}`;
 }
 
 export function buildGoogleOAuthUrl(
@@ -103,7 +107,6 @@ export function consumeGoogleOAuthRedirect(): GoogleOAuthReturn {
   if (result === null) return null;
   sessionStorage.removeItem(STATE_KEY);
   sessionStorage.removeItem(NONCE_KEY);
-  const path = window.location.pathname || '/';
-  window.history.replaceState(null, '', result.ok ? path : `${path}?auth_error=google`);
+  window.history.replaceState(null, '', result.ok ? '/' : '/?auth_error=google');
   return result;
 }

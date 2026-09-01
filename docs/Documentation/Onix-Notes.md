@@ -208,11 +208,14 @@ DNS сайт (плюс почта reg.ru не трогать):
 - Логи: `slog` redact'ит и message, и string fields, и итоговую JSON-строку.
   Bot webhook не пишет `message.text` / `callback_data` payload.
 - Чат: `sanitizeChatText` на send/caption (теги, javascript:/data:, control chars).
-- Google: вход — полная страница OAuth (`response_type=id_token`) на `{origin}/`,
-  без GIS `/gsi/client` и без popup `/gsi/transform`. В Google Console
-  Authorized redirect URI: `https://www.onixtg.shop/` (и localhost для Vite).
+- Google: вход — полная страница OAuth (`response_type=id_token`) на
+  `https://www.onixtg.shop/auth/google` (путь, Google Console его не срезает).
+  Без GIS `/gsi/client` и без popup `/gsi/transform`. В Google Console
+  Authorized redirect URI **точно**: `https://www.onixtg.shop/auth/google`.
   Имя/фамилия/фото из tokeninfo пишутся в профиль (если нет Telegram-лица).
   Аватары `*.googleusercontent.com` проксируются через `/api/avatars`.
+  Logout: cookie+CSRF (без Bearer) + Max-Age=0/Expires epoch, иначе refresh
+  после F5 снова сажает ту же сессию.
 - Apex `onixtg.shop` → 301 `www` (кроме `/.well-known/`).
 
 **Остаётся ops / архитектура — не «починить одним PR»:**
@@ -227,9 +230,9 @@ DNS сайт (плюс почта reg.ru не трогать):
 - Тариф 0.5 CPU / 1 GB — DoS по CPU дешевле, чем по логике. Rate-limit in-process
   не шарится между будущими репликами (сейчас реплика 1).
 - Google `accounts.google.com` в РФ может резаться независимо от Amvera.
-  Код больше не открывает GIS popup `/gsi/transform` (белый экран Edge +
-  `initialize()` × N + `postMessage` null). Кнопка уходит на OAuth id_token.
-  В Google Console: Authorized redirect URI `https://www.onixtg.shop/`.
+  Код больше не открывает GIS popup `/gsi/transform`. Кнопка уходит на OAuth
+  id_token → `/auth/google`. В Google Console Authorized redirect URI:
+  `https://www.onixtg.shop/auth/google` (не корень `/` — Console стирает слэш).
 - LoginChallenge 2 минуты; голое `/start` игнорируется — это не баг, не открывать
   confirm без payload.
 - Worker (включая `telegram-outbox`) должен ходить в **тот же Neon**, что и API.

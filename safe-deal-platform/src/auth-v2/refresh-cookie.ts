@@ -26,13 +26,26 @@ export function buildRefreshCookieHeader(token: string, maxAgeSeconds: number): 
 }
 
 export function buildClearRefreshCookieHeader(): string {
-  const secure = process.env.AUTH_COOKIE_SECURE !== 'false';
+  return buildClearRefreshCookieHeaders()[0]!;
+}
+
+/** Clear both __Host- and legacy names so logout cannot leave a stale cookie. */
+export function buildClearRefreshCookieHeaders(): string[] {
+  return [
+    clearRefreshCookie('__Host-onix_rt', true),
+    clearRefreshCookie('onix_rt', true),
+    clearRefreshCookie('onix_rt', false),
+  ];
+}
+
+function clearRefreshCookie(name: string, secure: boolean): string {
   const parts = [
-    `${refreshCookieName()}=`,
+    `${name}=`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
     'Max-Age=0',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
   ];
   if (secure) parts.push('Secure');
   return parts.join('; ');

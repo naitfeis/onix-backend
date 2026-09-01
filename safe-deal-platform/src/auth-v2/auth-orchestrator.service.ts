@@ -239,6 +239,16 @@ export class AuthOrchestrator {
     });
   }
 
+  async logoutCurrentCookie(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) return;
+    try {
+      const { user, session } = await this.sessions.getSessionByRefreshToken(refreshToken);
+      await this.logout(session.id, user.id);
+    } catch {
+      /* already revoked / unknown — cookie is still cleared by the controller */
+    }
+  }
+
   async loginWithGoogle(command: {
     idToken: string;
     rememberMe?: boolean;

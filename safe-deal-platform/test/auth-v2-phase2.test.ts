@@ -7,6 +7,7 @@ import { AuthEventPublisher } from '../src/auth-v2/auth-events';
 import {
   assertCsrfHeader,
   buildClearRefreshCookieHeader,
+  buildClearRefreshCookieHeaders,
   buildRefreshCookieHeader,
   readRefreshTokenFromCookie,
   refreshCookieName,
@@ -65,6 +66,10 @@ test('refresh cookie helpers use HttpOnly SameSite and readable parse', () => {
   assert.match(header, /Path=\//);
   assert.equal(readRefreshTokenFromCookie(`foo=1; ${header.split(';')[0]}`), 'secret-token');
   assert.match(buildClearRefreshCookieHeader(), /Max-Age=0/);
+  assert.match(buildClearRefreshCookieHeader(), /Expires=/);
+  const cleared = buildClearRefreshCookieHeaders();
+  assert.ok(cleared.some((row) => row.startsWith('__Host-onix_rt=')));
+  assert.ok(cleared.some((row) => row.startsWith('onix_rt=')));
   delete process.env.AUTH_COOKIE_SECURE;
 });
 

@@ -10,7 +10,7 @@ import { AuthV2Guard, type AuthV2RequestUser } from './auth-v2.guards';
 import {
   assertCsrfHeader,
   assertGoogleGsiCsrf,
-  buildClearRefreshCookieHeader,
+  buildClearRefreshCookieHeaders,
   buildRefreshCookieHeader,
   readRefreshTokenFromCookie,
 } from './refresh-cookie';
@@ -338,16 +338,22 @@ export class AuthV2Controller {
     };
   }
 
-  @UseGuards(AuthV2Guard)
+  /**
+   * Cookie is the source of truth. Bearer is optional — expired access must not
+   * skip logout and leave __Host-onix_rt alive for the next refresh.
+   */
   @Post('logout')
   async logout(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Req() req: { user: AuthV2RequestUser },
+    @Req() req: { ip?: string; headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
   ) {
+    const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+    await this.rateLimit.assert(`auth:v2:logout:${clientIp ?? 'unknown'}`, 30, 60_000);
     assertCsrfHeader(headers);
-    await this.orchestrator.logout(req.user.sessionId, req.user.id);
-    res.setHeader('Set-Cookie', buildClearRefreshCookieHeader());
+    const refreshToken = readRefreshTokenFromCookie(headerString(headers, 'cookie'));
+    await this.orchestrator.logoutCurrentCookie(refreshToken);
+    res.setHeader('Set-Cookie', buildClearRefreshCookieHeaders());
     return { ok: true };
   }
 
@@ -360,7 +366,7 @@ export class AuthV2Controller {
   ) {
     assertCsrfHeader(headers);
     const result = await this.orchestrator.logoutAll(req.user.id);
-    res.setHeader('Set-Cookie', buildClearRefreshCookieHeader());
+    res.setHeader('Set-Cookie', buildClearRefreshCookieHeaders());
     return result;
   }
 
