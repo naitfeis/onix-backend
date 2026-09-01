@@ -5,7 +5,7 @@ import {
   formatLoginConfirmPrompt,
   parseUserAgentHints,
 } from '../src/login-challenge/login-challenge-prompt';
-import { BotWebhookHandler } from '../src/login-challenge/bot-webhook.handler';
+import { BotWebhookHandler, parseBotStartCommand } from '../src/login-challenge/bot-webhook.handler';
 import { AuthPlatformError } from '../src/auth-v2/auth-errors';
 
 test('parseUserAgentHints extracts Chrome on Windows', () => {
@@ -219,6 +219,49 @@ test('BotWebhookHandler /start with missing challenge sends error message', asyn
       },
     });
     assert.match(String(calls[0]?.body.text), /недействительна|не удалось найти/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('parseBotStartCommand accepts /start@bot login_ and bare /start', () => {
+  assert.deepEqual(parseBotStartCommand('/start'), { kind: 'bare', payload: '' });
+  assert.deepEqual(parseBotStartCommand('/start login_ch_abc'), { kind: 'login', payload: 'login_ch_abc' });
+  assert.deepEqual(parseBotStartCommand('/start@Onixshop_bot login_ch_abc'), { kind: 'login', payload: 'login_ch_abc' });
+  assert.deepEqual(parseBotStartCommand('/start mfa_step1'), { kind: 'mfa', payload: 'mfa_step1' });
+  assert.equal(parseBotStartCommand('hello').kind, 'none');
+});
+
+test('BotWebhookHandler bare /start replies with help instead of silence', async () => {
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const challenges = {
+    openForBotPrompt: async () => { throw new Error('must not look up a challenge'); },
+    confirmFromBot: async () => ({ challengeId: 'x', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    const result = await handler.handle(undefined, {
+      message: {
+        text: '/start',
+        chat: { id: 42 },
+        from: { id: 7, first_name: 'Hiro' },
+      },
+    });
+    assert.equal((result as { helped?: boolean }).helped, true);
+    assert.equal(calls[0]?.method, 'sendMessage');
+    assert.match(String(calls[0]?.body.text), /Голая команда \/start/);
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.BOT_TOKEN;

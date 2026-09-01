@@ -171,6 +171,7 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
+  const [telegramLink, setTelegramLink] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const onAuthenticatedRef = useRef(onAuthenticated);
   onAuthenticatedRef.current = onAuthenticated;
@@ -182,7 +183,8 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
   const onLogin = async () => {
     setError('');
     setBusy(true);
-    setHint('Откройте Telegram и подтвердите вход…');
+    setTelegramLink(null);
+    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт и кнопок нет — нажмите ссылку ещё раз.');
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -192,9 +194,11 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
       } catch { /* switch-account: ignore missing cookie */ }
       getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
+      setTelegramLink(started.webDeepLink);
       openTelegramBotLogin(started.deepLink, started.webDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
       setHint('');
+      setTelegramLink(null);
       onAuthenticatedRef.current();
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -211,6 +215,11 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     <Button onClick={() => void onLogin()} disabled={busy}>
       {busy ? 'Ожидание Telegram…' : 'Войти через Telegram'}
     </Button>
+    {telegramLink && (
+      <p>
+        <a href={telegramLink} target="_blank" rel="noopener noreferrer">Открыть Telegram ещё раз</a>
+      </p>
+    )}
     {hint && <small>{hint}</small>}
     {error && <small>{error}</small>}
     <p className="auth-notice__legal muted">

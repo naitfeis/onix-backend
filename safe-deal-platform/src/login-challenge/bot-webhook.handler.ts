@@ -38,6 +38,21 @@ type TelegramUpdate = {
   };
 };
 
+/** `/start`, `/start@Bot login_…`, `/start mfa_…` — Telegram Desktop often sends a bare `/start`. */
+export function parseBotStartCommand(text: string | undefined): {
+  kind: 'none' | 'bare' | 'login' | 'mfa' | 'other';
+  payload: string;
+} {
+  const trimmed = text?.trim() ?? '';
+  const match = trimmed.match(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i);
+  if (!match) return { kind: 'none', payload: '' };
+  const payload = (match[1] ?? '').trim();
+  if (!payload) return { kind: 'bare', payload: '' };
+  if (payload.startsWith('login_')) return { kind: 'login', payload };
+  if (payload.startsWith('mfa_')) return { kind: 'mfa', payload };
+  return { kind: 'other', payload };
+}
+
 /** Log-safe webhook summary — never includes message body or login payload. */
 export function summarizeTelegramWebhookForLog(
   update: TelegramUpdate | undefined,
@@ -45,14 +60,8 @@ export function summarizeTelegramWebhookForLog(
 ): Record<string, string | number | boolean | null> {
   const text = update?.message?.text;
   const data = update?.callback_query?.data;
-  const trimmed = typeof text === 'string' ? text.trim() : '';
-  let startKind: string | null = null;
-  if (trimmed.startsWith('/start')) {
-    if (trimmed === '/start') startKind = 'bare';
-    else if (trimmed.startsWith('/start login_')) startKind = 'login';
-    else if (trimmed.startsWith('/start mfa_')) startKind = 'mfa';
-    else startKind = 'other';
-  }
+  const start = parseBotStartCommand(typeof text === 'string' ? text : undefined);
+  const startKind = start.kind === 'none' ? null : start.kind;
   const callbackKind = typeof data === 'string' ? (data.split(':')[0] ?? '').slice(0, 40) : null;
   return {
     msg: '[Bot] webhook hit',
@@ -89,35 +98,22 @@ export class BotWebhookHandler {
     assertWebhookSecret(secret);
     this.logger.log('[Bot] webhook secret check passed');
 
-    const start = update.message?.text?.trim();
-    if (start?.startsWith('/start')) {
-      const startKind = start === '/start'
-        ? 'bare'
-        : start.startsWith('/start login_')
-          ? 'login'
-          : start.startsWith('/start mfa_')
-            ? 'mfa'
-            : 'other';
+    const start = parseBotStartCommand(update.message?.text);
+    if (start.kind !== 'none') {
       this.logger.log(JSON.stringify({
         msg: '[Bot] received /start',
-        startKind,
+        startKind: start.kind,
         telegramId: update.message?.from?.id ?? null,
         chatId: update.message?.chat?.id ?? null,
       }));
 
-      if (!start.startsWith('/start ')) {
-        this.logger.warn(JSON.stringify({
-          msg: '[Bot] /start format not matched — expected "/start login_<id>" or "/start mfa_<id>"',
-          startKind,
-        }));
-        return { ok: true, ignored: true, reason: 'start_format' };
+      if (start.kind === 'bare' || start.kind === 'other') {
+        return this.onBareStart(update);
       }
-
-      const payload = start.slice('/start '.length).trim();
-      if (payload.startsWith('mfa_')) {
-        return this.onStartMfa(update, payload.slice('mfa_'.length));
+      if (start.kind === 'mfa') {
+        return this.onStartMfa(update, start.payload.slice('mfa_'.length));
       }
-      return this.onStartLogin(update);
+      return this.onStartLogin(update, start.payload);
     }
 
     const data = update.callback_query?.data;
@@ -215,16 +211,37 @@ export class BotWebhookHandler {
     return { ok: true };
   }
 
-  private async onStartLogin(update: TelegramUpdate) {
-    const start = update.message?.text?.trim() ?? '';
-    const param = start.slice('/start '.length).trim();
-    const challengeId = parseLoginChallengeId(param);
+  private async onBareStart(update: TelegramUpdate) {
+    const chatId = update.message?.chat?.id;
+    if (chatId == null) return { ok: true, ignored: true, reason: 'start_format' };
+    this.logger.warn(JSON.stringify({
+      msg: '[Bot] /start without login payload — Telegram likely focused an existing chat',
+      telegramId: update.message?.from?.id ?? null,
+      chatId,
+    }));
+    const sent = await sendTelegramMessage({
+      chatId,
+      text: [
+        'Чтобы войти на сайт ONIX, нажмите «Войти через Telegram» на сайте и не закрывайте вкладку.',
+        '',
+        'Голая команда /start вход не открывает. Если Telegram уже был открыт — вернитесь на сайт и нажмите кнопку ещё раз: в этом чате должна появиться клавиатура «Подтвердить вход».',
+      ].join('\n'),
+      replyMarkup: {
+        inline_keyboard: [[{ text: 'Открыть ONIX', url: 'https://www.onixtg.shop' }]],
+      },
+    });
+    this.logBotApi('[Bot] bare /start help sendMessage', sent);
+    return { ok: true, prompted: false, reason: 'start_format', helped: true };
+  }
+
+  private async onStartLogin(update: TelegramUpdate, startParam: string) {
+    const challengeId = parseLoginChallengeId(startParam);
     const chatId = update.message?.chat?.id;
     const from = update.message?.from;
 
     this.logger.log(JSON.stringify({
       msg: '[Bot] parse start payload',
-      startParam: param,
+      startParam,
       challengeId,
       telegramId: from?.id ?? null,
       chatId: chatId ?? null,

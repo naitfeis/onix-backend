@@ -197,7 +197,7 @@ export async function waitAndLinkBotTelegram(
 }
 
 /** Open Telegram without navigating away from the Website tab (keeps polling alive). */
-export function openTelegramBotLogin(deepLink: string, webDeepLink: string): void {
+export function openTelegramBotLogin(_deepLink: string, webDeepLink: string): void {
   const openBlank = (href: string) => {
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -208,13 +208,9 @@ export function openTelegramBotLogin(deepLink: string, webDeepLink: string): voi
     anchor.remove();
   };
 
-  // Prefer https://t.me (works on Desktop/Web/Mobile). tg:// as secondary attempt in a blank tab.
+  // Only https://t.me/?start=… — firing tg://resolve at the same time focuses an
+  // already-open Desktop chat and drops the login payload (user then types bare /start).
   openBlank(webDeepLink);
-  try {
-    openBlank(deepLink);
-  } catch {
-    /* ignore */
-  }
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
