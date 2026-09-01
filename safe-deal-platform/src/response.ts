@@ -54,6 +54,7 @@ export interface ProfileDto {
   /** Selling requires a linked Telegram account. */
   canSell?: boolean;
   hasTelegram?: boolean;
+  hasGoogle?: boolean;
 }
 
 export interface LedgerDto {

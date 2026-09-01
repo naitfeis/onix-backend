@@ -5,7 +5,7 @@ import { FAQ_ITEMS, faqAnswer, matchFaq, TICKET_HINT } from './help-replies';
 import { messageDto } from '../response';
 import { RealtimeBus } from '../realtime/realtime-bus.service';
 
-const AI_TITLE = 'ONIX AI';
+const AI_TITLE = 'Onix AI';
 
 const SENDER_SELECT = {
   id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,

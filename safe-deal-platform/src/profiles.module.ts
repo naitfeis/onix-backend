@@ -64,7 +64,7 @@ export class ProfilesService {
       });
     }
 
-    const [profile, ledger] = await Promise.all([
+    const [profile, ledger, googleLink] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: user.id },
         select: {
@@ -84,6 +84,10 @@ export class ProfilesService {
         orderBy: { createdAt: 'desc' },
         take: WALLET_HISTORY_PAGE,
       }),
+      this.prisma.identityLink.findFirst({
+        where: { userId: user.id, provider: 'GOOGLE', deletedAt: null },
+        select: { id: true },
+      }),
     ]);
 
     const proActive = Boolean(
@@ -98,6 +102,7 @@ export class ProfilesService {
       ...base,
       canSell: hasTelegram && !profile.sellBannedAt,
       hasTelegram,
+      hasGoogle: Boolean(googleLink),
       deposit: {
         availableCents: profile.depositAvailableCents.toString(),
         lockedCents: profile.depositLockedCents.toString(),

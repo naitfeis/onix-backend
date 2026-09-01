@@ -149,6 +149,26 @@ export async function postAuthV2Google(
   return data;
 }
 
+export async function postAuthV2LinkGoogle(
+  body: { idToken: string },
+  accessToken: string,
+  fetchImpl: AuthV2Fetch = fetch,
+  apiBase = '',
+): Promise<{ linked: true; hasGoogle: true }> {
+  const response = await fetchImpl(`${apiBase}/api/v2/auth/link/google`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'X-ONIX-CSRF': '1',
+    },
+    body: JSON.stringify(body),
+  });
+  return readEnvelope<{ linked: true; hasGoogle: true }>(response);
+}
+
 export type AuthV2PublicConfig = {
   googleClientId: string | null;
   googleRedirectUri: string | null;

@@ -1413,6 +1413,31 @@ html[data-theme="light"] .cat-card__count {
   justify-content: flex-end;
   margin-top: 4px;
 }
+.profile-link-banner {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #422126;
+  border-radius: 12px;
+  color: #df8c92;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.profile-link-banner p {
+  margin: 0;
+  max-width: 100%;
+}
+.profile-link-banner .button {
+  justify-self: start;
+  min-height: 36px;
+}
+.profile-link-banner small {
+  color: var(--text-secondary);
+}
 .profile-logout__btn.button,
 .profile-logout .button {
   min-height: 36px;
@@ -3245,13 +3270,19 @@ html[data-theme="dark"] .lot-sheet__detail {
   margin-top: 10px;
 }
 .seller-identity__trust p {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+  display: block;
   margin: 0;
   font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  overflow-wrap: break-word;
+  word-break: normal;
 }
-.seller-identity__trust span { color: var(--text-secondary); }
+.seller-identity__trust b {
+  color: var(--text-primary);
+  font-weight: 700;
+  white-space: nowrap;
+}
 .seller-identity__actions {
   display: flex !important;
   flex-wrap: wrap;

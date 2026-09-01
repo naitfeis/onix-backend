@@ -119,7 +119,7 @@ export async function continueBotLogin(_exchangeCode: string, _signal?: AbortSig
  * Poll until CONFIRMED (ready) then complete exactly once on the same SPA URL.
  * No /login/continue, no ?x=, no location changes.
  */
-export async function waitAndCompleteBotLogin(
+export async function waitUntilBotConfirmed(
   challengeId: string,
   options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal },
 ): Promise<void> {
@@ -127,9 +127,8 @@ export async function waitAndCompleteBotLogin(
   const intervalMs = options?.intervalMs ?? 1_500;
   const signal = options?.signal;
   const started = Date.now();
-  let completed = false;
 
-  while (!completed) {
+  while (true) {
     if (signal?.aborted) {
       throw new BotLoginError('Login cancelled.', 'ABORTED');
     }
@@ -150,11 +149,7 @@ export async function waitAndCompleteBotLogin(
       continue;
     }
 
-    if (status.status === 'CONFIRMED') {
-      await completeBotLogin(challengeId, signal);
-      completed = true;
-      return;
-    }
+    if (status.status === 'CONFIRMED') return;
     if (status.status === 'EXPIRED') {
       throw new BotLoginError('Login challenge expired.', 'AUTH_LOGIN_CHALLENGE_EXPIRED');
     }
@@ -164,6 +159,41 @@ export async function waitAndCompleteBotLogin(
 
     await delay(intervalMs, signal);
   }
+}
+
+export async function waitAndCompleteBotLogin(
+  challengeId: string,
+  options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal },
+): Promise<void> {
+  await waitUntilBotConfirmed(challengeId, options);
+  await completeBotLogin(challengeId, options?.signal);
+}
+
+export async function completeBotLink(challengeId: string, signal?: AbortSignal): Promise<void> {
+  const token = getSharedAuthManager().getAccessToken();
+  if (!token) {
+    throw new BotLoginError('Session expired. Sign in again, then link Telegram.', 'AUTH_INVALID_TOKEN');
+  }
+  const response = await fetch(buildApiUrl('/api/v2/auth/telegram-bot/link', resolveApiBase()), {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ challengeId }),
+    signal,
+  });
+  await readData<{ linked: true; hasTelegram: true; canSell: true }>(response);
+}
+
+export async function waitAndLinkBotTelegram(
+  challengeId: string,
+  options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal },
+): Promise<void> {
+  await waitUntilBotConfirmed(challengeId, options);
+  await completeBotLink(challengeId, options?.signal);
 }
 
 /** Open Telegram without navigating away from the Website tab (keeps polling alive). */

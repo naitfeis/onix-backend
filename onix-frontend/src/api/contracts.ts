@@ -171,6 +171,7 @@ export interface Profile extends Seller {
   trustCard?: TrustCard;
   canSell?: boolean;
   hasTelegram?: boolean;
+  hasGoogle?: boolean;
 }
 
 /** GET /api/users/me/analytics — Mon–Sun week */
@@ -410,6 +411,7 @@ export const API_PATHS = {
   authGoogle: '/api/v2/auth/google',
   authPublicConfig: '/api/v2/auth/public-config',
   authLinkTelegram: '/api/v2/auth/link/telegram',
+  authLinkGoogle: '/api/v2/auth/link/google',
   walletWithdraw: '/api/wallet/withdrawals',
   mfaStatus: (challengeId: string) =>
     `/api/v2/auth/mfa/status?challengeId=${encodeURIComponent(challengeId)}`,

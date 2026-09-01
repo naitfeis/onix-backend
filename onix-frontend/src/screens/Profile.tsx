@@ -5,6 +5,13 @@ import {
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import { isTelegramMiniApp } from '../auth/telegramEnv';
+import {
+  getAuthV2PublicConfig,
+  openTelegramBotLogin,
+  startBotLogin,
+  startGoogleOAuth,
+  waitAndLinkBotTelegram,
+} from '../auth';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -35,6 +42,116 @@ type StepUpState = {
 function rublesToCents(rubles: string | number): number {
   const cents = parseRublesToCents(rubles);
   return Number.isSafeInteger(cents) ? cents : Number.NaN;
+}
+
+function AccountLinkPanel({
+  profile,
+  onLinked,
+  setToast,
+}: {
+  profile: { hasTelegram?: boolean; hasGoogle?: boolean };
+  onLinked: () => Promise<unknown>;
+  setToast: (text: string) => void;
+}) {
+  const needTelegram = profile.hasTelegram === false;
+  const needGoogle = profile.hasTelegram !== false && profile.hasGoogle === false;
+  const [busy, setBusy] = useState<'telegram' | 'google' | null>(null);
+  const [hint, setHint] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(
+    () => import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || null,
+  );
+  const [googleRedirect, setGoogleRedirect] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_error') === 'google_link') {
+      setToast('Google не привязан. Попробуйте ещё раз.');
+      window.history.replaceState(null, '', window.location.pathname || '/');
+    }
+  }, [setToast]);
+
+  useEffect(() => {
+    if (!needGoogle) return;
+    let cancelled = false;
+    void getAuthV2PublicConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        if (cfg.googleClientId?.trim()) setGoogleClientId(cfg.googleClientId.trim());
+        if (cfg.googleRedirectUri?.trim()) setGoogleRedirect(cfg.googleRedirectUri.trim());
+      })
+      .catch(() => { /* keep baked client id */ });
+    return () => { cancelled = true; };
+  }, [needGoogle]);
+
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
+
+  if (!needTelegram && !needGoogle) return null;
+
+  const linkTelegram = async () => {
+    setBusy('telegram');
+    setHint('Откройте Telegram и подтвердите привязку…');
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const started = await startBotLogin(controller.signal);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink);
+      await waitAndLinkBotTelegram(started.challengeId, { signal: controller.signal });
+      await onLinked();
+      setToast('Telegram привязан. Можно продавать.');
+      setHint('');
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setToast(friendlyError(error));
+      setHint('Оставайтесь на вкладке — после подтверждения в Telegram привязка завершится сама.');
+    } finally {
+      if (!controller.signal.aborted) setBusy(null);
+    }
+  };
+
+  return (
+    <div className="profile-link-banner" role="status">
+      {needTelegram && (
+        <>
+          <p>
+            Аккаунт Google: покупки доступны. Чтобы продавать, привяжите Telegram — имя и аватар тогда возьмутся из Telegram.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            busy={busy === 'telegram'}
+            disabled={busy !== null}
+            onClick={() => void linkTelegram()}
+          >
+            {busy === 'telegram' ? 'Ожидание Telegram…' : 'Привязать Telegram'}
+          </Button>
+        </>
+      )}
+      {needGoogle && (
+        <>
+          <p>Привяжите Google, чтобы входить в этот же аккаунт и через Google.</p>
+          {googleClientId ? (
+            <Button
+              type="button"
+              variant="secondary"
+              busy={busy === 'google'}
+              disabled={busy !== null}
+              onClick={() => {
+                setBusy('google');
+                startGoogleOAuth(googleClientId, googleRedirect, { intent: 'link' });
+              }}
+            >
+              Привязать Google
+            </Button>
+          ) : (
+            <p>Google вход на сервере не настроен.</p>
+          )}
+        </>
+      )}
+      {hint ? <small>{hint}</small> : null}
+    </div>
+  );
 }
 
 export function EditProduct({ product, core, onClose, setToast }: { product: Product | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
@@ -411,11 +528,7 @@ export function Profile({
           </div>
         )}
       </div>
-      {profile.hasTelegram === false && (
-        <p className="form-error" role="alert">
-          Аккаунт Google: покупки доступны. Чтобы продавать, привяжите Telegram — имя и аватар тогда возьмутся из Telegram.
-        </p>
-      )}
+      <AccountLinkPanel profile={profile} onLinked={() => core.loadProfile()} setToast={setToast} />
       {showWebsiteLogout && (
         <div className="profile-logout">
           <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>

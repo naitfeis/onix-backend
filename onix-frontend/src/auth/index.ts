@@ -43,7 +43,7 @@ export {
 export { readJwtSub } from './jwtSub';
 export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
 
-export { startGoogleOAuth, consumeGoogleOAuthRedirect, GOOGLE_OAUTH_CALLBACK_PATH, PRODUCTION_GOOGLE_REDIRECT_URI } from './googleOAuth';
+export { startGoogleOAuth, consumeGoogleOAuthRedirect, consumeGoogleOAuthIntent, GOOGLE_OAUTH_CALLBACK_PATH, PRODUCTION_GOOGLE_REDIRECT_URI } from './googleOAuth';
 
 export {
   AuthV2ApiError,
@@ -53,6 +53,7 @@ export {
   probeAuthV2Session,
   postAuthV2Login,
   postAuthV2Google,
+  postAuthV2LinkGoogle,
   getAuthV2PublicConfig,
   postAuthV2Logout,
 } from './v2AuthApi';
@@ -79,6 +80,7 @@ export {
   openTelegramBotLogin,
   startBotLogin,
   waitAndCompleteBotLogin,
+  waitAndLinkBotTelegram,
   completeBotLogin,
   continueBotLogin,
   pollBotLoginStatus,

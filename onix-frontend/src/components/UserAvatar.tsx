@@ -14,6 +14,8 @@ type UserAvatarProps = {
    * Omit / undefined = no pip (system messages, etc.).
    */
   online?: boolean;
+  /** Override initials (e.g. "AI" for Onix AI). */
+  initials?: string;
 };
 
 /** Avoid repeating known-missing avatar requests across remounts and reloads. */
@@ -66,7 +68,7 @@ function resolveAvatarSrc(avatarUrl: string | undefined, userId?: string): strin
 }
 
 export default function UserAvatar({
-  avatarUrl, userId, name, size = 'small', online, onClick,
+  avatarUrl, userId, name, size = 'small', online, initials: initialsOverride, onClick,
 }: UserAvatarProps) {
   const usableUrl = resolveAvatarSrc(avatarUrl, userId);
   const [failedUrl, setFailedUrl] = useState<string | null>(
@@ -104,7 +106,7 @@ export default function UserAvatar({
               setFailedUrl(usableUrl ?? null);
             }}
           />
-          : <span aria-hidden="true">{initials(name)}</span>}
+          : <span aria-hidden="true">{initialsOverride || initials(name)}</span>}
       </span>
       {showPresence && <span className="user-avatar__presence" aria-hidden="true" />}
     </>
