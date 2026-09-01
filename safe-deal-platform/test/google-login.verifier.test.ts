@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GoogleLoginVerifier } from '../src/auth-v2/google-login.verifier';
+import { GoogleLoginVerifier, pendingGoogleOnixId } from '../src/auth-v2/google-login.verifier';
 
 test('GoogleLoginVerifier POSTs tokeninfo and rejects bad iss / unverified email', async () => {
   const prev = process.env.GOOGLE_CLIENT_ID;
@@ -62,4 +62,13 @@ test('GoogleLoginVerifier rejects unverified email', async () => {
     if (prev === undefined) delete process.env.GOOGLE_CLIENT_ID;
     else process.env.GOOGLE_CLIENT_ID = prev;
   }
+});
+
+test('pendingGoogleOnixId fits User.onixId VarChar(20) and stays unique for long Google subs', () => {
+  const a = pendingGoogleOnixId('105397786614918335979');
+  const b = pendingGoogleOnixId('105397786614918335978');
+  assert.ok(a.length <= 20);
+  assert.ok(b.length <= 20);
+  assert.notEqual(a, b);
+  assert.equal(pendingGoogleOnixId('abc').length <= 20, true);
 });

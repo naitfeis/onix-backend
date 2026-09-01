@@ -6,7 +6,7 @@ import { resolveIsSupport } from '../common';
 import { RiskScoreService, type RiskDeviceInput } from '../risk-score.service';
 import { AuthPlatformError } from './auth-errors';
 import type { VerifiedTelegramIdentity } from './telegram-login.verifier';
-import type { VerifiedGoogleIdentity } from './google-login.verifier';
+import { pendingGoogleOnixId, type VerifiedGoogleIdentity } from './google-login.verifier';
 
 @Injectable()
 export class IdentityService {
@@ -182,7 +182,7 @@ export class IdentityService {
       const created = await tx.user.create({
         data: {
           telegramId: null,
-          onixId: `PENDING-G-${identity.sub.slice(0, 16)}`,
+          onixId: pendingGoogleOnixId(identity.sub),
           displayName,
           firstName: identity.givenName,
           lastName: identity.familyName,

@@ -65,7 +65,7 @@ export class GoogleLoginVerifier {
     const picture = clipPicture(body.picture);
     return {
       sub: body.sub,
-      email: body.email,
+      email: body.email?.trim().slice(0, 320),
       emailVerified: verified,
       name,
       givenName,
@@ -73,6 +73,13 @@ export class GoogleLoginVerifier {
       picture,
     };
   }
+}
+
+/** User.onixId is VarChar(20). `PENDING-G-` + 16-digit sub was 26 chars and 500'd create. */
+export function pendingGoogleOnixId(googleSub: string): string {
+  const digits = googleSub.replace(/[^0-9a-zA-Z]/g, '') || '0';
+  const body = digits.length <= 19 ? digits : digits.slice(-19);
+  return `g${body}`.slice(0, 20);
 }
 
 function clipName(value: string | undefined): string | undefined {
@@ -83,6 +90,6 @@ function clipName(value: string | undefined): string | undefined {
 
 function clipPicture(value: string | undefined): string | undefined {
   const url = value?.trim();
-  if (!url || url.length > 500) return undefined;
+  if (!url || !/^https:\/\//i.test(url) || url.length > 500) return undefined;
   return url;
 }
