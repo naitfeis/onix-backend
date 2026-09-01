@@ -13,6 +13,17 @@ import {
 import type { AdminActor } from './admin-session.service';
 import { AdminSecurityService } from './admin-security.service';
 
+class WipeUserDto {
+  @IsString() @Length(1, 40) confirmOnixId!: string;
+  @IsString() @Length(1, 1000) reason!: string;
+}
+
+class UnlinkIdentityDto {
+  @IsIn(['TELEGRAM', 'GOOGLE']) provider!: 'TELEGRAM' | 'GOOGLE';
+  @IsOptional() @IsString() @Length(1, 40) confirmOnixId?: string;
+  @IsOptional() @IsString() @Length(1, 1000) reason?: string;
+}
+
 class GrantProDto {
   @IsOptional() @IsISO8601() endsAt?: string;
 }
@@ -51,6 +62,20 @@ export class AdminPlaneController {
     return this.security.dashboard();
   }
 
+  @Get('users')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async users(
+    @CurrentAdmin() admin: AdminActor,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const users = await this.security.listUsers({ q, limit: limit ? Number(limit) : 50 });
+    await this.security.logAction(admin, 'ADMIN_LIST_USERS', { metadata: { count: users.length, q: q ?? null } });
+    return { users };
+  }
+
   @Get('security-flags')
   @Header('Cache-Control', 'no-store')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
@@ -77,7 +102,7 @@ export class AdminPlaneController {
     @Param('id') id: string,
   ) {
     const data = await this.security.getUserInvestigation(id);
-    if (!data) throw new NotFoundException('РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ.');
+    if (!data) throw new NotFoundException('Пользователь не найден.');
     await this.security.logAction(admin, 'ADMIN_VIEW_USER', {
       type: 'User',
       id: data.profile.id,
@@ -90,6 +115,35 @@ export class AdminPlaneController {
   @UseGuards(AdminRoleGuard)
   banUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason: string; comment: string; durationDays?: number }) {
     return this.security.banUser(admin, id, body);
+  }
+
+  @Patch('users/:id/unban')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  unbanUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { comment?: string }) {
+    return this.security.unbanUser(admin, id, body.comment);
+  }
+
+  @Delete('users/:id')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  wipeUser(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: WipeUserDto,
+  ) {
+    return this.security.wipeUser(admin, id, body);
+  }
+
+  @Post('users/:id/identities/unlink')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  unlinkIdentity(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: UnlinkIdentityDto,
+  ) {
+    return this.security.unlinkIdentity(admin, id, body);
   }
 
   @Patch('users/:id/sell-ban')
@@ -264,6 +318,16 @@ export class AdminPlaneController {
     const messages = await this.security.listMessages({ limit: limit ? Number(limit) : 100, search });
     await this.security.logAction(admin, 'ADMIN_LIST_MESSAGES', { metadata: { count: messages.length, search: search ?? null } });
     return { messages };
+  }
+
+  @Get('chats/:id')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async chat(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    const chat = await this.security.getChatThread(id);
+    await this.security.logAction(admin, 'ADMIN_VIEW_CHAT', { type: 'Chat', id: chat.id });
+    return chat;
   }
 
   @Delete('messages/:id')

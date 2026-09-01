@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
 
 type QueueItem = {
-  ticketId: string | null; orderId: string; kind: string; status: string;
+  ticketId: string | null; orderId: string; chatId?: string | null; kind: string; status: string;
   productTitle: string; totalAmountCents: string; reason?: string | null;
   buyer: { onixId: string }; seller: { onixId: string }; createdAt: string;
 };
@@ -12,7 +12,7 @@ type Report = {
   target: { onixId: string; username?: string | null };
 };
 
-export function SupportScreen() {
+export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => void }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [reason, setReason] = useState('');
@@ -39,34 +39,35 @@ export function SupportScreen() {
   }
 
   return <div className="panel">
-    <h2>Support control plane</h2>
+    <h2>Тикеты, споры и жалобы</h2>
     <div className="row">
-      <label>Decision / reply reason<textarea value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-      <button className="primary" type="button" disabled={busy} onClick={() => void load()}>Refresh</button>
+      <label>Комментарий / ответ<textarea value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+      <button className="primary" type="button" disabled={busy} onClick={() => void load()}>Обновить</button>
     </div>
     {error && <p className="error">{error}</p>}
-    <h3>Open tickets and disputes</h3>
-    <table><thead><tr><th>Order</th><th>Product</th><th>Parties</th><th>Status</th><th>Reason</th><th>Actions</th></tr></thead>
+    <h3>Открытые тикеты и споры</h3>
+    <table><thead><tr><th>Заказ</th><th>Товар</th><th>Стороны</th><th>Статус</th><th>Причина</th><th>Действия</th></tr></thead>
       <tbody>{queue.map((item) => <tr key={`${item.orderId}:${item.ticketId ?? 'dispute'}`}>
         <td>#{item.orderId}<br /><span className="muted">{item.kind}</span></td>
-        <td>{item.productTitle}<br />{item.totalAmountCents}¢</td>
+        <td>{item.productTitle}<br />{Number(item.totalAmountCents) / 100} ₽</td>
         <td>{item.buyer.onixId} → {item.seller.onixId}</td><td>{item.status}</td><td>{item.reason || '—'}</td>
         <td className="actions-cell">
-          <button className="primary" type="button" onClick={() => void act(`/api/admin/orders/${item.orderId}/complete`, { reason })}>Confirm seller</button>
-          <button className="danger" type="button" onClick={() => void act(`/api/admin/orders/${item.orderId}/refund`, { reason })}>Refund</button>
-          {item.ticketId && <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${item.ticketId}/close`, { reason })}>Close ticket</button>}
+          {item.chatId && <button className="ghost" type="button" onClick={() => onOpenChat(item.chatId!)}>Чат</button>}
+          <button className="primary" type="button" onClick={() => void act(`/api/admin/orders/${item.orderId}/complete`, { reason })}>Подтвердить продавцу</button>
+          <button className="danger" type="button" onClick={() => void act(`/api/admin/orders/${item.orderId}/refund`, { reason })}>Рефанд</button>
+          {item.ticketId && <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${item.ticketId}/close`, { reason })}>Закрыть тикет</button>}
         </td>
       </tr>)}</tbody>
     </table>
-    <h3>Open reports</h3>
-    <table><thead><tr><th>Kind</th><th>Reporter</th><th>Target</th><th>Report</th><th>Actions</th></tr></thead>
+    <h3>Открытые жалобы</h3>
+    <table><thead><tr><th>Тип</th><th>Кто</th><th>На кого</th><th>Текст</th><th>Действия</th></tr></thead>
       <tbody>{reports.map((report) => <tr key={report.id}>
         <td>{report.kind}</td><td>{report.reporter.onixId}</td><td>{report.target.onixId}</td>
         <td>{report.reason}<br /><span className="muted">{report.comment}</span></td>
         <td className="actions-cell">
-          {report.kind === 'AI_SUPPORT' && <button className="primary" type="button" disabled={!reason.trim()} onClick={() => void act(`/api/admin/support/reports/${report.id}/reply`, { text: reason })}>Reply</button>}
-          {report.kind === 'REVIEW_APPEAL' && <button className="primary" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/uphold-appeal`, {})}>Uphold appeal</button>}
-          <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/close`, { reason })}>Close</button>
+          {report.kind === 'AI_SUPPORT' && <button className="primary" type="button" disabled={!reason.trim()} onClick={() => void act(`/api/admin/support/reports/${report.id}/reply`, { text: reason })}>Ответить</button>}
+          {report.kind === 'REVIEW_APPEAL' && <button className="primary" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/uphold-appeal`, {})}>Принять апелляцию</button>}
+          <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/reports/${report.id}/close`, { reason })}>Закрыть</button>
         </td>
       </tr>)}</tbody>
     </table>

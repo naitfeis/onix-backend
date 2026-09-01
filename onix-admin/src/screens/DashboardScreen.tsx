@@ -7,6 +7,10 @@ type Dashboard = {
   securityEvents24h: number;
   openClawbacks: number;
   yellowFlagCount: number;
+  openTickets?: number;
+  openReports?: number;
+  usersTotal?: number;
+  bannedTotal?: number;
 };
 
 export function DashboardScreen() {
@@ -21,15 +25,19 @@ export function DashboardScreen() {
 
   return (
     <div className="panel">
-      <h2>Security Operations Console</h2>
-      <p className="muted">Live risk posture for the marketplace ({data?.windowHours ?? 24}h window).</p>
+      <h2>Консоль ONIX</h2>
+      <p className="muted">Операции, жалобы, деньги и риск за {data?.windowHours ?? 24}ч.</p>
       {error && <p className="error">{error}</p>}
       {data && (
         <div className="grid">
-          <div className="stat panel"><span className="muted">YELLOW flags</span><strong>{data.yellowFlagCount}</strong></div>
-          <div className="stat panel"><span className="muted">Withdrawals 24h</span><strong>{data.withdrawals24h}</strong></div>
-          <div className="stat panel"><span className="muted">Risk events 24h</span><strong>{data.securityEvents24h}</strong></div>
-          <div className="stat panel"><span className="muted">Open clawbacks</span><strong>{data.openClawbacks}</strong></div>
+          <div className="stat panel"><span className="muted">Пользователи</span><strong>{data.usersTotal ?? '—'}</strong></div>
+          <div className="stat panel"><span className="muted">Баны / стёртые</span><strong>{data.bannedTotal ?? '—'}</strong></div>
+          <div className="stat panel"><span className="muted">Открытые тикеты</span><strong>{data.openTickets ?? '—'}</strong></div>
+          <div className="stat panel"><span className="muted">Жалобы</span><strong>{data.openReports ?? '—'}</strong></div>
+          <div className="stat panel"><span className="muted">YELLOW флаги</span><strong>{data.yellowFlagCount}</strong></div>
+          <div className="stat panel"><span className="muted">Выводы 24ч</span><strong>{data.withdrawals24h}</strong></div>
+          <div className="stat panel"><span className="muted">Риск 24ч</span><strong>{data.securityEvents24h}</strong></div>
+          <div className="stat panel"><span className="muted">Clawbacks</span><strong>{data.openClawbacks}</strong></div>
         </div>
       )}
     </div>

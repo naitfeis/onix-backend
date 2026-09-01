@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PaymentWallet, PlatformStatus, Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
-import { BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
+import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
 import { createDomainNotification, deliverTelegramAfterCommit } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
@@ -9,11 +9,65 @@ import { PaymentsService } from '../economy/payments/payments.service';
 import { ProSubscriptionService } from '../economy/pro/pro.service';
 import { WithdrawVelocityService } from '../economy/wallet/withdraw-velocity';
 import { EscrowService } from '../escrow.module';
-import { formatOnixId } from '../onix-id';
+import { formatOnixId, onixIdLookupCandidates } from '../onix-id';
 import { flagsFromPlatformStatus, isPlatformStatus } from '../platform-status';
 import { PrismaService } from '../prisma.service';
 import type { AdminActor } from './admin-session.service';
 import { recomputeSellerRating } from '../marketplace/review-aggregate';
+
+const WIPED_DISPLAY_NAME = 'Удалённый аккаунт';
+const OPEN_ORDER_STATUSES = ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] as const;
+type AdminIdentityProvider = 'TELEGRAM' | 'GOOGLE';
+type AdminIdentityRow = {
+  provider: AdminIdentityProvider;
+  providerUserId: string;
+  label: string | null;
+  isMain: boolean;
+  wouldWipe: boolean;
+};
+
+function describeAdminIdentities(
+  user: { telegramId: bigint | null; telegramNick: string | null; displayName: string | null },
+  links: Array<{
+    provider: string;
+    providerUserId: string;
+    email: string | null;
+    username: string | null;
+    displayName: string | null;
+  }>,
+): AdminIdentityRow[] {
+  const googleLinks = links.filter((link) => link.provider === 'GOOGLE');
+  const telegramLink = links.find((link) => link.provider === 'TELEGRAM');
+  const hasTelegram = user.telegramId != null || Boolean(telegramLink);
+  const rows: AdminIdentityRow[] = [];
+  if (user.telegramId != null) {
+    rows.push({
+      provider: 'TELEGRAM',
+      providerUserId: user.telegramId.toString(),
+      label: user.telegramNick ?? user.displayName,
+      isMain: true,
+      wouldWipe: true,
+    });
+  } else if (telegramLink) {
+    rows.push({
+      provider: 'TELEGRAM',
+      providerUserId: telegramLink.providerUserId,
+      label: telegramLink.username ?? telegramLink.displayName ?? user.displayName,
+      isMain: true,
+      wouldWipe: true,
+    });
+  }
+  for (const link of googleLinks) {
+    rows.push({
+      provider: 'GOOGLE',
+      providerUserId: link.providerUserId,
+      label: link.email ?? link.displayName ?? link.username,
+      isMain: !hasTelegram,
+      wouldWipe: !hasTelegram,
+    });
+  }
+  return rows;
+}
 
 const ALLOWED_PLATFORM_STATUS_TRANSITIONS: Readonly<Record<PlatformStatus, ReadonlySet<PlatformStatus>>> = {
   USER: new Set(['VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP']),
@@ -37,7 +91,7 @@ export class AdminSecurityService {
 
   async dashboard() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [withdrawals24h, securityEvents24h, openClawbacks, yellowFlags] = await Promise.all([
+    const [withdrawals24h, securityEvents24h, openClawbacks, yellowFlags, openTickets, openReports, usersTotal, bannedTotal] = await Promise.all([
       this.prisma.ledgerEntry.count({
         where: { type: 'WITHDRAWAL', createdAt: { gte: since } },
       }),
@@ -48,6 +102,10 @@ export class AdminSecurityService {
         where: { status: { in: ['OPEN', 'PARTIAL'] } },
       }),
       this.listSecurityFlags({ limit: 50 }),
+      this.prisma.supportTicket.count({ where: { status: 'OPEN' } }),
+      this.prisma.userReport.count({ where: { closedAt: null } }),
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: { deletedAt: { not: null } } }),
     ]);
     return {
       windowHours: 24,
@@ -55,6 +113,10 @@ export class AdminSecurityService {
       securityEvents24h,
       openClawbacks,
       yellowFlagCount: yellowFlags.length,
+      openTickets,
+      openReports,
+      usersTotal,
+      bannedTotal,
     };
   }
 
@@ -84,13 +146,7 @@ export class AdminSecurityService {
   }
 
   async getUserInvestigation(onixIdOrId: string) {
-    const stripped = onixIdOrId.replace(/^ONIX-/i, '');
-    const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
-    const user = await this.prisma.user.findFirst({
-      where: asBig
-        ? { OR: [{ id: asBig }, { telegramId: asBig }, { onixId: stripped }] }
-        : { onixId: stripped },
-    });
+    const user = await this.findUserByAdminQuery(onixIdOrId);
     if (!user) return null;
 
     const [sessions, ledger, securityEvents, sales, pro] = await Promise.all([
@@ -161,7 +217,7 @@ export class AdminSecurityService {
       }),
     ]);
 
-    const [purchases, chats] = await Promise.all([
+    const [purchases, chats, identityLinks] = await Promise.all([
       this.prisma.order.findMany({
         where: { buyerId: user.id }, orderBy: { createdAt: 'desc' }, take: 50,
         select: { id: true, status: true, totalAmountCents: true, createdAt: true, product: { select: { title: true } }, seller: { select: { onixId: true } } },
@@ -169,6 +225,12 @@ export class AdminSecurityService {
       this.prisma.chat.findMany({
         where: { members: { some: { userId: user.id } } }, orderBy: { updatedAt: 'desc' }, take: 50,
         select: { id: true, kind: true, title: true, updatedAt: true, members: { select: { userId: true } }, messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { text: true, createdAt: true } } },
+      }),
+      this.prisma.identityLink.findMany({
+        where: { userId: user.id, deletedAt: null },
+        select: {
+          provider: true, providerUserId: true, email: true, username: true, displayName: true,
+        },
       }),
     ]);
     const yellow = await this.withdrawVelocity.resolveAccountSaleProtectionFlag(user.id);
@@ -188,6 +250,11 @@ export class AdminSecurityService {
         bannedAt: user.bannedAt?.toISOString() ?? null,
         bannedUntil: user.bannedUntil?.toISOString() ?? null,
         sellBannedAt: user.sellBannedAt?.toISOString() ?? null,
+        deletedAt: user.deletedAt?.toISOString() ?? null,
+        wiped: user.displayName === WIPED_DISPLAY_NAME && user.telegramId == null,
+        telegramId: user.telegramId?.toString() ?? null,
+        depositAvailableCents: user.depositAvailableCents.toString(),
+        depositLockedCents: user.depositLockedCents.toString(),
       },
       pro: pro
         ? {
@@ -225,16 +292,31 @@ export class AdminSecurityService {
       })),
       purchases: purchases.map((o) => ({ ...o, id: o.id.toString(), totalAmountCents: o.totalAmountCents.toString(), createdAt: o.createdAt.toISOString(), seller: { onixId: formatOnixId(o.seller.onixId) } })),
       chats: chats.map((c) => ({ ...c, updatedAt: c.updatedAt.toISOString(), memberIds: c.members.map((m) => m.userId.toString()), lastMessage: c.messages[0] ? { ...c.messages[0], createdAt: c.messages[0].createdAt.toISOString() } : null })),
+      identities: describeAdminIdentities(user, identityLinks),
     };
   }
 
-  private async resolveTarget(onixIdOrId: string) {
-    const stripped = onixIdOrId.replace(/^ONIX-/i, '');
+  private async findUserByAdminQuery(onixIdOrId: string) {
+    const q = onixIdOrId.trim();
+    if (!q) return null;
+    const stripped = q.replace(/^ONIX-/i, '');
     const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
-    const user = await this.prisma.user.findFirst({
-      where: asBig ? { OR: [{ id: asBig }, { telegramId: asBig }, { onixId: stripped }] } : { onixId: stripped },
+    const candidates = onixIdLookupCandidates(q);
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { onixId: { in: candidates } },
+          { displayName: { equals: q, mode: 'insensitive' } },
+          { telegramNick: { equals: q, mode: 'insensitive' } },
+          ...(asBig != null ? [{ id: asBig }, { telegramId: asBig }] : []),
+        ],
+      },
     });
-    if (!user) throw new BadRequestException('???????????? ?? ??????.');
+  }
+
+  private async resolveTarget(onixIdOrId: string) {
+    const user = await this.findUserByAdminQuery(onixIdOrId);
+    if (!user) throw new BadRequestException('Пользователь не найден.');
     return user;
   }
 
@@ -363,9 +445,9 @@ export class AdminSecurityService {
 
   async banUser(actor: AdminActor, targetId: string, input: { reason: string; comment: string; durationDays?: number }) {
     const target = await this.resolveTarget(targetId);
-    if (!input.comment?.trim()) throw new BadRequestException('??????? ????? ??????? ??????????.');
+    if (!input.comment?.trim()) throw new BadRequestException('Нужен публичный комментарий к бану.');
     const reason = input.reason as 'MISCONDUCT' | 'THIRD_PARTY_ADS' | 'OFF_PLATFORM_DEAL' | 'FRAUD' | 'OTHER';
-    if (!Object.prototype.hasOwnProperty.call(BAN_REASON_LABELS, reason)) throw new BadRequestException('???????????? ??????? ??????????.');
+    if (!Object.prototype.hasOwnProperty.call(BAN_REASON_LABELS, reason)) throw new BadRequestException('Неизвестная причина блокировки.');
     const days = banDurationDays(reason, input.durationDays);
     const now = new Date();
     const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86_400_000);
@@ -378,9 +460,266 @@ export class AdminSecurityService {
     return { onixId: formatOnixId(user.onixId), banned: true, bannedUntil: user.bannedUntil?.toISOString() ?? null };
   }
 
+  async unbanUser(actor: AdminActor, targetId: string, comment?: string) {
+    const target = await this.resolveTarget(targetId);
+    if (target.displayName === WIPED_DISPLAY_NAME && target.telegramId == null) {
+      throw new BadRequestException('Аккаунт стёрт. Это не бан — восстановить профиль нельзя.');
+    }
+    if (!target.deletedAt) return { onixId: formatOnixId(target.onixId), banned: false as const };
+    const user = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: target.id },
+        data: { ...BAN_CLEAR_DATA },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_UNBAN',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: { onixId: formatOnixId(target.onixId), comment: comment?.trim().slice(0, 500) ?? null },
+        },
+      });
+      return updated;
+    });
+    return { onixId: formatOnixId(user.onixId), banned: false as const };
+  }
+
+  async listUsers(opts?: { q?: string; limit?: number }) {
+    const take = Math.min(Math.max(opts?.limit ?? 50, 1), 100);
+    const q = opts?.q?.trim() ?? '';
+    const stripped = q.replace(/^ONIX-/i, '');
+    const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
+    const rows = await this.prisma.user.findMany({
+      where: q
+        ? {
+          OR: [
+            { onixId: { contains: stripped, mode: 'insensitive' } },
+            { displayName: { contains: q, mode: 'insensitive' } },
+            { telegramNick: { contains: q, mode: 'insensitive' } },
+            ...(asBig != null ? [{ id: asBig }, { telegramId: asBig }] : []),
+          ],
+        }
+        : undefined,
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: {
+        id: true, onixId: true, displayName: true, telegramNick: true,
+        deletedAt: true, bannedAt: true, sellBannedAt: true,
+        balanceCents: true, lastSeenAt: true, createdAt: true, telegramId: true,
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id.toString(),
+      onixId: formatOnixId(row.onixId),
+      username: row.displayName ?? row.telegramNick,
+      banned: Boolean(row.deletedAt),
+      wiped: row.displayName === WIPED_DISPLAY_NAME && row.telegramId == null,
+      sellBanned: Boolean(row.sellBannedAt),
+      balanceCents: row.balanceCents.toString(),
+      lastSeenAt: row.lastSeenAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  async wipeUser(actor: AdminActor, targetId: string, input: { confirmOnixId: string; reason: string }) {
+    if (actor.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Стирать аккаунт может только SUPER_ADMIN.');
+    }
+    const target = await this.resolveTarget(targetId);
+    const expected = formatOnixId(target.onixId);
+    const confirm = input.confirmOnixId.trim();
+    if (formatOnixId(confirm) !== expected && confirm !== target.id.toString()) {
+      throw new BadRequestException(`Для подтверждения введите ${expected}.`);
+    }
+    if (!input.reason?.trim()) throw new BadRequestException('Укажите причину удаления.');
+    if (target.displayName === WIPED_DISPLAY_NAME && target.telegramId == null) {
+      return { onixId: expected, wiped: true as const };
+    }
+    const openOrders = await this.prisma.order.count({
+      where: {
+        OR: [{ buyerId: target.id }, { sellerId: target.id }],
+        status: { in: [...OPEN_ORDER_STATUSES] },
+      },
+    });
+    if (openOrders > 0) {
+      throw new BadRequestException(`Нельзя стереть: открытых сделок ${openOrders}. Сначала закройте/верните их.`);
+    }
+    if (target.balanceCents !== 0n || target.depositAvailableCents !== 0n || target.depositLockedCents !== 0n) {
+      throw new BadRequestException('Нельзя стереть: ненулевой баланс или залог. Сначала обнулите кошелёк в админке.');
+    }
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { sellerId: target.id, status: { in: ['ACTIVE', 'SOLD_OUT'] } },
+        data: { status: 'ARCHIVED' },
+      });
+      await tx.identityLink.deleteMany({ where: { userId: target.id } });
+      await tx.session.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: now, revokeReason: 'ADMIN' },
+      });
+      await tx.user.update({
+        where: { id: target.id },
+        data: {
+          telegramId: null,
+          telegramNick: null,
+          firstName: null,
+          lastName: null,
+          displayName: WIPED_DISPLAY_NAME,
+          avatarUrl: null,
+          bio: null,
+          deletedAt: now,
+          bannedAt: now,
+          bannedUntil: null,
+          banReason: 'OTHER',
+          banComment: `[WIPED] ${input.reason.trim().slice(0, 900)}`,
+          platformStatus: 'USER',
+          ...flagsFromPlatformStatus('USER'),
+          sessionVersion: { increment: 1 },
+          permissionVersion: { increment: 1 },
+        },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_WIPE',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: { onixId: expected, reason: input.reason.trim().slice(0, 500) },
+        },
+      });
+    });
+    return { onixId: expected, wiped: true as const };
+  }
+
+  async unlinkIdentity(
+    actor: AdminActor,
+    targetId: string,
+    input: { provider: AdminIdentityProvider; confirmOnixId?: string; reason?: string },
+  ) {
+    const target = await this.resolveTarget(targetId);
+    if (target.displayName === WIPED_DISPLAY_NAME && target.telegramId == null) {
+      throw new BadRequestException('Аккаунт уже стёрт.');
+    }
+    const links = await this.prisma.identityLink.findMany({
+      where: { userId: target.id, deletedAt: null },
+      select: {
+        id: true, provider: true, providerUserId: true, email: true, username: true, displayName: true,
+      },
+    });
+    const identities = describeAdminIdentities(target, links);
+    const ident = identities.find((row) => row.provider === input.provider);
+    if (!ident) throw new BadRequestException(`Привязки ${input.provider} нет.`);
+
+    if (ident.wouldWipe) {
+      if (actor.role !== 'SUPER_ADMIN') {
+        throw new ForbiddenException('Основную привязку может снять только SUPER_ADMIN — аккаунт будет стёрт.');
+      }
+      if (!input.confirmOnixId?.trim()) {
+        throw new BadRequestException('Это основная привязка: аккаунт будет стёрт. Подтвердите ONIX ID.');
+      }
+      const wiped = await this.wipeUser(actor, targetId, {
+        confirmOnixId: input.confirmOnixId,
+        reason: input.reason?.trim() || `Отвязка основной привязки ${input.provider}`,
+      });
+      return { ...wiped, unlinked: input.provider, wiped: true as const };
+    }
+
+    const now = new Date();
+    const providerLinks = links.filter((link) => link.provider === input.provider);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.identityLink.deleteMany({ where: { userId: target.id, provider: input.provider } });
+      for (const link of providerLinks) {
+        await tx.identityHistory.create({
+          data: {
+            userId: target.id,
+            provider: input.provider,
+            providerUserId: link.providerUserId,
+            action: 'UNLINKED',
+            identityLinkId: link.id,
+            metadata: { source: 'admin', adminUserId: actor.id.toString() },
+          },
+        });
+      }
+      await tx.session.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: now, revokeReason: 'ADMIN' },
+      });
+      await tx.user.update({
+        where: { id: target.id },
+        data: { sessionVersion: { increment: 1 } },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_IDENTITY_UNLINK',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: {
+            onixId: formatOnixId(target.onixId),
+            provider: input.provider,
+            wiped: false,
+            reason: input.reason?.trim().slice(0, 500) ?? null,
+          },
+        },
+      });
+    });
+    return { onixId: formatOnixId(target.onixId), unlinked: input.provider, wiped: false as const };
+  }
+
+  async getChatThread(chatId: string) {
+    const id = chatId.trim();
+    if (!id || id.length > 64) throw new BadRequestException('Некорректный чат.');
+    const chat = await this.prisma.chat.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        updatedAt: true,
+        members: {
+          select: {
+            userId: true,
+            user: { select: { onixId: true, displayName: true, telegramNick: true } },
+          },
+        },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          take: 500,
+          select: {
+            id: true, senderId: true, kind: true, text: true,
+            deletedAt: true, deletedReason: true, createdAt: true,
+          },
+        },
+      },
+    });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    return {
+      id: chat.id,
+      kind: chat.kind,
+      title: chat.kind === 'AI' ? (chat.title || 'Onix AI') : (chat.title || 'Диалог'),
+      updatedAt: chat.updatedAt.toISOString(),
+      members: chat.members.map((m) => ({
+        userId: m.userId.toString(),
+        onixId: formatOnixId(m.user.onixId),
+        username: m.user.displayName ?? m.user.telegramNick ?? formatOnixId(m.user.onixId),
+      })),
+      messages: chat.messages.map((m) => ({
+        id: m.id.toString(),
+        senderId: m.senderId?.toString() ?? null,
+        kind: m.kind,
+        text: m.text,
+        deletedAt: m.deletedAt?.toISOString() ?? null,
+        deletedReason: m.deletedReason,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    };
+  }
+
   async sellBanUser(actor: AdminActor, targetId: string, input: { comment: string; banned: boolean }) {
     const target = await this.resolveTarget(targetId);
-    if (input.banned && !input.comment?.trim()) throw new BadRequestException('??????? ??????? ??????? ??????.');
+    if (input.banned && !input.comment?.trim()) throw new BadRequestException('Нужен комментарий к бану продаж.');
     const now = input.banned ? new Date() : null;
     const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({ where: { id: target.id }, data: { sellBannedAt: now } });
@@ -396,11 +735,11 @@ export class AdminSecurityService {
   }
 
   async setUserRole(actor: AdminActor, targetId: string, role: string) {
-    if (actor.role !== 'SUPER_ADMIN') throw new ForbiddenException('?????? ?????????? ????? ????????? ????.');
+    if (actor.role !== 'SUPER_ADMIN') throw new ForbiddenException('Менять роль может только SUPER_ADMIN.');
     const allowed = ['USER', 'VERIFIED_SELLER', 'MODERATOR', 'ADMIN', 'SUPER_ADMIN', 'VIP'];
-    if (!allowed.includes(role)) throw new BadRequestException('???????????? ????.');
+    if (!allowed.includes(role)) throw new BadRequestException('Некорректная роль.');
     const target = await this.resolveTarget(targetId);
-    if (target.id === actor.id && role !== 'SUPER_ADMIN') throw new BadRequestException('?????? ????? ???? ?????????? ? ???????? ????????.');
+    if (target.id === actor.id && role !== 'SUPER_ADMIN') throw new BadRequestException('Нельзя снять SUPER_ADMIN с собственного аккаунта.');
     const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
     const isSupport = isAdmin || role === 'MODERATOR';
     const updated = await this.prisma.user.update({ where: { id: target.id }, data: { platformStatus: role as any, isAdmin, isSupport, permissionVersion: { increment: 1 } } });
@@ -409,10 +748,10 @@ export class AdminSecurityService {
   }
 
   async adjustUserBalance(actor: AdminActor, targetId: string, input: { amountCents: string; reason: string; idempotencyKey: string }) {
-    if (actor.role !== 'SUPER_ADMIN' && actor.role !== 'FINANCE_ADMIN') throw new ForbiddenException('???????????? ???? ??? ????????? ???????.');
+    if (actor.role !== 'SUPER_ADMIN' && actor.role !== 'FINANCE_ADMIN') throw new ForbiddenException('Корректировать баланс может SUPER_ADMIN или FINANCE_ADMIN.');
     const target = await this.resolveTarget(targetId);
     const amount = BigInt(input.amountCents);
-    if (amount === 0n) throw new BadRequestException('????? ?? ????? ???? ????? ????.');
+    if (amount === 0n) throw new BadRequestException('Сумма не может быть нулевой.');
     const entry = await this.prisma.$transaction(async (tx) => {
       const meta = { idempotencyKey: input.idempotencyKey, description: input.reason?.trim().slice(0, 500), actorUserId: target.id, source: 'ADMIN' as const, fundKind: 'USER_OWNED' as const };
       const ledger = amount > 0n ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', meta) : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', { ...meta, allowNegative: true });
@@ -859,7 +1198,7 @@ export class AdminSecurityService {
       orderBy: { createdAt: 'desc' },
       take,
       select: {
-        id: true, status: true, totalAmountCents: true, feeCents: true, payoutCents: true,
+        id: true, status: true, chatId: true, totalAmountCents: true, feeCents: true, payoutCents: true,
         quantity: true, disputeReason: true, createdAt: true, updatedAt: true,
         buyer: { select: { onixId: true, telegramId: true, displayName: true } },
         seller: { select: { onixId: true, telegramId: true, displayName: true } },
