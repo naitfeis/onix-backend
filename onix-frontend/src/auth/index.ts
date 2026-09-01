@@ -42,7 +42,7 @@ export {
 
 export { getSharedAuthManager, peekSharedAuthManager, resetSharedAuthManager } from './sharedAuthManager';
 
-export { startGoogleOAuth, consumeGoogleOAuthRedirect } from './googleOAuth';
+export { startGoogleOAuth, consumeGoogleOAuthRedirect, GOOGLE_OAUTH_CALLBACK_PATH } from './googleOAuth';
 
 export {
   AuthV2ApiError,

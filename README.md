@@ -26,7 +26,7 @@ Required environment variables:
 
 Website (canonical `https://www.onixtg.shop`): Telegram **bot** LoginChallenge
 (`POST /api/v2/auth/telegram-bot/start` → webhook `POST /api/telegram/webhook` →
-`complete`). Google: `POST /api/v2/auth/google` with an OAuth `id_token` after redirect to `/`; Client ID from
+`complete`). Google: `POST /api/v2/auth/google` with an OAuth `id_token` after redirect to `/auth/google`; Client ID from
 `GET /api/v2/auth/public-config` (`GOOGLE_CLIENT_ID`, no secret).
 
 Mini App / widget still resolve `User` by verified Telegram ID:

@@ -127,19 +127,9 @@ export class AuthV2WebsiteAuthProvider implements WebsiteAuthProvider {
   async logout(): Promise<void> {
     this.cachedUser = null;
     try {
-      let token = this.manager.getAccessToken();
-      if (!token || this.manager.isAccessExpired()) {
-        try {
-          token = await this.manager.refreshAccessToken();
-        } catch {
-          token = this.manager.getAccessToken();
-        }
-      }
-      if (token) {
-        await postAuthV2Logout(token, this.fetchImpl, this.apiBase);
-      }
+      await postAuthV2Logout(this.fetchImpl, this.apiBase);
     } catch {
-      // Best-effort: still clear local session / cookie may already be gone.
+      // Best-effort: still clear local session even if the network failed.
     } finally {
       this.manager.clearSession('logout');
     }

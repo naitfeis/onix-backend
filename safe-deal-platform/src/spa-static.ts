@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { NextFunction, Request, Response } from 'express';
 import type { DynamicModule } from '@nestjs/common';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { structuredLog } from './observability/structured-logger';
@@ -16,6 +17,29 @@ export function resolveSpaDir(): string {
 
 export function spaIndexExists(spaDir = resolveSpaDir()): boolean {
   return existsSync(join(spaDir, 'index.html'));
+}
+
+export function spaAuthGoogleCallbackMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    next();
+    return;
+  }
+  const path = (req.path || req.url || '').split('?')[0] || '';
+  if (path !== '/auth/google' && path !== '/auth/google/') {
+    next();
+    return;
+  }
+  const index = join(resolveSpaDir(), 'index.html');
+  if (!existsSync(index)) {
+    next();
+    return;
+  }
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  res.sendFile(index);
 }
 
 /** Nest modules to import — empty when SPA was not built (API-only / worker). */

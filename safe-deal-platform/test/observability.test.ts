@@ -39,18 +39,18 @@ test('structuredLog redacts secret-shaped field values and the JSON line', () =>
   assert.match(lines[0], /\[REDACTED\]/);
 });
 
-test('quiet access log skips health, WS handshake, presence, and chat polls', async () => {
+test('quiet access log skips ordinary traffic and keeps slow/5xx', async () => {
   const { shouldQuietHttpAccessLog } = await import('../src/request-timing.middleware');
   assert.equal(shouldQuietHttpAccessLog({
-    method: 'GET', pathOnly: '/api/realtime', status: 101, durationMs: 12,
-  }), true);
-  assert.equal(shouldQuietHttpAccessLog({
-    method: 'POST', pathOnly: '/api/users/me/presence', status: 200, durationMs: 40,
-  }), true);
-  assert.equal(shouldQuietHttpAccessLog({
-    method: 'GET', pathOnly: '/api/chats/abc/messages', status: 200, durationMs: 80,
+    method: 'GET', pathOnly: '/assets/index.js', status: 200, durationMs: 12,
   }), true);
   assert.equal(shouldQuietHttpAccessLog({
     method: 'POST', pathOnly: '/api/v2/auth/refresh', status: 200, durationMs: 40,
+  }), true);
+  assert.equal(shouldQuietHttpAccessLog({
+    method: 'GET', pathOnly: '/api/products', status: 500, durationMs: 20,
+  }), false);
+  assert.equal(shouldQuietHttpAccessLog({
+    method: 'GET', pathOnly: '/api/users/me', status: 200, durationMs: 2500,
   }), false);
 });

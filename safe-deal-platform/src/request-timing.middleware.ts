@@ -11,29 +11,8 @@ export function shouldQuietHttpAccessLog(input: {
   status: number;
   durationMs: number;
 }): boolean {
-  const method = input.method.toUpperCase();
-  const pathOnly = input.pathOnly;
-  const { status, durationMs } = input;
-  if (durationMs >= 1500 || status >= 500) return false;
-  const isHealthProbe = pathOnly === '/api/health/live'
-    || pathOnly === '/api/health/ready'
-    || pathOnly === '/api/health'
-    || (pathOnly === '/' && method === 'HEAD');
-  if (isHealthProbe && status < 500) return true;
-  if (method === 'GET' && status < 400 && (
-    pathOnly === '/api/session-probe'
-    || pathOnly === '/api/v2/auth/session'
-    || pathOnly === '/api/realtime'
-    || pathOnly.startsWith('/api/notifications')
-    || pathOnly.startsWith('/api/avatars/')
-    || pathOnly.startsWith('/api/chats')
-  )) {
-    return true;
-  }
-  if (method === 'POST' && status < 400 && pathOnly === '/api/users/me/presence') {
-    return true;
-  }
-  return false;
+  if (input.status >= 500 || input.durationMs >= 2000) return false;
+  return true;
 }
 
 /**
