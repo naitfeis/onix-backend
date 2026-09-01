@@ -100,7 +100,8 @@ async function bootstrap(): Promise<void> {
   registerGracefulShutdown(app, { role: 'api' });
 
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port);
+  // PaaS ingress (Render, Amvera) probes the container from another netns.
+  await app.listen(port, '0.0.0.0');
 
   // Keep-alive tuned for Render reverse proxy (avoid premature socket close).
   const server = app.getHttpServer();

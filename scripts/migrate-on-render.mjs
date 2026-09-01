@@ -1,11 +1,13 @@
 /**
  * Free Render web services do not run preDeployCommand.
- * Apply pending Prisma migrations during the Render build instead.
- * Local `npm run build:web` is unchanged (RENDER is unset).
+ * Apply pending Prisma migrations during the PaaS build instead.
+ * Local `npm run build:web` is unchanged (RENDER/AMVERA unset).
  */
 import { spawnSync } from 'node:child_process';
 
-if (process.env.RENDER !== 'true') process.exit(0);
+const onPaas =
+  process.env.RENDER === 'true' || process.env.AMVERA === 'true';
+if (!onPaas) process.exit(0);
 
 const result = spawnSync('npx', ['prisma', 'migrate', 'deploy'], {
   stdio: 'inherit',
