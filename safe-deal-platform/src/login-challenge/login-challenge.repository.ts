@@ -16,6 +16,24 @@ export type CreateChallengeInput = {
 export class LoginChallengeRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async expireIncompleteForSession(loginSessionId: string): Promise<void> {
+    await this.prisma.loginChallenge.updateMany({
+      where: { loginSessionId, status: { in: ['CREATED', 'OPENED'] } },
+      data: { status: 'EXPIRED' },
+    });
+  }
+
+  async findLatestLiveForSession(loginSessionId: string): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findFirst({
+      where: {
+        loginSessionId,
+        status: { in: ['CREATED', 'OPENED'] },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async create(input: CreateChallengeInput): Promise<LoginChallenge> {
     const now = new Date();
     return this.prisma.loginChallenge.create({

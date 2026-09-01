@@ -302,21 +302,38 @@ export class AdminSecurityService {
     const stripped = q.replace(/^ONIX-/i, '');
     const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
     const candidates = onixIdLookupCandidates(q);
-    return this.prisma.user.findFirst({
+    const rows = await this.prisma.user.findMany({
       where: {
         OR: [
           { onixId: { in: candidates } },
+          ...(asBig != null ? [{ id: asBig }] : []),
           { displayName: { equals: q, mode: 'insensitive' } },
           { telegramNick: { equals: q, mode: 'insensitive' } },
-          ...(asBig != null ? [{ id: asBig }, { telegramId: asBig }] : []),
         ],
       },
+      take: 2,
     });
+    if (rows.length > 1) {
+      throw new BadRequestException('Несколько пользователей по этому запросу. Откройте карточку по ONIX ID из списка.');
+    }
+    return rows[0] ?? null;
   }
 
   private async resolveTarget(onixIdOrId: string) {
-    const user = await this.findUserByAdminQuery(onixIdOrId);
-    if (!user) throw new BadRequestException('Пользователь не найден.');
+    const q = onixIdOrId.trim();
+    if (!q) throw new BadRequestException('Пользователь не найден.');
+    const stripped = q.replace(/^ONIX-/i, '');
+    const asBig = /^\d+$/.test(stripped) ? BigInt(stripped) : null;
+    const candidates = onixIdLookupCandidates(q);
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { onixId: { in: candidates } },
+          ...(asBig != null ? [{ id: asBig }] : []),
+        ],
+      },
+    });
+    if (!user) throw new BadRequestException('Пользователь не найден. Для бана/стирания нужен ONIX ID.');
     return user;
   }
 
@@ -536,20 +553,23 @@ export class AdminSecurityService {
     if (target.displayName === WIPED_DISPLAY_NAME && target.telegramId == null) {
       return { onixId: expected, wiped: true as const };
     }
-    const openOrders = await this.prisma.order.count({
-      where: {
-        OR: [{ buyerId: target.id }, { sellerId: target.id }],
-        status: { in: [...OPEN_ORDER_STATUSES] },
-      },
-    });
-    if (openOrders > 0) {
-      throw new BadRequestException(`Нельзя стереть: открытых сделок ${openOrders}. Сначала закройте/верните их.`);
-    }
-    if (target.balanceCents !== 0n || target.depositAvailableCents !== 0n || target.depositLockedCents !== 0n) {
-      throw new BadRequestException('Нельзя стереть: ненулевой баланс или залог. Сначала обнулите кошелёк в админке.');
-    }
     const now = new Date();
     await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${target.id} FOR UPDATE`;
+      const locked = await tx.user.findUnique({ where: { id: target.id } });
+      if (!locked) throw new BadRequestException('Пользователь не найден.');
+      const openOrders = await tx.order.count({
+        where: {
+          OR: [{ buyerId: locked.id }, { sellerId: locked.id }],
+          status: { in: [...OPEN_ORDER_STATUSES] },
+        },
+      });
+      if (openOrders > 0) {
+        throw new BadRequestException(`Нельзя стереть: открытых сделок ${openOrders}. Сначала закройте/верните их.`);
+      }
+      if (locked.balanceCents !== 0n || locked.depositAvailableCents !== 0n || locked.depositLockedCents !== 0n) {
+        throw new BadRequestException('Нельзя стереть: ненулевой баланс или залог. Сначала обнулите кошелёк в админке.');
+      }
       await tx.product.updateMany({
         where: { sellerId: target.id, status: { in: ['ACTIVE', 'SOLD_OUT'] } },
         data: { status: 'ARCHIVED' },
@@ -685,7 +705,7 @@ export class AdminSecurityService {
           },
         },
         messages: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: 'desc' },
           take: 500,
           select: {
             id: true, senderId: true, kind: true, text: true,

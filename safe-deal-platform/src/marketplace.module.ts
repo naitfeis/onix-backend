@@ -367,28 +367,34 @@ export class MarketplaceService {
         ...secret,
       },
     });
-    const followers = await this.prisma.follow.findMany({
-      where: { sellerId: user.id },
-      select: { followerId: true, follower: { select: { telegramId: true } } },
-      take: 500,
-    });
-    if (followers.length) {
-      await this.prisma.notification.createMany({
-        data: followers.map(({ followerId }) => ({
-          userId: followerId, type: 'NEW_PRODUCT', title: 'Новый товар у продавца',
-          body: `${product.title} · ${product.category}`, data: { productId: product.id },
-        })),
-      });
-      void pushNewProductToFollowers(
-        followers.map((f) => ({ telegramId: f.follower.telegramId })),
-        product,
-      );
-    }
     this.emitProductChanged(
       { id: product.id, status: product.status, quantity: product.quantity },
       { created: true },
     );
+    void this.notifyFollowersNewListing(user.id, product).catch(() => undefined);
     return this.get(user, product.id);
+  }
+
+  private async notifyFollowersNewListing(
+    sellerId: bigint,
+    product: { id: string; title: string; priceCents: bigint; category: string },
+  ) {
+    const followers = await this.prisma.follow.findMany({
+      where: { sellerId },
+      select: { followerId: true, follower: { select: { telegramId: true } } },
+      take: 500,
+    });
+    if (!followers.length) return;
+    await this.prisma.notification.createMany({
+      data: followers.map(({ followerId }) => ({
+        userId: followerId, type: 'NEW_PRODUCT', title: 'Новый товар у продавца',
+        body: `${product.title} · ${product.category}`, data: { productId: product.id },
+      })),
+    });
+    await pushNewProductToFollowers(
+      followers.map((f) => ({ telegramId: f.follower.telegramId })),
+      product,
+    );
   }
 
   async update(user: AuthUser, id: string, dto: UpdateProductDto) {

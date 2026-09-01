@@ -18,6 +18,13 @@ type ChatThread = {
   }>;
 };
 
+function formatExactDateTime(iso: string) {
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 export function ChatThreadModal({ chatId, onClose }: { chatId: string; onClose: () => void }) {
   const [data, setData] = useState<ChatThread | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,10 +53,11 @@ export function ChatThreadModal({ chatId, onClose }: { chatId: string; onClose: 
         {data && (
           <>
             <p className="muted">Участники: {data.members.map((m) => `${m.username || '—'} ${m.onixId}`).join(' · ') || '—'}</p>
+            <p className="muted">Новые сообщения сверху. Время — локальное, с секундами.</p>
             <div className="chat-thread">
               {data.messages.length === 0 ? <p className="muted">Сообщений нет.</p> : data.messages.map((m) => (
                 <div key={m.id} className={`chat-bubble${m.kind === 'SYSTEM' ? ' system' : ''}`}>
-                  <small>{m.kind === 'SYSTEM' ? 'ONIX' : (nameById.get(m.senderId ?? '') || m.senderId || '—')} · {new Date(m.createdAt).toLocaleString('ru-RU')}</small>
+                  <small>{m.kind === 'SYSTEM' ? 'ONIX' : (nameById.get(m.senderId ?? '') || m.senderId || '—')} · {formatExactDateTime(m.createdAt)}</small>
                   <p>{m.deletedAt ? <s>{m.text}</s> : m.text}</p>
                   {m.deletedAt && m.deletedReason ? <span className="muted">{m.deletedReason}</span> : null}
                 </div>

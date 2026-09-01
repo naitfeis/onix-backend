@@ -16,5 +16,6 @@ export function isWebsiteBotLoginEnabled(): boolean {
   return getWebsiteLoginProvider() === 'bot';
 }
 
-export const LOGIN_CHALLENGE_TTL_MS = 2 * 60 * 1000;
+/** Telegram Desktop often delivers /start login_… minutes after the click. Keep the challenge alive. */
+export const LOGIN_CHALLENGE_TTL_MS = 10 * 60 * 1000;
 export const LOGIN_EXCHANGE_TTL_MS = 5 * 60 * 1000;

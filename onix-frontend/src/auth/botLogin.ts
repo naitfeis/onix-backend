@@ -123,7 +123,7 @@ export async function waitUntilBotConfirmed(
   challengeId: string,
   options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal },
 ): Promise<void> {
-  const timeoutMs = options?.timeoutMs ?? 120_000;
+  const timeoutMs = options?.timeoutMs ?? 12 * 60 * 1000;
   const intervalMs = options?.intervalMs ?? 1_500;
   const signal = options?.signal;
   const started = Date.now();

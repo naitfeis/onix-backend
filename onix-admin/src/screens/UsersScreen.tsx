@@ -111,7 +111,7 @@ export function UsersScreen({
     setError(null);
     try {
       await loadList(query);
-      if (query.trim()) await loadUser(query.trim());
+      if (/^(?:ONIX-)?\d+$/i.test(query.trim())) await loadUser(query.trim());
     } catch (err) {
       setError(err instanceof AdminApiError ? err.message : 'Failed');
     } finally {

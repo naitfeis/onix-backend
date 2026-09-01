@@ -49,6 +49,7 @@ export class LoginChallengeService {
     createdUserAgent?: string;
   }): Promise<StartChallengeResult> {
     const loginSessionId = input.loginSessionId?.trim() || randomBytes(24).toString('hex');
+    await this.challenges.expireIncompleteForSession(loginSessionId);
     const challenge = await this.challenges.create({
       loginSessionId,
       browserFingerprintHash: input.browserFingerprintHash,
@@ -101,8 +102,9 @@ export class LoginChallengeService {
       msg: '[Bot] openForBotPrompt lookup',
       challengeId,
     }));
-    await this.markOpened(challengeId);
-    const challenge = await this.requireFresh(challengeId);
+    const live = await this.resolveLiveChallengeForBot(challengeId);
+    await this.markOpened(live.id);
+    const challenge = await this.requireFresh(live.id);
     this.logger.log(JSON.stringify({
       msg: '[Bot] openForBotPrompt result',
       challengeId: challenge.id,
@@ -293,6 +295,33 @@ export class LoginChallengeService {
         'Login session does not match this challenge.',
       );
     }
+  }
+
+  /**
+   * Telegram Desktop often delivers an older start=login_id after the user clicked login again.
+   * Reuse the newest live challenge from the same browser login session — never a stranger's.
+   */
+  private async resolveLiveChallengeForBot(challengeId: string): Promise<LoginChallenge> {
+    const row = await this.challenges.findById(challengeId);
+    if (!row) {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'Login challenge not found.');
+    }
+    const liveNow = (row.status === 'CREATED' || row.status === 'OPENED')
+      && row.expiresAt.getTime() > Date.now();
+    if (liveNow) return row;
+    const sibling = await this.challenges.findLatestLiveForSession(row.loginSessionId);
+    if (sibling) {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] recovered live challenge from same login session',
+        from: challengeId,
+        to: sibling.id,
+      }));
+      return sibling;
+    }
+    if (row.status === 'EXPIRED' || row.expiresAt.getTime() <= Date.now()) {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_EXPIRED', 'Login challenge expired.');
+    }
+    throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'Login challenge not found.');
   }
 
   private async requireFresh(challengeId: string): Promise<LoginChallenge> {

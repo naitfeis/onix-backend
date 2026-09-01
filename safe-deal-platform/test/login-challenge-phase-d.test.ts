@@ -45,8 +45,8 @@ test('login session cookie uses SameSite=Lax Secure for single-origin prod', () 
   process.env.AUTH_COOKIE_SECURE = prev;
 });
 
-test('LoginChallenge TTL is 2 minutes', () => {
-  assert.equal(LOGIN_CHALLENGE_TTL_MS, 120_000);
+test('LoginChallenge TTL is 10 minutes', () => {
+  assert.equal(LOGIN_CHALLENGE_TTL_MS, 600_000);
 });
 
 test('challenge state machine codes exist', () => {

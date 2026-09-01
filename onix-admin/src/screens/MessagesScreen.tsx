@@ -57,7 +57,12 @@ export function MessagesScreen({ onOpenChat }: { onOpenChat: (chatId: string) =>
                   ? <><s>{message.text}</s><br /><span className="muted">{message.deletedReason}</span></>
                   : message.text}
               </td>
-              <td>{new Date(message.createdAt).toLocaleString('ru-RU')}</td>
+              <td>{(() => {
+                const d = new Date(message.createdAt);
+                if (!Number.isFinite(d.getTime())) return message.createdAt;
+                const p = (n: number) => String(n).padStart(2, '0');
+                return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+              })()}</td>
               <td className="actions-cell">
                 {!message.deletedAt && <button className="danger" type="button" onClick={() => void remove(message.id)}>Удалить</button>}
                 <button className="ghost" type="button" onClick={() => onOpenChat(message.chatId)}>Чат</button>
