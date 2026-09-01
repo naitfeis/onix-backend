@@ -4063,19 +4063,22 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     min-width: 0;
     overflow: hidden;
   }
-  .sidebar-right > .widget:last-child {
+  .sidebar-right > .widget:last-child,
+  .sidebar-right > .widget--new-lots {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 180px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
-  .sidebar-right > .widget:last-child > h3 {
+  .sidebar-right > .widget:last-child > h3,
+  .sidebar-right > .widget--new-lots > h3 {
     flex-shrink: 0;
   }
-  .sidebar-right > .widget:last-child .widget-trend {
+  .sidebar-right > .widget:last-child .widget-trend,
+  .sidebar-right > .widget--new-lots .widget-trend {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 120px;
     overflow-x: hidden;
     overflow-y: auto;
   }
@@ -4093,7 +4096,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .widget-notify { display: grid; gap: 10px; max-height: min(320px, 42vh); overflow-y: auto; }
+  .widget-notify { display: grid; gap: 10px; max-height: min(200px, 26vh); overflow-y: auto; }
   .widget-notify__row {
     display: grid;
     grid-template-columns: 36px 1fr auto;
@@ -4129,13 +4132,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .widget-trend { display: grid; min-width: 0; }
   .widget-trend__row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     padding: 10px 0;
     border-bottom: 0;
     font-size: 13px;
     color: var(--text-primary);
     min-width: 0;
+    min-height: 48px;
     max-width: 100%;
     overflow: hidden;
   }

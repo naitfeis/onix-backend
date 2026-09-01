@@ -682,7 +682,7 @@ export default function App() {
                 )}
               </div>
             </div>
-            <div className="widget widget--glass">
+            <div className="widget widget--glass widget--new-lots">
               <h3>Новые лоты</h3>
               <div className="widget-trend">
                 {core.products.length === 0 ? (

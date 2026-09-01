@@ -4,9 +4,11 @@
 
 Если цель — понимать репозиторий, сессии, деньги и безопасность (а не учить JS с нуля):
 
-**[Урок 30 — архитектура, Ed25519, безопасность](./30-onix-owner-architecture-security.md)**
+**[Урок 30 — архитектура, Ed25519, безопасность](./30-onix-owner-architecture-security.md)**  
+**[Урок 31 — Vite, React, NestJS, same-origin, Google Console, CSP](./31-onix-web-stack-vite-react-nest.md)**
 
-Там: карта приложений, ветки `v1.4-render` / `v1.4-amvera`, same-origin, ledger, SERIALIZABLE, access vs refresh, Ed25519/`kid`, CSRF, Google redirect, Redis, что нельзя упрощать.
+Урок 30: ветки, ledger, SERIALIZABLE, access vs refresh, Ed25519, cookie, Redis.  
+Урок 31: что такое origin, зачем SPA и Nest на одном хосте, что делает Vite на dev и на build, чем React не является сервером, почему `redirect_uri_mismatch` и почему Self-XSS / `content.js` не баг ONIX.
 
 ## Режим 7/7
 
