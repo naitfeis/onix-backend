@@ -2,7 +2,7 @@ meta:
   environment: node
   toolchain:
     name: npm
-    version: 20
+    version: 22
 
 build:
   additionalCommands: npm ci --include=dev && npm run build && npm run build:spa
