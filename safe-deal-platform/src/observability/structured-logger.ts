@@ -21,6 +21,14 @@ function shouldLog(level: LogLevel): boolean {
   return LEVEL_ORDER[level] >= LEVEL_ORDER[minLevel()];
 }
 
+function redactFields(fields: LogFields): LogFields {
+  const out: LogFields = {};
+  for (const [key, value] of Object.entries(fields)) {
+    out[key] = typeof value === 'string' ? redactSecrets(value) : value;
+  }
+  return out;
+}
+
 function serializeError(err: unknown): LogFields {
   if (err instanceof Error) {
     return {
@@ -50,10 +58,10 @@ export function slog(
     msg: redactSecrets(message),
     service: process.env.OTEL_SERVICE_NAME ?? process.env.RENDER_SERVICE_NAME ?? 'onix-api',
     env: process.env.NODE_ENV ?? 'development',
-    ...fields,
+    ...redactFields(fields),
   };
   if (err !== undefined) Object.assign(payload, serializeError(err));
-  const line = JSON.stringify(payload);
+  const line = redactSecrets(JSON.stringify(payload));
   if (level === 'error') console.error(line);
   else if (level === 'warn') console.warn(line);
   else console.log(line);

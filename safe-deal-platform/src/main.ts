@@ -17,7 +17,7 @@ import { registerGracefulShutdown } from './observability/graceful-shutdown';
 import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
-import { createSecurityMiddleware, resolveCorsOrigins } from './security-headers';
+import { createSecurityMiddleware, resolveCorsOrigins, canonicalWwwHostMiddleware } from './security-headers';
 import { RealtimeHubService } from './realtime/realtime-hub.service';
 import { spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
@@ -49,7 +49,8 @@ async function bootstrap(): Promise<void> {
     logger: ['error', 'warn', 'log'],
   });
 
-  // Cloudflare / Render terminate TLS and forward X-Forwarded-For / CF-Connecting-IP.
+  // Amvera ingress (or Render LB) terminates TLS and forwards X-Forwarded-For.
+  // Do not trust Cloudflare client headers unless TRUST_CDN_HEADERS=true — see client-ip.ts.
   // Without this, Express `req.ip` is often the proxy peer (::1 / 127.0.0.1).
   const trustProxy = process.env.TRUST_PROXY?.trim();
   if (trustProxy === 'false' || trustProxy === '0') {
@@ -63,6 +64,7 @@ async function bootstrap(): Promise<void> {
 
   // Security headers first (Helmet + CSP).
   app.use(createSecurityMiddleware());
+  app.use(canonicalWwwHostMiddleware);
   // Scanners before ServeStatic / Nest (clean 404, never 500).
   app.use(httpNoiseMiddleware);
   // gzip only in production (Render NODE_ENV=production). Dev stays uncompressed for easier debugging.

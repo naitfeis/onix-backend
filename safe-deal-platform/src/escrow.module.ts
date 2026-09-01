@@ -14,7 +14,10 @@ import {
   lockUsersInIdOrder,
 } from './database/money-locks';
 import { decryptDeliverySecret } from './delivery-crypto';
-import { pushTelegramToChatId } from './domain-notify';
+import {
+  deliverTelegramAfterCommit,
+  notificationOrderId,
+} from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
@@ -150,13 +153,16 @@ export class EscrowService {
    * all call POST /orders/product/:productId → this method only.
    */
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
-    const order = await withSerializableTransaction(this.prisma, async (tx) => {
+    const { order, notifyIds } = await withSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
       if (existing) {
         if (existing.buyerId !== user.id || existing.productId !== productId || existing.quantity !== quantity) {
           throw new ConflictException('Ключ идемпотентности уже использован для другого запроса.');
         }
-        return existing;
+        return {
+          order: existing,
+          notifyIds: await this.pendingOrderNotifyIds(tx, existing.id, [existing.buyerId, existing.sellerId]),
+        };
       }
       // Listing first, then both parties in id order — before debit or chat upserts.
       await lockProductForUpdate(tx, productId);
@@ -287,21 +293,20 @@ export class EscrowService {
         });
       }
 
-      await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
+      const sellerNote = await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
+      const buyerNote = await this.notify(
+        tx,
+        user.id,
+        'ORDER_UPDATE',
+        'Заказ создан',
+        'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.',
+        created.id,
+      );
       await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
-      return created;
+      return { order: created, notifyIds: [sellerNote.id, buyerNote.id] };
     });
 
-    // Best-effort Telegram (after commit).
-    void this.prisma.user.findUnique({ where: { id: order.sellerId }, select: { telegramId: true } })
-      .then((seller) => {
-        if (seller) void pushTelegramToChatId(seller.telegramId, 'Новая покупка', 'Покупатель оплатил заказ — деньги хранятся в сейфе ONIX.');
-      });
-    void this.prisma.user.findUnique({ where: { id: user.id }, select: { telegramId: true } })
-      .then((buyer) => {
-        if (buyer) void pushTelegramToChatId(buyer.telegramId, 'Заказ создан', 'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.');
-      });
-
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
     const live = await this.prisma.order.findUnique({
       where: { id: order.id },
       select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
@@ -341,18 +346,16 @@ export class EscrowService {
   }
 
   async complete(user: AuthUser, id: bigint, key: string) {
-    await this.finishAsCompleted(user, id, key, {
+    const notifyIds = await this.finishAsCompleted(user, id, key, {
       allowedFrom: ['DELIVERING'],
       requireBuyer: true,
     });
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id },
-      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true, seller: { select: { telegramId: true } } },
+      select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
     });
     this.emitOrderUpdated(order);
-    if (order.seller.telegramId) {
-      void pushTelegramToChatId(order.seller.telegramId, 'Поступили деньги', 'Сделка завершена — выплата зачислена на баланс.');
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
     return this.one(user, id);
   }
 
@@ -362,7 +365,7 @@ export class EscrowService {
       throw new BadRequestException('Подтвердить сделку продавцу может только поддержка.');
     }
     const key = `order:${id}:admin-complete`;
-    await this.finishAsCompleted(actor, id, key, {
+    const notifyIds = await this.finishAsCompleted(actor, id, key, {
       allowedFrom: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'],
       requireBuyer: false,
       supportReason: reason,
@@ -397,13 +400,7 @@ export class EscrowService {
       });
       await this.prisma.chat.update({ where: { id: order.chat.id }, data: { updatedAt: new Date() } });
     }
-    const sellerTg = await this.prisma.user.findUnique({
-      where: { id: order.sellerId },
-      select: { telegramId: true },
-    });
-    if (sellerTg) {
-      void pushTelegramToChatId(sellerTg.telegramId, 'Поступили деньги', 'Поддержка подтвердила сделку — выплата зачислена.');
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
     this.emitOrderUpdated({
       id: order.id,
       status: order.status,
@@ -419,14 +416,15 @@ export class EscrowService {
     id: bigint,
     key: string,
     opts: { allowedFrom: OrderStatus[]; requireBuyer: boolean; supportReason?: string },
-  ) {
-    await withSerializableTransaction(this.prisma, async (tx) => {
+  ): Promise<bigint[]> {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== 'COMPLETED') {
           throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
         }
-        return;
+        const existing = await tx.order.findUniqueOrThrow({ where: { id } });
+        return this.pendingOrderNotifyIds(tx, id, [existing.sellerId]);
       }
       await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
@@ -434,7 +432,9 @@ export class EscrowService {
       if (opts.requireBuyer && order.buyerId !== actor.id) {
         throw new BadRequestException('Только покупатель подтверждает получение.');
       }
-      if (order.status === 'COMPLETED') return;
+      if (order.status === 'COMPLETED') {
+        return this.pendingOrderNotifyIds(tx, id, [order.sellerId]);
+      }
       await lockProductForUpdate(tx, order.productId);
       await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
@@ -491,12 +491,13 @@ export class EscrowService {
           reason: opts.supportReason?.trim() || null,
         },
       });
-      await this.notify(tx, order.sellerId, 'ORDER_UPDATE', 'Сделка завершена', 'Средства зачислены на баланс.', id);
+      const note = await this.notify(tx, order.sellerId, 'ORDER_UPDATE', 'Сделка завершена', 'Средства зачислены на баланс.', id);
       await this.audit(tx, actor.id, 'ORDER_COMPLETE', id, {
         ...(opts.requireBuyer ? {} : { support: true }),
         ...(opts.supportReason ? { reason: opts.supportReason } : {}),
         fromStatus: order.status,
       });
+      return [note.id];
     });
   }
 
@@ -515,20 +516,25 @@ export class EscrowService {
     if (priorTicket) {
       throw new BadRequestException('По этой сделке обращение уже было создано.');
     }
-    await withSerializableTransaction(this.prisma, async (tx) => {
+    const notifyIds = await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== 'DISPUTE') {
           throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
         }
-        return;
+        const existing = await tx.order.findUniqueOrThrow({ where: { id } });
+        const peerId = existing.buyerId === user.id ? existing.sellerId : existing.buyerId;
+        return this.pendingOrderNotifyIds(tx, id, [peerId]);
       }
       await lockOrderForUpdate(tx, id);
       const order = await tx.order.findFirst({
         where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
       });
       if (!order) throw new NotFoundException('Сделка не найдена.');
-      if (order.status === 'DISPUTE') return;
+      if (order.status === 'DISPUTE') {
+        const peerId = order.buyerId === user.id ? order.sellerId : order.buyerId;
+        return this.pendingOrderNotifyIds(tx, id, [peerId]);
+      }
       if (!['PAYMENT_HOLD', 'DELIVERING'].includes(order.status)) {
         throw new ConflictException('Спор сейчас открыть нельзя.');
       }
@@ -543,20 +549,19 @@ export class EscrowService {
       });
       await this.locks.holdForDispute(tx, id);
       await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
+      const peerId = order.buyerId === user.id ? order.sellerId : order.buyerId;
+      const note = await this.notify(
+        tx,
+        peerId,
+        'ORDER_UPDATE',
+        'Открыт спор',
+        reason?.slice(0, 200) ?? 'По сделке открыт спор.',
+        id,
+      );
+      return [note.id];
     });
     invalidateArbitrationContextCache();
-    const order = await this.prisma.order.findUniqueOrThrow({
-      where: { id },
-      select: { buyerId: true, sellerId: true },
-    });
-    const peers = await this.prisma.user.findMany({
-      where: { id: { in: [order.buyerId, order.sellerId].filter((x) => x !== user.id) } },
-      select: { telegramId: true },
-      take: 2,
-    });
-    for (const peer of peers) {
-      void pushTelegramToChatId(peer.telegramId, 'Открыт спор', reason?.slice(0, 200) ?? 'По сделке открыт спор.');
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
     const updated = await this.one(user, id);
     const row = await this.prisma.order.findUnique({
       where: { id },
@@ -600,13 +605,14 @@ export class EscrowService {
     reason?: string,
     opts?: { sellerInitiated?: boolean },
   ) {
-    await withSerializableTransaction(this.prisma, async (tx) => {
+    const notifyIds = await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== target) {
           throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
         }
-        return;
+        const existing = await tx.order.findUniqueOrThrow({ where: { id } });
+        return this.pendingOrderNotifyIds(tx, id, [existing.buyerId, existing.sellerId]);
       }
       await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
@@ -625,7 +631,9 @@ export class EscrowService {
       } else if (sellerInitiated && order.sellerId !== actor.id) {
         throw new BadRequestException('Возврат может инициировать только продавец.');
       }
-      if (order.status === target) return;
+      if (order.status === target) {
+        return this.pendingOrderNotifyIds(tx, id, [order.buyerId, order.sellerId]);
+      }
       await lockProductForUpdate(tx, order.productId);
       await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
@@ -675,7 +683,16 @@ export class EscrowService {
       if (target === 'REFUNDED' || target === 'CANCELED') {
         await hideReviewsForOrder(tx as never, id, 'REFUND');
       }
+      const title = target === 'REFUNDED' ? 'Возврат' : 'Заказ отменён';
+      const body = target === 'REFUNDED'
+        ? 'Деньги из сейфа ONIX возвращены покупателю.'
+        : 'Заказ отменён, оплата возвращена на баланс.';
+      const buyerNote = await this.notify(tx, order.buyerId, 'ORDER_UPDATE', title, body, id);
+      const sellerNote = await this.notify(tx, order.sellerId, 'ORDER_UPDATE', title, body, id);
+      return [buyerNote.id, sellerNote.id];
     });
+
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
 
     const live = await this.prisma.order.findUnique({
       where: { id },
@@ -779,6 +796,25 @@ export class EscrowService {
     });
     return dealDto(order, user);
   }
+  private async pendingOrderNotifyIds(
+    tx: Prisma.TransactionClient,
+    orderId: bigint,
+    userIds: bigint[],
+  ): Promise<bigint[]> {
+    const rows = await tx.notification.findMany({
+      where: {
+        userId: { in: userIds },
+        type: 'ORDER_UPDATE',
+        telegramPushedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 16,
+      select: { id: true, data: true },
+    });
+    const want = orderId.toString();
+    return rows.filter((row) => notificationOrderId(row.data) === want).map((row) => row.id);
+  }
+
   private notify(tx: Prisma.TransactionClient, userId: bigint, type: 'ORDER_UPDATE', title: string, body: string, orderId: bigint) {
     return tx.notification.create({ data: { userId, type, title, body, data: { orderId: orderId.toString() } } });
   }

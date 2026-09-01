@@ -1,4 +1,5 @@
 import { AuthPlatformError } from './auth-errors';
+import { timingSafeEqual } from 'node:crypto';
 
 /**
  * Refresh cookie helpers (ADR-003 / ADD cookie strategy).
@@ -52,6 +53,20 @@ export function readCookie(cookieHeader: string | undefined, name: string): stri
 
 export function readRefreshTokenFromCookie(cookieHeader: string | undefined): string | undefined {
   return readCookie(cookieHeader, refreshCookieName());
+}
+
+/** GIS redirect POST: cookie g_csrf_token must match body g_csrf_token. */
+export function assertGoogleGsiCsrf(cookieHeader: string | undefined, bodyToken: string | undefined): void {
+  const cookie = readCookie(cookieHeader, 'g_csrf_token');
+  const body = bodyToken?.trim() ?? '';
+  if (!cookie || !body) {
+    throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Google CSRF token is missing.');
+  }
+  const left = Buffer.from(cookie);
+  const right = Buffer.from(body);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) {
+    throw new AuthPlatformError('AUTH_CSRF_REJECTED', 'Google CSRF token is invalid.');
+  }
 }
 
 export function assertCsrfHeader(headers: Record<string, string | string[] | undefined>): void {

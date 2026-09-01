@@ -136,6 +136,110 @@ flow до изменения UI.
 
 ---
 
+# 0.1 PRODUCTION OPS (2026-09) — READ THIS FIRST
+
+Подробный runbook: `docs/architecture/ONIX-AMVERA-PRODUCTION.md`.
+
+Исторические docs (`ONIX-SINGLE-ORIGIN-MIGRATION.md`, cutover с Vercel→Render
+webhook) описывают **июль 2026**. С сентября публичный origin — **Amvera Moscow**,
+не Render и не Vercel rewrite.
+
+```text
+Canonical:  https://www.onixtg.shop     (SPA + /api, same origin)
+Ingress:    A 158.160.116.199           (Amvera msk0, project api-onix)
+Staging:    https://onix-api-47tj.onrender.com   (Render; no www DNS)
+DB:         Neon eu-central-1
+Redis:      Render Valkey EXTERNAL rediss://  (internal hostname fails from Amvera)
+Webhook:    POST https://www.onixtg.shop/api/telegram/webhook
+Git daily:  v1.3
+Git Amvera: v1.3-amvera   (merge v1.3 → v1.3-amvera → push to deploy Moscow)
+```
+
+Жёсткие правила:
+
+- Браузер **никогда** не ходит на `api.onixtg.shop` и не использует абсолютный
+  `VITE_API_URL` на Render. Только same-origin `/api`.
+- Cloudflare DNS **grey cloud** (DNS only) на `@` и `www`. Оранжевое облако =
+  RST в РФ + Amvera не выпустит Let's Encrypt.
+- Нет AAAA на `@` / `www`. Два A на один hostname нельзя.
+- `__Host-` cookies привязаны к хосту: логин на `onixtg.shop` ≠ сессия на `www`.
+  Канон — **www**.
+- Amvera env **нет на build**. `VITE_*` в панели не попадает в уже собранный SPA.
+  Google Client ID: runtime `GOOGLE_CLIENT_ID` + `GET /api/v2/auth/public-config`.
+  **GOOGLE_CLIENT_SECRET не используется.**
+- Telegram: не слать голое `/start`. Нужен deep link `?start=login_<id>` с сайта.
+  GET `/api/telegram/webhook` в браузере → 404 (это POST-only).
+- `TELEGRAM_WEBHOOK_SECRET` в Amvera = `secret_token` в `setWebhook`.
+- R2 — вложения чата, не сайт. Без `R2_*` upload недоступен. Browser PUT идёт на
+  Cloudflare R2 — из РФ может не открыться.
+- Не Apply пустую форму Configuration в Amvera (затирает `amvera.yaml`).
+- Реплики Amvera = 1, пока `www` смотрит сюда.
+
+DNS сайт (плюс почта reg.ru не трогать):
+
+| Name | Type | Content |
+| --- | --- | --- |
+| `@` / `www` | A | `158.160.116.199` |
+| `@` и отдельно `www` | TXT | `naitfeis222112-api-onix` |
+
+---
+
+# 0.2 KNOWN RISKS (do not paper over)
+
+Что реально слабо / атакуемо после cutover. Код чинит часть; остальное — ops.
+
+**Сделано в коде (2026-09):**
+- Amvera больше не доверяет `CF-Connecting-IP` / `X-Real-IP` / leftmost `X-Forwarded-For`
+  (спуф IP → обход rate-limit / admin allowlist / risk). `req.ip` после `trust proxy 1`.
+  Вернуть CDN-заголовки только если снова включите оранжевое Cloudflare:
+  `TRUST_CDN_HEADERS=true`.
+- Google id_token уходит **POST** на tokeninfo (не в query URL логов). Проверяются
+  `iss`, `exp`, `aud`, unverified email отклоняется.
+- Webhook secret сравнивается timing-safe. Inventory требует
+  `TELEGRAM_WEBHOOK_SECRET` в production.
+- Все SERIALIZABLE money-пути (escrow, wallet fund/withdraw, payments settle,
+  admin adjust, deposit unlock, clawback recover) идут через
+  `withSerializableTransaction`: retry P2034 / `40001` / deadlock `40P01` целиком,
+  без Telegram/HTTP внутри callback. Порядок локов: Order → Product → Users by id.
+- Telegram outbox: `Notification.telegramPushedAt` пишется в той же TX, что и
+  деньги/сообщение; Bot API — **после COMMIT** (`tryDeliverNotification`).
+  Крах после commit / 5xx Telegram → worker `telegram-outbox` на том же Neon.
+  Не слать Telegram из retryable SERIALIZABLE callback.
+- Логи: `slog` redact'ит и message, и string fields, и итоговую JSON-строку.
+  Bot webhook не пишет `message.text` / `callback_data` payload.
+- Чат: `sanitizeChatText` на send/caption (теги, javascript:/data:, control chars).
+- Google: COOP `same-origin-allow-popups`, CSP form-action на accounts.google.com,
+  GIS redirect на `/api/v2/auth/google/callback`. Имя/фамилия/фото из tokeninfo
+  пишутся в профиль (если нет Telegram-лица). Аватары `*.googleusercontent.com`
+  проксируются через `/api/avatars`.
+- Apex `onixtg.shop` → 301 `www` (кроме `/.well-known/`).
+
+**Остаётся ops / архитектура — не «починить одним PR»:**
+- Redis Valkey с inbound `0.0.0.0/0`: кто знает пароль URL — пишет в coordination.
+  Сузить IP Amvera, когда узнаете egress, или вынести Redis ближе.
+- Секреты, которые светились в чатах/скринах (JWT, bot, VPS, Neon) — **ротация**.
+- Браузерный PUT в Cloudflare R2 из РФ может не дойти; это и доступность, и
+  обход если bucket вдруг public.
+- Два хоста (`www` vs apex): код 301 apex → www (кроме ACME). Канон всё ещё www.
+- HSTS на год с `includeSubDomains`: любой будущий битый сертификат на поддомене
+  снова убьёт Edge. Не вешать HSTS на хосты без валидного LE.
+- Тариф 0.5 CPU / 1 GB — DoS по CPU дешевле, чем по логике. Rate-limit in-process
+  не шарится между будущими репликами (сейчас реплика 1).
+- Google GIS грузит `accounts.google.com` — в РФ режется независимо от Amvera.
+  Код: COOP `same-origin-allow-popups` + GIS `ux_mode=redirect` (не белый
+  `/gsi/transform` в Edge). В Google Console добавить Authorized redirect URI:
+  `https://www.onixtg.shop/api/v2/auth/google/callback`.
+- LoginChallenge 2 минуты; голое `/start` игнорируется — это не баг, не открывать
+  confirm без payload.
+- Worker (включая `telegram-outbox`) должен ходить в **тот же Neon**, что и API.
+  Иначе после crash Telegram не догоняется. After-commit send на API остаётся
+  быстрым путём; worker — гарантия доставки.
+
+Не снижать Serializable/idempotency/escrow ради «упрощения». Деньги по-прежнему
+только ledger.
+
+---
+
 # 1. ЧТО ТАКОЕ ONIX
 
 ONIX — P2P marketplace для цифровых товаров.
@@ -787,15 +891,15 @@ ONIX — самостоятельная Identity Platform + marketplace.
 
 # 12. TELEGRAM AUTH FLOW
 
-Website:
+Website (только `https://www.onixtg.shop`, вкладку не закрывать):
 
 POST /api/v2/auth/telegram-bot/start
         ↓
-tg://resolve
+https://t.me/<bot>?start=login_<challengeId>
         ↓
-Telegram Bot
+Telegram Bot  (голое `/start` без payload handler игнорирует)
         ↓
-Bot Webhook
+Bot Webhook POST /api/telegram/webhook
         ↓
 OPENED
         ↓
@@ -1334,61 +1438,46 @@ Backend должен предполагать:
 
 # 32. INFRASTRUCTURE
 
-Текущая схема:
+Текущая схема (2026-09): `docs/architecture/ONIX-AMVERA-PRODUCTION.md`.
 
-Cloudflare
-    ↓
-Vercel
-    ↓
-Render API
-    ↓
-Neon PostgreSQL
+```text
+Browser (RU)
+    ↓  DNS only (Cloudflare nameservers, grey cloud)
+https://www.onixtg.shop
+    ↓  A 158.160.116.199
+Amvera Moscow (Nest SPA+API :3000)
+    ├── Neon PostgreSQL (Frankfurt)
+    └── Redis / Valkey (Render Frankfurt, external URL)
+Telegram webhook → same www origin
+Render onix-api-47tj = staging only
+```
 
-Frontend:
-Vercel
-
-Backend:
-Render
-
-Database:
-Neon
-
-Telegram:
-Bot webhook → backend.
+Не возвращать публичный origin на Cloudflare orange / Vercel rewrite / Render
+custom domain `www` — это ломает РФ и `__Host-` cookies / сертификаты.
 
 ---
 
-# 33. CLOUDFLARE / VERCEL
+# 33. CLOUDFLARE
 
-Есть существующая proxy/rewrite архитектура.
+Cloudflare здесь **только DNS** (и опционально R2 для файлов чата).
 
-Не менять proxy architecture без проверки всей цепочки.
+Не включать proxy на `@` / `www`. Не использовать Cloudflare Workers как
+обязательный путь к API.
 
-Потенциальное направление:
-
-Cloudflare Workers
-
-может использоваться для proxy вместо Vercel rewrite, если это действительно необходимо.
-
-Но:
-
-НЕ делать migration только ради "более красивой архитектуры".
+Почта (MX, SPF, ftp/mail A) остаётся на reg.ru и к сайту не относится.
 
 ---
 
-# 34. RENDER
+# 34. RENDER (STAGING)
 
-Backend работает на Render.
+Render Web Service `onix-api-47tj` — **dev/staging**, URL
+`https://onix-api-47tj.onrender.com`.
 
-Возможна дальнейшая архитектура:
+После cutover кастомный домен `www.onixtg.shop` с Render снять (слоты сертификатов
+конфликтуют). Worker Render можно оставить.
 
-API Web Service
-+
-WebSocket / realtime process
-
-с internal networking.
-
-Но разделять процессы только когда есть реальная необходимость.
+Не деплоить дневную работу в `v1.3-amvera` в обход merge с `v1.3`, кроме
+Amvera-only yaml/start scripts.
 
 ---
 

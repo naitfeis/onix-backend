@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sanitizeReviewText } from '../src/sanitize-user-text';
+import { sanitizeReviewText, sanitizeChatText } from '../src/sanitize-user-text';
 
 test('sanitizeReviewText strips HTML tags', () => {
   assert.equal(
@@ -18,4 +18,11 @@ test('sanitizeReviewText neutralizes javascript: URLs', () => {
 
 test('sanitizeReviewText returns undefined for empty leftover', () => {
   assert.equal(sanitizeReviewText('   <b></b>  '), undefined);
+});
+
+test('sanitizeChatText strips tags and caps length', () => {
+  assert.equal(sanitizeChatText('<script>x</script>привет'), 'xпривет');
+  assert.equal(sanitizeChatText('javascript:alert(1)').includes('javascript:'), false);
+  assert.equal(sanitizeChatText('a'.repeat(5000), 2000).length, 2000);
+  assert.equal(sanitizeChatText('   '), '');
 });

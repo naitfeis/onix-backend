@@ -1,4 +1,5 @@
 import { Body, Controller, Headers, Logger, Post } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { Public } from '../common';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import { MfaStepUpService } from '../mfa/mfa-step-up.service';
@@ -37,6 +38,34 @@ type TelegramUpdate = {
   };
 };
 
+/** Log-safe webhook summary — never includes message body or login payload. */
+export function summarizeTelegramWebhookForLog(
+  update: TelegramUpdate | undefined,
+  secretPresent: boolean,
+): Record<string, string | number | boolean | null> {
+  const text = update?.message?.text;
+  const data = update?.callback_query?.data;
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+  let startKind: string | null = null;
+  if (trimmed.startsWith('/start')) {
+    if (trimmed === '/start') startKind = 'bare';
+    else if (trimmed.startsWith('/start login_')) startKind = 'login';
+    else if (trimmed.startsWith('/start mfa_')) startKind = 'mfa';
+    else startKind = 'other';
+  }
+  const callbackKind = typeof data === 'string' ? (data.split(':')[0] ?? '').slice(0, 40) : null;
+  return {
+    msg: '[Bot] webhook hit',
+    updateId: update?.update_id ?? null,
+    hasMessage: Boolean(update?.message),
+    hasCallback: Boolean(update?.callback_query),
+    textLen: typeof text === 'string' ? text.length : 0,
+    startKind,
+    callbackKind: callbackKind || null,
+    secretHeaderPresent: secretPresent,
+  };
+}
+
 /**
  * Telegram Bot webhook — LoginChallenge UX + MFA step-up (Slice 3).
  */
@@ -55,24 +84,23 @@ export class BotWebhookHandler {
     @Headers('x-telegram-bot-api-secret-token') secret: string | undefined,
     @Body() update: TelegramUpdate,
   ) {
-    this.logger.log(JSON.stringify({
-      msg: '[Bot] webhook hit',
-      updateId: update?.update_id ?? null,
-      hasMessage: Boolean(update?.message),
-      hasCallback: Boolean(update?.callback_query),
-      messageText: update?.message?.text ?? null,
-      callbackData: update?.callback_query?.data ?? null,
-      secretHeaderPresent: Boolean(secret),
-    }));
+    this.logger.log(JSON.stringify(summarizeTelegramWebhookForLog(update, Boolean(secret))));
 
     assertWebhookSecret(secret);
     this.logger.log('[Bot] webhook secret check passed');
 
     const start = update.message?.text?.trim();
     if (start?.startsWith('/start')) {
+      const startKind = start === '/start'
+        ? 'bare'
+        : start.startsWith('/start login_')
+          ? 'login'
+          : start.startsWith('/start mfa_')
+            ? 'mfa'
+            : 'other';
       this.logger.log(JSON.stringify({
         msg: '[Bot] received /start',
-        rawText: start,
+        startKind,
         telegramId: update.message?.from?.id ?? null,
         chatId: update.message?.chat?.id ?? null,
       }));
@@ -80,7 +108,7 @@ export class BotWebhookHandler {
       if (!start.startsWith('/start ')) {
         this.logger.warn(JSON.stringify({
           msg: '[Bot] /start format not matched — expected "/start login_<id>" or "/start mfa_<id>"',
-          rawText: start,
+          startKind,
         }));
         return { ok: true, ignored: true, reason: 'start_format' };
       }
@@ -444,9 +472,19 @@ function assertWebhookSecret(secret: string | undefined): void {
     }
     return; // local / test only
   }
-  if (secret !== expected) {
+  if (!secret || !timingSafeEqualUtf8(secret, expected)) {
     throw new AuthPlatformError('AUTH_PROVIDER_REJECTED', 'Invalid Telegram webhook secret.');
   }
+}
+
+function timingSafeEqualUtf8(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) {
+    timingSafeEqual(left, left);
+    return false;
+  }
+  return timingSafeEqual(left, right);
 }
 
 function userFacingChallengeError(error: AuthPlatformError): string {

@@ -208,8 +208,8 @@ export class AvatarService {
         // Users who started the bot often expose chat photo even when profile album is empty/private.
         const viaChat = await this.resolvePhotoFileUrlViaGetChat(token, userId);
         if (viaChat) return viaChat;
-        this.logger.warn(
-          `bot avatar photos empty user=${telegramId.toString()} ok=${String(photosJson.ok)} ${photosJson.description ?? ''}`,
+        this.logger.debug(
+          `bot avatar photos empty user=${telegramId.toString()} ok=${String(photosJson.ok)}`,
         );
         return null;
       }

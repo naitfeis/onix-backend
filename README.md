@@ -2,6 +2,13 @@
 
 NestJS API for the ONIX marketplace. PostgreSQL is accessed only through Prisma; money is stored as `BigInt` kopecks and serialized as decimal strings.
 
+**Production (2026-09):** public origin is **Amvera Moscow** at
+[`https://www.onixtg.shop`](https://www.onixtg.shop) (SPA + API, same origin).
+Render `onix-api-47tj` is staging only. Agent/ops map:
+[docs/architecture/ONIX-AMVERA-PRODUCTION.md](docs/architecture/ONIX-AMVERA-PRODUCTION.md),
+[docs/Documentation/Onix-Notes.md](docs/Documentation/Onix-Notes.md) §0.1.
+Deploy Moscow from git branch `v1.3-amvera`.
+
 ## Configuration
 
 Required environment variables:
@@ -18,12 +25,18 @@ Required environment variables:
 
 ## Authentication
 
-Both login methods resolve the same `User` by verified Telegram ID:
+Website (canonical `https://www.onixtg.shop`): Telegram **bot** LoginChallenge
+(`POST /api/v2/auth/telegram-bot/start` → webhook `POST /api/telegram/webhook` →
+`complete`). Google: `POST /api/v2/auth/google` after GIS; Client ID from
+`GET /api/v2/auth/public-config` (`GOOGLE_CLIENT_ID`, no secret).
+
+Mini App / widget still resolve `User` by verified Telegram ID:
 
 - `POST /api/auth/telegram-mini` with `{ "initData": "..." }`
-- `POST /api/auth/telegram-login` with the exact Telegram Login Widget payload
+- `POST /api/auth/telegram-login` with the Telegram Login Widget payload
 
-They return a signed Bearer token. All other API routes except `/api/health/live` require `Authorization: Bearer <token>`. User identity is never accepted from body or query parameters.
+Website session uses in-memory access + HttpOnly `__Host-onix_rt`. Do not send
+`Authorization` identity from the client body. Health: `GET /api/health/live`.
 
 ## API
 
@@ -86,4 +99,6 @@ npx prisma migrate resolve --applied 20260712140000_onix_backend
 npx prisma migrate deploy
 ```
 
-Run both commands with the same `DATABASE_URL` used by the Render service. Never mark a partially applied baseline migration as complete.
+Run both commands with the same `DATABASE_URL` used by the API (Amvera production
+or Render staging). Amvera runs `prisma migrate deploy` at **start**, not build.
+Never mark a partially applied baseline migration as complete.

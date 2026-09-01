@@ -14,6 +14,11 @@
 > - Do not create duplicate modules because an old document mentions a different location.
 > - Search the current repository before changing an existing feature.
 > - The repository contains generated/build output and IDE metadata; these are not primary source code.
+>
+> PRODUCTION (2026-09): public site is Amvera Moscow at https://www.onixtg.shop.
+> Full ops map: `docs/architecture/ONIX-AMVERA-PRODUCTION.md` and
+> `docs/Documentation/Onix-Notes.md` §0.1. Do not follow Vercel→Render webhook
+> URLs in older architecture reports.
 
 ---
 
@@ -116,11 +121,11 @@ The following is the CURRENT repository inventory. It is intentionally grouped f
 package.json
 package-lock.json
 prisma.config.ts
-render.yaml
+amvera.yaml / amvera.yml     # Moscow deploy (Amvera reads this; do not overwrite via empty UI form)
+render.yaml                  # Render staging only
 README.md
 tsconfig.json
-tsconfig.tests.tsbuildinfo
-tsconfig.tsbuildinfo
+scripts/start-amvera.mjs     # migrate deploy + start (DATABASE_URL required at runtime)
 ```
 
 Additional root artifacts may exist for temporary diagnostics/build output. Do not treat files such as `api_ready.tmp`, `build-out.txt`, `typecheck-out.txt`, `tsc-*.txt` as architectural source.
@@ -180,12 +185,14 @@ Database is critical infrastructure. Schema changes can affect backend, workers,
 
 ```text
 docs/
-├── architecture/
+├── architecture/          # includes ONIX-AMVERA-PRODUCTION.md
+├── Documentation/         # Onix-Notes.md, PS_Onix-FileStructure.md
 ├── audit/
 └── learning/
 ```
 
 `docs/architecture/` contains architecture and operational decisions, including:
+- **current prod:** `ONIX-AMVERA-PRODUCTION.md`
 - auth;
 - identity;
 - privacy/security;
@@ -463,6 +470,7 @@ safe-deal-platform/src/auth-v2/
 ├── debug-session.controller.ts
 ├── device-trust.service.ts
 ├── dual-access.service.ts
+├── google-login.verifier.ts
 ├── identity.service.ts
 ├── rbac.service.ts
 ├── refresh-cookie.ts
@@ -736,9 +744,13 @@ safe-deal-platform/src/chat-attachments/
 ```
 
 Purpose:
-Attachment validation/storage.
+Chat file attachments via Cloudflare R2 (`r2-storage.service.ts`).
 
-Security checks must happen server-side.
+Needs runtime `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`,
+`R2_BUCKET`. Without them, upload-intent returns unavailable.
+
+Browser presigned PUT targets Cloudflare — may fail from RU. Magic-byte and
+size checks stay on the Nest complete path.
 
 ---
 
@@ -1094,9 +1106,36 @@ safe-deal-platform/test/risk-engine.slice2.test.ts
 Start:
 ```text
 safe-deal-platform/src/login-challenge/
+safe-deal-platform/src/login-challenge/bot-webhook.handler.ts
 safe-deal-platform/src/auth-v2/telegram-login.verifier.ts
 safe-deal-platform/src/auth-v2/auth-orchestrator.service.ts
 onix-frontend/src/auth/botLogin.ts
+onix-frontend/src/screens/AuthGate.tsx
+docs/architecture/ONIX-AMVERA-PRODUCTION.md
+```
+
+Bare `/start` is ignored. Webhook is POST-only on www.onixtg.shop. Confirm
+`getWebhookInfo` + Amvera logs `[Bot] webhook hit`.
+
+### "Исправь Google login"
+Start:
+```text
+safe-deal-platform/src/auth-v2/google-login.verifier.ts
+safe-deal-platform/src/auth-v2/auth-v2.controller.ts   # GET public-config, POST google
+onix-frontend/src/screens/AuthGate.tsx
+onix-frontend/src/auth/v2AuthApi.ts
+```
+
+Amvera: `GOOGLE_CLIENT_ID` only (no Client Secret). SPA reads
+`GET /api/v2/auth/public-config` because Vite env is not baked on Amvera builds.
+
+### "Прод / Amvera / DNS / сертификат"
+Start:
+```text
+docs/architecture/ONIX-AMVERA-PRODUCTION.md
+docs/Documentation/Onix-Notes.md          # §0.1
+amvera.yaml
+scripts/start-amvera.mjs
 ```
 
 ### "Исправь чат"

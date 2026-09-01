@@ -9,7 +9,7 @@ import {
 } from 'class-validator';
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
-import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { createDomainNotification, deliverTelegramAfterCommit } from './domain-notify';
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
@@ -20,9 +20,10 @@ import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
-import { sanitizeReviewText } from './sanitize-user-text';
+import { sanitizeChatText, sanitizeReviewText } from './sanitize-user-text';
 import { hideReviewsForOrder, recomputeSellerRating } from './marketplace/review-aggregate';
 import { canLeaveReview } from './marketplace/review-policy';
+import { withSerializableTransaction } from './database/transaction-retry';
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
 class MessageDto { @IsString() @Length(1, 2000) text!: string; }
 class MessagesQuery {
@@ -56,7 +57,6 @@ class DeleteMessageDto {
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
 }
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 const SENDER_SELECT = {
   id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
 } as const;
@@ -268,7 +268,7 @@ export class ChatService {
       );
     }
 
-    const chat = await this.prisma.$transaction(async (tx) => {
+    const chat = await withSerializableTransaction(this.prisma, async (tx) => {
       // Creator first (earlier createdAt) so addMembers owner check is stable.
       const created = await tx.chat.create({
         data: {
@@ -291,7 +291,7 @@ export class ChatService {
         },
       });
       return created;
-    }, SERIALIZABLE);
+    });
 
     return {
       id: chat.id,
@@ -310,9 +310,9 @@ export class ChatService {
     const pairKey = pairChatKey(user.id, target.id);
     let chat: { id: string };
     try {
-      chat = await this.prisma.$transaction(
+      chat = await withSerializableTransaction(
+        this.prisma,
         (tx) => ensurePairChat(tx, user.id, target.id),
-        SERIALIZABLE,
       );
     } catch (error) {
       if (
@@ -390,7 +390,7 @@ export class ChatService {
 
   async send(user: AuthUser, chatId: string, text: string) {
     await this.member(user.id, chatId);
-    const body = text.trim();
+    const body = sanitizeChatText(text, 2000);
     if (!body) throw new BadRequestException('Сообщение не может быть пустым.');
 
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
@@ -421,31 +421,27 @@ export class ChatService {
       lastReadAt: m.lastReadAt,
     }));
 
-    const message = await this.prisma.$transaction(async (tx) => {
+    const { message, notifyIds } = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: { chatId, senderId: user.id, kind: 'USER', text: body },
         include: { sender: { select: SENDER_SELECT } },
       });
       await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+      const notifyIds: bigint[] = [];
       for (const other of others) {
-        await createDomainNotification(tx, {
+        const note = await createDomainNotification(tx, {
           userId: other.userId,
           type: 'NEW_MESSAGE',
           title: 'Новое сообщение',
           body: body.slice(0, 160),
           data: { chatId },
         });
+        notifyIds.push(note.id);
       }
-      return created;
+      return { message: created, notifyIds };
     });
 
-    const peers = await this.prisma.user.findMany({
-      where: { id: { in: others.map((o) => o.userId) } },
-      select: { telegramId: true },
-    });
-    for (const peer of peers) {
-      void pushTelegramToChatId(peer.telegramId, 'Новое сообщение', body.slice(0, 200));
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
 
     this.fanoutChatMessage(
       chatId,
@@ -784,7 +780,7 @@ export class ReviewService {
 
   async create(user: AuthUser, orderId: bigint, dto: ReviewDto) {
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await withSerializableTransaction(this.prisma, async (tx) => {
         const order = await tx.order.findUnique({ where: { id: orderId } });
         if (!order || !canLeaveReview({
           status: order.status,
@@ -815,7 +811,7 @@ export class ReviewService {
           },
         });
         await recomputeSellerRating(tx as never, subjectId);
-        await createDomainNotification(tx, {
+        const note = await createDomainNotification(tx, {
           userId: subjectId,
           type: 'NEW_REVIEW',
           title: 'Оставлен отзыв',
@@ -826,16 +822,10 @@ export class ReviewService {
           where: { id: review.id },
       include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
     });
-        return { dto: reviewDto(row), subjectId };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
-
-      const subject = await this.prisma.user.findUnique({
-        where: { id: result.subjectId },
-        select: { telegramId: true },
+        return { dto: reviewDto(row), notifyIds: [note.id] };
       });
-      if (subject) {
-        void pushTelegramToChatId(subject.telegramId, 'Оставлен отзыв', `Оценка: ${dto.rating}/5`);
-      }
+
+      deliverTelegramAfterCommit(this.prisma, result.notifyIds);
       return result.dto;
     } catch (error) {
       if (

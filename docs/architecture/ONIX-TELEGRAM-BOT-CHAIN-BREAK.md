@@ -74,7 +74,8 @@ If `sendMessage` failed, there is no inline keyboard → no callback → `confir
 # 1) Where does Telegram send updates?
 curl "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo"
 
-# Must be: https://<your-api-host>/api/telegram/webhook
+# Must be: https://www.onixtg.shop/api/telegram/webhook
+# (2026-09 Amvera). Staging-only leftover: onix-api-47tj.onrender.com — do not use for the bot.
 
 # 2) After a login attempt, grep API logs:
 # [Bot] webhook hit

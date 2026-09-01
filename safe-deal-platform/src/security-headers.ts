@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 
 /**
- * Security headers for same-origin SPA + API on Render.
+ * Security headers for same-origin SPA + API (Amvera production / Render staging).
  * CSP allows Telegram Login Widget / oauth frames; avatars are same-origin only.
  */
 export function createSecurityMiddleware(): (
@@ -14,6 +14,9 @@ export function createSecurityMiddleware(): (
   return helmet({
     // SPA + Nest on one origin — no cross-origin embed needed.
     crossOriginEmbedderPolicy: false,
+    // GIS popup (accounts.google.com/gsi/transform) needs to postMessage the id_token
+    // back to this origin. Helmet's default `same-origin` leaves a white Edge popup.
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     crossOriginResourcePolicy: { policy: 'same-origin' },
     contentSecurityPolicy: {
       useDefaults: true,
@@ -22,7 +25,11 @@ export function createSecurityMiddleware(): (
         baseUri: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
-        formAction: ["'self'", 'https://oauth.telegram.org'],
+        formAction: [
+          "'self'",
+          'https://oauth.telegram.org',
+          'https://accounts.google.com',
+        ],
         scriptSrc: [
           "'self'",
           'https://telegram.org',
@@ -31,9 +38,14 @@ export function createSecurityMiddleware(): (
           'https://www.gstatic.com',
         ],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://www.gstatic.com', 'https://accounts.google.com'],
         fontSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'", 'wss:', 'ws:', 'https://accounts.google.com'],
+        connectSrc: [
+          "'self'",
+          'wss:',
+          'ws:',
+          'https://accounts.google.com',
+        ],
         frameSrc: [
           'https://oauth.telegram.org',
           'https://telegram.org',
@@ -64,4 +76,22 @@ export function resolveCorsOrigins(): string[] {
     'https://www.onixtg.shop',
     'https://onixtg.shop',
   ];
+}
+
+/**
+ * __Host- cookies are host-bound. Apex and www are different sessions.
+ * ACME and Amvera preview hosts must not be redirected.
+ */
+export function canonicalWwwHostMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const host = String(req.headers.host ?? '').split(':')[0]?.toLowerCase() ?? '';
+  if (host !== 'onixtg.shop') {
+    next();
+    return;
+  }
+  const path = (req.originalUrl ?? req.url ?? '/').split('?')[0] || '/';
+  if (path.startsWith('/.well-known/')) {
+    next();
+    return;
+  }
+  res.redirect(301, `https://www.onixtg.shop${req.originalUrl || '/'}`);
 }

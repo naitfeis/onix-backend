@@ -399,9 +399,12 @@ model Notification {
   data      Json?
   readAt    DateTime?
   createdAt DateTime         @default(now())
+  /** Null = Telegram outbox pending. Set after Bot API success or when user has no telegramId. */
+  telegramPushedAt DateTime?
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+  @@index([telegramPushedAt, createdAt])
 }
 
 model Review {

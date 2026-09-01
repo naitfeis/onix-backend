@@ -44,6 +44,7 @@ test('assessSecrets reports names only — never embeds env values', () => {
     DEVICE_HMAC_SECRET: secret,
     JWT_SECRET: secret,
     BOT_TOKEN: '123456789:AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQR',
+    TELEGRAM_WEBHOOK_SECRET: 'webhook-secret',
   };
   const items = assessSecrets(env, 'production');
   const line = formatSecretsInventoryLine(items);
@@ -65,6 +66,7 @@ test('assessSecrets flags missing DEVICE_HMAC_SECRET as required in production',
       AUTH_ED25519_CURRENT_PUBLIC_PEM: 'u',
       JWT_SECRET: 'x'.repeat(32),
       BOT_TOKEN: '1:token',
+      TELEGRAM_WEBHOOK_SECRET: 'wh',
     },
     'production',
   );

@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { lockUsersInIdOrder } from '../../database/money-locks';
+import { withSerializableTransaction } from '../../database/transaction-retry';
 import { PrismaService } from '../../prisma.service';
 import { LockService } from '../../economy/wallet/lock.service';
-
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 /**
  * Global sweep for expired ACTIVE deposit locks.
@@ -25,9 +24,10 @@ export class DepositUnlockJob {
     });
     let processed = 0;
     for (const row of due) {
-      await this.prisma.$transaction(async (tx) => {
+      await withSerializableTransaction(this.prisma, async (tx) => {
+        await lockUsersInIdOrder(tx, [row.userId]);
         await this.locks.releaseLock(tx, row.id);
-      }, SERIALIZABLE);
+      });
       processed += 1;
     }
     return processed;

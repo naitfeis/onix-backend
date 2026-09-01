@@ -9,6 +9,7 @@ import { GoogleLoginDto, LinkTelegramDto, LoginDto, RefreshDto } from './auth-v2
 import { AuthV2Guard, type AuthV2RequestUser } from './auth-v2.guards';
 import {
   assertCsrfHeader,
+  assertGoogleGsiCsrf,
   buildClearRefreshCookieHeader,
   buildRefreshCookieHeader,
   readRefreshTokenFromCookie,
@@ -127,6 +128,51 @@ export class AuthV2Controller {
         rememberMe: result.session.rememberMe,
       },
     };
+  }
+
+  /**
+   * GIS redirect return. Google POSTs credential + g_csrf_token (not JSON).
+   * Sets the refresh cookie and 303s to `/` so the SPA session probe picks it up.
+   * Add this URL under Authorized redirect URIs in Google Cloud Console.
+   */
+  @Post('google/callback')
+  @Header('Cache-Control', 'no-store')
+  async loginGoogleRedirect(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Req() req: {
+      ip?: string;
+      body?: Record<string, unknown>;
+      headers: Record<string, string | string[] | undefined>;
+      socket?: { remoteAddress?: string };
+    },
+    @Res() res: Response,
+  ) {
+    try {
+      const clientIp = resolveClientIp({ ip: req.ip, headers: req.headers ?? headers, socket: req.socket });
+      await this.rateLimit.assert(`auth:v2:google:${clientIp ?? 'unknown'}`, 20, 60_000);
+      const credential = typeof req.body?.credential === 'string' ? req.body.credential : '';
+      const csrf = typeof req.body?.g_csrf_token === 'string' ? req.body.g_csrf_token : undefined;
+      if (!credential) {
+        throw new AuthPlatformError('AUTH_INVALID_TOKEN', 'Google token is invalid.');
+      }
+      assertGoogleGsiCsrf(headerString(headers, 'cookie'), csrf);
+      const result = await this.orchestrator.loginWithGoogle({
+        idToken: credential,
+        rememberMe: true,
+        device: {
+          userAgent: headerString(headers, 'user-agent'),
+          ipAddress: clientIp ?? undefined,
+        },
+      });
+      res.setHeader('Set-Cookie', buildRefreshCookieHeader(result.refreshToken, result.refreshMaxAgeSeconds));
+      res.redirect(303, '/');
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        msg: 'auth_v2_google_redirect_failed',
+        code: error instanceof AuthPlatformError ? error.code : 'AUTH_INTERNAL',
+      }));
+      res.redirect(303, '/?auth_error=google');
+    }
   }
 
   /** Public Client ID for Google GIS. Safe to expose; Amvera cannot bake VITE_* at build. */

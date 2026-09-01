@@ -1,7 +1,14 @@
 /**
- * Resolve the real client IP behind Cloudflare / Render / Vite proxies.
+ * Resolve the real client IP behind a reverse proxy.
  *
- * Prefer CDN headers when present; never trust a client-supplied body field.
+ * After the 2026-09 Amvera cutover the browser hits Nest without Cloudflare.
+ * CDN headers (`CF-Connecting-IP`, `True-Client-IP`, `X-Real-IP`, leftmost
+ * `X-Forwarded-For`) are then attacker-controlled — trusting them bypasses
+ * rate limits, admin IP allowlists, and risk scoring.
+ *
+ * Default: trust those headers (historical Render + Cloudflare orange).
+ * Amvera (`AMVERA=1`) or `TRUST_CDN_HEADERS=false`: use Express `req.ip`
+ * (with `trust proxy` 1 at the ingress hop).
  */
 
 export type ClientIpRequestLike = {
@@ -41,6 +48,16 @@ export function isLoopbackIp(ip: string | null | undefined): boolean {
   return LOOPBACK.has(n.toLowerCase()) || n.startsWith('127.');
 }
 
+/** Whether CF / True-Client-IP / X-Real-IP / leftmost XFF may be used. */
+export function cdnClientHeadersTrusted(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.TRUST_CDN_HEADERS?.trim().toLowerCase();
+  if (raw === '1' || raw === 'true') return true;
+  if (raw === '0' || raw === 'false') return false;
+  const amvera = env.AMVERA?.trim();
+  if (amvera === '1' || amvera?.toLowerCase() === 'true') return false;
+  return true;
+}
+
 function headerFirst(
   headers: Record<string, string | string[] | undefined> | undefined,
   name: string,
@@ -73,6 +90,11 @@ function isPrivateOrLocal(ip: string): boolean {
  * Returns null only when nothing usable is present.
  */
 export function resolveClientIp(req: ClientIpRequestLike): string | null {
+  const expressIp = normalizeIp(req.ip) ?? normalizeIp(req.socket?.remoteAddress);
+  if (!cdnClientHeadersTrusted()) {
+    return expressIp;
+  }
+
   const headers = req.headers ?? {};
 
   const cf = normalizeIp(headerFirst(headers, 'cf-connecting-ip'));
@@ -94,7 +116,6 @@ export function resolveClientIp(req: ClientIpRequestLike): string | null {
     if (chain[0]) return chain[0];
   }
 
-  const expressIp = normalizeIp(req.ip) ?? normalizeIp(req.socket?.remoteAddress);
   return expressIp;
 }
 

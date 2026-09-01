@@ -58,3 +58,26 @@ test('formatClientIpForPrompt marks loopback', () => {
   assert.equal(formatClientIpForPrompt('185.1.2.3'), '185.1.2.3');
   assert.equal(formatClientIpForPrompt(null), 'скрыт');
 });
+
+test('Amvera ignores spoofable CDN / XFF headers', () => {
+  const prevA = process.env.AMVERA;
+  const prevT = process.env.TRUST_CDN_HEADERS;
+  process.env.AMVERA = '1';
+  delete process.env.TRUST_CDN_HEADERS;
+  try {
+    const ip = resolveClientIp({
+      ip: '203.0.113.9',
+      headers: {
+        'cf-connecting-ip': '8.8.8.8',
+        'x-real-ip': '1.1.1.1',
+        'x-forwarded-for': '9.9.9.9, 10.0.0.1',
+      },
+    });
+    assert.equal(ip, '203.0.113.9');
+  } finally {
+    if (prevA === undefined) delete process.env.AMVERA;
+    else process.env.AMVERA = prevA;
+    if (prevT === undefined) delete process.env.TRUST_CDN_HEADERS;
+    else process.env.TRUST_CDN_HEADERS = prevT;
+  }
+});

@@ -29,7 +29,7 @@ const SECRET_SPECS: readonly SecretSpec[] = [
   { name: 'JWT_SECRET', required: true, domain: 'legacy_jwt' },
   { name: 'PRODUCT_DELIVERY_KEY', required: false, domain: 'delivery' },
   { name: 'BOT_TOKEN', required: true, domain: 'telegram' },
-  { name: 'TELEGRAM_WEBHOOK_SECRET', required: false, domain: 'telegram' },
+  { name: 'TELEGRAM_WEBHOOK_SECRET', required: 'production', domain: 'telegram' },
   { name: 'ADMIN_IP_ALLOWLIST', required: false, domain: 'admin' },
   { name: 'ADMIN_BOOTSTRAP_EMAIL', required: false, domain: 'admin' },
   { name: 'ADMIN_BOOTSTRAP_PASSWORD', required: false, domain: 'admin' },

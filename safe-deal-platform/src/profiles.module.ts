@@ -3,8 +3,9 @@ import {
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { Prisma } from '@prisma/client';
 import { AuthRequest, AuthUser, CurrentUser } from './common';
+import { withSerializableTransaction } from './database/transaction-retry';
+import { lockUsersInIdOrder } from './database/money-locks';
 import { EconomyModule } from './economy/economy.module';
 import { buildPublicTrustCard } from './economy/trust/trust-card';
 import { LockService } from './economy/wallet/lock.service';
@@ -28,7 +29,6 @@ class LedgerQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
 }
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 /** Skip DB/WS fan-out if the same user already pinged within this window. */
 const PRESENCE_MIN_MS = 45_000;
 const lastPresenceWriteAt = new Map<string, { at: number; lastOnline: string }>();
@@ -58,9 +58,10 @@ export class ProfilesService {
       }),
     ]);
     if (dueLock) {
-      await this.prisma.$transaction(async (tx) => {
+      await withSerializableTransaction(this.prisma, async (tx) => {
+        await lockUsersInIdOrder(tx, [user.id]);
         await this.locks.releaseExpiredForUser(tx, user.id);
-      }, SERIALIZABLE);
+      });
     }
 
     const [profile, ledger] = await Promise.all([

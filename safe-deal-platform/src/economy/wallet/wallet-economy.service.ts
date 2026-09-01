@@ -1,8 +1,9 @@
 import {
   BadRequestException, ConflictException, Injectable, NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { AuthUser } from '../../common';
+import { lockUsersInIdOrder } from '../../database/money-locks';
+import { withSerializableTransaction } from '../../database/transaction-retry';
 import { PrismaService } from '../../prisma.service';
 import { requireUserByOnixId } from '../../onix-id-lookup';
 import { BalanceService } from './balance.service';
@@ -12,8 +13,6 @@ import { LockService } from './lock.service';
 import { TrustService } from '../trust/trust.service';
 import { assertNoTrustScore, buildPublicTrustCard } from '../trust/trust-card';
 import { ProSubscriptionService } from '../pro/pro.service';
-
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 @Injectable()
 export class WalletEconomyService {
@@ -28,9 +27,10 @@ export class WalletEconomyService {
 
   /** Owner deposit view — runs lazy unlock first. */
   async getDepositWallet(user: AuthUser) {
-    await this.prisma.$transaction(async (tx) => {
+    await withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [user.id]);
       await this.locks.releaseExpiredForUser(tx, user.id);
-    }, SERIALIZABLE);
+    });
     const snap = await this.prisma.$transaction((tx) => this.deposit.getSnapshot(tx, user.id));
     return {
       availableCents: snap.availableCents.toString(),
@@ -57,9 +57,10 @@ export class WalletEconomyService {
   }
 
   async listLocks(user: AuthUser) {
-    await this.prisma.$transaction(async (tx) => {
+    await withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [user.id]);
       await this.locks.releaseExpiredForUser(tx, user.id);
-    }, SERIALIZABLE);
+    });
     const rows = await this.prisma.depositLock.findMany({
       where: { userId: user.id, status: { in: ['ACTIVE', 'HELD_DISPUTE'] } },
       orderBy: { unlockAt: 'asc' },
@@ -79,7 +80,8 @@ export class WalletEconomyService {
   async fundDepositFromBalance(user: AuthUser, amountCents: number, idempotencyKey: string) {
     if (amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения залога — 1 ₽.');
     const amount = BigInt(amountCents);
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [user.id]);
       await this.locks.releaseExpiredForUser(tx, user.id);
       const existing = await tx.depositLedgerEntry.findUnique({ where: { idempotencyKey } });
       if (existing) {
@@ -118,14 +120,15 @@ export class WalletEconomyService {
         depositEntryId: entry.id.toString(),
         amountCents: amount.toString(),
       };
-    }, SERIALIZABLE);
+    });
   }
 
   /** Deposit available → main balance. Locked deposit cannot be withdrawn. */
   async withdrawDeposit(user: AuthUser, amountCents: number, idempotencyKey: string) {
     if (amountCents < 100) throw new BadRequestException('Минимальная сумма вывода залога — 1 ₽.');
     const amount = BigInt(amountCents);
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [user.id]);
       await this.locks.releaseExpiredForUser(tx, user.id);
       const existing = await tx.depositLedgerEntry.findUnique({ where: { idempotencyKey } });
       if (existing) {
@@ -166,7 +169,7 @@ export class WalletEconomyService {
         depositEntryId: entry.id.toString(),
         amountCents: amount.toString(),
       };
-    }, SERIALIZABLE);
+    });
   }
 
   async getPublicTrustCard(onixId: string) {

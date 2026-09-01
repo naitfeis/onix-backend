@@ -1,8 +1,14 @@
-# Chat Attachments v1 — NEXT STAGE (not active)
+# Chat Attachments v1
 
-**Status:** parked. Do not enable until Cloudflare R2 is provisioned and core ONIX chat is stable.
+**Status (2026-09):** code lives in `safe-deal-platform/src/chat-attachments/`.
+Uploads work only when Amvera/Render has `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. Otherwise API returns that uploads are
+unavailable. Browser PUT to R2 is Cloudflare — may fail from Russia.
 
-Draft implementation lives in-repo but is **not wired**:
+Older note (kept for history): the feature was parked until R2 existed; do not
+treat the next paragraph as current wiring.
+
+Draft implementation (historical):
 
 - `safe-deal-platform/src/chat-attachments/` (excluded from `tsc`)
 - `safe-deal-platform/src/workers/jobs/chat-attachment-cleanup.job.ts` (excluded)

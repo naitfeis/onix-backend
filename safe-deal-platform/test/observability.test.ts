@@ -22,3 +22,19 @@ test('structuredLog: does not throw and redacts bearer tokens in fields via slog
   structuredLog.info('test event', { route: '/api/wallet/ledger', status: 200 });
   structuredLog.warn('test warn', { requestId: 'abc' });
 });
+
+test('structuredLog redacts secret-shaped field values and the JSON line', () => {
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = ((msg?: unknown) => { lines.push(String(msg)); }) as typeof console.log;
+  try {
+    structuredLog.info('auth dump', {
+      authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.e30.signaturepaddingvalue',
+    });
+  } finally {
+    console.log = orig;
+  }
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].includes('eyJhbGciOiJIUzI1NiJ9'), false);
+  assert.match(lines[0], /\[REDACTED\]/);
+});

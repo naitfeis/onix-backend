@@ -119,6 +119,13 @@ function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => 
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_error') === 'google') {
+      setError('Google вход не выполнен. Закройте пустое окно Google и нажмите кнопку ещё раз.');
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     void getAuthV2PublicConfig()
       .then((cfg) => {
@@ -146,6 +153,14 @@ function GoogleLoginButton({ onAuthenticated, onBan }: { onAuthenticated: () => 
       if (!google?.accounts?.id) return;
       google.accounts.id.initialize({
         client_id: clientId,
+        // Edge GIS popup often lands on /gsi/transform blank unless COOP allows popups.
+        // Redirect avoids that window entirely (needs Authorized redirect URI in Google Console).
+        ux_mode: 'redirect',
+        login_uri: `${window.location.origin}/api/v2/auth/google/callback`,
+        use_fedcm_for_button: false,
+        use_fedcm_for_prompt: false,
+        itp_support: true,
+        auto_select: false,
         callback: async (response: { credential?: string }) => {
           if (!response.credential) return;
           try {

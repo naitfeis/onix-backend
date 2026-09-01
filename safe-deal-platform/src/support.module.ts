@@ -4,7 +4,7 @@ import {
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
-import { createDomainNotification, pushTelegramToChatId } from './domain-notify';
+import { createDomainNotification, deliverTelegramAfterCommit, pushTelegramToChatId } from './domain-notify';
 import { invalidateArbitrationContextCache } from './dispute-card';
 import { PrismaService } from './prisma.service';
 
@@ -41,7 +41,8 @@ export class SupportService {
       throw new BadRequestException('По этой сделке уже открыт спор.');
     }
 
-    const ticket = await this.prisma.$transaction(async (tx) => {
+    const counterpartIds = [order.buyerId, order.sellerId].filter((id) => id !== user.id);
+    const { ticket, notifyIds } = await this.prisma.$transaction(async (tx) => {
       const chat = order.chatId
         ? { id: order.chatId }
         : await ensurePairChat(tx, order.buyerId, order.sellerId);
@@ -67,19 +68,21 @@ export class SupportService {
         },
       });
       await tx.chat.update({ where: { id: chat.id }, data: { updatedAt: new Date() } });
-      return created;
+      const ids: bigint[] = [];
+      for (const uid of counterpartIds) {
+        const note = await createDomainNotification(tx, {
+          userId: uid,
+          type: 'ORDER_UPDATE',
+          title: 'Открыт спор / поддержка',
+          body: `Заказ #${orderId}: обращение в поддержку`,
+          data: { orderId: orderId.toString(), ticketId: created.id },
+        });
+        ids.push(note.id);
+      }
+      return { ticket: created, notifyIds: ids };
     });
 
-    const counterpartIds = [order.buyerId, order.sellerId].filter((id) => id !== user.id);
-    for (const uid of counterpartIds) {
-      await createDomainNotification(this.prisma, {
-        userId: uid,
-        type: 'ORDER_UPDATE',
-        title: 'Открыт спор / поддержка',
-        body: `Заказ #${orderId}: обращение в поддержку`,
-        data: { orderId: orderId.toString(), ticketId: ticket.id },
-      });
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
     const adminTg = process.env.ADMIN_TELEGRAM_ID?.trim();
     if (adminTg && /^\d+$/.test(adminTg)) {
       void pushTelegramToChatId(

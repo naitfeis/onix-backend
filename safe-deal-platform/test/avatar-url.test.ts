@@ -26,6 +26,14 @@ test('isAllowedTelegramAvatarHost allowlist', () => {
   assert.equal(isAllowedTelegramAvatarHost('evil.example'), false);
 });
 
+test('assertSafeAvatarUrl allows Google profile photo hosts', () => {
+  assert.equal(
+    assertSafeAvatarUrl('https://lh3.googleusercontent.com/a/abc=s96-c')?.hostname,
+    'lh3.googleusercontent.com',
+  );
+  assert.equal(assertSafeAvatarUrl('https://evil.googleusercontent.com.attacker.test/x'), null);
+});
+
 test('assertSafeAvatarUrl blocks SSRF targets', () => {
   assert.equal(assertSafeAvatarUrl('https://t.me/i/userpic/320/x.jpg')?.hostname, 't.me');
   assert.equal(assertSafeAvatarUrl('http://t.me/x'), null);

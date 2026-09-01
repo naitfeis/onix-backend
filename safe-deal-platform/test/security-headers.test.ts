@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveCorsOrigins } from '../src/security-headers';
+import { canonicalWwwHostMiddleware, resolveCorsOrigins } from '../src/security-headers';
 
 test('resolveCorsOrigins excludes localhost in production by default', () => {
   const prevEnv = process.env.NODE_ENV;
@@ -30,4 +30,39 @@ test('resolveCorsOrigins honors explicit CORS_ORIGINS', () => {
     if (prevCors === undefined) delete process.env.CORS_ORIGINS;
     else process.env.CORS_ORIGINS = prevCors;
   }
+});
+
+test('canonicalWwwHostMiddleware 301s apex to www except ACME', () => {
+  const calls: string[] = [];
+  const res = {
+    redirect: (code: number, url: string) => { calls.push(`${code}:${url}`); },
+  };
+  let nexted = false;
+  canonicalWwwHostMiddleware(
+    { headers: { host: 'onixtg.shop' }, originalUrl: '/login', url: '/login' } as never,
+    res as never,
+    () => { nexted = true; },
+  );
+  assert.equal(nexted, false);
+  assert.deepEqual(calls, ['301:https://www.onixtg.shop/login']);
+
+  nexted = false;
+  canonicalWwwHostMiddleware(
+    {
+      headers: { host: 'onixtg.shop' },
+      originalUrl: '/.well-known/acme-challenge/x',
+      url: '/.well-known/acme-challenge/x',
+    } as never,
+    res as never,
+    () => { nexted = true; },
+  );
+  assert.equal(nexted, true);
+
+  nexted = false;
+  canonicalWwwHostMiddleware(
+    { headers: { host: 'www.onixtg.shop' }, originalUrl: '/', url: '/' } as never,
+    res as never,
+    () => { nexted = true; },
+  );
+  assert.equal(nexted, true);
 });

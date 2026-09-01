@@ -40,6 +40,16 @@ export function isAllowedTelegramAvatarHost(hostname: string): boolean {
   );
 }
 
+/** Google profile photos (GIS `picture`) — lh3/lh4/…googleusercontent.com only. */
+export function isAllowedGoogleAvatarHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com');
+}
+
+export function isAllowedAvatarHost(hostname: string): boolean {
+  return isAllowedTelegramAvatarHost(hostname) || isAllowedGoogleAvatarHost(hostname);
+}
+
 /** Reject private / link-local / weird hosts even if somehow allowlisted later. */
 export function isBlockedAvatarIpLiteral(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
@@ -62,6 +72,6 @@ export function assertSafeAvatarUrl(raw: string): URL | null {
   if (parsed.protocol !== 'https:') return null;
   if (parsed.username || parsed.password) return null;
   if (isBlockedAvatarIpLiteral(parsed.hostname)) return null;
-  if (!isAllowedTelegramAvatarHost(parsed.hostname)) return null;
+  if (!isAllowedAvatarHost(parsed.hostname)) return null;
   return parsed;
 }

@@ -7,12 +7,13 @@ import {
 import { AttachmentStatus, MessageContentType, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../common';
-import { createDomainNotification, pushTelegramToChatId } from '../domain-notify';
+import { createDomainNotification, deliverTelegramAfterCommit } from '../domain-notify';
 import { publicDisplayName } from '../public-username';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
 import { RealtimeBus } from '../realtime/realtime-bus.service';
 import { messageDto } from '../response';
+import { sanitizeChatText } from '../sanitize-user-text';
 import {
   ALLOWED_MIME,
   attachmentTierForUser,
@@ -174,7 +175,10 @@ export class ChatAttachmentsService {
     }
 
     const contentType = contentTypeForMime(detected) as MessageContentType;
-    const text = (caption?.trim() || (contentType === 'FILE' ? attachment.originalName : '')).slice(0, 4500);
+    const text = sanitizeChatText(
+      caption?.trim() || (contentType === 'FILE' ? attachment.originalName : ''),
+      4500,
+    );
 
     const others = await this.prisma.chatMember.findMany({
       where: { chatId, userId: { not: user.id } },
@@ -185,6 +189,7 @@ export class ChatAttachmentsService {
     const memberReads = await this.memberReads(chatId);
 
     let message;
+    let notifyIds: bigint[] = [];
     try {
       message = await this.prisma.$transaction(async (tx) => {
         const fresh = await tx.chatAttachment.findUnique({ where: { id: attachment.id } });
@@ -228,15 +233,18 @@ export class ChatAttachmentsService {
 
         await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 
+        const ids: bigint[] = [];
         for (const other of others) {
-          await createDomainNotification(tx, {
+          const note = await createDomainNotification(tx, {
             userId: other.userId,
             type: 'NEW_MESSAGE',
             title: 'Новое сообщение',
             body: (text || (contentType === 'IMAGE' ? 'Изображение' : `Файл: ${attachment.originalName}`)).slice(0, 160),
             data: { chatId },
           });
+          ids.push(note.id);
         }
+        notifyIds = ids;
 
         return { ...created, attachment: linked };
       });
@@ -258,14 +266,7 @@ export class ChatAttachmentsService {
       throw error;
     }
 
-    const peers = await this.prisma.user.findMany({
-      where: { id: { in: others.map((o) => o.userId) } },
-      select: { telegramId: true },
-    });
-    const preview = text || (contentType === 'IMAGE' ? 'Изображение' : attachment.originalName);
-    for (const peer of peers) {
-      void pushTelegramToChatId(peer.telegramId, 'Новое сообщение', preview.slice(0, 200));
-    }
+    deliverTelegramAfterCommit(this.prisma, notifyIds);
 
     this.fanout(chatId, message, user, others.map((o) => o.userId), memberReads);
 

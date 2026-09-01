@@ -1,11 +1,19 @@
 # ONIX Infrastructure — Single-Origin Production Migration
 
+> **CURRENT (2026-09):** still same-origin on `https://www.onixtg.shop`, but the
+> public host is **Amvera Moscow**, not Vercel rewrite → Render. Webhook is
+> `https://www.onixtg.shop/api/telegram/webhook`. See
+> [ONIX-AMVERA-PRODUCTION.md](./ONIX-AMVERA-PRODUCTION.md).
+> Tables below are the **2026-07** migration report and are historically useful
+> for *why* the browser must not call Render; do not copy the webhook/Vercel
+> rows into new ops.
+
 | Field | Value |
 | --- | --- |
-| **Date** | 2026-07-15 |
+| **Date** | 2026-07-15 (historical) |
 | **Public origin** | `https://www.onixtg.shop` |
-| **Internal API** | `https://onix-api-47tj.onrender.com` (Render; not browser-visible) |
-| **Webhook** | Unchanged: `https://onix-api-47tj.onrender.com/api/telegram/webhook` |
+| **Then: internal API** | `https://onix-api-47tj.onrender.com` (now **staging only**) |
+| **Then: webhook** | Render URL — **superseded**; now www Amvera |
 
 ---
 

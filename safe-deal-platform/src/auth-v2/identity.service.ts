@@ -156,6 +156,8 @@ export class IdentityService {
       include: { user: true },
     });
     const loggedInAt = new Date();
+    const displayName = identity.name?.slice(0, 120);
+    const picture = identity.picture?.slice(0, 500);
     let user: User;
     if (link?.user && !link.user.deletedAt) {
       const keepTelegramFace = link.user.telegramId != null;
@@ -164,12 +166,12 @@ export class IdentityService {
         data: {
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
-          ...(!keepTelegramFace && identity.name && identity.name !== link.user.displayName
-            ? { displayName: identity.name }
-            : {}),
-          ...(!keepTelegramFace && identity.picture && identity.picture !== link.user.avatarUrl
-            ? { avatarUrl: identity.picture }
-            : {}),
+          ...(!keepTelegramFace ? {
+            ...(displayName ? { displayName } : {}),
+            ...(identity.givenName ? { firstName: identity.givenName } : {}),
+            ...(identity.familyName ? { lastName: identity.familyName } : {}),
+            ...(picture ? { avatarUrl: picture } : {}),
+          } : {}),
         },
       });
     } else if (link?.user?.deletedAt && isBanActive(link.user)) {
@@ -181,8 +183,10 @@ export class IdentityService {
         data: {
           telegramId: null,
           onixId: `PENDING-G-${identity.sub.slice(0, 16)}`,
-          displayName: identity.name,
-          avatarUrl: identity.picture,
+          displayName,
+          firstName: identity.givenName,
+          lastName: identity.familyName,
+          avatarUrl: picture,
           lastSeenAt: loggedInAt,
           lastLoginAt: loggedInAt,
         },
@@ -202,15 +206,15 @@ export class IdentityService {
         provider: 'GOOGLE',
         providerUserId: identity.sub,
         email: identity.email,
-        displayName: identity.name,
-        avatarUrl: identity.picture,
+        displayName,
+        avatarUrl: picture,
         lastUsedAt: loggedInAt,
       },
       update: {
         userId: user.id,
         email: identity.email,
-        displayName: identity.name,
-        avatarUrl: identity.picture,
+        displayName,
+        avatarUrl: picture,
         lastUsedAt: loggedInAt,
         deletedAt: null,
       },

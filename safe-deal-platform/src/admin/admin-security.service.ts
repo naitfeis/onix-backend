@@ -3,7 +3,7 @@ import type { PaymentWallet, PlatformStatus, Prisma } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
-import { createDomainNotification, pushTelegramToChatId } from '../domain-notify';
+import { createDomainNotification, deliverTelegramAfterCommit } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
 import { PaymentsService } from '../economy/payments/payments.service';
 import { ProSubscriptionService } from '../economy/pro/pro.service';
@@ -641,12 +641,8 @@ export class AdminSecurityService {
     if (!report) throw new NotFoundException('Жалоба не найдена.');
     if (report.kind !== 'AI_SUPPORT') throw new BadRequestException('Ответ доступен только для AI_SUPPORT.');
     if (report.closedAt) throw new BadRequestException('Обращение уже закрыто.');
-    const reporter = await this.prisma.user.findUnique({
-      where: { id: report.reporterId },
-      select: { telegramId: true },
-    });
-    await this.prisma.$transaction(async (tx) => {
-      await createDomainNotification(tx, {
+    const note = await this.prisma.$transaction(async (tx) => {
+      const created = await createDomainNotification(tx, {
         userId: report.reporterId,
         type: 'SYSTEM',
         title: 'Ответ поддержки ONIX',
@@ -665,10 +661,9 @@ export class AdminSecurityService {
           targetId: reportId,
         },
       });
+      return created;
     });
-    if (reporter?.telegramId) {
-      void pushTelegramToChatId(reporter.telegramId, 'Ответ поддержки ONIX', reply);
-    }
+    deliverTelegramAfterCommit(this.prisma, [note.id]);
     return { id: reportId, replied: true as const, closed: true as const };
   }
 

@@ -13,6 +13,7 @@ import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
 import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { ShadowListingJob } from './jobs/shadow-listing.job';
+import { TelegramOutboxJob } from './jobs/telegram-outbox.job';
 import { WorkerLockService } from './worker-lock.service';
 
 type JobDef = {
@@ -42,6 +43,7 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly clawbackRecover: ClawbackRecoverJob,
     private readonly securityIpRetention: SecurityIpRetentionJob,
     private readonly shadowListing: ShadowListingJob,
+    private readonly telegramOutbox: TelegramOutboxJob,
   ) {}
 
   onModuleInit(): void {
@@ -99,6 +101,12 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         intervalMs: Number(process.env.WORKER_SHADOW_LISTING_MS ?? 300_000),
         leaseTtlMs: 180_000,
         run: () => this.shadowListing.run(),
+      },
+      {
+        name: 'telegram-outbox',
+        intervalMs: Number(process.env.WORKER_TELEGRAM_OUTBOX_MS ?? 15_000),
+        leaseTtlMs: 60_000,
+        run: () => this.telegramOutbox.run(),
       },
     ];
 

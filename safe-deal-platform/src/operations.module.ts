@@ -1,7 +1,7 @@
 import {
   BadRequestException, Body, Controller, ForbiddenException, Get, Header, Injectable, Module, NotFoundException, Post, Req, Res,
 } from '@nestjs/common';
-import { BanReason, PlatformStatus, Prisma } from '@prisma/client';
+import { BanReason, PlatformStatus } from '@prisma/client';
 import {
   IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, MaxLength, Min,
 } from 'class-validator';
@@ -27,6 +27,8 @@ import {
 import { debugEndpointsEnabled } from './debug-endpoints';
 import { buildInfo } from './build-info';
 import { PrismaService } from './prisma.service';
+import { lockUsersInIdOrder } from './database/money-locks';
+import { withSerializableTransaction } from './database/transaction-retry';
 import { RiskScoreService } from './risk-score.service';
 import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
@@ -66,7 +68,8 @@ class OperationsService {
   async adjust(actor: AuthUser, onixId: string, dto: BalanceDto, correlationId?: string) {
     const resolved = await requireUserByOnixId(this.prisma, onixId);
     const corr = correlationId ?? resolveCorrelationId();
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [resolved.id]);
       const target = await tx.user.findUniqueOrThrow({ where: { id: resolved.id } });
       const amount = BigInt(dto.amountCents);
       const creditMeta: LedgerWriteMeta = {
@@ -105,7 +108,7 @@ class OperationsService {
         },
       });
       return entry;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   private async countOtherPrivilegedAdmins(excludeUserId: bigint): Promise<number> {

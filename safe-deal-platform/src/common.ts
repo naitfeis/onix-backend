@@ -66,8 +66,12 @@ function jsonSafe(value: unknown): unknown {
 
 @Injectable()
 export class ApiEnvelopeInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    return next.handle().pipe(map((data) => ({ success: true, data: jsonSafe(data) })));
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const res = context.switchToHttp().getResponse<{ headersSent?: boolean }>();
+    return next.handle().pipe(map((data) => {
+      if (res.headersSent) return data;
+      return { success: true, data: jsonSafe(data) };
+    }));
   }
 }
 

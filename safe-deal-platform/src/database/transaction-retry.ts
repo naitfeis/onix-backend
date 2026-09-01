@@ -37,7 +37,9 @@ export async function withSerializableTransaction<T>(
       });
     } catch (error) {
       if (attempt >= attempts || !isRetryableTransactionConflict(error)) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 10 * attempt + Math.floor(Math.random() * 15)));
+      // Serialization conflicts (40001) and deadlocks (40P01) need a short jittered pause
+      // so the winner can commit before this session retries the whole callback.
+      await new Promise((resolve) => setTimeout(resolve, 40 * attempt + Math.floor(Math.random() * 60)));
     }
   }
 }

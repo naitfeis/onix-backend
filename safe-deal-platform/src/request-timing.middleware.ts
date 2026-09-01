@@ -51,6 +51,18 @@ export function requestTimingMiddleware(req: Request, res: Response, next: NextF
     if (isHealthProbe && res.statusCode < 500 && durationMs < 2000) {
       return (originalEnd as any)(...args);
     }
+    const isQuietPoll = req.method === 'GET'
+      && res.statusCode < 400
+      && durationMs < 1500
+      && (
+        pathOnly === '/api/session-probe'
+        || pathOnly === '/api/v2/auth/session'
+        || pathOnly.startsWith('/api/notifications')
+        || pathOnly.startsWith('/api/avatars/')
+      );
+    if (isQuietPoll) {
+      return (originalEnd as any)(...args);
+    }
     // Skip access log for empty scanner 404s (middleware already ended).
     if (res.statusCode === 404 && (route.endsWith(' /.env') || route.includes(' /.git'))) {
       return (originalEnd as any)(...args);

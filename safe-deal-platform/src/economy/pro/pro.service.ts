@@ -1,10 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
+import { withSerializableTransaction } from '../../database/transaction-retry';
 import { TrustService } from '../trust/trust.service';
 import { createId } from '../wallet/cuid';
-
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } as const;
 
 /**
  * ONIX PRO commercial subscription — independent of Trust Score / Level.
@@ -32,7 +30,7 @@ export class ProSubscriptionService {
 
   /** Trusted admin-plane grant — authorization and audit are enforced by its caller. */
   async grantFromAdminPlane(userId: bigint, endsAt?: Date) {
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const sub = await tx.sellerSubscription.upsert({
         where: { userId },
         create: {
@@ -54,12 +52,12 @@ export class ProSubscriptionService {
         endsAt: sub.endsAt?.toISOString() ?? null,
       });
       return sub;
-    }, SERIALIZABLE);
+    });
   }
 
   /** Trusted admin-plane revoke — authorization and audit are enforced by its caller. */
   async revokeFromAdminPlane(userId: bigint) {
-    return this.prisma.$transaction(async (tx) => {
+    return withSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.sellerSubscription.findUnique({ where: { userId } });
       if (!existing) throw new NotFoundException('Подписка не найдена.');
       const sub = await tx.sellerSubscription.update({
@@ -68,6 +66,6 @@ export class ProSubscriptionService {
       });
       await this.trust.appendHistory(tx, userId, 'PRO_ENDED', { subscriptionId: sub.id });
       return sub;
-    }, SERIALIZABLE);
+    });
   }
 }

@@ -12,6 +12,7 @@ import { PaymentReconciliationJob } from './jobs/payment-reconciliation.job';
 import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
 import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { ShadowListingJob } from './jobs/shadow-listing.job';
+import { TelegramOutboxJob } from './jobs/telegram-outbox.job';
 import { WorkerLockService } from './worker-lock.service';
 import { WorkerRunnerService } from './worker-runner.service';
 
@@ -32,6 +33,7 @@ import { WorkerRunnerService } from './worker-runner.service';
     ClawbackRecoverJob,
     SecurityIpRetentionJob,
     ShadowListingJob,
+    TelegramOutboxJob,
     WorkerRunnerService,
   ],
 })
