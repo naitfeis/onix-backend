@@ -1,16 +1,13 @@
-# ONIX on Amvera (Moscow): same process as Render web — SPA + /api, __Host- cookies.
-# Amvera already runs `npm install` before build.additionalCommands.
-# Copy env from Render before the first deploy. Tariff: Начальный Плюс (1 GB), not Пробный.
 meta:
   environment: node
   toolchain:
     name: npm
-    version: "20"
+    version: 20
 
 build:
   additionalCommands: npm ci --include=dev && npx prisma migrate deploy && npm run build && npm run build:spa
 
 run:
-  command: node dist/main.js
+  scriptName: dist/main.js
   containerPort: 3000
   persistenceMount: /data
