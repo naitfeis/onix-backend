@@ -194,7 +194,7 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     setBusy(true);
     setTelegramLink(null);
     setStartCommand(null);
-    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт и кнопок нет — нажмите ссылку ещё раз.');
+    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт — отправьте /start в боте (даже без кода).');
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -204,8 +204,13 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
       } catch { /* switch-account: ignore missing cookie */ }
       getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
+      const command = started.startCommand ?? `/start login_${started.challengeId}`;
       setTelegramLink(started.webDeepLink);
-      setStartCommand(started.startCommand ?? `/start login_${started.challengeId}`);
+      setStartCommand(command);
+      setHint('Telegram Desktop часто пишет просто /start. Нажмите Отправить в чате бота — вход с сайта подхватится сам. Либо отправьте команду ниже.');
+      try {
+        await navigator.clipboard.writeText(command);
+      } catch { /* ignore */ }
       openTelegramBotLogin(started.deepLink, started.webDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
       setHint('');
@@ -236,7 +241,7 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     )}
     {startCommand && (
       <p>
-        <small>Если бот молчит, отправьте в чат:</small>
+        <small>Desktop часто пишет только /start — этого достаточно, если вход на сайте ещё открыт. Или отправьте:</small>
         {' '}
         <code className="auth-notice__command">{startCommand}</code>
       </p>

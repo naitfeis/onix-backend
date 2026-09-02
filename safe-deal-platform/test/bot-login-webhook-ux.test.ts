@@ -5,7 +5,12 @@ import {
   formatLoginConfirmPrompt,
   parseUserAgentHints,
 } from '../src/login-challenge/login-challenge-prompt';
-import { BotWebhookHandler, parseBotStartCommand } from '../src/login-challenge/bot-webhook.handler';
+import {
+  BotWebhookHandler,
+  parseBotStartCommand,
+  resetBotPromptDedupeForTests,
+} from '../src/login-challenge/bot-webhook.handler';
+import { LoginChallengeService } from '../src/login-challenge/login-challenge.service';
 import { AuthPlatformError } from '../src/auth-v2/auth-errors';
 
 test('parseUserAgentHints extracts Chrome on Windows', () => {
@@ -49,6 +54,7 @@ test('escapeHtml prevents HTML injection in prompt fields', () => {
 });
 
 test('BotWebhookHandler /start login_xxx sends confirm+cancel buttons with details', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -104,6 +110,7 @@ test('BotWebhookHandler /start login_xxx sends confirm+cancel buttons with detai
 });
 
 test('BotWebhookHandler confirm edits message to success without return URL', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -150,6 +157,7 @@ test('BotWebhookHandler confirm edits message to success without return URL', as
 });
 
 test('BotWebhookHandler cancel expires challenge and edits message', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -194,6 +202,7 @@ test('BotWebhookHandler cancel expires challenge and edits message', async () =>
 });
 
 test('BotWebhookHandler /start with missing challenge sends error message', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -238,6 +247,7 @@ test('parseBotStartCommand accepts /start@bot login_ and bare /start', () => {
 });
 
 test('BotWebhookHandler bare /start replies with help instead of silence', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -276,6 +286,7 @@ test('BotWebhookHandler bare /start replies with help instead of silence', async
 });
 
 test('BotWebhookHandler bare /start recovers newest live challenge and sends confirm buttons', async () => {
+  resetBotPromptDedupeForTests();
   const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
   process.env.BOT_TOKEN = 'test-token';
   const originalFetch = globalThis.fetch;
@@ -321,3 +332,226 @@ test('BotWebhookHandler bare /start recovers newest live challenge and sends con
     delete process.env.BOT_TOKEN;
   }
 });
+
+test('BotWebhookHandler expired payload recovers unclaimed live and buttons use recovered id', async () => {
+  resetBotPromptDedupeForTests();
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const challenges = {
+    openLatestLiveForBareStart: async () => ({ challengeId: 'ch_fresh' }),
+    openForBotPrompt: async (id: string) => {
+      if (id === 'ch_stale') {
+        throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_EXPIRED', 'Login challenge expired.');
+      }
+      assert.equal(id, 'ch_fresh');
+      return {
+        challengeId: 'ch_fresh',
+        status: 'OPENED',
+        createdAt: new Date('2026-07-15T12:00:00.000Z'),
+        createdIp: '198.51.100.7',
+        createdUserAgent: 'Mozilla/5.0 Chrome/120.0.0.0',
+        expiresAt: new Date('2026-07-15T12:10:00.000Z'),
+      };
+    },
+    confirmFromBot: async () => ({ challengeId: 'ch_fresh', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'ch_fresh', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    const result = await handler.handle(undefined, {
+      message: {
+        text: '/start login_ch_stale',
+        chat: { id: 42 },
+        from: { id: 7, first_name: 'Hiro' },
+      },
+    });
+    assert.equal((result as { prompted?: boolean }).prompted, true);
+    const keyboard = (calls[0]?.body.reply_markup as { inline_keyboard: Array<Array<{ callback_data?: string }>> })
+      .inline_keyboard[0];
+    assert.equal(keyboard[0].callback_data, 'confirm_login:ch_fresh');
+    assert.equal(keyboard[1].callback_data, 'cancel_login:ch_fresh');
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('BotWebhookHandler expired payload does not attach a challenge claimed by another chat', async () => {
+  resetBotPromptDedupeForTests();
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const challenges = {
+    openLatestLiveForBareStart: async () => null,
+    openForBotPrompt: async () => {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_EXPIRED', 'Login challenge expired.');
+    },
+    confirmFromBot: async () => ({ challengeId: 'x', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    const result = await handler.handle(undefined, {
+      message: {
+        text: '/start login_ch_old',
+        chat: { id: 7099007790 },
+        from: { id: 7099007790, first_name: 'Hiro' },
+      },
+    });
+    assert.equal((result as { prompted?: boolean }).prompted, false);
+    assert.match(String(calls[0]?.body.text), /истёк/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('BotWebhookHandler claimed-by-other payload does not steal an unclaimed live login', async () => {
+  resetBotPromptDedupeForTests();
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  let recovered = false;
+  const challenges = {
+    openLatestLiveForBareStart: async () => {
+      recovered = true;
+      return { challengeId: 'ch_other_site' };
+    },
+    openForBotPrompt: async () => {
+      throw new AuthPlatformError(
+        'AUTH_LOGIN_CHALLENGE_INVALID',
+        'Login challenge is already claimed by another Telegram chat.',
+      );
+    },
+    confirmFromBot: async () => ({ challengeId: 'x', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    await handler.handle(undefined, {
+      message: {
+        text: '/start login_ch_claimed',
+        chat: { id: 1 },
+        from: { id: 1, first_name: 'Hiro' },
+      },
+    });
+    assert.equal(recovered, false);
+    assert.match(String(calls[0]?.body.text), /недействительна/i);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('BotWebhookHandler skips a duplicate confirm prompt to the same chat within a few seconds', async () => {
+  resetBotPromptDedupeForTests();
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const challenges = {
+    openLatestLiveForBareStart: async () => null,
+    openForBotPrompt: async () => ({
+      challengeId: 'ch_dup',
+      status: 'OPENED',
+      createdAt: new Date('2026-07-15T12:00:00.000Z'),
+      createdIp: '198.51.100.7',
+      createdUserAgent: 'Mozilla/5.0 Chrome/120.0.0.0',
+      expiresAt: new Date('2026-07-15T12:10:00.000Z'),
+    }),
+    confirmFromBot: async () => ({ challengeId: 'ch_dup', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'ch_dup', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    const first = await handler.handle(undefined, {
+      message: { text: '/start login_ch_dup', chat: { id: 42 }, from: { id: 7, first_name: 'Hiro' } },
+    });
+    const second = await handler.handle(undefined, {
+      message: { text: '/start login_ch_dup', chat: { id: 42 }, from: { id: 7, first_name: 'Hiro' } },
+    });
+    assert.equal((first as { prompted?: boolean }).prompted, true);
+    assert.equal((second as { deduped?: boolean }).deduped, true);
+    assert.equal(calls.filter((c) => c.method === 'sendMessage').length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('openLatestLiveForBareStart does not bind a challenge when claim loses to another chat', async () => {
+  const repo = {
+    findLatestLiveForChat: async () => null,
+    findLatestLiveGlobal: async () => ({ id: 'ch_live', status: 'OPENED' }),
+    claimTelegramChat: async () => false,
+  };
+  const svc = new LoginChallengeService(repo as never, {} as never);
+  assert.equal(await svc.openLatestLiveForBareStart(7099007790), null);
+});
+
+test('openLatestLiveForBareStart claims an unclaimed live challenge for this chat', async () => {
+  let claimedFor: bigint | null = null;
+  const repo = {
+    findLatestLiveForChat: async () => null,
+    findLatestLiveGlobal: async () => ({ id: 'ch_unclaimed', status: 'CREATED' }),
+    claimTelegramChat: async (_id: string, chatId: bigint) => {
+      claimedFor = chatId;
+      return true;
+    },
+  };
+  const svc = new LoginChallengeService(repo as never, {} as never);
+  const result = await svc.openLatestLiveForBareStart(42);
+  assert.equal(result?.challengeId, 'ch_unclaimed');
+  assert.equal(claimedFor, 42n);
+});
+
+test('openForBotPrompt refuses a live challenge already claimed by another Telegram chat', async () => {
+  const repo = {
+    findById: async () => ({
+      id: 'ch_claimed',
+      status: 'OPENED',
+      telegramChatId: 8089505271n,
+      expiresAt: new Date(Date.now() + 60_000),
+      loginSessionId: 'ls-other',
+    }),
+  };
+  const svc = new LoginChallengeService(repo as never, {} as never);
+  await assert.rejects(
+    () => svc.openForBotPrompt('ch_claimed', 7099007790),
+    (error: unknown) => error instanceof AuthPlatformError
+      && error.code === 'AUTH_LOGIN_CHALLENGE_INVALID',
+  );
+});
+

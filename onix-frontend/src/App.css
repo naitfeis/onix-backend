@@ -141,7 +141,7 @@
   gap: 12px;
   padding: 12px 14px;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--glass-thick-bg, rgba(18, 16, 28, 0.94)) 92%, #8B7FF5 8%);
+  background: var(--glass-thick-bg);
   border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.14));
   box-shadow: var(--glass-drop-shadow, 0 12px 36px rgba(0, 0, 0, 0.32));
   backdrop-filter: blur(18px) saturate(130%);
@@ -182,7 +182,7 @@
   font-size: 12px;
   font-weight: 650;
   color: #fff;
-  background: linear-gradient(135deg, #8B7FF5, #6B5FE0);
+  background: linear-gradient(135deg, var(--accent-violet), var(--accent-violet-deep));
   cursor: pointer;
 }
 .pwa-install__dismiss {
@@ -598,13 +598,13 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button {
 }
 .market-hero .button--violet {
   color: #fff;
-  background: #6B5FE0;
+  background: var(--accent-violet);
   box-shadow: none;
 }
 
 .button--buy {
   color: #fff;
-  background: #3D6FD4;
+  background: var(--accent-violet);
   border: 0;
   box-shadow: none;
 }
@@ -644,7 +644,7 @@ html[data-theme="dark"] .button--secondary {
 }
 .button--violet {
   color: #fff;
-  background: #6B5FE0;
+  background: var(--accent-violet);
   border: 0;
   box-shadow: none !important;
   filter: none;
@@ -1285,7 +1285,7 @@ html[data-theme="light"] .cat-more:hover {
   box-shadow: none !important;
 }
 .cat-card.active .cat-card__emblem {
-  box-shadow: 0 0 0 2px var(--accent-violet), 0 8px 18px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 0 0 2px var(--accent-violet);
 }
 .cat-card__icon {
   position: relative;
@@ -1309,7 +1309,7 @@ html[data-theme="light"] .cat-more:hover {
   flex-shrink: 0;
   overflow: hidden;
   background: var(--_bg, linear-gradient(145deg, var(--accent-violet), var(--accent-violet-deep)));
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.38);
+  box-shadow: none;
 }
 html[data-theme="light"] .cat-card__emblem {
   box-shadow: 0 8px 16px rgba(16, 18, 24, 0.14);
@@ -1356,70 +1356,43 @@ html[data-theme="light"] .cat-card__emblem--all {
 .cat-card__count,
 .cat-card__share {
   position: absolute;
-  top: -4px;
-  right: -6px;
-  z-index: 1;
+  top: -5px;
+  right: -5px;
+  z-index: 2;
+  pointer-events: none;
 }
-.cat-card__count {
+.cat-card__count,
+.cat-card__share,
+.cat-card__share--full {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
+  width: auto;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 5px;
   margin: 0;
   border-radius: 999px;
+  border: 0;
+  box-shadow: 0 0 0 2px var(--page-bg, #0B0B0C);
+  background: #ececef;
+  color: #141416;
   font-family: var(--font-body), sans-serif;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  letter-spacing: 0;
   text-align: center;
-  color: #fff;
-  background: var(--accent-violet);
-  border: 0;
-  box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
-.cat-card__share {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  margin: 0;
-  border-radius: 50%;
-  border: 2px solid var(--page-bg, #0e0e0e);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
-  background: conic-gradient(#fff var(--share-deg, 0deg), rgba(255, 255, 255, 0.16) 0);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-body), sans-serif;
-  font-size: 9px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: #111;
-  letter-spacing: -0.04em;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-}
-.cat-card__share--full {
-  background: #fff;
-  color: #111;
-}
-html[data-theme="light"] .cat-card__count {
-  background: var(--accent-violet);
-  color: #fff;
-}
-html[data-theme="light"] .cat-card__share {
-  border-color: #e8eef6;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
-  background: conic-gradient(#161616 var(--share-deg, 0deg), rgba(22, 22, 22, 0.16) 0);
-  color: #fff;
-}
+html[data-theme="light"] .cat-card__count,
+html[data-theme="light"] .cat-card__share,
 html[data-theme="light"] .cat-card__share--full {
-  background: #161616;
-  color: #fff;
+  background: #ececef;
+  color: #141416;
+  box-shadow: 0 0 0 2px var(--page-bg, #e8eef6);
 }
 
 /* Mobile home wallet widget (Vision Pro glass card) */
@@ -2202,8 +2175,8 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips button.active, .segmented button.active {
   color: #fff;
-  background: #6B5FE0;
-  border-color: #6B5FE0;
+  background: var(--accent-violet-deep);
+  border-color: var(--accent-violet-deep);
   box-shadow: none !important;
 }
 
@@ -2253,29 +2226,29 @@ html[data-theme="light"] .category-toggle.is-open {
 .lot-form .button--primary,
 .lot-form .button--violet {
   color: #fff;
-  background: #6B5FE0;
+  background: var(--accent-violet-deep);
   border: 0;
   box-shadow: none;
 }
 .lot-form .button--primary:hover:not(:disabled),
 .lot-form .button--violet:hover:not(:disabled) {
-  background: #8B7FF5;
+  background: var(--accent-violet);
 }
 .lot-form .check-row input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #6B5FE0;
+  accent-color: var(--accent-violet-deep);
   flex: 0 0 auto;
 }
 .lot-form .control:focus,
 .lot-form .category-toggle.is-open,
 .lot-form .category-toggle:focus {
-  border-color: #8B7FF5;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #6B5FE0 28%, transparent);
+  border-color: var(--accent-violet);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-violet-deep) 28%, transparent);
   outline: none;
 }
 .lot-form .summary-line strong {
-  color: #8B7FF5;
+  color: var(--accent-violet);
 }
 .segmented {
   display: grid;
@@ -2321,9 +2294,9 @@ html[data-theme="light"] .category-toggle.is-open {
   color: var(--text);
 }
 .deal-peer-actions .button:hover {
-  border-color: #8B7FF5;
+  border-color: var(--accent-violet);
   color: #fff;
-  background: color-mix(in srgb, #6B5FE0 35%, transparent);
+  background: color-mix(in srgb, var(--accent-violet-deep) 35%, transparent);
 }
 .deal-lot-tags {
   display: flex;
@@ -3354,8 +3327,8 @@ html[data-theme="dark"] .lot-sheet__detail {
 .lot-sheet__buy .button {
   width: 100%;
   color: #fff;
-  background: #6B5FE0;
-  border: 1px solid #6B5FE0;
+  background: var(--accent-violet-deep);
+  border: 1px solid var(--accent-violet-deep);
   outline: none;
   box-shadow: none !important;
   filter: none;
@@ -3363,8 +3336,8 @@ html[data-theme="dark"] .lot-sheet__detail {
 }
 .lot-sheet__buy .button:hover:not(:disabled),
 .lot-sheet__buy .button:focus-visible {
-  background: #8B7FF5;
-  border-color: #8B7FF5;
+  background: var(--accent-violet);
+  border-color: var(--accent-violet);
   outline: none;
   box-shadow: none !important;
 }
@@ -3384,7 +3357,7 @@ html[data-theme="dark"] .lot-sheet__detail {
     background: var(--page-bg, #e8eef6);
   }
   .lot-sheet__buy .button {
-    border: 1px solid #6B5FE0;
+    border: 1px solid var(--accent-violet-deep);
     box-shadow: none !important;
     outline: none !important;
   }
@@ -3447,8 +3420,8 @@ html[data-theme="light"] .seller-identity__actions .button {
 .seller-identity__actions .button:hover:not(:disabled),
 html[data-theme="dark"] .seller-identity__actions .button:hover:not(:disabled),
 html[data-theme="light"] .seller-identity__actions .button:hover:not(:disabled) {
-  border-color: #8B7FF5;
-  background: color-mix(in srgb, #6B5FE0 28%, transparent);
+  border-color: var(--accent-violet);
+  background: color-mix(in srgb, var(--accent-violet-deep) 28%, transparent);
   color: #fff;
 }
 html[data-theme="light"] .seller-identity__actions .button {

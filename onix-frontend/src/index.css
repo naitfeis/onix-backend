@@ -4,7 +4,7 @@ html {
   min-width: 320px;
   min-height: 100%;
   color-scheme: dark;
-  background: var(--page-bg, #0e0e0e);
+  background: var(--page-bg, #0B0B0C);
   scroll-behavior: smooth;
 }
 
@@ -19,7 +19,7 @@ html[data-theme="light"] { color-scheme: light; }
 html,
 body {
   min-height: 100%;
-  background: var(--page-bg, #0e0e0e);
+  background: var(--page-bg, #0B0B0C);
 }
 
 #root {
@@ -31,7 +31,7 @@ body {
 body {
   overflow-x: hidden;
   color: var(--text);
-  background: var(--page-bg, #0e0e0e);
+  background: var(--page-bg, #0B0B0C);
   font-family: var(--font-body);
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;

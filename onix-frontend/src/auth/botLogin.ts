@@ -247,7 +247,8 @@ export function openTelegramBotLogin(
     anchor.remove();
   };
 
-  // Only https://t.me/?start=… — Mini App startapp hijacks login into MARKET.
+  // https://t.me/?start=… keeps this Website tab alive for polling.
+  // Telegram Desktop may still type a bare /start — the bot attaches the live challenge.
   openBlank(webDeepLink);
 }
 

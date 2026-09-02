@@ -5,6 +5,7 @@ import { AuthOrchestrator } from '../auth-v2/auth-orchestrator.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import type { DeviceContext, SessionAuthResult } from '../auth-v2/session.service';
 import type { VerifiedTelegramIdentity } from '../auth-v2/telegram-login.verifier';
+import { LOGIN_CHALLENGE_TTL_MS } from './login-challenge.flags';
 import { LoginChallengeRepository } from './login-challenge.repository';
 
 /** Same payload Website `/complete` returns (Session + refreshMaxAge). */
@@ -90,14 +91,15 @@ export class LoginChallengeService {
     return this.status(challengeId);
   }
 
-  async attachPromptChat(challengeId: string, chatId: number): Promise<void> {
-    await this.challenges.attachTelegramChat(challengeId, BigInt(chatId));
+  async attachPromptChat(challengeId: string, chatId: number): Promise<boolean> {
+    return this.challenges.claimTelegramChat(challengeId, BigInt(chatId));
   }
 
   /**
-   * Telegram Desktop often sends a bare `/start` after the website click.
-   * Prefer the live challenge already attached to this chat; otherwise a very
-   * fresh global challenge (payload dropped). Never attach a stranger's 10‑minute-old login.
+   * Telegram Desktop often sends a bare `/start` after the website click
+   * (it types `/start` without `login_<id>`). Attach this chat's live challenge,
+   * else the newest *unclaimed* website login still inside the TTL.
+   * Never binds a challenge already claimed by another Telegram chat.
    */
   async openLatestLiveForBareStart(chatId?: number): Promise<{ challengeId: string } | null> {
     if (chatId != null) {
@@ -111,13 +113,20 @@ export class LoginChallengeService {
         return { challengeId: forChat.id };
       }
     }
-    const row = await this.challenges.findLatestLiveGlobal(120_000);
+    const row = await this.challenges.findLatestLiveGlobal(LOGIN_CHALLENGE_TTL_MS);
     if (!row) return null;
     if (chatId != null) {
-      await this.challenges.attachTelegramChat(row.id, BigInt(chatId));
+      const claimed = await this.challenges.claimTelegramChat(row.id, BigInt(chatId));
+      if (!claimed) {
+        this.logger.warn(JSON.stringify({
+          msg: '[Bot] skipped live challenge already claimed by another chat',
+          challengeId: row.id,
+        }));
+        return null;
+      }
     }
     this.logger.log(JSON.stringify({
-      msg: '[Bot] recovered live challenge for bare /start',
+      msg: '[Bot] recovered unclaimed live challenge for bare /start',
       challengeId: row.id,
       status: row.status,
     }));
@@ -125,9 +134,9 @@ export class LoginChallengeService {
   }
 
   /**
-   * Bot /start login_xxx: mark OPENED and return fields for the confirm prompt.
+   * Bot /start login_xxx: claim this chat, mark OPENED, return fields for the confirm prompt.
    */
-  async openForBotPrompt(challengeId: string): Promise<{
+  async openForBotPrompt(challengeId: string, chatId?: number): Promise<{
     challengeId: string;
     status: string;
     createdAt: Date;
@@ -138,8 +147,18 @@ export class LoginChallengeService {
     this.logger.log(JSON.stringify({
       msg: '[Bot] openForBotPrompt lookup',
       challengeId,
+      chatId: chatId ?? null,
     }));
-    const live = await this.resolveLiveChallengeForBot(challengeId);
+    const live = await this.resolveLiveChallengeForBot(challengeId, chatId);
+    if (chatId != null) {
+      const claimed = await this.challenges.claimTelegramChat(live.id, BigInt(chatId));
+      if (!claimed) {
+        throw new AuthPlatformError(
+          'AUTH_LOGIN_CHALLENGE_INVALID',
+          'Login challenge is already claimed by another Telegram chat.',
+        );
+      }
+    }
     await this.markOpened(live.id);
     const challenge = await this.requireFresh(live.id);
     this.logger.log(JSON.stringify({
@@ -194,8 +213,19 @@ export class LoginChallengeService {
   async confirmFromBot(
     challengeId: string,
     identity: VerifiedTelegramIdentity,
+    chatId?: number,
   ): Promise<{ challengeId: string; status: 'CONFIRMED' }> {
     const challenge = await this.requireFresh(challengeId);
+    if (
+      chatId != null
+      && challenge.telegramChatId != null
+      && challenge.telegramChatId !== BigInt(chatId)
+    ) {
+      throw new AuthPlatformError(
+        'AUTH_LOGIN_CHALLENGE_STATE',
+        'Login challenge belongs to another Telegram chat.',
+      );
+    }
     const statusBefore = challenge.status;
     this.logger.log(JSON.stringify({
       msg: '[Bot] confirmFromBot status before',
@@ -336,24 +366,56 @@ export class LoginChallengeService {
 
   /**
    * Telegram Desktop often delivers an older start=login_id after the user clicked login again.
-   * Reuse the newest live challenge from the same browser login session — never a stranger's.
+   * Reuse: same browser session, this chat's live challenge, or an *unclaimed* live login.
+   * Never return a challenge already bound to another Telegram chat.
    */
-  private async resolveLiveChallengeForBot(challengeId: string): Promise<LoginChallenge> {
+  private async resolveLiveChallengeForBot(
+    challengeId: string,
+    chatId?: number,
+  ): Promise<LoginChallenge> {
     const row = await this.challenges.findById(challengeId);
     if (!row) {
       throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'Login challenge not found.');
     }
     const liveNow = (row.status === 'CREATED' || row.status === 'OPENED')
       && row.expiresAt.getTime() > Date.now();
-    if (liveNow) return row;
+    if (liveNow) {
+      if (!usableByChat(row, chatId)) {
+        throw new AuthPlatformError(
+          'AUTH_LOGIN_CHALLENGE_INVALID',
+          'Login challenge is already claimed by another Telegram chat.',
+        );
+      }
+      return row;
+    }
     const sibling = await this.challenges.findLatestLiveForSession(row.loginSessionId);
-    if (sibling) {
+    if (sibling && usableByChat(sibling, chatId)) {
       this.logger.log(JSON.stringify({
         msg: '[Bot] recovered live challenge from same login session',
         from: challengeId,
         to: sibling.id,
       }));
       return sibling;
+    }
+    if (chatId != null) {
+      const forChat = await this.challenges.findLatestLiveForChat(BigInt(chatId));
+      if (forChat) {
+        this.logger.log(JSON.stringify({
+          msg: '[Bot] recovered live challenge for this Telegram chat after stale payload',
+          from: challengeId,
+          to: forChat.id,
+        }));
+        return forChat;
+      }
+    }
+    const unclaimed = await this.challenges.findLatestLiveGlobal(LOGIN_CHALLENGE_TTL_MS);
+    if (unclaimed && usableByChat(unclaimed, chatId)) {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] recovered unclaimed live challenge after stale payload',
+        from: challengeId,
+        to: unclaimed.id,
+      }));
+      return unclaimed;
     }
     if (row.status === 'EXPIRED' || row.expiresAt.getTime() <= Date.now()) {
       throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_EXPIRED', 'Login challenge expired.');
@@ -375,6 +437,12 @@ export class LoginChallengeService {
     }
     return challenge;
   }
+}
+
+function usableByChat(row: LoginChallenge, chatId?: number): boolean {
+  if (row.telegramChatId == null) return true;
+  if (chatId == null) return false;
+  return row.telegramChatId === BigInt(chatId);
 }
 
 function identityFromChallenge(challenge: LoginChallenge): VerifiedTelegramIdentity {

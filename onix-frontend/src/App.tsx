@@ -162,7 +162,7 @@ function readStoredTheme(): ThemeMode | null {
 
 function applyTheme(theme: ThemeMode) {
   document.documentElement.setAttribute('data-theme', theme);
-  const color = theme === 'light' ? '#F4F2F8' : '#0e0e0e';
+  const color = theme === 'light' ? '#F4F2F8' : '#0B0B0C';
   document.querySelectorAll('meta[name="theme-color"]').forEach((node) => {
     node.setAttribute('content', color);
   });

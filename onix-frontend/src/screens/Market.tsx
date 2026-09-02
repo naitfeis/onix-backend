@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
@@ -75,29 +75,11 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function CategoryShareBadge({
-  share,
-  count,
-  total,
-}: {
-  share: number;
-  count: number;
-  total: number;
-}) {
-  if (total <= 0 || count <= 0) return null;
-  const clamped = Math.max(0, Math.min(1, share));
-  const degrees = clamped >= 0.999 ? 360 : Math.max(14, clamped * 360);
-  const label = clamped >= 0.999
-    ? `Все лоты рынка · ${count}`
-    : `${count} из ${total} лотов`;
+function CategoryCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
   const shown = count > 99 ? '99+' : String(count);
   return (
-    <span
-      className={`cat-card__share${clamped >= 0.999 ? ' cat-card__share--full' : ''}`}
-      title={label}
-      aria-label={label}
-      style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
-    >
+    <span className="cat-card__count" aria-label={`${shown} новых лотов`}>
       {shown}
     </span>
   );
@@ -186,6 +168,7 @@ export function Market({
   ];
 
   const viewedIdsRef = useRef<Set<string>>(readViewedLots());
+  const [viewedRev, setViewedRev] = useState(0);
 
   const openProduct = async (product: Product, origin: 'catalog' | 'profile' = 'catalog') => {
     if (origin === 'catalog') {
@@ -207,8 +190,11 @@ export function Market({
       setSelected(full);
       setDetailReady(true);
       if (trust) setSellerTrust(trust);
-      if (core.profile && !viewedIdsRef.current.has(full.id)) {
+      if (!viewedIdsRef.current.has(full.id)) {
         rememberViewedLot(full.id, viewedIdsRef.current);
+        setViewedRev((n) => n + 1);
+      }
+      if (core.profile) {
         void api.post(API_PATHS.productView(full.id), {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
         }).catch(() => { /* ignore view errors */ });
@@ -455,13 +441,21 @@ export function Market({
     return () => { cancelled = true; };
   }, [focusProductId]);
 
-  const categoryCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    const fromCore = core.products.filter((p) => p.category === cat).length;
-    const fromPage = items.filter((p) => p.category === cat).length;
-    acc[cat] = Math.max(fromCore, fromPage);
+  const categoryCounts = useMemo(() => {
+    void viewedRev;
+    const viewed = viewedIdsRef.current;
+    const byId = new Map<string, Product>();
+    for (const product of [...core.products, ...items]) byId.set(product.id, product);
+    const acc: Record<string, number> = {};
+    for (const cat of CATEGORIES) {
+      acc[cat] = [...byId.values()].filter((p) => p.category === cat && !viewed.has(p.id)).length;
+    }
     return acc;
-  }, {});
-  const totalVisible = Math.max(items.length, core.products.length);
+  }, [core.products, items, viewedRev]);
+  const totalNew = useMemo(
+    () => Object.values(categoryCounts).reduce((sum, n) => sum + n, 0),
+    [categoryCounts],
+  );
 
   const goHeroSlide = (index: number) => {
     const next = ((index % heroSlides.length) + heroSlides.length) % heroSlides.length;
@@ -608,9 +602,7 @@ export function Market({
             <span className="cat-card__emblem cat-card__emblem--all">
               <AllGridIcon />
             </span>
-            {totalVisible > 0 && (
-              <CategoryShareBadge share={1} count={totalVisible} total={totalVisible} />
-            )}
+            {totalNew > 0 && <CategoryCountBadge count={totalNew} />}
           </span>
           <span className="cat-card__name">{t('market.all')}</span>
         </button>
@@ -645,13 +637,7 @@ export function Market({
                     style={{ background: style.bg }}
                   >{style.letter}</span>
                 )}
-                {count > 0 && (
-                  <CategoryShareBadge
-                    share={count / Math.max(totalVisible, 1)}
-                    count={count}
-                    total={totalVisible}
-                  />
-                )}
+                {count > 0 && <CategoryCountBadge count={count} />}
               </span>
               <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
             </button>

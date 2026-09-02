@@ -48,20 +48,35 @@ export class LoginChallengeRepository {
     });
   }
 
-  async attachTelegramChat(id: string, chatId: bigint): Promise<void> {
-    await this.prisma.loginChallenge.updateMany({
-      where: { id },
+  /**
+   * Claim a live challenge for this Telegram chat.
+   * Succeeds only if unclaimed or already bound to the same chat — never steals another chat's login.
+   */
+  async claimTelegramChat(id: string, chatId: bigint): Promise<boolean> {
+    const result = await this.prisma.loginChallenge.updateMany({
+      where: {
+        id,
+        status: { in: ['CREATED', 'OPENED'] },
+        OR: [{ telegramChatId: null }, { telegramChatId: chatId }],
+      },
       data: { telegramChatId: chatId },
     });
+    return result.count === 1;
+  }
+
+  async attachTelegramChat(id: string, chatId: bigint): Promise<boolean> {
+    return this.claimTelegramChat(id, chatId);
   }
 
   /**
-   * Newest live website login in the TTL window.
+   * Newest unclaimed live website login in the TTL window.
    * Used when Telegram Desktop delivers a bare `/start` and drops `login_<id>`.
+   * Never returns a challenge already bound to another Telegram chat.
    */
   async findLatestLiveGlobal(withinMs: number): Promise<LoginChallenge | null> {
     return this.prisma.loginChallenge.findFirst({
       where: {
+        telegramChatId: null,
         status: { in: ['CREATED', 'OPENED'] },
         expiresAt: { gt: new Date() },
         createdAt: { gte: new Date(Date.now() - withinMs) },

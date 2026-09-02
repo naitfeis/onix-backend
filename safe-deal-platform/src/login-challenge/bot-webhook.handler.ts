@@ -76,6 +76,28 @@ export function summarizeTelegramWebhookForLog(
   };
 }
 
+/** Skip a second confirm keyboard to the same chat for the same challenge (Telegram Desktop double-sends /start). */
+const recentPromptAt = new Map<string, number>();
+const PROMPT_DEDUPE_MS = 8_000;
+
+export function resetBotPromptDedupeForTests(): void {
+  recentPromptAt.clear();
+}
+
+function shouldSkipDuplicatePrompt(challengeId: string, chatId: number): boolean {
+  const now = Date.now();
+  if (recentPromptAt.size > 500) {
+    for (const [key, at] of recentPromptAt) {
+      if (now - at > 60_000) recentPromptAt.delete(key);
+    }
+  }
+  const key = `${challengeId}:${chatId}`;
+  const last = recentPromptAt.get(key) ?? 0;
+  if (now - last < PROMPT_DEDUPE_MS) return true;
+  recentPromptAt.set(key, now);
+  return false;
+}
+
 /**
  * Telegram Bot webhook — LoginChallenge UX + MFA step-up (Slice 3).
  */
@@ -268,7 +290,7 @@ export class BotWebhookHandler {
     return { ok: true, prompted: false, reason: 'start_format', helped: true };
   }
 
-  private async onStartLogin(update: TelegramUpdate, startParam: string) {
+  private async onStartLogin(update: TelegramUpdate, startParam: string, recovered = false) {
     const challengeId = parseLoginChallengeId(startParam);
     const chatId = update.message?.chat?.id;
     const from = update.message?.from;
@@ -296,7 +318,7 @@ export class BotWebhookHandler {
         msg: '[Bot] LoginChallenge lookup → openForBotPrompt()',
         challengeId,
       }));
-      const prompt = await this.challenges.openForBotPrompt(challengeId);
+      const prompt = await this.challenges.openForBotPrompt(challengeId, chatId);
       this.logger.log(JSON.stringify({
         msg: '[Bot] challenge found',
         challengeId: prompt.challengeId,
@@ -307,6 +329,15 @@ export class BotWebhookHandler {
         userLinked: 'n/a (IdentityLink resolved later on Website complete)',
         expiresAt: prompt.expiresAt.toISOString(),
       }));
+
+      if (shouldSkipDuplicatePrompt(prompt.challengeId, chatId)) {
+        this.logger.log(JSON.stringify({
+          msg: '[Bot] skip duplicate confirm prompt',
+          challengeId: prompt.challengeId,
+          chatId,
+        }));
+        return { ok: true, prompted: true, deduped: true };
+      }
 
       const text = formatLoginConfirmPrompt(
         {
@@ -319,7 +350,7 @@ export class BotWebhookHandler {
 
       this.logger.log(JSON.stringify({
         msg: '[Bot] sending prompt…',
-        challengeId,
+        challengeId: prompt.challengeId,
         chatId,
         botTokenConfigured: Boolean(process.env.BOT_TOKEN),
       }));
@@ -331,8 +362,8 @@ export class BotWebhookHandler {
         parseMode: 'HTML',
         replyMarkup: {
           inline_keyboard: [[
-            { text: '✅ Подтвердить вход', callback_data: `confirm_login:${challengeId}` },
-            { text: '❌ Отменить', callback_data: `cancel_login:${challengeId}` },
+            { text: '✅ Подтвердить вход', callback_data: `confirm_login:${prompt.challengeId}` },
+            { text: '❌ Отменить', callback_data: `cancel_login:${prompt.challengeId}` },
           ]],
         },
       });
@@ -340,7 +371,7 @@ export class BotWebhookHandler {
       if (!sent.ok) {
         this.logger.error(JSON.stringify({
           msg: '[Bot] chain break — Telegram Bot API sendMessage FAILED',
-          challengeId,
+          challengeId: prompt.challengeId,
           statusAfterDb: prompt.status,
           note: 'DB may be OPENED but Website stays non-CONFIRMED until user confirms; without keyboard confirm never happens',
           ...sent,
@@ -350,12 +381,26 @@ export class BotWebhookHandler {
 
       this.logger.log(JSON.stringify({
         msg: '[Bot] prompt delivered',
-        challengeId,
+        challengeId: prompt.challengeId,
         messageId: sent.messageId ?? null,
       }));
-      await this.challenges.attachPromptChat?.(prompt.challengeId, chatId)?.catch?.(() => undefined);
       return { ok: true, prompted: true, messageId: sent.messageId ?? null };
     } catch (error) {
+      if (
+        !recovered
+        && error instanceof AuthPlatformError
+        && error.code === 'AUTH_LOGIN_CHALLENGE_EXPIRED'
+      ) {
+        const live = await this.challenges.openLatestLiveForBareStart(chatId).catch(() => null);
+        if (live?.challengeId && live.challengeId !== challengeId) {
+          this.logger.log(JSON.stringify({
+            msg: '[Bot] expired start payload — attaching unclaimed live website login',
+            from: challengeId,
+            to: live.challengeId,
+          }));
+          return this.onStartLogin(update, `login_${live.challengeId}`, true);
+        }
+      }
       const message = error instanceof AuthPlatformError
         ? userFacingChallengeError(error)
         : 'Не удалось найти попытку входа. Откройте вход на сайте ONIX ещё раз.';
@@ -405,7 +450,7 @@ export class BotWebhookHandler {
         lastName: from.last_name,
         // Bot updates never include photo_url — AvatarService pulls via Bot API using tg:profile.
         photoUrl: `tg:profile:${from.id}`,
-      });
+      }, chatId);
 
       this.logger.log(JSON.stringify({
         msg: '[Bot] confirmFromBot() done',

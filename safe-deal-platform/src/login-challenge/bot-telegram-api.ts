@@ -73,16 +73,24 @@ export async function sendTelegramMessage(input: {
   replyMarkup?: InlineKeyboard;
   replyToMessageId?: number;
 }): Promise<TelegramApiResult> {
-  return telegramApi('sendMessage', {
+  const body: Record<string, unknown> = {
     chat_id: input.chatId,
     text: input.text,
+    disable_web_page_preview: true,
     ...(input.parseMode ? { parse_mode: input.parseMode } : {}),
     ...(input.replyMarkup ? { reply_markup: input.replyMarkup } : {}),
-    ...(input.replyToMessageId != null
-      ? { reply_to_message_id: input.replyToMessageId, allow_sending_without_reply: true }
-      : {}),
-    disable_web_page_preview: true,
-  });
+  };
+  const withReply = input.replyToMessageId != null
+    ? {
+      ...body,
+      reply_to_message_id: input.replyToMessageId,
+      allow_sending_without_reply: true,
+    }
+    : body;
+  const first = await telegramApi('sendMessage', withReply);
+  if (first.ok || input.replyToMessageId == null) return first;
+  // Desktop sometimes rejects reply_to on a focused chat — still deliver the prompt.
+  return telegramApi('sendMessage', body);
 }
 
 export async function editTelegramMessage(input: {
