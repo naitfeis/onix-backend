@@ -11,6 +11,7 @@
 
 type TelegramWebAppLike = {
   initData?: string;
+  initDataUnsafe?: { start_param?: string };
   platform?: string;
   ready?: () => void;
   expand?: () => void;
@@ -132,6 +133,30 @@ export function isTelegramMiniApp(): boolean {
 export function getTelegramInitData(): string {
   const live = readInjectedWebApp()?.initData ?? '';
   return live || ensuredInitData;
+}
+
+/** startapp / start_param passed when the Mini App is opened from a website login link. */
+export function getTelegramStartParam(): string {
+  const tg = readInjectedWebApp();
+  const unsafe = tg?.initDataUnsafe?.start_param?.trim();
+  if (unsafe) return unsafe;
+  try {
+    const params = new URLSearchParams(tg?.initData || ensuredInitData || '');
+    const fromInit = params.get('start_param')?.trim();
+    if (fromInit) return fromInit;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const hash = typeof location !== 'undefined' ? location.hash : '';
+    const search = typeof location !== 'undefined' ? location.search : '';
+    const combined = `${search}&${hash.replace(/^#/, '')}`;
+    const match = combined.match(/(?:^|[?&#])tgWebAppStartParam=([^&]+)/);
+    if (match?.[1]) return decodeURIComponent(match[1]).trim();
+  } catch {
+    /* ignore */
+  }
+  return '';
 }
 
 async function loadTwaSdk(): Promise<TelegramWebAppLike | undefined> {

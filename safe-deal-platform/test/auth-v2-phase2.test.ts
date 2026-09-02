@@ -48,6 +48,27 @@ test('TelegramLoginVerifier accepts valid widget payload', () => {
   assert.equal(identity.firstName, 'Onix');
 });
 
+test('TelegramLoginVerifier accepts valid Mini App initData', () => {
+  process.env.BOT_TOKEN = '123:test-token';
+  const user = JSON.stringify({ id: 42, first_name: 'Onix', username: 'onix_user' });
+  const fields: Record<string, string> = {
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    query_id: 'AAE',
+    user,
+  };
+  const check = Object.entries(fields)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  const secret = createHmac('sha256', 'WebAppData').update(process.env.BOT_TOKEN).digest();
+  const hash = createHmac('sha256', secret).update(check).digest('hex');
+  const initData = new URLSearchParams({ ...fields, hash }).toString();
+  const identity = new TelegramLoginVerifier().verifyWebAppInitData(initData);
+  assert.equal(identity.telegramId, 42n);
+  assert.equal(identity.firstName, 'Onix');
+  assert.equal(identity.username, 'onix_user');
+});
+
 test('TelegramLoginVerifier rejects bad hash with AUTH_PROVIDER_REJECTED', () => {
   const verifier = new TelegramLoginVerifier();
   const valid = telegramLoginPayload();

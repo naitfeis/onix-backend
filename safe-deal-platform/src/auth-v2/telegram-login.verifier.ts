@@ -28,6 +28,48 @@ export interface VerifiedTelegramIdentity {
 export class TelegramLoginVerifier {
   private readonly maxAgeSeconds = Number(process.env.TELEGRAM_AUTH_MAX_AGE_SECONDS ?? 3600);
 
+  /**
+   * Telegram Mini App initData (HMAC-SHA256 with WebAppData secret).
+   * Same crypto as legacy POST /api/auth/telegram-mini.
+   */
+  verifyWebAppInitData(initData: string): VerifiedTelegramIdentity {
+    const params = new URLSearchParams(initData);
+    const hash = params.get('hash');
+    const userJson = params.get('user');
+    const authDate = Number(params.get('auth_date'));
+    this.assertFresh(authDate);
+    if (!hash || !userJson) {
+      throw new AuthPlatformError('AUTH_PROVIDER_REJECTED', 'Telegram InitData is incomplete.');
+    }
+    params.delete('hash');
+    const check = [...params.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${value}`)
+      .join('\n');
+    this.verifyHash(
+      check,
+      hash,
+      createHmac('sha256', 'WebAppData').update(this.botToken()).digest(),
+    );
+    let value: Record<string, unknown>;
+    try {
+      value = JSON.parse(userJson) as Record<string, unknown>;
+    } catch {
+      throw new AuthPlatformError('AUTH_PROVIDER_REJECTED', 'Telegram InitData user is invalid.');
+    }
+    const id = value.id;
+    if (id == null || !Number.isFinite(Number(id))) {
+      throw new AuthPlatformError('AUTH_PROVIDER_REJECTED', 'Telegram InitData user id is invalid.');
+    }
+    return {
+      telegramId: BigInt(String(id)),
+      username: typeof value.username === 'string' ? value.username : undefined,
+      firstName: typeof value.first_name === 'string' ? value.first_name : undefined,
+      lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
+      photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
+    };
+  }
+
   verify(dto: TelegramLoginPayload): VerifiedTelegramIdentity {
     this.assertFresh(dto.auth_date);
     const { hash, ...data } = dto;

@@ -96,7 +96,7 @@ function AccountLinkPanel({
     abortRef.current = controller;
     try {
       const started = await startBotLogin(controller.signal);
-      openTelegramBotLogin(started.deepLink, started.webDeepLink);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink, started.miniAppDeepLink);
       await waitAndLinkBotTelegram(started.challengeId, { signal: controller.signal });
       await onLinked();
       setToast('Telegram привязан. Можно продавать.');

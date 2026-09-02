@@ -162,7 +162,7 @@ function readStoredTheme(): ThemeMode | null {
 
 function applyTheme(theme: ThemeMode) {
   document.documentElement.setAttribute('data-theme', theme);
-  const color = theme === 'light' ? '#F4F2F8' : '#000000';
+  const color = theme === 'light' ? '#F4F2F8' : '#0e0e0e';
   document.querySelectorAll('meta[name="theme-color"]').forEach((node) => {
     node.setAttribute('content', color);
   });
@@ -497,7 +497,7 @@ export default function App() {
             >
               {image ? (
                 <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
-                  <img src={image} alt="" width={28} height={28} loading="lazy" decoding="async" />
+                  <img src={image} alt="" width={56} height={56} loading="lazy" decoding="async" draggable={false} />
                 </span>
               ) : (
                 <span

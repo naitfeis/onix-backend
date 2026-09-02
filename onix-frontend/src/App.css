@@ -329,6 +329,20 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.auth-notice__command {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  user-select: all;
+}
+html[data-theme="light"] .auth-notice__command {
+  background: rgba(20, 24, 32, 0.08);
+}
 .ban-notice__row { display: block; }
 .deal-card--focus { outline: 2px solid var(--accent, #3d7eff); outline-offset: 2px; }
 .dispute-card {
@@ -456,7 +470,7 @@
   margin-bottom: 16px;
   padding: 0;
   border-radius: var(--radius-hero);
-  background: #12101c;
+  background: #1c1c1c;
   border: var(--glass-border);
   box-shadow: none;
   -webkit-backdrop-filter: none !important;
@@ -1150,7 +1164,7 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 @media (max-width: 719px) {
   .cat-row {
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
     gap: 10px 8px;
   }
 }
@@ -1226,14 +1240,14 @@ html[data-theme="light"] .cat-more:hover {
   position: relative;
   display: grid;
   place-items: center;
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   flex-shrink: 0;
 }
 .cat-card__emblem {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
+  width: 80px;
+  height: 80px;
+  border-radius: 16px;
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -1255,6 +1269,9 @@ html[data-theme="light"] .cat-more:hover {
   height: 100%;
   object-fit: cover;
   display: block;
+  image-rendering: auto;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .cat-card__name {
   font-size: 11px;
@@ -1274,10 +1291,14 @@ html[data-theme="light"] .cat-more:hover {
   writing-mode: horizontal-tb;
   color: var(--text-primary);
 }
-.cat-card__count {
+.cat-card__count,
+.cat-card__share {
   position: absolute;
   top: -4px;
   right: -6px;
+  z-index: 1;
+}
+.cat-card__count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1298,11 +1319,33 @@ html[data-theme="light"] .cat-more:hover {
   box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  z-index: 1;
+}
+.cat-card__share {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid var(--page-bg, #0e0e0e);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  background: conic-gradient(#fff var(--share-deg, 0deg), rgba(255, 255, 255, 0.16) 0);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.cat-card__share--full {
+  background: #fff;
 }
 html[data-theme="light"] .cat-card__count {
   background: var(--accent-violet);
   color: #fff;
+}
+html[data-theme="light"] .cat-card__share {
+  border-color: #e8eef6;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  background: conic-gradient(#161616 var(--share-deg, 0deg), rgba(22, 22, 22, 0.16) 0);
+}
+html[data-theme="light"] .cat-card__share--full {
+  background: #161616;
 }
 
 /* Mobile home wallet widget (Vision Pro glass card) */
@@ -3239,7 +3282,7 @@ html[data-theme="dark"] .lot-sheet__detail {
     z-index: 2;
     margin: 0 -16px;
     padding: 10px 16px 6px;
-    background: var(--page-bg, #0a0812);
+    background: var(--page-bg, #0e0e0e);
     border: 0;
     box-shadow: none;
     outline: none;

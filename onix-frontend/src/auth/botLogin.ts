@@ -16,6 +16,8 @@ export type BotLoginStartResult = {
   status: string;
   deepLink: string;
   webDeepLink: string;
+  miniAppDeepLink?: string;
+  startCommand?: string;
   provider: string;
 };
 
@@ -196,8 +198,45 @@ export async function waitAndLinkBotTelegram(
   await completeBotLink(challengeId, options?.signal);
 }
 
+export async function confirmBotLoginFromMini(
+  challengeId: string,
+  initData: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(buildApiUrl('/api/v2/auth/telegram-bot/confirm-mini', resolveApiBase()), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challengeId, initData }),
+    signal,
+  });
+  await readData<{ challengeId: string; status: string }>(response);
+}
+
+/**
+ * Mini App opened via startapp=login_<id>: confirm the website tab's challenge.
+ * Failures are ignored — Mini App session still works on its own.
+ */
+export async function confirmWebsiteLoginFromMiniAppIfNeeded(): Promise<void> {
+  const { getTelegramInitData, getTelegramStartParam } = await import('./telegramEnv');
+  const startParam = getTelegramStartParam();
+  if (!startParam.startsWith('login_')) return;
+  const challengeId = startParam.slice('login_'.length).trim();
+  const initData = getTelegramInitData();
+  if (!challengeId || !initData) return;
+  try {
+    await confirmBotLoginFromMini(challengeId, initData);
+  } catch {
+    /* website may not be waiting; Mini App login is independent */
+  }
+}
+
 /** Open Telegram without navigating away from the Website tab (keeps polling alive). */
-export function openTelegramBotLogin(_deepLink: string, webDeepLink: string): void {
+export function openTelegramBotLogin(
+  _deepLink: string,
+  webDeepLink: string,
+  miniAppDeepLink?: string,
+): void {
   const openBlank = (href: string) => {
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -208,9 +247,9 @@ export function openTelegramBotLogin(_deepLink: string, webDeepLink: string): vo
     anchor.remove();
   };
 
-  // Only https://t.me/?start=… — firing tg://resolve at the same time focuses an
-  // already-open Desktop chat and drops the login payload (user then types bare /start).
-  openBlank(webDeepLink);
+  // Prefer startapp so Telegram opens the MARKET Mini App with the login payload
+  // instead of focusing an existing chat and sending a bare /start.
+  openBlank(miniAppDeepLink || webDeepLink);
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

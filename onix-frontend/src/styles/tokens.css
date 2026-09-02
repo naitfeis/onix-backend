@@ -2,11 +2,11 @@
 
 :root,
 html[data-theme="dark"] {
-  --bg-scene-0: #2C2838;
-  --bg-scene-1: #1A1724;
-  --bg-scene-2: #100E16;
-  --bg-scene-warm: #2A2220;
-  --bg-scene-deep: #0A090E;
+  --bg-scene-0: #242424;
+  --bg-scene-1: #1a1a1a;
+  --bg-scene-2: #111111;
+  --bg-scene-warm: #1c1c1c;
+  --bg-scene-deep: #0e0e0e;
 
   --text: rgba(255, 255, 255, 0.92);
   --text-primary: rgba(255, 255, 255, 0.92);
@@ -25,12 +25,12 @@ html[data-theme="dark"] {
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   --glass-filter-thin: blur(var(--glass-blur-thin)) saturate(120%);
 
-  --glass-bg: rgba(18, 16, 28, 0.88);
+  --glass-bg: rgba(22, 22, 22, 0.94);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(18, 16, 28, 0.82);
-  --glass-regular-bg: rgba(18, 16, 28, 0.9);
-  --glass-thick-bg: rgba(18, 16, 28, 0.94);
-  --glass-card-bg: #12101c;
+  --glass-thin-bg: rgba(22, 22, 22, 0.9);
+  --glass-regular-bg: rgba(22, 22, 22, 0.94);
+  --glass-thick-bg: rgba(18, 18, 18, 0.96);
+  --glass-card-bg: #161616;
 
   --glass-border: 1px solid rgba(255, 255, 255, 0.08);
   --glass-highlight: none;
@@ -115,7 +115,7 @@ html[data-theme="dark"] {
   --chat-panel-w: 100%;
   --chat-panel-h: 70vh;
   /* Elevated surface behind avatar presence ring */
-  --bg-elevated: rgba(18, 16, 28, 0.95);
+  --bg-elevated: rgba(22, 22, 22, 0.96);
 
   /* Z-index scale — use these only (no magic 2100/9999) */
   --z-base: 0;
@@ -131,7 +131,7 @@ html[data-theme="dark"] {
 
   --header-blur: 0;
   --nav-capsule: rgba(255, 255, 255, 0.1);
-  --page-bg: #0A090E;
+  --page-bg: #0e0e0e;
   --sparkle: rgba(255, 252, 245, 0.95);
 
   /* Modal focus — dark: glass-first scene stays visible but recedes */

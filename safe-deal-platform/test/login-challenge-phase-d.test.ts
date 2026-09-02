@@ -124,11 +124,13 @@ test('expired challenge maps to AUTH_LOGIN_CHALLENGE_EXPIRED', () => {
   assert.equal(err.code, 'AUTH_LOGIN_CHALLENGE_EXPIRED');
 });
 
-test('deep link format uses start=login_<id>', () => {
+test('deep link format uses start=login_<id> and startapp Mini App link', () => {
   const bot = 'Onixshop_bot';
   const id = 'clxxxxxxxx';
   const deepLink = `tg://resolve?domain=${bot}&start=login_${id}`;
   const web = `https://t.me/${bot}?start=login_${id}`;
+  const mini = `https://t.me/${bot}?startapp=login_${id}`;
   assert.match(deepLink, /tg:\/\/resolve/);
   assert.match(web, /https:\/\/t\.me\/Onixshop_bot\?start=login_/);
+  assert.match(mini, /https:\/\/t\.me\/Onixshop_bot\?startapp=login_/);
 });

@@ -3,6 +3,7 @@ import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, Ap
 import {
   consumeGoogleOAuthIntent,
   consumeGoogleOAuthRedirect,
+  confirmWebsiteLoginFromMiniAppIfNeeded,
   getSharedAuthManager,
   postAuthV2Google,
   postAuthV2LinkGoogle,
@@ -220,7 +221,10 @@ async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
       await ensureTelegramMiniAppReady();
       return bootstrapAuth();
     });
-    if (miniOk) return { status: 'authenticated', mode: 'mini' };
+    if (miniOk) {
+      void confirmWebsiteLoginFromMiniAppIfNeeded();
+      return { status: 'authenticated', mode: 'mini' };
+    }
     if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
     return { status: 'guest' };
   }

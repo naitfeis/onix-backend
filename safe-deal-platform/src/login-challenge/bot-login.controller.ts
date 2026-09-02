@@ -8,6 +8,7 @@ import { AuthV2Guard, type AuthV2RequestUser } from '../auth-v2/auth-v2.guards';
 import {
   buildRefreshCookieHeader,
 } from '../auth-v2/refresh-cookie';
+import { TelegramLoginVerifier } from '../auth-v2/telegram-login.verifier';
 import { getWebsiteLoginProvider, LOGIN_CHALLENGE_TTL_MS } from './login-challenge.flags';
 import { LoginChallengeService } from './login-challenge.service';
 import {
@@ -23,6 +24,7 @@ export class BotLoginController {
   constructor(
     private readonly challenges: LoginChallengeService,
     private readonly rateLimit: DistributedRateLimiter,
+    private readonly telegram: TelegramLoginVerifier,
   ) {}
 
   @Get('provider')
@@ -61,6 +63,8 @@ export class BotLoginController {
       status: started.status,
       deepLink: started.deepLink,
       webDeepLink: started.webDeepLink,
+      miniAppDeepLink: started.miniAppDeepLink,
+      startCommand: `/start login_${started.challengeId}`,
       provider: getWebsiteLoginProvider(),
     };
   }
@@ -73,6 +77,26 @@ export class BotLoginController {
     const clientIp = resolveClientIp(req);
     await this.rateLimit.assert(`auth:bot:status:${clientIp ?? 'unknown'}`, 60, 60_000);
     return this.challenges.status(challengeId);
+  }
+
+  /**
+   * Mini App opened with startapp=login_<id>: prove Telegram identity via initData
+   * and mark the website LoginChallenge CONFIRMED so the original tab can complete.
+   */
+  @Post('confirm-mini')
+  async confirmFromMiniApp(
+    @Body() body: { challengeId?: string; initData?: string },
+    @Req() req: { ip?: string; headers?: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
+  ) {
+    const clientIp = resolveClientIp(req);
+    await this.rateLimit.assert(`auth:bot:confirm-mini:${clientIp ?? 'unknown'}`, 30, 60_000);
+    const challengeId = body?.challengeId?.trim();
+    const initData = body?.initData?.trim();
+    if (!challengeId || !initData) {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_INVALID', 'challengeId and initData are required.');
+    }
+    const identity = this.telegram.verifyWebAppInitData(initData);
+    return this.challenges.confirmFromBot(challengeId, identity);
   }
 
   @Post('opened')

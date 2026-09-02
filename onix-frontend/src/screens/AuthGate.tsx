@@ -172,6 +172,8 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
   const [telegramLink, setTelegramLink] = useState<string | null>(null);
+  const [chatLink, setChatLink] = useState<string | null>(null);
+  const [startCommand, setStartCommand] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const onAuthenticatedRef = useRef(onAuthenticated);
   onAuthenticatedRef.current = onAuthenticated;
@@ -184,7 +186,9 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     setError('');
     setBusy(true);
     setTelegramLink(null);
-    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт и кнопок нет — нажмите ссылку ещё раз.');
+    setChatLink(null);
+    setStartCommand(null);
+    setHint('Откройте Telegram. Если открылся чат без кнопок — нажмите MARKET или отправьте команду ниже.');
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -194,11 +198,15 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
       } catch { /* switch-account: ignore missing cookie */ }
       getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
-      setTelegramLink(started.webDeepLink);
-      openTelegramBotLogin(started.deepLink, started.webDeepLink);
+      setTelegramLink(started.miniAppDeepLink || started.webDeepLink);
+      setChatLink(started.webDeepLink);
+      setStartCommand(started.startCommand ?? `/start login_${started.challengeId}`);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink, started.miniAppDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
       setHint('');
       setTelegramLink(null);
+      setChatLink(null);
+      setStartCommand(null);
       onAuthenticatedRef.current();
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -218,6 +226,19 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     {telegramLink && (
       <p>
         <a href={telegramLink} target="_blank" rel="noopener noreferrer">Открыть Telegram ещё раз</a>
+        {chatLink && chatLink !== telegramLink ? (
+          <>
+            {' · '}
+            <a href={chatLink} target="_blank" rel="noopener noreferrer">Открыть чат бота</a>
+          </>
+        ) : null}
+      </p>
+    )}
+    {startCommand && (
+      <p>
+        <small>Если бот молчит, отправьте в чат:</small>
+        {' '}
+        <code className="auth-notice__command">{startCommand}</code>
       </p>
     )}
     {hint && <small>{hint}</small>}

@@ -5,6 +5,7 @@ import { AuthOrchestrator } from '../auth-v2/auth-orchestrator.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import type { DeviceContext, SessionAuthResult } from '../auth-v2/session.service';
 import type { VerifiedTelegramIdentity } from '../auth-v2/telegram-login.verifier';
+import { LOGIN_CHALLENGE_TTL_MS } from './login-challenge.flags';
 import { LoginChallengeRepository } from './login-challenge.repository';
 
 /** Same payload Website `/complete` returns (Session + refreshMaxAge). */
@@ -17,6 +18,7 @@ export type StartChallengeResult = {
   expiresAt: string;
   deepLink: string;
   webDeepLink: string;
+  miniAppDeepLink: string;
   status: string;
 };
 
@@ -61,6 +63,7 @@ export class LoginChallengeService {
     const startParam = `login_${challenge.id}`;
     const deepLink = `tg://resolve?domain=${bot}&start=${startParam}`;
     const webDeepLink = `https://t.me/${bot}?start=${startParam}`;
+    const miniAppDeepLink = `https://t.me/${bot}?startapp=${startParam}`;
 
     this.logger.log(JSON.stringify({
       msg: 'login_challenge_created',
@@ -75,6 +78,7 @@ export class LoginChallengeService {
       expiresAt: challenge.expiresAt.toISOString(),
       deepLink,
       webDeepLink,
+      miniAppDeepLink,
       status: challenge.status,
     };
   }
@@ -85,6 +89,21 @@ export class LoginChallengeService {
       await this.challenges.markOpened(challengeId);
     }
     return this.status(challengeId);
+  }
+
+  /**
+   * Telegram Desktop often sends a bare `/start` after the website click.
+   * Recover the newest live challenge so the confirm keyboard still appears.
+   */
+  async openLatestLiveForBareStart(): Promise<{ challengeId: string } | null> {
+    const row = await this.challenges.findLatestLiveGlobal(LOGIN_CHALLENGE_TTL_MS);
+    if (!row) return null;
+    this.logger.log(JSON.stringify({
+      msg: '[Bot] recovered live challenge for bare /start',
+      challengeId: row.id,
+      status: row.status,
+    }));
+    return { challengeId: row.id };
   }
 
   /**

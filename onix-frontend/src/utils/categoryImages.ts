@@ -1,4 +1,4 @@
-/** Category cover images served from /public/categories (80×80 WebP). */
+/** Category cover images served from /public/categories (160×160 WebP). */
 export const CATEGORY_IMAGES: Record<string, string> = {
   STANDOFF_2: '/categories/standoff-2.webp',
   STEAM: '/categories/steam.webp',

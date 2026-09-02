@@ -69,6 +69,7 @@ const debugControllers: Type<unknown>[] = debugEndpointsEnabled()
     RbacService,
     RiskScoreService,
     RiskModule,
+    TelegramLoginVerifier,
     SECRETS_PROVIDER,
     AUTH_EVENT_PUBLISHER,
   ],

@@ -96,4 +96,13 @@ describe('desktop and chat layout CSS regressions', () => {
       /\.sidebar-nav__badge\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,
     );
   });
+
+  it('renders category market-share as a filled pie, not a count pill', () => {
+    expect(appCss).toMatch(
+      /\.cat-card__share\s*\{[^}]*conic-gradient/s,
+    );
+    expect(appCss).toMatch(
+      /\.cat-card__share--full\s*\{[^}]*background:\s*#fff;/s,
+    );
+  });
 });

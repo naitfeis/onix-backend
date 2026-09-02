@@ -71,6 +71,7 @@ test('BotWebhookHandler /start login_xxx sends confirm+cancel buttons with detai
     }),
     confirmFromBot: async () => ({ challengeId: 'ch_abc', status: 'CONFIRMED' as const }),
     cancelFromBot: async () => ({ challengeId: 'ch_abc', status: 'EXPIRED' }),
+    openLatestLiveForBareStart: async () => null,
   };
 
   try {
@@ -121,6 +122,7 @@ test('BotWebhookHandler confirm edits message to success without return URL', as
       return { challengeId: id, status: 'CONFIRMED' as const };
     },
     cancelFromBot: async () => ({ challengeId: 'ch_ok', status: 'EXPIRED' }),
+    openLatestLiveForBareStart: async () => null,
   };
 
   try {
@@ -167,6 +169,7 @@ test('BotWebhookHandler cancel expires challenge and edits message', async () =>
       cancelled = true;
       return { challengeId: id, status: 'EXPIRED' };
     },
+    openLatestLiveForBareStart: async () => null,
   };
 
   try {
@@ -207,6 +210,7 @@ test('BotWebhookHandler /start with missing challenge sends error message', asyn
     },
     confirmFromBot: async () => ({ challengeId: 'ch_cancel', status: 'CONFIRMED' as const }),
     cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
+    openLatestLiveForBareStart: async () => null,
   };
 
   try {
@@ -248,6 +252,7 @@ test('BotWebhookHandler bare /start replies with help instead of silence', async
     openForBotPrompt: async () => { throw new Error('must not look up a challenge'); },
     confirmFromBot: async () => ({ challengeId: 'x', status: 'CONFIRMED' as const }),
     cancelFromBot: async () => ({ challengeId: 'x', status: 'EXPIRED' }),
+    openLatestLiveForBareStart: async () => null,
   };
 
   try {
@@ -261,7 +266,54 @@ test('BotWebhookHandler bare /start replies with help instead of silence', async
     });
     assert.equal((result as { helped?: boolean }).helped, true);
     assert.equal(calls[0]?.method, 'sendMessage');
-    assert.match(String(calls[0]?.body.text), /Голая команда \/start/);
+    assert.match(String(calls[0]?.body.text), /\/start без кода/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.BOT_TOKEN;
+  }
+});
+
+test('BotWebhookHandler bare /start recovers newest live challenge and sends confirm buttons', async () => {
+  const calls: Array<{ method: string; body: Record<string, unknown> }> = [];
+  process.env.BOT_TOKEN = 'test-token';
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const url = String(_url);
+    const method = url.split('/').pop() || 'unknown';
+    calls.push({ method, body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  }) as typeof fetch;
+
+  const challenges = {
+    openLatestLiveForBareStart: async () => ({ challengeId: 'ch_live' }),
+    openForBotPrompt: async (id: string) => {
+      assert.equal(id, 'ch_live');
+      return {
+        challengeId: id,
+        status: 'OPENED',
+        createdAt: new Date('2026-07-15T12:00:00.000Z'),
+        createdIp: '198.51.100.7',
+        createdUserAgent: 'Mozilla/5.0 Chrome/120.0.0.0',
+        expiresAt: new Date('2026-07-15T12:02:00.000Z'),
+      };
+    },
+    confirmFromBot: async () => ({ challengeId: 'ch_live', status: 'CONFIRMED' as const }),
+    cancelFromBot: async () => ({ challengeId: 'ch_live', status: 'EXPIRED' }),
+  };
+
+  try {
+    const handler = new BotWebhookHandler(challenges as never);
+    const result = await handler.handle(undefined, {
+      message: {
+        text: '/start',
+        chat: { id: 42 },
+        from: { id: 7, first_name: 'Hiro' },
+      },
+    });
+    assert.equal((result as { prompted?: boolean }).prompted, true);
+    const keyboard = (calls[0]?.body.reply_markup as { inline_keyboard: Array<Array<{ callback_data?: string }>> })
+      .inline_keyboard[0];
+    assert.equal(keyboard[0].callback_data, 'confirm_login:ch_live');
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.BOT_TOKEN;

@@ -98,6 +98,21 @@ export class BotWebhookHandler {
     assertWebhookSecret(secret);
     this.logger.log('[Bot] webhook secret check passed');
 
+    try {
+      return await this.dispatch(update);
+    } catch (error) {
+      if (error instanceof AuthPlatformError && error.code === 'AUTH_PROVIDER_REJECTED') {
+        throw error;
+      }
+      this.logger.error(JSON.stringify({
+        msg: '[Bot] webhook handler crashed — acknowledged so Telegram keeps the webhook',
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      return { ok: true, error: true };
+    }
+  }
+
+  private async dispatch(update: TelegramUpdate) {
     const start = parseBotStartCommand(update.message?.text);
     if (start.kind !== 'none') {
       this.logger.log(JSON.stringify({
@@ -219,12 +234,29 @@ export class BotWebhookHandler {
       telegramId: update.message?.from?.id ?? null,
       chatId,
     }));
+    try {
+      const live = await this.challenges.openLatestLiveForBareStart();
+      if (live?.challengeId) {
+        this.logger.log(JSON.stringify({
+          msg: '[Bot] attaching bare /start to newest live website login',
+          challengeId: live.challengeId,
+        }));
+        return this.onStartLogin(update, `login_${live.challengeId}`);
+      }
+    } catch (error) {
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] bare /start live-challenge lookup failed',
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
     const sent = await sendTelegramMessage({
       chatId,
       text: [
         'Чтобы войти на сайт ONIX, нажмите «Войти через Telegram» на сайте и не закрывайте вкладку.',
         '',
-        'Голая команда /start вход не открывает. Если Telegram уже был открыт — вернитесь на сайт и нажмите кнопку ещё раз: в этом чате должна появиться клавиатура «Подтвердить вход».',
+        'Если Telegram уже был открыт, команда /start без кода вход не открывает.',
+        'Вернитесь на сайт и нажмите кнопку ещё раз — в этом чате должна появиться клавиатура «Подтвердить вход».',
+        'Либо нажмите MARKET и дождитесь входа в приложении.',
       ].join('\n'),
       replyMarkup: {
         inline_keyboard: [[{ text: 'Открыть ONIX', url: 'https://www.onixtg.shop' }]],

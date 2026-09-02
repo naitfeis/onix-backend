@@ -34,6 +34,21 @@ export class LoginChallengeRepository {
     });
   }
 
+  /**
+   * Newest live website login in the TTL window.
+   * Used when Telegram Desktop delivers a bare `/start` and drops `login_<id>`.
+   */
+  async findLatestLiveGlobal(withinMs: number): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findFirst({
+      where: {
+        status: { in: ['CREATED', 'OPENED'] },
+        expiresAt: { gt: new Date() },
+        createdAt: { gte: new Date(Date.now() - withinMs) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async create(input: CreateChallengeInput): Promise<LoginChallenge> {
     const now = new Date();
     return this.prisma.loginChallenge.create({

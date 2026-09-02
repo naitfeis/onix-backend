@@ -70,6 +70,7 @@ export { collectDeviceInfo, collectDeviceInfoAsync } from './deviceInfo';
 export {
   ensureTelegramMiniAppReady,
   getTelegramInitData,
+  getTelegramStartParam,
   isTelegramMiniApp,
   signalTelegramReadyIfMiniApp,
   telegramHaptic,
@@ -84,6 +85,8 @@ export {
   completeBotLogin,
   continueBotLogin,
   pollBotLoginStatus,
+  confirmBotLoginFromMini,
+  confirmWebsiteLoginFromMiniAppIfNeeded,
   BotLoginError,
 } from './botLogin';
 export type { BotLoginStartResult, WebsiteLoginProvider } from './botLogin';

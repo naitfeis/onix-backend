@@ -26,6 +26,18 @@ describe('telegramEnv website isolation', () => {
     expect(getTelegramInitData().length).toBeGreaterThan(0);
   });
 
+  it('reads start_param from initDataUnsafe and initData', async () => {
+    vi.stubGlobal('Telegram', {
+      WebApp: {
+        initData: 'query_id=1&start_param=login_abc&hash=abc',
+        initDataUnsafe: { start_param: 'login_abc' },
+        platform: 'tdesktop',
+      },
+    });
+    const { getTelegramStartParam } = await import('./telegramEnv');
+    expect(getTelegramStartParam()).toBe('login_abc');
+  });
+
   it('does not treat empty initData + platform unknown as Mini App', async () => {
     const ready = vi.fn();
     const expand = vi.fn();

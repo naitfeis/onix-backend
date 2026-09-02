@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { api, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
@@ -74,10 +74,29 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function formatCatCount(n: number): string {
-  if (n <= 0) return '';
-  if (n > 99) return '99+';
-  return String(n);
+function CategoryShareBadge({
+  share,
+  count,
+  total,
+}: {
+  share: number;
+  count: number;
+  total: number;
+}) {
+  if (total <= 0 || count <= 0) return null;
+  const clamped = Math.max(0, Math.min(1, share));
+  const degrees = clamped >= 0.999 ? 360 : Math.max(14, clamped * 360);
+  const label = clamped >= 0.999
+    ? `Все лоты рынка · ${count}`
+    : `${count} из ${total} лотов`;
+  return (
+    <span
+      className={`cat-card__share${clamped >= 0.999 ? ' cat-card__share--full' : ''}`}
+      title={label}
+      aria-label={label}
+      style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
+    />
+  );
 }
 
 const VIEWED_LOTS_KEY = 'onix-viewed-lots';
@@ -583,7 +602,9 @@ export function Market({
         >
           <span className="cat-card__icon">
             <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
-            {totalVisible > 0 && <span className="cat-card__count">{formatCatCount(totalVisible)}</span>}
+            {totalVisible > 0 && (
+              <CategoryShareBadge share={1} count={totalVisible} total={totalVisible} />
+            )}
           </span>
           <span className="cat-card__name">{t('market.all')}</span>
         </button>
@@ -605,11 +626,11 @@ export function Market({
                     <img
                       src={image}
                       alt=""
-                      width={56}
-                      height={56}
+                      width={80}
+                      height={80}
                       loading="lazy"
                       decoding="async"
-                      fetchPriority="low"
+                      draggable={false}
                     />
                   </span>
                 ) : (
@@ -618,7 +639,13 @@ export function Market({
                     style={{ background: style.bg }}
                   >{style.letter}</span>
                 )}
-                {count > 0 && <span className="cat-card__count">{formatCatCount(count)}</span>}
+                {count > 0 && (
+                  <CategoryShareBadge
+                    share={count / Math.max(totalVisible, 1)}
+                    count={count}
+                    total={totalVisible}
+                  />
+                )}
               </span>
               <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
             </button>
