@@ -13,7 +13,8 @@ import {
   postAuthV2Logout,
   getSharedAuthManager,
 } from '../auth';
-import { BotLoginError } from '../auth/botLogin';
+import { BotLoginError, confirmWebsiteLoginFromMiniAppIfNeeded } from '../auth/botLogin';
+import { getTelegramStartParam } from '../auth/telegramEnv';
 import { formatBanRemaining, refreshBanInfo, type BanInfo } from '../api/contracts';
 import { Button } from '../design-system';
 import { GoogleLogo, TelegramLogo } from '../components/BrandLogos';
@@ -194,20 +195,20 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     setBusy(true);
     setTelegramLink(null);
     setStartCommand(null);
-    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт — отправьте /start в боте (даже без кода).');
+    setHint('Откройте Telegram. Не закрывайте эту вкладку — вход завершится сам.');
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       const started = await startBotLogin(controller.signal);
       const command = started.startCommand ?? `/start login_${started.challengeId}`;
-      setTelegramLink(started.webDeepLink);
+      setTelegramLink(started.miniAppDeepLink || started.webDeepLink);
       setStartCommand(command);
-      setHint('Telegram Desktop часто пишет просто /start. Нажмите Отправить в чате бота — вход с сайта подхватится сам. Либо отправьте команду ниже.');
+      setHint('Если открылся чат без кнопок — нажмите MARKET или отправьте команду ниже. Старые кнопки «Подтвердить» недействительны — нужен новый вход с сайта.');
       try {
         await navigator.clipboard.writeText(command);
       } catch { /* ignore */ }
-      openTelegramBotLogin(started.deepLink, started.webDeepLink);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink, started.miniAppDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
       setHint('');
       setTelegramLink(null);
@@ -237,7 +238,7 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     )}
     {startCommand && (
       <p>
-        <small>Desktop часто пишет только /start — этого достаточно, если вход на сайте ещё открыт. Или отправьте:</small>
+        <small>Если Mini App не открылся, отправьте в чат бота:</small>
         {' '}
         <code className="auth-notice__command">{startCommand}</code>
       </p>
@@ -303,3 +304,44 @@ function TelegramLogin({ onBan }: { onBan?: (ban: BanInfo) => void }) {
   </div>;
 }
 export default AuthNotice;
+
+/** Mini App opened with startapp=login_… — confirm the website tab instead of dropping into MARKET. */
+export function WebsiteLoginBridge() {
+  const [status, setStatus] = useState<'working' | 'ok' | 'fail'>('working');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const ok = await confirmWebsiteLoginFromMiniAppIfNeeded();
+        if (!cancelled) setStatus(ok ? 'ok' : 'fail');
+      } catch {
+        if (!cancelled) setStatus('fail');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return (
+    <div className="auth-notice" role="status">
+      <div>
+        <strong>
+          {status === 'working' && 'Подтверждаем вход…'}
+          {status === 'ok' && 'Вход подтверждён'}
+          {status === 'fail' && 'Не удалось подтвердить вход'}
+        </strong>
+        <span>
+          {status === 'ok'
+            ? 'Вернитесь на вкладку сайта ONIX в браузере. Вход завершится сам.'
+            : status === 'fail'
+              ? 'Вернитесь на сайт и нажмите «Войти через Telegram» ещё раз. Не закрывайте вкладку сайта.'
+              : 'Не закрывайте вкладку сайта в браузере.'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function isWebsiteLoginStartParam(): boolean {
+  return getTelegramStartParam().startsWith('login_');
+}

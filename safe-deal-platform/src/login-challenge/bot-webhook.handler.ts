@@ -39,12 +39,15 @@ type TelegramUpdate = {
   };
 };
 
-/** `/start`, `/start@Bot login_…`, `/start mfa_…` — Telegram Desktop often sends a bare `/start`. */
+/** `/start`, `/start@Bot login_…`, pasted `login_…`, `/start mfa_…` — Telegram Desktop often sends a bare `/start`. */
 export function parseBotStartCommand(text: string | undefined): {
   kind: 'none' | 'bare' | 'login' | 'mfa' | 'other';
   payload: string;
 } {
   const trimmed = text?.trim() ?? '';
+  if (/^login_[A-Za-z0-9_]+$/.test(trimmed)) {
+    return { kind: 'login', payload: trimmed };
+  }
   const match = trimmed.match(/^\/start(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i);
   if (!match) return { kind: 'none', payload: '' };
   const payload = (match[1] ?? '').trim();
@@ -372,7 +375,6 @@ export class BotWebhookHandler {
 
       const sent = await sendTelegramMessage({
         chatId,
-        replyToMessageId: update.message?.message_id,
         text,
         parseMode: 'HTML',
         replyMarkup: {

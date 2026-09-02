@@ -215,27 +215,44 @@ export async function confirmBotLoginFromMini(
 
 /**
  * Mini App opened via startapp=login_<id>: confirm the website tab's challenge.
- * Failures are ignored — Mini App session still works on its own.
+ * Retries briefly — Telegram often injects initData a tick after first paint.
  */
-export async function confirmWebsiteLoginFromMiniAppIfNeeded(): Promise<void> {
+export async function confirmWebsiteLoginFromMiniAppIfNeeded(): Promise<boolean> {
   const { getTelegramInitData, getTelegramStartParam } = await import('./telegramEnv');
-  const startParam = getTelegramStartParam();
-  if (!startParam.startsWith('login_')) return;
-  const challengeId = startParam.slice('login_'.length).trim();
-  const initData = getTelegramInitData();
-  if (!challengeId || !initData) return;
-  try {
-    await confirmBotLoginFromMini(challengeId, initData);
-  } catch {
-    /* website may not be waiting; Mini App login is independent */
+  const hash = typeof location !== 'undefined' ? location.hash : '';
+  const search = typeof location !== 'undefined' ? location.search : '';
+  const maybeLogin = getTelegramStartParam().startsWith('login_')
+    || hash.includes('tgWebAppStartParam')
+    || search.includes('tgWebAppStartParam');
+  if (!maybeLogin) return false;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const startParam = getTelegramStartParam();
+    if (!startParam.startsWith('login_')) {
+      await delay(150);
+      continue;
+    }
+    const challengeId = startParam.slice('login_'.length).trim();
+    const initData = getTelegramInitData();
+    if (!challengeId || !initData) {
+      await delay(150);
+      continue;
+    }
+    try {
+      await confirmBotLoginFromMini(challengeId, initData);
+      return true;
+    } catch {
+      await delay(150);
+    }
   }
+  return false;
 }
 
 /** Open Telegram without navigating away from the Website tab (keeps polling alive). */
 export function openTelegramBotLogin(
   _deepLink: string,
   webDeepLink: string,
-  _miniAppDeepLink?: string,
+  miniAppDeepLink?: string,
 ): void {
   const openBlank = (href: string) => {
     const anchor = document.createElement('a');
@@ -247,9 +264,9 @@ export function openTelegramBotLogin(
     anchor.remove();
   };
 
-  // https://t.me/?start=… keeps this Website tab alive for polling.
-  // Telegram Desktop may still type a bare /start — the bot attaches the live challenge.
-  openBlank(webDeepLink);
+  // startapp confirms via Mini App initData even when Desktop focuses an existing chat.
+  // start= is the fallback when Mini App is blocked.
+  openBlank(miniAppDeepLink || webDeepLink);
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

@@ -19,7 +19,7 @@ import { Button, Card, Skeleton, Toast } from './design-system';
 import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
 import { t } from './i18n';
-import AuthNotice from './screens/AuthGate';
+import AuthNotice, { WebsiteLoginBridge, isWebsiteLoginStartParam } from './screens/AuthGate';
 import type { Screen } from './screens/types';
 import PwaInstallBanner from './shell/PwaInstallBanner';
 import { CATEGORY_IMAGES } from './utils/categoryImages';
@@ -242,20 +242,20 @@ export default function App() {
   const leftIcons = rails.left <= LEFT_ICONS_AT;
   const rightIcons = rails.right <= RIGHT_ICONS_AT;
   const [miniApp, setMiniApp] = useState(() => isTelegramMiniApp());
+  const [websiteLoginBridge, setWebsiteLoginBridge] = useState(() => isWebsiteLoginStartParam());
   useEffect(() => {
-    if (miniApp) return;
+    if (miniApp && websiteLoginBridge) return;
     const id = window.setInterval(() => {
-      if (isTelegramMiniApp()) {
-        setMiniApp(true);
-        window.clearInterval(id);
-      }
+      if (isTelegramMiniApp()) setMiniApp(true);
+      if (isWebsiteLoginStartParam()) setWebsiteLoginBridge(true);
+      if (isTelegramMiniApp() && isWebsiteLoginStartParam()) window.clearInterval(id);
     }, 80);
     const stop = window.setTimeout(() => window.clearInterval(id), 2500);
     return () => {
       window.clearInterval(id);
       window.clearTimeout(stop);
     };
-  }, [miniApp]);
+  }, [miniApp, websiteLoginBridge]);
 
   useEffect(() => {
     const unlock = () => unlockSounds();
@@ -427,6 +427,7 @@ export default function App() {
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
   const showAuth = Boolean(banNotice)
+    || websiteLoginBridge
     || core.sessionRestore === 'guest'
     || (core.sessionRestore === 'network' && !core.profile && core.states.profile === 'error');
   const shellReady = core.states.products === 'success'
@@ -458,7 +459,13 @@ export default function App() {
     >
     <a className="skip-link" href="#content">К содержимому</a>
 
-    {showAuth && (
+    {websiteLoginBridge && (
+      <SoftErrorBoundary label="Не удалось подтвердить вход с сайта.">
+        <WebsiteLoginBridge />
+      </SoftErrorBoundary>
+    )}
+
+    {showAuth && !websiteLoginBridge && (
       <SoftErrorBoundary label="Не удалось открыть вход. Обновите страницу.">
         <AuthNotice
           miniApp={miniApp}

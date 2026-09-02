@@ -243,6 +243,7 @@ test('parseBotStartCommand accepts /start@bot login_ and bare /start', () => {
   assert.deepEqual(parseBotStartCommand('/start login_ch_abc'), { kind: 'login', payload: 'login_ch_abc' });
   assert.deepEqual(parseBotStartCommand('/start@Onixshop_bot login_ch_abc'), { kind: 'login', payload: 'login_ch_abc' });
   assert.deepEqual(parseBotStartCommand('/start mfa_step1'), { kind: 'mfa', payload: 'mfa_step1' });
+  assert.deepEqual(parseBotStartCommand('login_ch_abc'), { kind: 'login', payload: 'login_ch_abc' });
   assert.equal(parseBotStartCommand('hello').kind, 'none');
 });
 
