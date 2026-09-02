@@ -85,6 +85,7 @@ export async function loadArbitrationContext(prisma: PrismaClient): Promise<Arbi
 
   const byOrder = new Map<string, QueueRow>();
   for (const t of openTickets) {
+    if (t.orderId == null || t.chatId == null) continue;
     const key = t.orderId.toString();
     if (!byOrder.has(key)) {
       byOrder.set(key, { orderId: t.orderId, at: t.createdAt, chatId: t.chatId });

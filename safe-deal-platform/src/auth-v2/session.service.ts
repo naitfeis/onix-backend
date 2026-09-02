@@ -97,6 +97,7 @@ export class SessionService {
     const session = await this.prisma.$transaction(async (tx) => (
       this.persistPreparedSession(tx, user, input, prepared)
     ));
+    void this.riskEngine.maybeLockAfterLogin(user.id, prepared.loginDecision).catch(() => undefined);
 
     return this.toAuthResult(user, session, prepared.refresh.token, input.amr, prepared.trusted);
   }
@@ -156,6 +157,7 @@ export class SessionService {
     familyId: string;
     sessionId: string;
     riskEvents: RiskEventDraft[];
+    loginDecision: import('../risk/risk-engine.types').RiskDecision & { events?: RiskEventDraft[] };
   }> {
     const rememberMe = input.rememberMe === true;
     const now = new Date();
@@ -200,6 +202,13 @@ export class SessionService {
       familyId: newId(),
       sessionId: newId(),
       riskEvents: loginRisk.events,
+      loginDecision: {
+        action: loginRisk.action,
+        score: loginRisk.score,
+        factors: loginRisk.factors,
+        reason: loginRisk.reason,
+        events: loginRisk.events,
+      },
     };
   }
 
@@ -212,7 +221,9 @@ export class SessionService {
     const {
       refresh, trusted, riskScore, rememberMe, idleMs, now, device, fingerprintHash, familyId, sessionId,
       riskEvents,
+      loginDecision: _loginDecision,
     } = prepared;
+    void _loginDecision;
 
     await this.enforceSessionLimit(tx, user.id, now);
 

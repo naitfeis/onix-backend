@@ -17,6 +17,33 @@ describe('telegramEnv website isolation', () => {
     expect(getTelegramInitData()).toBe('');
   });
 
+  it('does not cache false before Telegram injects', async () => {
+    const { isTelegramMiniApp } = await import('./telegramEnv');
+    expect(isTelegramMiniApp()).toBe(false);
+    vi.stubGlobal('Telegram', {
+      WebApp: { initData: 'query_id=1&hash=abc', platform: 'ios' },
+    });
+    expect(isTelegramMiniApp()).toBe(true);
+  });
+
+  it('does not expand when the Mini App is already expanded', async () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+    vi.stubGlobal('Telegram', {
+      WebApp: {
+        initData: 'query_id=1&auth_date=1&hash=test',
+        platform: 'android',
+        isExpanded: true,
+        ready,
+        expand,
+      },
+    });
+    const { ensureTelegramMiniAppReady } = await import('./telegramEnv');
+    await ensureTelegramMiniAppReady();
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(expand).not.toHaveBeenCalled();
+  });
+
   it('is true when Telegram injects non-empty initData', async () => {
     vi.stubGlobal('Telegram', {
       WebApp: { initData: 'query_id=1&user=%7B%22id%22%3A1%7D&hash=abc', platform: 'ios' },

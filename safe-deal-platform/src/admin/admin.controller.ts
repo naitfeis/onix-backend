@@ -12,6 +12,7 @@ import {
 } from './admin.guard';
 import type { AdminActor } from './admin-session.service';
 import { AdminSecurityService } from './admin-security.service';
+import { SupportCenterService } from '../support-center.service';
 
 class WipeUserDto {
   @IsString() @Length(1, 40) confirmOnixId!: string;
@@ -43,7 +44,10 @@ class CreateManualPaymentDto {
 @Public()
 @UseGuards(AdminAccessGuard)
 export class AdminPlaneController {
-  constructor(private readonly security: AdminSecurityService) {}
+  constructor(
+    private readonly security: AdminSecurityService,
+    private readonly tickets: SupportCenterService,
+  ) {}
 
   @Get('me')
   @Header('Cache-Control', 'no-store')
@@ -378,5 +382,72 @@ export class AdminPlaneController {
       metadata: { count: events.length },
     });
     return { events };
+  }
+
+  @Get('risk/center')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async riskCenter(@CurrentAdmin() admin: AdminActor) {
+    const data = await this.security.listRiskCenter();
+    await this.security.logAction(admin, 'ADMIN_RISK_CENTER', { metadata: { count: data.events.length } });
+    return data;
+  }
+
+  @Get('support/tickets')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async ticketsList(
+    @CurrentAdmin() admin: AdminActor,
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+  ) {
+    const tickets = await this.tickets.listTickets({ status, category });
+    await this.security.logAction(admin, 'ADMIN_LIST_TICKETS', { metadata: { count: tickets.length, status: status ?? 'ALL' } });
+    return { tickets };
+  }
+
+  @Get('support/tickets/:id')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async ticketCard(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    const ticket = await this.tickets.getTicket(id);
+    await this.security.logAction(admin, 'ADMIN_VIEW_TICKET', { type: 'SupportTicket', id });
+    return ticket;
+  }
+
+  @Post('support/tickets/:id/status')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  ticketStatus(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { status: 'OPEN' | 'IN_REVIEW' | 'WAITING_USER' | 'RESOLVED' | 'CLOSED'; comment?: string },
+  ) {
+    return this.tickets.setStatus(admin, id, body.status, body.comment);
+  }
+
+  @Post('support/tickets/:id/comment')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  ticketComment(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { text: string },
+  ) {
+    return this.tickets.addComment(admin, id, body.text);
+  }
+
+  @Post('support/tickets/:id/decision')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  ticketDecision(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { decision: 'KEEP_LOCK' | 'UNLOCK' | 'REDUCE_RESTRICTIONS' | 'PERMANENT_BAN'; reason?: string },
+  ) {
+    return this.tickets.decideLock(admin, id, body.decision, body.reason);
   }
 }

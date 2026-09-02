@@ -38,13 +38,45 @@ export class AdminAuthController {
   @Public()
   @Post('login')
   @HttpCode(200)
-  login(@Body() dto: AdminLoginDto, @Req() req: Request) {
+  async login(@Body() dto: AdminLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.assertIp(req);
-    return this.auth.login({
+    const result = await this.auth.login({
       email: dto.email,
       password: dto.password,
       ip: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] ?? null,
     });
+    if (!result.mfaRequired) {
+      res.setHeader(
+        'Set-Cookie',
+        buildAdminRefreshCookieHeader(result.refreshToken, result.maxAgeSeconds),
+      );
+      return {
+        mfaRequired: false as const,
+        accessToken: result.accessToken,
+        admin: result.admin,
+      };
+    }
+    return result;
+  }
+
+  @Public()
+  @Post('resume')
+  @HttpCode(200)
+  async resume(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    this.assertIp(req);
+    const result = await this.auth.resumeFromIp({
+      ip: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] ?? null,
+    });
+    res.setHeader(
+      'Set-Cookie',
+      buildAdminRefreshCookieHeader(result.refreshToken, result.maxAgeSeconds),
+    );
+    return {
+      accessToken: result.accessToken,
+      admin: result.admin,
+    };
   }
 
   @Public()

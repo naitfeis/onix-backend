@@ -5,7 +5,7 @@
 
 export type RiskAction = 'ALLOW' | 'MONITOR' | 'STEP_UP' | 'BLOCK';
 
-export type RiskActionKind = 'LOGIN' | 'WITHDRAW';
+export type RiskActionKind = 'LOGIN' | 'WITHDRAW' | 'PURCHASE' | 'SELL' | 'TRANSFER' | 'SPEND';
 
 export type RiskFactor =
   | 'NEW_DEVICE'
@@ -14,7 +14,11 @@ export type RiskFactor =
   | 'LARGE_AMOUNT'
   | 'NEW_PAYOUT_DEST'
   | 'HIGH_SESSION_RISK'
-  | 'CONTEXT_SHIFT';
+  | 'CONTEXT_SHIFT'
+  | 'BAN_EVASION'
+  | 'ACCOUNT_SALE_PROCEEDS'
+  | 'SUSPICIOUS_FUNDS'
+  | 'SECURITY_LOCK_ACTIVE';
 
 export type RiskDecision = {
   action: RiskAction;
@@ -22,10 +26,23 @@ export type RiskDecision = {
   factors: RiskFactor[];
   /** Human-readable reason for clients / audit (no secrets). */
   reason: string;
+  level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 };
 
 export type RiskEventDraft = {
-  type: 'SESSION_ANOMALY' | 'IMPOSSIBLE_TRAVEL' | 'ACCOUNT_TAKEOVER_SUSPECTED';
+  type:
+    | 'SESSION_ANOMALY'
+    | 'IMPOSSIBLE_TRAVEL'
+    | 'ACCOUNT_TAKEOVER_SUSPECTED'
+    | 'BAN_EVASION'
+    | 'HIGH_RISK_THRESHOLD'
+    | 'SECURITY_LOCK'
+    | 'OFF_PLATFORM_PAYMENT'
+    | 'EXTERNAL_CONTACT'
+    | 'SPAM'
+    | 'DUPLICATE_LISTING'
+    | 'SUSPICIOUS_LINK'
+    | 'FRAUD_ATTEMPT';
   severity: number;
   ipAddress?: string | null;
   country?: string | null;

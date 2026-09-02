@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
-  Module, NotFoundException, Param, Post, Query,
+  Module, NotFoundException, Optional, Param, Post, Query,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -19,6 +19,8 @@ import {
   notificationOrderId,
 } from './domain-notify';
 import { EconomyModule } from './economy/economy.module';
+import { RiskEngineService } from './risk/risk-engine.service';
+import { RiskModule } from './risk/risk.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { saleKindFromSubcategory } from './economy/wallet/fund-provenance';
@@ -71,6 +73,7 @@ export class EscrowService {
     private readonly clawbacks: ClawbackService,
     private readonly locks: LockService,
     private readonly realtime: RealtimeBus,
+    @Optional() private readonly risk?: RiskEngineService,
   ) {}
 
   private emitOrderUpdated(order: {
@@ -138,13 +141,19 @@ export class EscrowService {
       take: 100,
     });
     return orders.map((order) => {
-      const ticket = order.supportTickets[0] ?? null;
+      const ticket = order.supportTickets[0]
+        ? { ...order.supportTickets[0], chatId: order.supportTickets[0].chatId ?? order.chat?.id ?? '' }
+        : null;
       const dispute = buildLightDisputeCard({
         orderId: order.id,
         status: order.status,
         ticket,
       });
-      return dealDto({ ...order, dispute }, user);
+      const supportTickets = order.supportTickets.map((t) => ({
+        ...t,
+        chatId: t.chatId ?? undefined,
+      }));
+      return dealDto({ ...order, supportTickets, dispute }, user);
     });
   }
 
@@ -153,6 +162,13 @@ export class EscrowService {
    * all call POST /orders/product/:productId → this method only.
    */
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
+    const productPeek = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { priceCents: true },
+    });
+    if (productPeek && this.risk) {
+      await this.risk.assertPurchaseAllowed(user.id, productPeek.priceCents * BigInt(quantity));
+    }
     const { order, notifyIds } = await withSerializableTransaction(this.prisma, async (tx) => {
       const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
       if (existing) {
@@ -856,7 +872,7 @@ export class EscrowController {
 }
 
 @Module({
-  imports: [EconomyModule, RealtimeModule],
+  imports: [EconomyModule, RealtimeModule, RiskModule],
   controllers: [EscrowController],
   providers: [EscrowService],
   exports: [EscrowService],

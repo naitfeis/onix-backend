@@ -7,12 +7,11 @@ import { createId } from '../economy/wallet/cuid';
 import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
-import {
-  hashMfaCode, hashPassword, mintMfaCode, verifyPassword,
-} from './admin-crypto';
+import { hashIp, hashMfaCode, hashPassword, mintMfaCode, verifyPassword } from './admin-crypto';
 import { AdminSessionService } from './admin-session.service';
 
 const MFA_TTL_MS = Number(process.env.ADMIN_MFA_TTL_MS ?? 10 * 60 * 1000);
+const IP_TRUST_TTL_MS = Number(process.env.ADMIN_IP_TRUST_TTL_MS ?? 7 * 24 * 60 * 60 * 1000);
 
 @Injectable()
 export class AdminAuthService implements OnModuleInit {
@@ -63,12 +62,29 @@ export class AdminAuthService implements OnModuleInit {
     email: string;
     password: string;
     ip?: string | null;
-  }): Promise<{ mfaRequired: true; challengeId: string; debugCode?: string }> {
+    userAgent?: string | null;
+  }): Promise<
+    | { mfaRequired: true; challengeId: string; debugCode?: string }
+    | { mfaRequired: false; accessToken: string; refreshToken: string; maxAgeSeconds: number; admin: { id: string; email: string; role: AdminRole } }
+  > {
     assertRateLimit(`admin-login:${input.ip ?? 'unknown'}`, 10, 60_000);
     const email = input.email.trim().toLowerCase();
     const admin = await this.prisma.adminUser.findUnique({ where: { email } });
     if (!admin || !verifyPassword(input.password, admin.passwordHash)) {
       throw new UnauthorizedException('Неверный email или пароль.');
+    }
+
+    const trusted = await this.findTrustedIp(admin.id, input.ip);
+    if (trusted) {
+      const issued = await this.issueSession(admin, input.ip, input.userAgent);
+      await this.touchTrustedIp(admin.id, input.ip);
+      return {
+        mfaRequired: false,
+        accessToken: issued.accessToken,
+        refreshToken: issued.refreshToken,
+        maxAgeSeconds: issued.maxAgeSeconds,
+        admin: issued.admin,
+      };
     }
 
     const code = mintMfaCode();
@@ -173,6 +189,8 @@ export class AdminAuthService implements OnModuleInit {
       return issued;
     });
 
+    await this.rememberTrustedIp(challenge.adminUser.id, input.ip);
+
     return {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -202,5 +220,88 @@ export class AdminAuthService implements OnModuleInit {
       email: actor.email,
       role: actor.role,
     };
+  }
+
+  async resumeFromIp(input: { ip?: string | null; userAgent?: string | null }) {
+    assertRateLimit(`admin-resume:${input.ip ?? 'unknown'}`, 20, 60_000);
+    const ipHash = hashIp(input.ip);
+    if (!ipHash) throw new UnauthorizedException('Не удалось определить IP.');
+    const matches = await this.prisma.adminTrustedIp.findMany({
+      where: { ipHash, expiresAt: { gt: new Date() } },
+      include: { adminUser: true },
+      take: 3,
+    });
+    if (matches.length !== 1) {
+      throw new UnauthorizedException('Нет доверенной admin-сессии для этого IP.');
+    }
+    const admin = matches[0]!.adminUser;
+    const issued = await this.issueSession(admin, input.ip, input.userAgent);
+    await this.touchTrustedIp(admin.id, input.ip);
+    await this.prisma.adminActionLog.create({
+      data: {
+        adminUserId: admin.id,
+        action: 'ADMIN_IP_RESUME',
+        metadataJson: { sessionId: issued.sessionId },
+      },
+    });
+    return {
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      maxAgeSeconds: issued.maxAgeSeconds,
+      admin: issued.admin,
+    };
+  }
+
+  private async issueSession(
+    admin: { id: bigint; email: string; role: AdminRole },
+    ip?: string | null,
+    userAgent?: string | null,
+  ) {
+    const issued = await this.sessions.createSession({
+      adminUserId: admin.id,
+      role: admin.role,
+      email: admin.email,
+      ip,
+      userAgent,
+    });
+    await this.prisma.adminUser.update({
+      where: { id: admin.id },
+      data: { lastLoginAt: new Date() },
+    });
+    return {
+      accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      maxAgeSeconds: issued.maxAgeSeconds,
+      sessionId: issued.actor.sessionId,
+      admin: {
+        id: issued.actor.id.toString(),
+        email: issued.actor.email,
+        role: issued.actor.role,
+      },
+    };
+  }
+
+  private async findTrustedIp(adminUserId: bigint, ip?: string | null) {
+    const ipHash = hashIp(ip);
+    if (!ipHash) return null;
+    return this.prisma.adminTrustedIp.findFirst({
+      where: { adminUserId, ipHash, expiresAt: { gt: new Date() } },
+      select: { id: true },
+    });
+  }
+
+  private async rememberTrustedIp(adminUserId: bigint, ip?: string | null): Promise<void> {
+    const ipHash = hashIp(ip);
+    if (!ipHash) return;
+    const expiresAt = new Date(Date.now() + IP_TRUST_TTL_MS);
+    await this.prisma.adminTrustedIp.upsert({
+      where: { adminUserId_ipHash: { adminUserId, ipHash } },
+      create: { adminUserId, ipHash, expiresAt, lastSeenAt: new Date() },
+      update: { expiresAt, lastSeenAt: new Date() },
+    });
+  }
+
+  private async touchTrustedIp(adminUserId: bigint, ip?: string | null): Promise<void> {
+    await this.rememberTrustedIp(adminUserId, ip);
   }
 }

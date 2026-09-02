@@ -50,6 +50,13 @@ model User {
   bannedUntil            DateTime?
   /** When set, user cannot create/update listings (account still works). */
   sellBannedAt           DateTime?
+  /** Automatic Risk Engine lock — never deletes the account. */
+  securityLockedAt       DateTime?
+  securityLockLevel      String?   @db.VarChar(16)
+  securityLockReason     String?   @db.VarChar(500)
+  securityCasePublicId   String?   @db.VarChar(32)
+  withdrawBlockedAt      DateTime?
+  suspiciousFundsHoldAt  DateTime?
   mergedIntoUserId       BigInt?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -83,7 +90,9 @@ model User {
   reportsMade           UserReport[]         @relation("ReportAuthor")
   reportsReceived       UserReport[]         @relation("ReportTarget")
   auditLogs             AuditLog[]           @relation("AuditActor")
-  supportTickets        SupportTicket[]
+  supportTickets        SupportTicket[] @relation("TicketOpener")
+  ticketsReported       SupportTicket[] @relation("TicketReported")
+  ticketEvents          SupportTicketEvent[]
   identityLinks         IdentityLink[]
   sessions              Session[]
   userRoles             UserRole[]
@@ -364,20 +373,50 @@ model UserReport {
 }
 
 model SupportTicket {
-  id         String              @id @default(cuid())
-  orderId    BigInt
-  chatId     String
-  openedById BigInt
-  status     SupportTicketStatus @default(OPEN)
-  createdAt  DateTime            @default(now())
-  closedAt   DateTime?
-  order      Order               @relation(fields: [orderId], references: [id])
-  chat       Chat                @relation(fields: [chatId], references: [id])
-  openedBy   User                @relation(fields: [openedById], references: [id])
+  id                     String                 @id @default(cuid())
+  publicNumber           Int                    @unique @default(autoincrement())
+  orderId                BigInt?
+  chatId                 String?
+  openedById             BigInt?
+  reportedUserId         BigInt?
+  relatedListingId       String?
+  relatedRiskEventId     BigInt?
+  relatedSecurityEventId BigInt?
+  status                 SupportTicketStatus    @default(OPEN)
+  category               SupportTicketCategory  @default(OTHER)
+  priority               SupportTicketPriority  @default(MEDIUM)
+  subject                String?                @db.VarChar(240)
+  body                   String?                @db.Text
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  closedAt               DateTime?
+  order                  Order?                 @relation(fields: [orderId], references: [id])
+  chat                   Chat?                  @relation(fields: [chatId], references: [id])
+  openedBy               User?                  @relation("TicketOpener", fields: [openedById], references: [id])
+  reportedUser           User?                  @relation("TicketReported", fields: [reportedUserId], references: [id])
+  events                 SupportTicketEvent[]
 
   @@index([orderId, status])
   @@index([chatId])
   @@index([status, createdAt])
+  @@index([category, status, createdAt])
+  @@index([priority, status, createdAt])
+  @@index([reportedUserId, createdAt])
+}
+
+model SupportTicketEvent {
+  id          String        @id @default(cuid())
+  ticketId    String
+  kind        String        @db.VarChar(64)
+  message     String        @db.VarChar(1000)
+  actorUserId BigInt?
+  actorAdminId BigInt?
+  payload     Json?
+  createdAt   DateTime      @default(now())
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorUser   User?         @relation(fields: [actorUserId], references: [id])
+
+  @@index([ticketId, createdAt])
 }
 
 model UserBlock {
@@ -708,6 +747,15 @@ enum SecurityEventType {
   SESSION_ANOMALY
   ACCOUNT_TAKEOVER_SUSPECTED
   REGISTRATION_BLOCKED
+  BAN_EVASION
+  OFF_PLATFORM_PAYMENT
+  EXTERNAL_CONTACT
+  SPAM
+  DUPLICATE_LISTING
+  SUSPICIOUS_LINK
+  FRAUD_ATTEMPT
+  SECURITY_LOCK
+  HIGH_RISK_THRESHOLD
 }
 
 enum AbuseMarkerKind {
@@ -715,6 +763,9 @@ enum AbuseMarkerKind {
   BROWSER_ID
   IP
   USER_AGENT
+  TELEGRAM_ID
+  PHONE_HASH
+  VK_ID
 }
 
 enum SecurityEventStatus {
@@ -1025,12 +1076,14 @@ model LoginChallenge {
   exchangeExpiresAt       DateTime?
   createdIp               String?              @db.VarChar(64)
   createdUserAgent        String?              @db.VarChar(512)
+  telegramChatId          BigInt?
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
 
   @@index([loginSessionId, status])
   @@index([status, expiresAt])
   @@index([telegramId])
+  @@index([telegramChatId, status, createdAt])
 }
 
 enum ProductStatus {
@@ -1160,7 +1213,38 @@ enum MessageKind {
 
 enum SupportTicketStatus {
   OPEN
+  IN_REVIEW
+  WAITING_USER
+  RESOLVED
   CLOSED
+}
+
+enum SupportTicketCategory {
+  FRAUD_REPORT
+  RISK_ENGINE
+  BAN_EVASION
+  ACCOUNT_SECURITY
+  BAN_APPEAL
+  SELL_BAN_APPEAL
+  WITHDRAWAL_REVIEW
+  CHAT_ABUSE
+  SPAM
+  HARASSMENT
+  ORDER_DISPUTE
+  REFUND_REQUEST
+  ITEM_NOT_RECEIVED
+  ITEM_NOT_AS_DESCRIBED
+  ACCOUNT
+  PAYMENT
+  BUG
+  OTHER
+}
+
+enum SupportTicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 /** Public account status (everyone starts as USER). */
@@ -1265,6 +1349,20 @@ model AdminUser {
   sessions      AdminSession[]
   mfaChallenges AdminMfaChallenge[]
   actionLogs    AdminActionLog[]
+  trustedIps    AdminTrustedIp[]
+}
+
+model AdminTrustedIp {
+  id          String    @id @default(cuid())
+  adminUserId BigInt
+  ipHash      String    @db.VarChar(64)
+  createdAt   DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  expiresAt   DateTime
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, ipHash])
+  @@index([ipHash, expiresAt])
 }
 
 model AdminSession {

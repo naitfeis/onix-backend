@@ -75,6 +75,8 @@ export class ProfilesService {
           ratingAverage: true, ratingCount: true, completedSales: true,
           lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
           telegramId: true, sellBannedAt: true,
+          securityLockedAt: true, securityLockLevel: true, securityLockReason: true, securityCasePublicId: true,
+          withdrawBlockedAt: true, suspiciousFundsHoldAt: true,
           _count: { select: { followers: true } },
           sellerSubscription: { select: { status: true, endsAt: true } },
         },
@@ -100,9 +102,19 @@ export class ProfilesService {
     const hasTelegram = profile.telegramId != null;
     return {
       ...base,
-      canSell: hasTelegram && !profile.sellBannedAt,
+      canSell: hasTelegram && !profile.sellBannedAt && !profile.securityLockedAt,
       hasTelegram,
       hasGoogle: Boolean(googleLink),
+      securityLock: profile.securityLockedAt
+        ? {
+          locked: true as const,
+          level: profile.securityLockLevel,
+          reason: profile.securityLockReason,
+          caseId: profile.securityCasePublicId,
+          withdrawBlocked: Boolean(profile.withdrawBlockedAt),
+          fundsHold: Boolean(profile.suspiciousFundsHoldAt),
+        }
+        : { locked: false as const },
       deposit: {
         availableCents: profile.depositAvailableCents.toString(),
         lockedCents: profile.depositLockedCents.toString(),

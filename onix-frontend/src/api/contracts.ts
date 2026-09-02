@@ -172,6 +172,14 @@ export interface Profile extends Seller {
   canSell?: boolean;
   hasTelegram?: boolean;
   hasGoogle?: boolean;
+  securityLock?: {
+    locked: boolean;
+    level?: string | null;
+    reason?: string | null;
+    caseId?: string | null;
+    withdrawBlocked?: boolean;
+    fundsHold?: boolean;
+  };
 }
 
 /** GET /api/users/me/analytics — Mon–Sun week */
@@ -386,6 +394,7 @@ export const API_PATHS = {
   dealDispute: (id: string) => `/api/orders/${encodeURIComponent(id)}/dispute`,
   orderRefundRequest: (id: string) => `/api/orders/${encodeURIComponent(id)}/refund-request`,
   orderSupport: (id: string) => `/api/orders/${encodeURIComponent(id)}/support`,
+  supportAppeal: '/api/support/appeals',
   mePresence: '/api/users/me/presence',
   leaveGroupChat: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members/me`,
   chats: '/api/chats',

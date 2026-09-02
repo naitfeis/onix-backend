@@ -12,6 +12,8 @@ import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, publicSubcategoryCatalog } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
+import { RiskEngineService } from './risk/risk-engine.service';
+import { RiskModule } from './risk/risk.module';
 import { AuthModule, AuthService } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
 import { encryptDeliverySecret } from './delivery-crypto';
@@ -137,6 +139,7 @@ export class MarketplaceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeBus,
+    @Optional() private readonly risk?: RiskEngineService,
   ) {}
 
   private emitProductChanged(product: { id: string; status: string; quantity: number }, opts?: { created?: boolean }): void {
@@ -338,6 +341,9 @@ export class MarketplaceService {
     });
     if (seller?.sellBannedAt) {
       throw new BadRequestException('Продажа товаров запрещена администратором.');
+    }
+    if (this.risk) {
+      await this.risk.assertSellAllowed(user.id, dto.title);
     }
     if (!seller?.telegramId) {
       throw new BadRequestException('Чтобы продавать, привяжите Telegram к аккаунту.');
@@ -646,7 +652,7 @@ export class MarketplaceController {
 }
 
 @Module({
-  imports: [AuthV2Module, AuthModule, RealtimeModule],
+  imports: [AuthV2Module, AuthModule, RealtimeModule, RiskModule],
   // Product moderation lives in the separate AdminModule control plane.
   controllers: [MarketplaceController],
   providers: [MarketplaceService],

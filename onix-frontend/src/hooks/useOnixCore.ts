@@ -15,6 +15,7 @@ import {
   isTelegramMiniApp,
   signalTelegramReadyIfMiniApp,
   telegramHaptic,
+  waitForTelegramMiniAppSurface,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
 import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
@@ -215,7 +216,8 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
 }
 
 async function ensureWebsiteOrMiniAuth(): Promise<AuthBootstrap> {
-  if (isTelegramMiniApp()) {
+  const miniSurface = await waitForTelegramMiniAppSurface();
+  if (miniSurface || isTelegramMiniApp()) {
     const miniOk = await bootstrapPhase('telegram', async () => {
       // Wait for initData (SDK may need to parse tgWebAppData) before /telegram-mini.
       await ensureTelegramMiniAppReady();

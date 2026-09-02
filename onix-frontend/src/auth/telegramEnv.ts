@@ -30,8 +30,7 @@ let ensuredInitData = '';
 /**
  * Cached detect result for this page load.
  * - `true` sticks once initData / markers confirm Mini App.
- * - `false` sticks only for definitive www (no inject, no tgWebAppData URL).
- * Ambiguous cases (empty WebApp stub / URL-only) are not cached as false.
+ * - `false` is never cached: Telegram inject often arrives after the first JS tick.
  */
 let cachedIsMiniApp: boolean | undefined;
 let lastDetectLogKey: string | undefined;
@@ -106,10 +105,35 @@ function computeIsTelegramMiniApp(): boolean {
   return false;
 }
 
+function looksLikeTelegramWebView(): boolean {
+  try {
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    if (/Telegram/i.test(ua)) return true;
+    const root = globalThis as typeof globalThis & { TelegramWebviewProxy?: unknown };
+    if (root.TelegramWebviewProxy) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+function isSdkStubOnly(): boolean {
+  const tg = readInjectedWebApp();
+  if (!tg) return false;
+  const platform = tg.platform ?? '';
+  const empty = !tg.initData;
+  return empty && (platform === 'unknown' || platform === '') && !looksLikeTelegramWebView() && !hasTgWebAppUrlMarker();
+}
+
+function shouldWaitForTelegramInject(): boolean {
+  if (computeIsTelegramMiniApp()) return false;
+  if (isSdkStubOnly()) return false;
+  return looksLikeTelegramWebView() || hasTgWebAppUrlMarker() || Boolean(readInjectedWebApp());
+}
+
 /** True inside Telegram Mini App (initData / URL markers / native platform). */
 export function isTelegramMiniApp(): boolean {
   if (cachedIsMiniApp === true) return true;
-  if (cachedIsMiniApp === false) return false;
 
   const result = computeIsTelegramMiniApp();
   if (result) {
@@ -118,15 +142,37 @@ export function isTelegramMiniApp(): boolean {
     return true;
   }
 
-  // Definitive ordinary www — safe to cache for the page lifetime.
-  if (!readInjectedWebApp() && !hasTgWebAppUrlMarker()) {
-    cachedIsMiniApp = false;
-    logTelegramDetect('isTelegramMiniApp:false', false);
-    return false;
-  }
+  // Never cache false: Telegram often injects WebApp after the first JS tick.
+  // Caching false made Mini App boot as www, then look like a full refresh.
+  logTelegramDetect('isTelegramMiniApp:pending-or-www', false);
+  return false;
+}
 
-  // Ambiguous: empty inject / pending initData — recompute next call, log once.
-  logTelegramDetect('isTelegramMiniApp:pending', false);
+/**
+ * Mini App WebView often injects `Telegram.WebApp` a tick after JS starts.
+ * Wait briefly when the surface looks like Telegram; no-op on ordinary www.
+ */
+export async function waitForTelegramMiniAppSurface(timeoutMs = 1800): Promise<boolean> {
+  if (computeIsTelegramMiniApp()) {
+    cachedIsMiniApp = true;
+    await ensureTelegramMiniAppReady();
+    return true;
+  }
+  if (!shouldWaitForTelegramInject()) return false;
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (Date.now() < deadline) {
+    if (computeIsTelegramMiniApp()) {
+      cachedIsMiniApp = true;
+      await ensureTelegramMiniAppReady();
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+  if (computeIsTelegramMiniApp()) {
+    cachedIsMiniApp = true;
+    await ensureTelegramMiniAppReady();
+    return true;
+  }
   return false;
 }
 
@@ -171,7 +217,8 @@ async function loadTwaSdk(): Promise<TelegramWebAppLike | undefined> {
 function signalReady(tg: TelegramWebAppLike | undefined): void {
   try {
     tg?.ready?.();
-    tg?.expand?.();
+    const expanded = (tg as TelegramWebAppLike & { isExpanded?: boolean })?.isExpanded;
+    if (!expanded) tg?.expand?.();
   } catch {
     /* ignore */
   }

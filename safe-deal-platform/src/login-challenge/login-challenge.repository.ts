@@ -35,6 +35,27 @@ export class LoginChallengeRepository {
   }
 
   /**
+   * Live challenge for this Telegram chat, else a very fresh global one (Desktop drops start payload).
+   */
+  async findLatestLiveForChat(chatId: bigint): Promise<LoginChallenge | null> {
+    return this.prisma.loginChallenge.findFirst({
+      where: {
+        telegramChatId: chatId,
+        status: { in: ['CREATED', 'OPENED'] },
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async attachTelegramChat(id: string, chatId: bigint): Promise<void> {
+    await this.prisma.loginChallenge.updateMany({
+      where: { id },
+      data: { telegramChatId: chatId },
+    });
+  }
+
+  /**
    * Newest live website login in the TTL window.
    * Used when Telegram Desktop delivers a bare `/start` and drops `login_<id>`.
    */

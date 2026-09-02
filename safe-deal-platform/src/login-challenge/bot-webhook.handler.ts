@@ -23,6 +23,7 @@ type TelegramUpdate = {
   update_id?: number;
   message?: {
     text?: string;
+    message_id?: number;
     from?: TelegramUser;
     chat?: { id: number };
   };
@@ -228,6 +229,7 @@ export class BotWebhookHandler {
 
   private async onBareStart(update: TelegramUpdate) {
     const chatId = update.message?.chat?.id;
+    const replyTo = update.message?.message_id;
     if (chatId == null) return { ok: true, ignored: true, reason: 'start_format' };
     this.logger.warn(JSON.stringify({
       msg: '[Bot] /start without login payload — Telegram likely focused an existing chat',
@@ -235,7 +237,7 @@ export class BotWebhookHandler {
       chatId,
     }));
     try {
-      const live = await this.challenges.openLatestLiveForBareStart();
+      const live = await this.challenges.openLatestLiveForBareStart(chatId);
       if (live?.challengeId) {
         this.logger.log(JSON.stringify({
           msg: '[Bot] attaching bare /start to newest live website login',
@@ -251,12 +253,12 @@ export class BotWebhookHandler {
     }
     const sent = await sendTelegramMessage({
       chatId,
+      replyToMessageId: replyTo,
       text: [
-        'Чтобы войти на сайт ONIX, нажмите «Войти через Telegram» на сайте и не закрывайте вкладку.',
+        'Срок попытки входа истёк или вход с сайта ещё не начат.',
         '',
-        'Если Telegram уже был открыт, команда /start без кода вход не открывает.',
-        'Вернитесь на сайт и нажмите кнопку ещё раз — в этом чате должна появиться клавиатура «Подтвердить вход».',
-        'Либо нажмите MARKET и дождитесь входа в приложении.',
+        'Вернитесь на сайт ONIX и нажмите «Войти через Telegram» ещё раз.',
+        'Не закрывайте вкладку сайта — после подтверждения вход завершится сам.',
       ].join('\n'),
       replyMarkup: {
         inline_keyboard: [[{ text: 'Открыть ONIX', url: 'https://www.onixtg.shop' }]],
@@ -324,6 +326,7 @@ export class BotWebhookHandler {
 
       const sent = await sendTelegramMessage({
         chatId,
+        replyToMessageId: update.message?.message_id,
         text,
         parseMode: 'HTML',
         replyMarkup: {
@@ -334,7 +337,6 @@ export class BotWebhookHandler {
         },
       });
       this.logBotApi('[Bot] sendMessage result', sent);
-
       if (!sent.ok) {
         this.logger.error(JSON.stringify({
           msg: '[Bot] chain break — Telegram Bot API sendMessage FAILED',
@@ -351,6 +353,7 @@ export class BotWebhookHandler {
         challengeId,
         messageId: sent.messageId ?? null,
       }));
+      await this.challenges.attachPromptChat?.(prompt.challengeId, chatId)?.catch?.(() => undefined);
       return { ok: true, prompted: true, messageId: sent.messageId ?? null };
     } catch (error) {
       const message = error instanceof AuthPlatformError
@@ -363,7 +366,7 @@ export class BotWebhookHandler {
         errorCode: error instanceof AuthPlatformError ? error.code : 'UNKNOWN',
         error: error instanceof Error ? error.message : String(error),
       }));
-      const sent = await sendTelegramMessage({ chatId, text: message });
+      const sent = await sendTelegramMessage({ chatId, text: message, replyToMessageId: update.message?.message_id });
       this.logBotApi('[Bot] error notify sendMessage', sent);
       return { ok: true, prompted: false, reason: 'challenge_lookup_failed' };
     }

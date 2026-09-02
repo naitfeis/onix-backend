@@ -25,29 +25,49 @@ export function App() {
   const [chatId, setChatId] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = getAdminToken();
-    if (!token) {
-      void adminApi<{ accessToken: string; admin: AdminMe }>('/api/admin/auth/refresh', {
-        method: 'POST',
-      })
-        .then((result) => {
+    let cancelled = false;
+    async function boot() {
+      try {
+        const token = getAdminToken();
+        if (token) {
+          try {
+            const me = await adminApi<AdminMe>('/api/admin/me');
+            if (!cancelled) setAdmin(me);
+            return;
+          } catch {
+            clearAdminToken();
+          }
+        }
+        try {
+          const result = await adminApi<{ accessToken: string; admin: AdminMe }>('/api/admin/auth/refresh', {
+            method: 'POST',
+          });
+          if (cancelled) return;
           setAdminToken(result.accessToken);
           setAdmin(result.admin);
-        })
-        .catch(() => {
-          clearAdminToken();
-          setAdmin(null);
-        })
-        .finally(() => setBooting(false));
-      return;
+          return;
+        } catch {
+          /* try same-IP resume */
+        }
+        try {
+          const result = await adminApi<{ accessToken: string; admin: AdminMe }>('/api/admin/auth/resume', {
+            method: 'POST',
+          });
+          if (cancelled) return;
+          setAdminToken(result.accessToken);
+          setAdmin(result.admin);
+        } catch {
+          if (!cancelled) {
+            clearAdminToken();
+            setAdmin(null);
+          }
+        }
+      } finally {
+        if (!cancelled) setBooting(false);
+      }
     }
-    void adminApi<AdminMe>('/api/admin/me')
-      .then((me) => setAdmin(me))
-      .catch(() => {
-        clearAdminToken();
-        setAdmin(null);
-      })
-      .finally(() => setBooting(false));
+    void boot();
+    return () => { cancelled = true; };
   }, []);
 
   if (booting) {
@@ -73,7 +93,7 @@ export function App() {
         <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{adminRoleLabel(admin.role)}</p>
         <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Дашборд</button>
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Сделки</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Тикеты и жалобы</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Support & Security</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'products' ? 'active' : ''} onClick={() => setScreen('products')}>Лоты</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'messages' ? 'active' : ''} onClick={() => setScreen('messages')}>Чаты</button>}
         <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Аудит</button>
@@ -81,7 +101,7 @@ export function App() {
         {admin.role !== 'SUPPORT_ADMIN' && <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Выводы</button>}
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'FINANCE_ADMIN') && <button type="button" className={screen === 'payments' ? 'active' : ''} onClick={() => setScreen('payments')}>Платежи</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>Пользователи / баны</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Риск</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Center</button>}
         <div style={{ marginTop: '1.5rem' }}>
           <button
             type="button"

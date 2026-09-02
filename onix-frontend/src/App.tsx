@@ -241,7 +241,21 @@ export default function App() {
   );
   const leftIcons = rails.left <= LEFT_ICONS_AT;
   const rightIcons = rails.right <= RIGHT_ICONS_AT;
-  const miniApp = useMemo(() => isTelegramMiniApp(), []);
+  const [miniApp, setMiniApp] = useState(() => isTelegramMiniApp());
+  useEffect(() => {
+    if (miniApp) return;
+    const id = window.setInterval(() => {
+      if (isTelegramMiniApp()) {
+        setMiniApp(true);
+        window.clearInterval(id);
+      }
+    }, 80);
+    const stop = window.setTimeout(() => window.clearInterval(id), 2500);
+    return () => {
+      window.clearInterval(id);
+      window.clearTimeout(stop);
+    };
+  }, [miniApp]);
 
   useEffect(() => {
     const unlock = () => unlockSounds();

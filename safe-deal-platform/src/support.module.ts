@@ -7,6 +7,12 @@ import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, deliverTelegramAfterCommit, pushTelegramToChatId } from './domain-notify';
 import { invalidateArbitrationContextCache } from './dispute-card';
 import { PrismaService } from './prisma.service';
+import { SupportCenterService } from './support-center.service';
+import { RiskModule } from './risk/risk.module';
+
+class AppealDto {
+  @IsString() @MaxLength(2000) explanation!: string;
+}
 
 class OpenSupportDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
@@ -55,6 +61,10 @@ export class SupportService {
           chatId: chat.id,
           openedById: user.id,
           status: 'OPEN',
+          category: 'ORDER_DISPUTE',
+          priority: 'HIGH',
+          subject: `Сделка #${orderId}`,
+          body: reason?.trim() || null,
         },
       });
       await tx.message.create({
@@ -99,7 +109,10 @@ export class SupportService {
 
 @Controller()
 export class SupportController {
-  constructor(private readonly support: SupportService) {}
+  constructor(
+    private readonly support: SupportService,
+    private readonly center: SupportCenterService,
+  ) {}
 
   @Post('orders/:id/support')
   open(
@@ -109,10 +122,19 @@ export class SupportController {
   ) {
     return this.support.open(user, parseId(id), dto.reason);
   }
+
+  @Post('support/appeals')
+  appeal(@CurrentUser() user: AuthUser, @Body() dto: AppealDto) {
+    const text = dto.explanation.trim();
+    if (text.length < 8) throw new BadRequestException('Опишите ситуацию подробнее.');
+    return this.center.createAppeal(user.id, text);
+  }
 }
 
 @Module({
+  imports: [RiskModule],
   controllers: [SupportController],
-  providers: [SupportService],
+  providers: [SupportService, SupportCenterService],
+  exports: [SupportService, SupportCenterService],
 })
 export class SupportModule {}

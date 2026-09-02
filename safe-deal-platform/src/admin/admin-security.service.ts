@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { PaymentWallet, PlatformStatus, Prisma } from '@prisma/client';
+import type { PaymentWallet, PlatformStatus, Prisma, SecurityEventStatus } from '@prisma/client';
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
@@ -102,7 +102,7 @@ export class AdminSecurityService {
         where: { status: { in: ['OPEN', 'PARTIAL'] } },
       }),
       this.listSecurityFlags({ limit: 50 }),
-      this.prisma.supportTicket.count({ where: { status: 'OPEN' } }),
+      this.prisma.supportTicket.count({ where: { status: { in: ['OPEN', 'IN_REVIEW', 'WAITING_USER'] } } }),
       this.prisma.userReport.count({ where: { closedAt: null } }),
       this.prisma.user.count(),
       this.prisma.user.count({ where: { deletedAt: { not: null } } }),
@@ -826,7 +826,7 @@ export class AdminSecurityService {
   async listSupportQueue() {
     const [tickets, disputes] = await Promise.all([
       this.prisma.supportTicket.findMany({
-        where: { status: 'OPEN' },
+        where: { status: { in: ['OPEN', 'IN_REVIEW'] }, orderId: { not: null } },
         orderBy: { createdAt: 'desc' },
         take: 100,
         select: {
@@ -858,19 +858,23 @@ export class AdminSecurityService {
       username: user.displayName ?? formatOnixId(user.onixId),
     });
     return [
-      ...tickets.map((ticket) => ({
-        ticketId: ticket.id,
-        orderId: ticket.order.id.toString(),
-        chatId: ticket.chatId,
-        kind: ticket.order.status === 'DISPUTE' ? 'DISPUTE' : 'SUPPORT',
-        status: ticket.order.status,
-        productTitle: ticket.order.product.title,
-        totalAmountCents: ticket.order.totalAmountCents.toString(),
-        reason: ticket.order.disputeReason,
-        buyer: party(ticket.order.buyer),
-        seller: party(ticket.order.seller),
-        createdAt: ticket.createdAt.toISOString(),
-      })),
+      ...tickets.flatMap((ticket) => {
+        const order = ticket.order;
+        if (!order) return [];
+        return [{
+          ticketId: ticket.id,
+          orderId: order.id.toString(),
+          chatId: ticket.chatId,
+          kind: order.status === 'DISPUTE' ? 'DISPUTE' : 'SUPPORT',
+          status: order.status,
+          productTitle: order.product.title,
+          totalAmountCents: order.totalAmountCents.toString(),
+          reason: order.disputeReason,
+          buyer: party(order.buyer),
+          seller: party(order.seller),
+          createdAt: ticket.createdAt.toISOString(),
+        }];
+      }),
       ...disputes.map((order) => ({
         ticketId: null,
         orderId: order.id.toString(),
@@ -896,16 +900,18 @@ export class AdminSecurityService {
         where: { id: ticketId },
         data: { status: 'CLOSED', closedAt: new Date() },
       });
-      await tx.message.create({
-        data: {
-          chatId: ticket.chatId,
-          kind: 'SYSTEM',
-          senderId: null,
-          text: reason?.trim()
-            ? `Обращение закрыто поддержкой.\n${reason.trim().slice(0, 1000)}`
-            : 'Обращение закрыто поддержкой.',
-        },
-      });
+      if (ticket.chatId) {
+        await tx.message.create({
+          data: {
+            chatId: ticket.chatId,
+            kind: 'SYSTEM',
+            senderId: null,
+            text: reason?.trim()
+              ? `Обращение закрыто поддержкой.\n${reason.trim().slice(0, 1000)}`
+              : 'Обращение закрыто поддержкой.',
+          },
+        });
+      }
       await tx.adminActionLog.create({
         data: {
           adminUserId: actor.id,
@@ -1264,7 +1270,7 @@ export class AdminSecurityService {
       seller: { ...order.seller, id: order.seller.id.toString(), telegramId: order.seller.telegramId?.toString() ?? null, onixId: formatOnixId(order.seller.onixId) },
       product: { ...order.product, priceCents: order.product.priceCents.toString() },
       transitions: order.transitions.map((t) => ({ ...t, id: t.id.toString(), orderId: t.orderId.toString(), actorId: t.actorId?.toString() ?? null, createdAt: t.createdAt.toISOString() })),
-      supportTickets: order.supportTickets.map((t) => ({ ...t, openedById: t.openedById.toString(), createdAt: t.createdAt.toISOString(), closedAt: t.closedAt?.toISOString() ?? null })),
+      supportTickets: order.supportTickets.map((t) => ({ ...t, openedById: t.openedById?.toString() ?? null, createdAt: t.createdAt.toISOString(), closedAt: t.closedAt?.toISOString() ?? null })),
       chat: order.chat ? { id: order.chat.id, messages: order.chat.messages.map((m) => ({ ...m, id: m.id.toString(), senderId: m.senderId?.toString() ?? null, createdAt: m.createdAt.toISOString(), deletedAt: m.deletedAt?.toISOString() ?? null })) } : null,
     };
   }
@@ -1345,7 +1351,69 @@ export class AdminSecurityService {
       id: e.id.toString(),
       userId: e.userId?.toString() ?? null,
       createdAt: e.createdAt.toISOString(),
+      severity: e.severity,
     }));
+  }
+
+  async listRiskCenter() {
+    const openStatuses: SecurityEventStatus[] = ['OPEN', 'ACKNOWLEDGED'];
+    const open = { status: { in: openStatuses } };
+    const [critical, high, medium, low, events] = await Promise.all([
+      this.prisma.securityEvent.count({ where: { ...open, severity: { gte: 85 } } }),
+      this.prisma.securityEvent.count({ where: { ...open, severity: { gte: 70, lt: 85 } } }),
+      this.prisma.securityEvent.count({ where: { ...open, severity: { gte: 40, lt: 70 } } }),
+      this.prisma.securityEvent.count({ where: { ...open, severity: { lt: 40 } } }),
+      this.prisma.securityEvent.findMany({
+        where: open,
+        orderBy: [{ severity: 'desc' }, { createdAt: 'desc' }],
+        take: 80,
+      }),
+    ]);
+    const userIds = [...new Set(events.map((e) => e.userId).filter((id): id is bigint => id != null))];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: {
+          id: true, onixId: true, displayName: true,
+          securityLockedAt: true, securityLockLevel: true, securityCasePublicId: true,
+        },
+      })
+      : [];
+    const byId = new Map(users.map((u) => [u.id.toString(), u]));
+    return {
+      counts: { critical, high, medium, low },
+      events: events.map((e) => {
+        const user = e.userId ? byId.get(e.userId.toString()) : null;
+        const payload = (e.payload && typeof e.payload === 'object') ? e.payload as Record<string, unknown> : {};
+        const reasons = Array.isArray(payload.reasons) ? payload.reasons.map(String) : [];
+        const level = e.severity >= 85 ? 'CRITICAL' : e.severity >= 70 ? 'HIGH' : e.severity >= 40 ? 'MEDIUM' : 'LOW';
+        return {
+          id: e.id.toString(),
+          type: e.type,
+          severity: e.severity,
+          level,
+          status: e.status,
+          createdAt: e.createdAt.toISOString(),
+          ipAddress: e.ipAddress,
+          country: e.country,
+          payload,
+          reasons,
+          action: payload.kind === 'SECURITY_LOCK' || e.type === 'SECURITY_LOCK' || e.type === 'BAN_EVASION'
+            ? 'SECURITY_LOCK'
+            : (e.severity >= 70 ? 'MONITOR' : 'ALLOW'),
+          user: user
+            ? {
+              id: user.id.toString(),
+              onixId: formatOnixId(user.onixId),
+              username: user.displayName,
+              caseId: user.securityCasePublicId,
+              locked: Boolean(user.securityLockedAt),
+              lockLevel: user.securityLockLevel,
+            }
+            : null,
+        };
+      }),
+    };
   }
 
   async logAction(

@@ -9,6 +9,9 @@ const WEIGHT: Record<AbuseMarkerKind, number> = {
   BROWSER_ID: 35,
   IP: 15,
   USER_AGENT: 10,
+  TELEGRAM_ID: 45,
+  PHONE_HASH: 40,
+  VK_ID: 40,
 };
 
 /** Block when score >= threshold AND at least 2 distinct factors (never IP alone). */
@@ -23,6 +26,8 @@ type Db = Prisma.TransactionClient | {
   abuseMarker: { findMany: Prisma.TransactionClient['abuseMarker']['findMany']; createMany: Prisma.TransactionClient['abuseMarker']['createMany']; updateMany: Prisma.TransactionClient['abuseMarker']['updateMany'] };
   securityEvent: { create: Prisma.TransactionClient['securityEvent']['create'] };
   session: { findMany: Prisma.TransactionClient['session']['findMany'] };
+  user: { findUnique: Prisma.TransactionClient['user']['findUnique'] };
+  identityLink: { findMany: Prisma.TransactionClient['identityLink']['findMany'] };
 };
 
 function hashValue(raw: string): string {
@@ -110,6 +115,21 @@ export class RiskScoreService {
     push('BROWSER_ID', device?.browserId);
     push('IP', device?.ipAddress);
     push('USER_AGENT', device?.userAgent);
+
+    const [user, links] = await Promise.all([
+      db.user.findUnique({
+        where: { id: sourceUserId },
+        select: { telegramId: true },
+      }),
+      db.identityLink.findMany({
+        where: { userId: sourceUserId, deletedAt: null },
+        select: { provider: true, providerUserId: true },
+      }),
+    ]);
+    push('TELEGRAM_ID', user?.telegramId?.toString() ?? null);
+    for (const link of links) {
+      if (link.provider === 'TELEGRAM') push('TELEGRAM_ID', link.providerUserId);
+    }
 
     const unique = new Map(rows.map((r) => [`${r.kind}:${r.valueHash}`, r]));
     if (unique.size === 0) return;

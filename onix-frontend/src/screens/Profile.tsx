@@ -266,6 +266,9 @@ export function Profile({
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [logoutBusy, setLogoutBusy] = useState(false);
+  const [appealOpen, setAppealOpen] = useState(false);
+  const [appealText, setAppealText] = useState('');
+  const [appealBusy, setAppealBusy] = useState(false);
   const [stepUp, setStepUp] = useState<StepUpState | null>(null);
   const [stepUpStatus, setStepUpStatus] = useState<string>('PENDING');
   const showWebsiteLogout = useMemo(() => !isTelegramMiniApp(), []);
@@ -514,7 +517,16 @@ export function Profile({
         ? 'Пополнение через СБП или банковскую карту.'
         : 'Вывод на СБП или банковскую карту. Сумма и комиссия подтверждаются сервером.';
 
-  return <div className="stack"><Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+  return <div className="stack">
+    {profile.securityLock?.locked && (
+      <Card className="security-lock-banner" role="alert">
+        <strong>Аккаунт временно ограничен</strong>
+        <p>Причина: подозрительная активность{profile.securityLock.caseId ? `. ID дела: ${profile.securityLock.caseId}` : ''}</p>
+        <p className="muted">Данные сохранены. Вы можете обжаловать решение — аккаунт не удалён.</p>
+        <Button type="button" onClick={() => setAppealOpen(true)}>Обжаловать решение</Button>
+      </Card>
+    )}
+    <Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="wallet-strip">
         <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
           <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
@@ -727,6 +739,41 @@ export function Profile({
           >Повторить вывод</Button>
         </div>
       </div>
+    </Modal>
+    <Modal open={appealOpen} title="Обжаловать ограничение" onClose={() => setAppealOpen(false)}>
+      <form className="form" onSubmit={async (event) => {
+        event.preventDefault();
+        const text = appealText.trim();
+        if (text.length < 8) {
+          setToast('Опишите ситуацию подробнее.');
+          return;
+        }
+        setAppealBusy(true);
+        try {
+          const result = await api.post<{ publicId: string; caseId?: string | null }>(API_PATHS.supportAppeal, {
+            explanation: text,
+          });
+          setAppealOpen(false);
+          setAppealText('');
+          setToast(`Апелляция ${result.publicId} отправлена.`);
+        } catch (error) {
+          setToast(friendlyError(error));
+        } finally {
+          setAppealBusy(false);
+        }
+      }}>
+        <p className="muted">
+          {profile.securityLock?.caseId ? `Дело ${profile.securityLock.caseId}. ` : ''}
+          Напишите объяснение. Решение примет модератор — аккаунт не будет удалён автоматически.
+        </p>
+        <Field label="Объяснение">
+          <Textarea maxLength={2000} value={appealText} onChange={(e) => setAppealText(e.target.value)} />
+        </Field>
+        <div className="modal__actions">
+          <Button type="button" variant="secondary" onClick={() => setAppealOpen(false)}>Отмена</Button>
+          <Button type="submit" busy={appealBusy}>Отправить апелляцию</Button>
+        </div>
+      </form>
     </Modal>
   </div>;
 }

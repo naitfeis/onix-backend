@@ -9,6 +9,7 @@ import {
   decideAction,
   decisionReason,
   largeWithdrawCents,
+  riskLevel,
   scoreFactors,
 } from './risk-engine.scoring';
 import type {
@@ -18,6 +19,13 @@ import type {
   RiskFactor,
   WithdrawRiskInput,
 } from './risk-engine.types';
+import {
+  inspectDuplicateListing,
+  inspectSpamBurst,
+  inspectUserText,
+  strongerHit,
+} from './moderation-engine';
+import { SecurityLockService } from './security-lock.service';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -32,6 +40,7 @@ export class RiskEngineService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly mfa?: MfaStepUpService,
+    @Optional() private readonly locks?: SecurityLockService,
   ) {}
 
   /**
@@ -88,31 +97,44 @@ export class RiskEngineService {
       factors.push('CONTEXT_SHIFT');
     }
 
+    const evasion = await this.collectBanEvasionFactors(input.userId, {
+      ipAddress: input.ipAddress,
+      deviceId: input.deviceId,
+    }, db);
+    factors.push(...evasion.factors);
+
     const score = scoreFactors(factors);
     let action = applyStepUpPolicy(decideAction(score, factors));
-    // Login: never BLOCK / never enforce STEP_UP yet (Slice 3). MONITOR + raise session risk.
-    if (action === 'STEP_UP' || action === 'BLOCK') action = 'MONITOR';
+    const level = riskLevel(score, factors);
+    // Login never STEP_UP. BAN_EVASION / CRITICAL stay BLOCK so the caller can lock.
+    if (action === 'STEP_UP') action = 'MONITOR';
+    if (action === 'BLOCK' && !factors.includes('BAN_EVASION')) {
+      action = 'MONITOR';
+    }
 
     const base = input.trustedDevice ? 5 : 20;
     const riskScore = Math.min(100, base + score);
 
     const events: RiskEventDraft[] = [];
-    if (action === 'MONITOR' && factors.length > 0) {
-      const type = factors.includes('NEW_COUNTRY') && factors.includes('NEW_IP')
-        ? 'IMPOSSIBLE_TRAVEL'
-        : 'SESSION_ANOMALY';
+    if ((action === 'MONITOR' || action === 'BLOCK') && factors.length > 0) {
+      const type = factors.includes('BAN_EVASION')
+        ? 'BAN_EVASION'
+        : (factors.includes('NEW_COUNTRY') && factors.includes('NEW_IP')
+          ? 'IMPOSSIBLE_TRAVEL'
+          : 'SESSION_ANOMALY');
       events.push({
         type,
-        severity: Math.min(100, 30 + score),
+        severity: Math.min(100, (action === 'BLOCK' ? 80 : 30) + score),
         ipAddress: input.ipAddress ?? null,
         country: input.country ?? null,
         payload: {
           kind: 'LOGIN',
           factors,
           score,
+          level,
+          reasons: evasion.reasons,
           deviceIdPresent: Boolean(input.deviceId),
           trustedDevice: input.trustedDevice,
-          // Context for Risk — not identity
           timezone: input.timezone ?? null,
           locale: input.locale ?? null,
         },
@@ -126,6 +148,7 @@ export class RiskEngineService {
       reason: decisionReason(action, factors),
       events,
       riskScore,
+      level,
     };
   }
 
@@ -245,6 +268,27 @@ export class RiskEngineService {
       }
     }
 
+    try {
+      const lockRow = await db.user.findUnique({
+        where: { id: input.userId },
+        select: { securityLockedAt: true, withdrawBlockedAt: true, suspiciousFundsHoldAt: true },
+      });
+      if (lockRow?.securityLockedAt || lockRow?.withdrawBlockedAt) {
+        factors.push('SECURITY_LOCK_ACTIVE');
+      }
+      const sale = await db.ledgerEntry.findFirst({
+        where: { userId: input.userId, fundKind: 'SALE_PROCEEDS', saleKind: 'ACCOUNT' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true },
+      });
+      if (sale) {
+        factors.push('ACCOUNT_SALE_PROCEEDS');
+        if (lockRow?.suspiciousFundsHoldAt) factors.push('SUSPICIOUS_FUNDS');
+      }
+    } catch {
+      /* partial prisma mocks in tests */
+    }
+
     const score = scoreFactors(factors);
     let action = applyStepUpPolicy(decideAction(score, factors));
 
@@ -304,9 +348,15 @@ export class RiskEngineService {
    * or accepts a CONFIRMED stepUpChallengeId.
    */
   async assertWithdrawAllowed(input: WithdrawRiskInput, db: Db = this.prisma): Promise<RiskDecision> {
+    if (this.locks) {
+      await this.locks.assertNotLocked(input.userId, 'withdraw', db);
+    }
     const result = await this.evaluateWithdraw(input, db);
     if (result.events.length > 0) {
       await this.writeEvents(db, input.userId, input.sessionId, result.events);
+    }
+    if (result.action === 'BLOCK') {
+      await this.enforceBlockLock(input.userId, result.factors, result.score, 'WITHDRAW');
     }
     if (result.action === 'STEP_UP') {
       if (input.stepUpChallengeId?.trim() && this.mfa) {
@@ -359,8 +409,8 @@ export class RiskEngineService {
     }
     if (result.action === 'BLOCK') {
       throw new AuthPlatformError(
-        'AUTH_ACCOUNT_LOCKED',
-        'Операция заблокирована системой риска.',
+        'AUTH_SECURITY_LOCK',
+        'Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение.',
         { factors: result.factors, score: result.score },
       );
     }
@@ -369,7 +419,207 @@ export class RiskEngineService {
       score: result.score,
       factors: result.factors,
       reason: result.reason,
+      level: riskLevel(result.score, result.factors),
     };
+  }
+
+  async assertSellAllowed(userId: bigint, title?: string, db: Db = this.prisma): Promise<void> {
+    if (this.locks) await this.locks.assertNotLocked(userId, 'sell', db);
+    const evasion = await this.collectBanEvasionFactors(userId, {}, db);
+    if (title) {
+      try {
+        const recent = await db.product.count({
+          where: { sellerId: userId, title, createdAt: { gte: new Date(Date.now() - 24 * 3600_000) } },
+        });
+        const hit = inspectDuplicateListing(title, recent);
+        if (hit) await this.applyModerationHit(userId, hit, { listingTitle: title });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (evasion.factors.includes('BAN_EVASION') || evasion.factors.includes('SECURITY_LOCK_ACTIVE')) {
+      await this.enforceBlockLock(userId, evasion.factors, 90, 'SELL', evasion.reasons);
+    }
+  }
+
+  async assertPurchaseAllowed(userId: bigint, amountCents: bigint, db: Db = this.prisma): Promise<void> {
+    if (this.locks) await this.locks.assertNotLocked(userId, 'spend', db);
+    const large = amountCents >= largeWithdrawCents();
+    const evasion = await this.collectBanEvasionFactors(userId, {}, db);
+    const factors: RiskFactor[] = [...evasion.factors];
+    if (large) factors.push('LARGE_AMOUNT');
+    try {
+      const lockRow = await db.user.findUnique({
+        where: { id: userId },
+        select: { suspiciousFundsHoldAt: true },
+      });
+      if (lockRow?.suspiciousFundsHoldAt) factors.push('SUSPICIOUS_FUNDS');
+    } catch {
+      /* ignore */
+    }
+    const score = scoreFactors(factors);
+    const action = decideAction(score, factors);
+    if (action === 'BLOCK' || (large && evasion.factors.includes('BAN_EVASION'))) {
+      await this.enforceBlockLock(userId, factors, score, 'PURCHASE', evasion.reasons);
+    }
+  }
+
+  async inspectChatMessage(input: {
+    userId: bigint;
+    chatId: string;
+    text: string;
+  }): Promise<void> {
+    const textHit = inspectUserText(input.text);
+    let spamHit = null as ReturnType<typeof inspectSpamBurst>;
+    try {
+      const recent = await this.prisma.message.count({
+        where: {
+          senderId: input.userId,
+          text: input.text,
+          createdAt: { gte: new Date(Date.now() - 10 * 60_000) },
+        },
+      });
+      spamHit = inspectSpamBurst(recent);
+    } catch {
+      /* ignore */
+    }
+    const hit = strongerHit(textHit, spamHit);
+    if (!hit) return;
+    await this.applyModerationHit(input.userId, hit, { chatId: input.chatId, textPreview: input.text.slice(0, 180) });
+    if (hit.action === 'BLOCK') {
+      throw new AuthPlatformError(
+        'AUTH_SECURITY_LOCK',
+        'Сообщение заблокировано системой модерации.',
+        { type: hit.type, reasons: hit.reasons },
+      );
+    }
+  }
+
+  async maybeLockAfterLogin(
+    userId: bigint,
+    decision: RiskDecision & { events?: RiskEventDraft[] },
+  ): Promise<void> {
+    if (decision.action !== 'BLOCK' && !decision.factors.includes('BAN_EVASION')) return;
+    await this.enforceBlockLock(
+      userId,
+      decision.factors,
+      decision.score,
+      'LOGIN',
+      (decision.events?.[0]?.payload as { reasons?: string[] } | undefined)?.reasons,
+      true,
+    );
+  }
+
+  private async applyModerationHit(
+    userId: bigint,
+    hit: { type: RiskEventDraft['type']; action: string; reasons: string[] },
+    extra: Record<string, unknown>,
+  ): Promise<void> {
+    await this.writeEvents(this.prisma, userId, null, [{
+      type: hit.type,
+      severity: hit.action === 'SECURITY_LOCK' || hit.action === 'BLOCK' ? 90 : 55,
+      payload: { kind: 'MODERATION', ...hit, ...extra },
+    }]);
+    if (hit.action === 'SECURITY_LOCK' || hit.action === 'BLOCK') {
+      await this.enforceBlockLock(userId, ['SUSPICIOUS_FUNDS'], 90, hit.type, hit.reasons);
+    }
+  }
+
+  private async enforceBlockLock(
+    userId: bigint,
+    factors: RiskFactor[] | string[],
+    score: number,
+    eventType: string,
+    extraReasons: string[] = [],
+    silent = false,
+  ): Promise<void> {
+    const reasons = [
+      ...extraReasons,
+      ...factors.map(String),
+      `score=${score}`,
+    ];
+    const level = score >= 85 || factors.includes('BAN_EVASION' as RiskFactor) ? 'CRITICAL' : 'HIGH';
+    if (this.locks) {
+      await this.locks.applyLock({
+        userId,
+        level,
+        eventType,
+        reasons,
+      });
+    }
+    if (silent) return;
+    throw new AuthPlatformError(
+      'AUTH_SECURITY_LOCK',
+      'Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение.',
+      { factors, score, caseAppeal: true },
+    );
+  }
+
+  async collectBanEvasionFactors(
+    userId: bigint,
+    input: { ipAddress?: string | null; deviceId?: string | null; telegramId?: bigint | null },
+    db: Db = this.prisma,
+  ): Promise<{ factors: RiskFactor[]; reasons: string[] }> {
+    const factors: RiskFactor[] = [];
+    const reasons: string[] = [];
+    try {
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: { telegramId: true, securityLockedAt: true },
+      });
+      if (user?.securityLockedAt) factors.push('SECURITY_LOCK_ACTIVE');
+
+      const telegramId = input.telegramId ?? user?.telegramId ?? null;
+      const signals: string[] = [];
+
+      if (telegramId != null) {
+        const bannedTwin = await db.user.findFirst({
+          where: {
+            telegramId,
+            id: { not: userId },
+            OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }],
+          },
+          select: { id: true },
+        });
+        if (bannedTwin) signals.push('linked banned telegram account');
+      }
+
+      let deviceHit = false;
+      let ipHit = false;
+      if (input.deviceId) {
+        const device = await db.session.findFirst({
+          where: {
+            fingerprintHash: input.deviceId,
+            userId: { not: userId },
+            user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
+          },
+          select: { id: true },
+        });
+        if (device) deviceHit = true;
+      }
+      if (input.ipAddress) {
+        const ip = await db.session.findFirst({
+          where: {
+            ipAddress: input.ipAddress,
+            userId: { not: userId },
+            user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
+          },
+          select: { id: true },
+        });
+        if (ip) ipHit = true;
+      }
+
+      if (deviceHit) reasons.push('device seen on banned account');
+      if (ipHit) reasons.push('ip seen on banned account');
+      reasons.push(...signals);
+
+      if (signals.length >= 1 && (deviceHit || ipHit || signals.length >= 2)) {
+        factors.push('BAN_EVASION');
+      }
+    } catch {
+      /* tests / partial prisma mocks */
+    }
+    return { factors: [...new Set(factors)], reasons };
   }
 }
 

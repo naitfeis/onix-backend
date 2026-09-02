@@ -71,12 +71,16 @@ export async function sendTelegramMessage(input: {
   text: string;
   parseMode?: 'HTML';
   replyMarkup?: InlineKeyboard;
+  replyToMessageId?: number;
 }): Promise<TelegramApiResult> {
   return telegramApi('sendMessage', {
     chat_id: input.chatId,
     text: input.text,
     ...(input.parseMode ? { parse_mode: input.parseMode } : {}),
     ...(input.replyMarkup ? { reply_markup: input.replyMarkup } : {}),
+    ...(input.replyToMessageId != null
+      ? { reply_to_message_id: input.replyToMessageId, allow_sending_without_reply: true }
+      : {}),
     disable_web_page_preview: true,
   });
 }

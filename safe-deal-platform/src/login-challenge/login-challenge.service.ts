@@ -5,7 +5,6 @@ import { AuthOrchestrator } from '../auth-v2/auth-orchestrator.service';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
 import type { DeviceContext, SessionAuthResult } from '../auth-v2/session.service';
 import type { VerifiedTelegramIdentity } from '../auth-v2/telegram-login.verifier';
-import { LOGIN_CHALLENGE_TTL_MS } from './login-challenge.flags';
 import { LoginChallengeRepository } from './login-challenge.repository';
 
 /** Same payload Website `/complete` returns (Session + refreshMaxAge). */
@@ -91,13 +90,32 @@ export class LoginChallengeService {
     return this.status(challengeId);
   }
 
+  async attachPromptChat(challengeId: string, chatId: number): Promise<void> {
+    await this.challenges.attachTelegramChat(challengeId, BigInt(chatId));
+  }
+
   /**
    * Telegram Desktop often sends a bare `/start` after the website click.
-   * Recover the newest live challenge so the confirm keyboard still appears.
+   * Prefer the live challenge already attached to this chat; otherwise a very
+   * fresh global challenge (payload dropped). Never attach a stranger's 10‑minute-old login.
    */
-  async openLatestLiveForBareStart(): Promise<{ challengeId: string } | null> {
-    const row = await this.challenges.findLatestLiveGlobal(LOGIN_CHALLENGE_TTL_MS);
+  async openLatestLiveForBareStart(chatId?: number): Promise<{ challengeId: string } | null> {
+    if (chatId != null) {
+      const forChat = await this.challenges.findLatestLiveForChat(BigInt(chatId));
+      if (forChat) {
+        this.logger.log(JSON.stringify({
+          msg: '[Bot] recovered live challenge for this Telegram chat',
+          challengeId: forChat.id,
+          status: forChat.status,
+        }));
+        return { challengeId: forChat.id };
+      }
+    }
+    const row = await this.challenges.findLatestLiveGlobal(120_000);
     if (!row) return null;
+    if (chatId != null) {
+      await this.challenges.attachTelegramChat(row.id, BigInt(chatId));
+    }
     this.logger.log(JSON.stringify({
       msg: '[Bot] recovered live challenge for bare /start',
       challengeId: row.id,

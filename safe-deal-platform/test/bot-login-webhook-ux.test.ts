@@ -259,6 +259,7 @@ test('BotWebhookHandler bare /start replies with help instead of silence', async
     const handler = new BotWebhookHandler(challenges as never);
     const result = await handler.handle(undefined, {
       message: {
+        message_id: 901,
         text: '/start',
         chat: { id: 42 },
         from: { id: 7, first_name: 'Hiro' },
@@ -266,7 +267,8 @@ test('BotWebhookHandler bare /start replies with help instead of silence', async
     });
     assert.equal((result as { helped?: boolean }).helped, true);
     assert.equal(calls[0]?.method, 'sendMessage');
-    assert.match(String(calls[0]?.body.text), /\/start без кода/);
+    assert.equal(calls[0]?.body.reply_to_message_id, 901);
+    assert.match(String(calls[0]?.body.text), /Срок попытки входа истёк|ещё не начат/);
   } finally {
     globalThis.fetch = originalFetch;
     delete process.env.BOT_TOKEN;

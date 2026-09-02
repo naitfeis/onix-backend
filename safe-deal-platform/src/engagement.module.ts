@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header,
-  Injectable, Module, NotFoundException, Param, Patch, Post, Query,
+  Injectable, Module, NotFoundException, Optional, Param, Patch, Post, Query,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -20,6 +20,8 @@ import { assertRateLimit } from './rate-limit';
 import { messageDto, notificationDto, reviewDto } from './response';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
+import { RiskEngineService } from './risk/risk-engine.service';
+import { RiskModule } from './risk/risk.module';
 import { sanitizeChatText, sanitizeReviewText } from './sanitize-user-text';
 import { hideReviewsForOrder, recomputeSellerRating } from './marketplace/review-aggregate';
 import { canLeaveReview } from './marketplace/review-policy';
@@ -72,6 +74,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeBus,
+    @Optional() private readonly risk?: RiskEngineService,
   ) {}
 
   async list(user: AuthUser, search?: string) {
@@ -403,6 +406,9 @@ export class ChatService {
     }
 
     assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
+    if (this.risk) {
+      await this.risk.inspectChatMessage({ userId: user.id, chatId, text: body });
+    }
 
     const others = await this.prisma.chatMember.findMany({
       where: { chatId, userId: { not: user.id } },
@@ -956,7 +962,7 @@ export class EngagementController {
 }
 
 @Module({
-  imports: [RealtimeModule],
+  imports: [RealtimeModule, RiskModule],
   controllers: [EngagementController],
   providers: [ChatService, NotificationService, ReviewService],
 })

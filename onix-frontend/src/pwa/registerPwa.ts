@@ -6,13 +6,52 @@ export function registerPwa(opts?: {
   onOfflineReady?: () => void;
 }): void {
   if (typeof window === 'undefined') return;
-  try {
-    const tg = (window as Window & { Telegram?: { WebApp?: { initData?: string } } }).Telegram?.WebApp;
-    if (tg?.initData) return;
-  } catch {
-    /* ignore */
+  const skipPwa = (): boolean => {
+    try {
+      const tg = (window as Window & {
+        Telegram?: { WebApp?: { initData?: string } };
+        TelegramWebviewProxy?: unknown;
+      }).Telegram?.WebApp;
+      const hash = typeof location !== 'undefined' ? location.hash : '';
+      const search = typeof location !== 'undefined' ? location.search : '';
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+      return Boolean(tg)
+        || Boolean((window as Window & { TelegramWebviewProxy?: unknown }).TelegramWebviewProxy)
+        || /Telegram/i.test(ua)
+        || hash.includes('tgWebAppData')
+        || hash.includes('tgWebAppStartParam')
+        || search.includes('tgWebAppData')
+        || search.includes('tgWebAppStartParam');
+    } catch {
+      return false;
+    }
+  };
+
+  const unregisterSw = () => {
+    void navigator.serviceWorker?.getRegistrations?.()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .catch(() => undefined);
+  };
+
+  if (skipPwa()) {
+    unregisterSw();
+    return;
   }
 
+  // Telegram inject can land after first JS tick — do not let skipWaiting reload the WebView.
+  window.setTimeout(() => {
+    if (skipPwa()) {
+      unregisterSw();
+      return;
+    }
+    registerWebsitePwa(opts);
+  }, 400);
+}
+
+function registerWebsitePwa(opts?: {
+  onNeedRefresh?: (update: () => void) => void;
+  onOfflineReady?: () => void;
+}): void {
   try {
     const updateSW = registerSW({
       immediate: true,
