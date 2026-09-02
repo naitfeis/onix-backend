@@ -98,6 +98,17 @@ function shouldSkipDuplicatePrompt(challengeId: string, chatId: number): boolean
   return false;
 }
 
+type BotStartLoginResult = {
+  ok: true;
+  prompted?: boolean;
+  ignored?: boolean;
+  deduped?: boolean;
+  helped?: boolean;
+  reason?: string;
+  messageId?: number | null;
+  botApi?: TelegramApiResult;
+};
+
 /**
  * Telegram Bot webhook — LoginChallenge UX + MFA step-up (Slice 3).
  */
@@ -249,7 +260,7 @@ export class BotWebhookHandler {
     return { ok: true };
   }
 
-  private async onBareStart(update: TelegramUpdate) {
+  private async onBareStart(update: TelegramUpdate): Promise<BotStartLoginResult> {
     const chatId = update.message?.chat?.id;
     const replyTo = update.message?.message_id;
     if (chatId == null) return { ok: true, ignored: true, reason: 'start_format' };
@@ -290,7 +301,11 @@ export class BotWebhookHandler {
     return { ok: true, prompted: false, reason: 'start_format', helped: true };
   }
 
-  private async onStartLogin(update: TelegramUpdate, startParam: string, recovered = false) {
+  private async onStartLogin(
+    update: TelegramUpdate,
+    startParam: string,
+    recovered = false,
+  ): Promise<BotStartLoginResult> {
     const challengeId = parseLoginChallengeId(startParam);
     const chatId = update.message?.chat?.id;
     const from = update.message?.from;
