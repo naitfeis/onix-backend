@@ -13,6 +13,7 @@ import {
   waitAndLinkBotTelegram,
 } from '../auth';
 import UserAvatar from '../components/UserAvatar';
+import { CardLogo, SbpLogo } from '../components/BrandLogos';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
@@ -96,7 +97,7 @@ function AccountLinkPanel({
     abortRef.current = controller;
     try {
       const started = await startBotLogin(controller.signal);
-      openTelegramBotLogin(started.deepLink, started.webDeepLink, started.miniAppDeepLink);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink);
       await waitAndLinkBotTelegram(started.challengeId, { signal: controller.signal });
       await onLinked();
       setToast('Telegram привязан. Можно продавать.');
@@ -252,7 +253,7 @@ export function Profile({
   const moneyKeyRef = useRef(crypto.randomUUID());
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
-  const [payMethod, setPayMethod] = useState<'MANUAL' | 'TELEGRAM' | 'YOOKASSA'>('MANUAL');
+  const [payMethod, setPayMethod] = useState<'SBP' | 'CARD'>('SBP');
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -358,7 +359,7 @@ export function Profile({
 
   const openMoney = (kind: Exclude<MoneyModal, null>) => {
     setAmount('');
-    setPayMethod('MANUAL');
+    setPayMethod('SBP');
     setMoneyOpen(true);
     moneyKeyRef.current = crypto.randomUUID();
     setMoneyModal(kind);
@@ -440,7 +441,7 @@ export function Profile({
         const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
           wallet: 'MAIN',
           amountCents,
-          provider: payMethod,
+          provider: payMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
           idempotencyKey: key,
         });
         await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
@@ -510,8 +511,8 @@ export function Profile({
     : moneyModal === 'DEPOSIT_WITHDRAW'
       ? 'Только доступный залог. Замороженные средства после сделки нельзя вывести до конца HOLD.'
       : moneyModal === 'MAIN_TOPUP'
-        ? 'Пополнение через PaymentIntent. Позже: Telegram Wallet / ЮKassa.'
-        : 'Сумма и комиссия будут подтверждены сервером до списания.';
+        ? 'Пополнение через СБП или банковскую карту.'
+        : 'Вывод на СБП или банковскую карту. Сумма и комиссия подтверждаются сервером.';
 
   return <div className="stack"><Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
       <div className="wallet-strip">
@@ -664,13 +665,12 @@ export function Profile({
             aria-label="Сумма пополнения"
           />
         </Field>
-        {moneyModal === 'MAIN_TOPUP' && (
-          <Field label="Способ оплаты">
-            <div className="pay-methods" role="radiogroup" aria-label="Способ оплаты">
+        {(moneyModal === 'MAIN_TOPUP' || moneyModal === 'MAIN_WITHDRAW') && (
+          <Field label={moneyModal === 'MAIN_WITHDRAW' ? 'Куда вывести' : 'Способ оплаты'}>
+            <div className="pay-methods" role="radiogroup" aria-label={moneyModal === 'MAIN_WITHDRAW' ? 'Куда вывести' : 'Способ оплаты'}>
               {([
-                { id: 'MANUAL' as const, label: 'Вручную (тест)' },
-                { id: 'TELEGRAM' as const, label: 'Telegram Wallet' },
-                { id: 'YOOKASSA' as const, label: 'ЮKassa' },
+                { id: 'SBP' as const, label: 'СБП', icon: <SbpLogo size={22} /> },
+                { id: 'CARD' as const, label: 'Банковская карта', icon: <CardLogo size={22} /> },
               ]).map((method) => (
                 <button
                   key={method.id}
@@ -680,6 +680,7 @@ export function Profile({
                   className={`pay-methods__btn${payMethod === method.id ? ' is-active' : ''}`}
                   onClick={() => setPayMethod(method.id)}
                 >
+                  <span className="pay-methods__icon" aria-hidden="true">{method.icon}</span>
                   {method.label}
                 </button>
               ))}

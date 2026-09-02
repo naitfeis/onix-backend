@@ -235,7 +235,7 @@ export async function confirmWebsiteLoginFromMiniAppIfNeeded(): Promise<void> {
 export function openTelegramBotLogin(
   _deepLink: string,
   webDeepLink: string,
-  miniAppDeepLink?: string,
+  _miniAppDeepLink?: string,
 ): void {
   const openBlank = (href: string) => {
     const anchor = document.createElement('a');
@@ -247,9 +247,8 @@ export function openTelegramBotLogin(
     anchor.remove();
   };
 
-  // Prefer startapp so Telegram opens the MARKET Mini App with the login payload
-  // instead of focusing an existing chat and sending a bare /start.
-  openBlank(miniAppDeepLink || webDeepLink);
+  // Only https://t.me/?start=… — Mini App startapp hijacks login into MARKET.
+  openBlank(webDeepLink);
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

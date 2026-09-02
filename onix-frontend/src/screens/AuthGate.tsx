@@ -16,6 +16,7 @@ import {
 import { BotLoginError } from '../auth/botLogin';
 import { formatBanRemaining, refreshBanInfo, type BanInfo } from '../api/contracts';
 import { Button } from '../design-system';
+import { GoogleLogo, TelegramLogo } from '../components/BrandLogos';
 
 type TelegramLoginPayload = Record<string, string | number>;
 
@@ -104,12 +105,15 @@ export function AuthNotice({
 
 function WebsiteLoginEntry({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
   const provider = getWebsiteLoginProvider();
-  return (
-    <div className="stack compact">
-      {provider === 'widget' ? <TelegramLogin onBan={onBan} /> : <BotTelegramLogin onAuthenticated={onAuthenticated} onBan={onBan} />}
-      <GoogleLoginButton onAuthenticated={onAuthenticated} onBan={onBan} />
-    </div>
-  );
+  if (provider === 'widget') {
+    return (
+      <div className="auth-login">
+        <TelegramLogin onBan={onBan} />
+        <GoogleLoginButton onAuthenticated={onAuthenticated} onBan={onBan} />
+      </div>
+    );
+  }
+  return <BotTelegramLogin onAuthenticated={onAuthenticated} onBan={onBan} />;
 }
 
 function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
@@ -145,26 +149,30 @@ function GoogleLoginButton(_props: { onAuthenticated: () => void; onBan?: (ban: 
   if (!clientId) {
     return null;
   }
-  return <div>
-    <Button
-      variant="secondary"
-      disabled={busy}
-      onClick={() => {
-        setError('');
-        setBusy(true);
-        void (async () => {
-          try {
-            await postAuthV2Logout();
-          } catch { /* previous cookie may already be gone */ }
-          getSharedAuthManager().clearSession('logout');
-          startGoogleOAuth(clientId, redirectUri);
-        })();
-      }}
-    >
-      {busy ? 'Переход в Google…' : 'Войти через Google'}
-    </Button>
-    {error && <small>{error}</small>}
-  </div>;
+  return (
+    <div>
+      <button
+        type="button"
+        className="auth-btn auth-btn--google"
+        disabled={busy}
+        onClick={() => {
+          setError('');
+          setBusy(true);
+          void (async () => {
+            try {
+              await postAuthV2Logout();
+            } catch { /* previous cookie may already be gone */ }
+            getSharedAuthManager().clearSession('logout');
+            startGoogleOAuth(clientId, redirectUri);
+          })();
+        }}
+      >
+        <GoogleLogo />
+        <span>{busy ? 'Переход в Google…' : 'Войти через Google'}</span>
+      </button>
+      {error && <small>{error}</small>}
+    </div>
+  );
 }
 
 function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => void; onBan?: (ban: BanInfo) => void }) {
@@ -172,7 +180,6 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
   const [busy, setBusy] = useState(false);
   const [hint, setHint] = useState('');
   const [telegramLink, setTelegramLink] = useState<string | null>(null);
-  const [chatLink, setChatLink] = useState<string | null>(null);
   const [startCommand, setStartCommand] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const onAuthenticatedRef = useRef(onAuthenticated);
@@ -186,9 +193,8 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     setError('');
     setBusy(true);
     setTelegramLink(null);
-    setChatLink(null);
     setStartCommand(null);
-    setHint('Откройте Telegram. Если открылся чат без кнопок — нажмите MARKET или отправьте команду ниже.');
+    setHint('Откройте Telegram и подтвердите вход. Если чат уже открыт и кнопок нет — нажмите ссылку ещё раз.');
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -198,14 +204,12 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
       } catch { /* switch-account: ignore missing cookie */ }
       getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
-      setTelegramLink(started.miniAppDeepLink || started.webDeepLink);
-      setChatLink(started.webDeepLink);
+      setTelegramLink(started.webDeepLink);
       setStartCommand(started.startCommand ?? `/start login_${started.challengeId}`);
-      openTelegramBotLogin(started.deepLink, started.webDeepLink, started.miniAppDeepLink);
+      openTelegramBotLogin(started.deepLink, started.webDeepLink);
       await waitAndCompleteBotLogin(started.challengeId, { signal: controller.signal });
       setHint('');
       setTelegramLink(null);
-      setChatLink(null);
       setStartCommand(null);
       onAuthenticatedRef.current();
     } catch (e) {
@@ -219,19 +223,15 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     }
   };
 
-  return <div>
-    <Button onClick={() => void onLogin()} disabled={busy}>
-      {busy ? 'Ожидание Telegram…' : 'Войти через Telegram'}
-    </Button>
+  return <div className="auth-login">
+    <button type="button" className="auth-btn auth-btn--telegram" onClick={() => void onLogin()} disabled={busy}>
+      <TelegramLogo />
+      <span>{busy ? 'Ожидание Telegram…' : 'Войти через Telegram'}</span>
+    </button>
+    <GoogleLoginButton onAuthenticated={onAuthenticated} onBan={onBan} />
     {telegramLink && (
       <p>
         <a href={telegramLink} target="_blank" rel="noopener noreferrer">Открыть Telegram ещё раз</a>
-        {chatLink && chatLink !== telegramLink ? (
-          <>
-            {' · '}
-            <a href={chatLink} target="_blank" rel="noopener noreferrer">Открыть чат бота</a>
-          </>
-        ) : null}
       </p>
     )}
     {startCommand && (

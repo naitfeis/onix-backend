@@ -11,12 +11,12 @@ export const LOT_PAY_METHODS: LotPayMethod[] = ['BALANCE', 'SBP', 'CARD'];
 export function lotPayMethodMeta(method: LotPayMethod): {
   title: string;
   hint: string;
-  icon: string;
+  icon: 'onix' | 'sbp' | 'card';
   live: boolean;
 } {
-  if (method === 'SBP') return { title: 'СБП', hint: 'Сбор 1% с остатка', icon: '⚡', live: true };
-  if (method === 'CARD') return { title: 'Банковская карта', hint: 'Сбор 4% с остатка', icon: '💳', live: true };
-  return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: '◆', live: true };
+  if (method === 'SBP') return { title: 'СБП', hint: 'Сбор 1% с остатка', icon: 'sbp', live: true };
+  if (method === 'CARD') return { title: 'Банковская карта', hint: 'Сбор 4% с остатка', icon: 'card', live: true };
+  return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: 'onix', live: true };
 }
 
 export function parseCents(value: string | number | null | undefined): number {

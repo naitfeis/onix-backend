@@ -11,11 +11,18 @@ import {
 import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
 import { lotWarrantyBadge } from '../utils/warranty';
+import { CardLogo, OnixPayMark, SbpLogo } from '../components/BrandLogos';
 
 const PAYMENT_WARNING =
   'Не подтверждайте заказ, пока продавец не передал товар. Снимите передачу на видео — так проще решить спор.';
 const SAFE_NOTE =
   'Деньги не уходят продавцу сразу: они хранятся на платформе, пока вы не подтвердите, что товар получен.';
+
+function PayMethodIcon({ kind }: { kind: 'onix' | 'sbp' | 'card' }) {
+  if (kind === 'sbp') return <SbpLogo />;
+  if (kind === 'card') return <CardLogo />;
+  return <OnixPayMark />;
+}
 
 function PayMethodRow({
   method,
@@ -33,7 +40,9 @@ function PayMethodRow({
   const meta = lotPayMethodMeta(method);
   return (
     <button type="button" className={`lot-pay-option${open ? ' is-open' : ''}${active ? ' is-active' : ''}`} onClick={onClick}>
-      <span className="lot-pay-option__icon" aria-hidden="true">{meta.icon}</span>
+      <span className="lot-pay-option__icon" aria-hidden="true">
+        <PayMethodIcon kind={meta.icon} />
+      </span>
       <span className="lot-pay-option__text">
         <b>{meta.title}</b>
         <small>{meta.hint}</small>

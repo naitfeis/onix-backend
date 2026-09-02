@@ -15,6 +15,7 @@ import { PublicProfileModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 import { t } from '../i18n';
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
+import { AllGridIcon } from '../components/BrandLogos';
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
@@ -89,13 +90,16 @@ function CategoryShareBadge({
   const label = clamped >= 0.999
     ? `Все лоты рынка · ${count}`
     : `${count} из ${total} лотов`;
+  const shown = count > 99 ? '99+' : String(count);
   return (
     <span
       className={`cat-card__share${clamped >= 0.999 ? ' cat-card__share--full' : ''}`}
       title={label}
       aria-label={label}
       style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
-    />
+    >
+      {shown}
+    </span>
   );
 }
 
@@ -601,7 +605,9 @@ export function Market({
           onClick={() => { setCategory(t('market.all')); setSubcategory(''); }}
         >
           <span className="cat-card__icon">
-            <span className="cat-card__emblem" style={{ background: 'linear-gradient(145deg,#8B7FF5,#6B5FE0)' }}>ALL</span>
+            <span className="cat-card__emblem cat-card__emblem--all">
+              <AllGridIcon />
+            </span>
             {totalVisible > 0 && (
               <CategoryShareBadge share={1} count={totalVisible} total={totalVisible} />
             )}

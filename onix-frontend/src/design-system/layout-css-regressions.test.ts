@@ -97,12 +97,15 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('renders category market-share as a filled pie, not a count pill', () => {
+  it('renders category market-share as a filled pie with a count', () => {
     expect(appCss).toMatch(
       /\.cat-card__share\s*\{[^}]*conic-gradient/s,
     );
     expect(appCss).toMatch(
       /\.cat-card__share--full\s*\{[^}]*background:\s*#fff;/s,
+    );
+    expect(appCss).toMatch(
+      /\.cat-card__share\s*\{[^}]*font-variant-numeric:\s*tabular-nums;/s,
     );
   });
 });
