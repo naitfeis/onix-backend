@@ -70,6 +70,11 @@ export function startGoogleOAuth(
   );
 }
 
+function isGoogleOAuthCallbackPath(url: URL): boolean {
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  return path === GOOGLE_OAUTH_CALLBACK_PATH;
+}
+
 function decodeJwtPayload(idToken: string): { nonce?: string } | null {
   const part = idToken.split('.')[1];
   if (!part) return null;
@@ -99,6 +104,9 @@ export function interpretGoogleOAuthReturn(
   const state = hashParams.get('state') ?? url.searchParams.get('state');
   const error = hashParams.get('error') ?? url.searchParams.get('error');
   if (!idToken && !error) return null;
+  // Only /auth/google is a Google hop. A marketplace `?error=` or stray hash
+  // used to look like a failed Google login and wipe the Telegram cookie.
+  if (!isGoogleOAuthCallbackPath(url)) return null;
   if (error) {
     return { ok: false, error };
   }

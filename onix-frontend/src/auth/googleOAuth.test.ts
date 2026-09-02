@@ -43,17 +43,31 @@ describe('google OAuth redirect', () => {
     expect(interpretGoogleOAuthReturn(href, 'st', 'nn')).toEqual({ ok: true, idToken: token });
   });
 
-  it('rejects state mismatch and Google error', () => {
+  it('rejects state mismatch and Google error only on /auth/google', () => {
     const token = jwtWithNonce('nn');
     expect(interpretGoogleOAuthReturn(
-      `https://www.onixtg.shop/#id_token=${token}&state=other`,
+      `https://www.onixtg.shop/auth/google#id_token=${token}&state=other`,
       'st',
       'nn',
     )).toEqual({ ok: false, error: 'state_mismatch' });
     expect(interpretGoogleOAuthReturn(
-      'https://www.onixtg.shop/?error=access_denied',
+      'https://www.onixtg.shop/auth/google?error=access_denied',
       'st',
       'nn',
     )).toEqual({ ok: false, error: 'access_denied' });
+  });
+
+  it('does not treat marketplace error URLs as a Google hop', () => {
+    const token = jwtWithNonce('nn');
+    expect(interpretGoogleOAuthReturn(
+      'https://www.onixtg.shop/?error=access_denied',
+      'st',
+      'nn',
+    )).toBeNull();
+    expect(interpretGoogleOAuthReturn(
+      `https://www.onixtg.shop/#id_token=${token}&state=st`,
+      'st',
+      'nn',
+    )).toBeNull();
   });
 });

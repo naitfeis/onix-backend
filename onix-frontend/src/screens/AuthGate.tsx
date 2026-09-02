@@ -199,10 +199,6 @@ function BotTelegramLogin({ onAuthenticated, onBan }: { onAuthenticated: () => v
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      try {
-        await postAuthV2Logout();
-      } catch { /* switch-account: ignore missing cookie */ }
-      getSharedAuthManager().clearSession('logout');
       const started = await startBotLogin(controller.signal);
       const command = started.startCommand ?? `/start login_${started.challengeId}`;
       setTelegramLink(started.webDeepLink);

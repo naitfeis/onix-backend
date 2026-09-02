@@ -117,8 +117,8 @@ const notify = (kind: 'success' | 'error') => {
 async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   const manager = getSharedAuthManager();
   const googleReturn = consumeGoogleOAuthRedirect();
-  const googleIntent = consumeGoogleOAuthIntent();
   if (googleReturn) {
+    const googleIntent = consumeGoogleOAuthIntent();
     if (googleIntent === 'link') {
       try {
         await manager.refreshAccessToken();
