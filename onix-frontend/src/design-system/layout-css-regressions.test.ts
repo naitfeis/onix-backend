@@ -40,9 +40,9 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
   });
 
-  it('keeps AI helper questions in the composer stack with glass', () => {
+  it('keeps AI helper questions as a glass overlay above messages', () => {
     expect(appCss).toMatch(
-      /\.ai-actions\s*\{[^}]*position:\s*relative;/s,
+      /\.ai-actions\s*\{[^}]*position:\s*absolute;/s,
     );
     expect(appCss).toMatch(
       /\.ai-actions\s*\{[^}]*backdrop-filter:\s*blur\(18px\) saturate\(160%\);/s,
@@ -99,7 +99,14 @@ describe('desktop and chat layout CSS regressions', () => {
 
   it('renders category lot share as a closed white ring with a centered count', () => {
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?position:\s*absolute;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?border-radius:\s*50%;/);
     expect(appCss).toMatch(/\.cat-card__ring-value[\s\S]*?stroke:\s*#fff;/);
     expect(appCss).toMatch(/\.cat-card__ring-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
+    expect(appCss).toMatch(/\.cat-card__emblem--other[\s\S]*?background:\s*linear-gradient/);
+  });
+
+  it('keeps market notifications clipped instead of scrollable', () => {
+    expect(appCss).toMatch(/\.widget-notify\s*\{[^}]*overflow:\s*hidden;/s);
+    expect(appCss).toMatch(/\.sidebar-right > \.widget--notify\s*\{[^}]*overflow:\s*hidden;/s);
   });
 });

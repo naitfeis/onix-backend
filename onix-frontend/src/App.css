@@ -1360,14 +1360,15 @@ html[data-theme="light"] .cat-card__emblem--all {
   pointer-events: none;
   display: grid;
   place-items: center;
-  border-radius: 22px;
+  border-radius: 50%;
+  overflow: hidden;
 }
 .cat-card__ring::before {
   content: "";
   position: absolute;
-  inset: 6px;
+  inset: 0;
   border-radius: 50%;
-  background: rgba(8, 8, 12, 0.42);
+  background: rgba(8, 8, 12, 0.55);
 }
 .cat-card__ring-svg {
   position: absolute;
@@ -1380,11 +1381,11 @@ html[data-theme="light"] .cat-card__emblem--all {
 .cat-card__ring-track,
 .cat-card__ring-value {
   fill: none;
-  stroke-width: 3.75;
+  stroke-width: 4;
   stroke-linecap: butt;
 }
 .cat-card__ring-track {
-  stroke: rgba(255, 255, 255, 0.28);
+  stroke: rgba(255, 255, 255, 0.38);
 }
 .cat-card__ring-value {
   stroke: #fff;
@@ -1402,7 +1403,11 @@ html[data-theme="light"] .cat-card__emblem--all {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 .cat-card__emblem--other {
-  background: linear-gradient(145deg, #8A8B96, #63646E);
+  background: linear-gradient(145deg, #8A8B96, #63646E) !important;
+}
+.cat-card__emblem--other img {
+  mix-blend-mode: luminosity;
+  opacity: 0.92;
 }
 html[data-theme="light"] .cat-card__ring-track {
   stroke: rgba(255, 255, 255, 0.55);
@@ -2536,6 +2541,12 @@ html[data-theme="light"] .timeline li {
   padding: 12px 0;
   overflow-anchor: none;
 }
+.app-shell--chat .messages-wrap:has(.ai-actions) .messages {
+  padding-bottom: 56px;
+}
+.app-shell--chat .messages-wrap:has(.ai-actions.is-open) .messages {
+  padding-bottom: 132px;
+}
 .messages__virtual-list {
   width: 100%;
   min-height: 100%;
@@ -2828,6 +2839,17 @@ html[data-theme="light"] .thread {
 .conversation__head > div { display: grid; gap: 3px; font-size: 10px; }
 .messages-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .messages { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.messages-wrap:has(.ai-actions) .messages {
+  padding-bottom: 56px;
+}
+.messages-wrap:has(.ai-actions.is-open) .messages {
+  padding-bottom: 132px;
+}
+.app-shell--chat .conversation {
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
 .message {
   position: relative;
   align-self: flex-start;
@@ -2908,15 +2930,15 @@ html[data-theme="light"] .message__meta .receipt-admin {
 }
 .message-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .ai-actions {
-  position: relative;
-  left: auto;
-  right: auto;
-  bottom: auto;
-  z-index: 2;
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 8px;
+  z-index: 3;
   flex-shrink: 0;
-  max-height: min(42%, 280px);
-  overflow: auto;
-  margin: 0 10px 8px;
+  max-height: min(38%, 220px);
+  overflow: hidden;
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 18px;
   background: rgba(22, 22, 28, 0.42);
@@ -2951,6 +2973,9 @@ html[data-theme="light"] .ai-actions {
   transition: transform 160ms ease;
 }
 .ai-actions.is-open .ai-actions__chevron { color: var(--text); }
+.ai-actions.is-open {
+  overflow-y: auto;
+}
 .ai-quick-replies {
   display: flex;
   flex-wrap: wrap;
@@ -3994,12 +4019,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     transition: color 140ms, background 140ms, border-color 140ms;
   }
   .sidebar-nav button span {
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
   }
   .sidebar-nav__nick {
+    flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -4273,6 +4300,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     white-space: nowrap;
   }
   .widget-notify { display: grid; gap: 10px; max-height: none; overflow: hidden; }
+  .sidebar-right > .widget--notify {
+    flex: 0 0 auto;
+    overflow: hidden;
+    max-height: none;
+  }
   .widget-notify__row {
     display: grid;
     grid-template-columns: 36px 1fr auto;

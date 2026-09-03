@@ -684,7 +684,7 @@ export default function App() {
                 </Button>
               </div>
             </div>
-            <div className="widget widget--glass">
+            <div className="widget widget--glass widget--notify">
               <h3>{t('widgets.liveNotifications')}</h3>
               <div className="widget-notify">
                 {!core.profile ? (
@@ -710,7 +710,11 @@ export default function App() {
                           switchTo('deals');
                           return;
                         }
-                        if (item.title === 'Новое сообщение') switchTo('chat');
+                        if (item.title === 'Новое сообщение' || item.type === 'NEW_MESSAGE') {
+                          const unreadChat = core.chats.find((chat) => chat.unreadCount > 0);
+                          if (unreadChat) setFocusChatId(unreadChat.id);
+                          switchTo('chat');
+                        }
                       }}
                     >
                       <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />

@@ -79,7 +79,7 @@ function CategoryShareRing({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
   const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
   const size = 80;
-  const stroke = 3.75;
+  const stroke = 4;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   return (
@@ -91,16 +91,15 @@ function CategoryShareRing({ count, total }: { count: number; total: number }) {
           cy={size / 2}
           r={radius}
         />
-        {fraction > 0 && (
-          <circle
-            className="cat-card__ring-value"
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            strokeDasharray={circumference}
-            strokeDashoffset={circumference * (1 - fraction)}
-          />
-        )}
+        <circle
+          className="cat-card__ring-value"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - fraction)}
+          opacity={fraction > 0 ? 1 : 0}
+        />
       </svg>
       <span className="cat-card__ring-num">{shown}</span>
     </span>
@@ -647,7 +646,7 @@ export function Market({
                 {image ? (
                   <span
                     className={`cat-card__emblem cat-card__emblem--photo${cat === 'OTHER' ? ' cat-card__emblem--other' : ''}`}
-                    style={cat === 'OTHER' ? { background: style.bg } : undefined}
+                    style={{ background: style.bg }}
                   >
                     <img
                       src={image}
