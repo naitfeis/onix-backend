@@ -123,8 +123,16 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/\.settings-overlay\s*\{[^}]*z-index:\s*1200;/s);
     expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*transform:\s*translateX\(100%\);/s);
     expect(appCss).toMatch(/@media \(max-width: 699px\)\s*\{[\s\S]*?\.settings-sheet\s*\{[^}]*transform:\s*translateY\(-110%\);/s);
-    expect(appCss).toMatch(/\.settings-sheet__backdrop\s*\{[^}]*background:\s*transparent;/s);
+    expect(appCss).toMatch(/\.settings-sheet__backdrop\s*\{[^}]*background:\s*transparent/s);
+    expect(appCss).toMatch(/\.settings-overlay\s*\{[^}]*backdrop-filter:\s*none/s);
     expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*background:\s*#151517;/s);
+  });
+
+  it('does not collapse shell padding or hide the dock when opening chat', () => {
+    expect(appCss).not.toMatch(/\.app-shell--chat\s*\{[^}]*padding-inline:\s*0;/s);
+    expect(appCss).not.toMatch(/\.app-shell--chat \.sidebar-right \{ display: none; \}/);
+    expect(appCss).toMatch(/\.bottom-nav\s*\{[^}]*margin-inline:\s*auto;/s);
+    expect(appCss).toMatch(/\.bottom-nav button\s*\{[^}]*font-weight:\s*600;/s);
   });
 
   it('paints inactive hero pager dots grey and the active pill in theme ink', () => {

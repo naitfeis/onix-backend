@@ -70,6 +70,9 @@
   z-index: 1200;
   pointer-events: none;
   visibility: hidden;
+  background: transparent;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 .settings-overlay.is-open {
   pointer-events: auto;
@@ -80,7 +83,9 @@
   inset: 0;
   border: 0;
   padding: 0;
-  background: transparent;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   cursor: pointer;
 }
 .settings-sheet {
@@ -2681,17 +2686,12 @@ html[data-theme="light"] .timeline li {
 }
 .thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 
-/* Chat immersive: resizable messenger panel */
-.app-shell--chat {
-  padding-top: 0;
-  padding-inline: 0;
-  padding-bottom: calc(88px + env(safe-area-inset-bottom));
-}
+/* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
 .app-shell--chat .viewport {
   margin: 0;
-  height: calc(var(--tg-viewport-height, 100dvh) - 88px - env(safe-area-inset-bottom));
+  height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 96px - env(safe-area-inset-bottom) - 72px);
   min-height: 0;
-  max-height: calc(var(--tg-viewport-height, 100dvh) - 88px - env(safe-area-inset-bottom));
+  max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 96px - env(safe-area-inset-bottom) - 72px);
   overflow: hidden;
   display: flex;
   align-items: stretch;
@@ -3859,14 +3859,14 @@ html[data-theme="light"] .seller-identity__actions .button {
 /* Thin glass tab bar + sliding capsule under active icon */
 .bottom-nav {
   position: fixed;
-  left: 50%;
-  right: auto;
+  left: 0;
+  right: 0;
   bottom: calc(10px + env(safe-area-inset-bottom));
   z-index: var(--z-sticky);
   width: min(420px, calc(100vw - 24px));
   height: 64px;
+  margin-inline: auto;
   display: flex;
-  transform: translateX(-50%);
   border-radius: 22px;
   padding-bottom: 0;
   /* glass: tokens.css — blur via --glass-blur */
@@ -3886,6 +3886,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   gap: 3px;
   cursor: pointer;
   font: inherit;
+  font-weight: 600;
   transition: color 220ms;
 }
 .bottom-nav button > span {
@@ -3915,7 +3916,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   white-space: nowrap;
   padding-inline: 2px;
 }
-.bottom-nav button.active { color: var(--text-primary); font-weight: 600; }
+.bottom-nav button.active { color: var(--text-primary); }
 .bottom-nav button.active > span { opacity: 1; }
 .nav-indicator {
   position: absolute;
@@ -3963,14 +3964,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
 
-  /* Mini-app chat: fill down to the bottom nav */
+  /* Mini-app chat: same chrome as other tabs so the dock / categories do not jump */
   .app-shell--chat {
-    padding: 0;
-    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    padding:
+      calc(12px + env(safe-area-inset-top))
+      16px
+      calc(96px + env(safe-area-inset-bottom));
   }
   .app-shell--chat .viewport {
-    height: calc(var(--tg-viewport-height, 100dvh) - 78px - env(safe-area-inset-bottom));
-    max-height: calc(var(--tg-viewport-height, 100dvh) - 78px - env(safe-area-inset-bottom));
     min-height: 0;
     overflow: hidden;
   }
@@ -4004,7 +4005,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
-  .app-shell--chat { padding-inline: 0; }
   .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto; }
   .search-row select.control,
   .search-row .select-menu__trigger {
@@ -4079,7 +4079,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .app-shell--auth > .sidebar-right {
     grid-row: 2;
   }
-  .app-shell--chat .sidebar-right { display: none; }
   .app-shell > .topbar,
   .app-shell > .bottom-nav { display: none; }
   .app-shell > .viewport {

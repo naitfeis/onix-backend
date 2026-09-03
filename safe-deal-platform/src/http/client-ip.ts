@@ -55,6 +55,8 @@ export function cdnClientHeadersTrusted(env: NodeJS.ProcessEnv = process.env): b
   if (raw === '0' || raw === 'false') return false;
   const amvera = env.AMVERA?.trim();
   if (amvera === '1' || amvera?.toLowerCase() === 'true') return false;
+  // Production Amvera/Render without orange Cloudflare: spoofed CF/XFF must not win.
+  if ((env.NODE_ENV ?? '').toLowerCase() === 'production') return false;
   return true;
 }
 
@@ -117,6 +119,24 @@ export function resolveClientIp(req: ClientIpRequestLike): string | null {
   }
 
   return expressIp;
+}
+
+/** WebSocket / raw Node req: Express `req.ip` is missing. One trusted proxy → last XFF hop. */
+export function clientIpFromNodeRequest(req: {
+  headers?: Record<string, string | string[] | undefined>;
+  socket?: { remoteAddress?: string };
+}): string | null {
+  const headers = req.headers ?? {};
+  const socketIp = normalizeIp(req.socket?.remoteAddress);
+  if (cdnClientHeadersTrusted()) {
+    return resolveClientIp({ ip: socketIp ?? undefined, socket: req.socket, headers });
+  }
+  const forwarded = headerFirst(headers, 'x-forwarded-for');
+  if (forwarded) {
+    const chain = splitForwarded(forwarded);
+    if (chain.length > 0) return chain[chain.length - 1] ?? socketIp;
+  }
+  return socketIp;
 }
 
 /** Display helper for security prompts — never invent an IP. */

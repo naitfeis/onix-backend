@@ -12,11 +12,19 @@ import { SupportScreen } from './screens/SupportScreen';
 import { ProductsScreen } from './screens/ProductsScreen';
 import { MessagesScreen } from './screens/MessagesScreen';
 import { PaymentsScreen } from './screens/PaymentsScreen';
+import { StaffScreen } from './screens/StaffScreen';
 import { ChatThreadModal } from './screens/ChatThreadModal';
 
-type AdminMe = { id: string; email: string; role: string; sessionId?: string };
+type AdminMe = {
+  id: string;
+  email: string;
+  role: string;
+  sessionId?: string;
+  clientIp?: string | null;
+  ipAllowlistConfigured?: boolean;
+};
 function adminRoleLabel(role: string) { return role === 'SUPER_ADMIN' ? 'FOUNDER' : role; }
-type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk' | 'payments';
+type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk' | 'payments' | 'staff';
 
 export function App() {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
@@ -47,16 +55,6 @@ export function App() {
           setAdmin(result.admin);
           return;
         } catch {
-          /* try same-IP resume */
-        }
-        try {
-          const result = await adminApi<{ accessToken: string; admin: AdminMe }>('/api/admin/auth/resume', {
-            method: 'POST',
-          });
-          if (cancelled) return;
-          setAdminToken(result.accessToken);
-          setAdmin(result.admin);
-        } catch {
           if (!cancelled) {
             clearAdminToken();
             setAdmin(null);
@@ -77,9 +75,14 @@ export function App() {
   if (!admin) {
     return (
       <LoginScreen
-        onAuthed={(accessToken, me) => {
+        onAuthed={async (accessToken, me) => {
           setAdminToken(accessToken);
-          setAdmin(me);
+          try {
+            const full = await adminApi<AdminMe>('/api/admin/me');
+            setAdmin(full);
+          } catch {
+            setAdmin(me);
+          }
           setScreen('dashboard');
         }}
       />
@@ -101,6 +104,7 @@ export function App() {
         {admin.role !== 'SUPPORT_ADMIN' && <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Выводы</button>}
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'FINANCE_ADMIN') && <button type="button" className={screen === 'payments' ? 'active' : ''} onClick={() => setScreen('payments')}>Платежи</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>Пользователи / баны</button>}
+        {admin.role === 'SUPER_ADMIN' && <button type="button" className={screen === 'staff' ? 'active' : ''} onClick={() => setScreen('staff')}>Сотрудники</button>}
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Center</button>}
         <div style={{ marginTop: '1.5rem' }}>
           <button
@@ -127,6 +131,9 @@ export function App() {
         {screen === 'withdrawals' && <WithdrawalsScreen />}
         {screen === 'payments' && <PaymentsScreen />}
         {screen === 'users' && <UsersScreen adminRole={admin.role} onOpenChat={setChatId} />}
+        {screen === 'staff' && admin.role === 'SUPER_ADMIN' && (
+          <StaffScreen clientIp={admin.clientIp} ipAllowlistConfigured={admin.ipAllowlistConfigured} />
+        )}
         {screen === 'risk' && <RiskEventsScreen />}
         {chatId && <ChatThreadModal chatId={chatId} onClose={() => setChatId(null)} />}
       </main>

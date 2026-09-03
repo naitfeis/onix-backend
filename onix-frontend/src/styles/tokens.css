@@ -611,26 +611,26 @@ html[data-theme="dark"] .wallet-hero {
 }
 
 html[data-glass="vision"] {
-  --glass-blur: 48px;
-  --glass-blur-thin: 32px;
-  --glass-blur-regular: 48px;
-  --glass-blur-thick: 64px;
-  --glass-saturate: 190%;
+  --glass-blur: 20px;
+  --glass-blur-thin: 14px;
+  --glass-blur-regular: 20px;
+  --glass-blur-thick: 28px;
+  --glass-saturate: 140%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-bg: rgba(14, 14, 18, 0.18);
-  --glass-thin-bg: rgba(14, 14, 18, 0.12);
-  --glass-regular-bg: rgba(16, 16, 22, 0.22);
-  --glass-thick-bg: rgba(18, 18, 26, 0.28);
-  --glass-card-bg: rgba(16, 16, 22, 0.2);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  --glass-bg: rgba(255, 255, 255, 0.1);
+  --glass-thin-bg: rgba(255, 255, 255, 0.07);
+  --glass-regular-bg: rgba(255, 255, 255, 0.12);
+  --glass-thick-bg: rgba(255, 255, 255, 0.16);
+  --glass-card-bg: rgba(255, 255, 255, 0.12);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.22);
 }
 html[data-theme="light"][data-glass="vision"] {
-  --glass-bg: rgba(255, 255, 255, 0.22);
-  --glass-thin-bg: rgba(255, 255, 255, 0.14);
-  --glass-regular-bg: rgba(255, 255, 255, 0.26);
-  --glass-thick-bg: rgba(255, 255, 255, 0.34);
-  --glass-card-bg: rgba(255, 255, 255, 0.24);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.42);
+  --glass-bg: rgba(255, 255, 255, 0.42);
+  --glass-thin-bg: rgba(255, 255, 255, 0.32);
+  --glass-regular-bg: rgba(255, 255, 255, 0.5);
+  --glass-thick-bg: rgba(255, 255, 255, 0.58);
+  --glass-card-bg: rgba(255, 255, 255, 0.48);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.62);
 }
 
 html[data-glass="vision"] .card,
@@ -638,16 +638,7 @@ html[data-glass="vision"] .widget,
 html[data-glass="vision"] .product-card,
 html[data-glass="vision"] .topbar,
 html[data-glass="vision"] .section-head,
-html[data-glass="vision"] .desktop-hero,
-html[data-glass="vision"] .market-hero,
-html[data-glass="vision"] .wallet-hero,
-html[data-glass="vision"] .sidebar-left,
-html[data-glass="vision"] .sidebar-right,
-html[data-glass="vision"] .chat-layout,
-html[data-glass="vision"] .conversation,
-html[data-glass="vision"] .thread-list,
 html[data-glass="vision"] .modal__panel,
-html[data-glass="vision"] .bottom-nav,
 html[data-glass="vision"] .auth-notice {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;

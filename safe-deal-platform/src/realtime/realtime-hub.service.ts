@@ -3,6 +3,7 @@ import type { Server as HttpServer, IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import { PrismaService } from '../prisma.service';
 import { resolveCorsOrigins } from '../security-headers';
+import { clientIpFromNodeRequest } from '../http/client-ip';
 import { publicDisplayName } from '../public-username';
 import { structuredLog } from '../observability/structured-logger';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
@@ -10,16 +11,23 @@ import { RealtimeAuthService, type RealtimeAuthUser } from './realtime-auth.serv
 import { RealtimeBus } from './realtime-bus.service';
 import type { RealtimeClientMessage, RealtimeServerMessage } from './realtime.types';
 
-const AUTH_TIMEOUT_MS = 8_000;
+const AUTH_TIMEOUT_MS = Number(process.env.REALTIME_AUTH_TIMEOUT_MS ?? 3_000);
 const MAX_CONNECTIONS_PER_USER = Number(process.env.REALTIME_MAX_CONN_PER_USER ?? 5);
 const MAX_TOTAL_CONNECTIONS = Number(process.env.REALTIME_MAX_CONNECTIONS ?? 2_000);
+const MAX_UNAUTH_PER_IP = Number(process.env.REALTIME_MAX_UNAUTH_PER_IP ?? 8);
 const PING_INTERVAL_MS = 25_000;
+const TELEGRAM_WEB_ORIGINS = new Set([
+  'https://web.telegram.org',
+  'https://k.web.telegram.org',
+]);
 
 type SocketState = {
   ws: WebSocket;
   user: RealtimeAuthUser | null;
   chats: Set<string>;
   alive: boolean;
+  peerIp?: string;
+  unauthSlot?: boolean;
   authTimer?: NodeJS.Timeout;
 };
 
@@ -32,6 +40,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
   private wss: WebSocketServer | null = null;
   private readonly sockets = new Set<SocketState>();
   private readonly byUser = new Map<string, Set<SocketState>>();
+  private readonly unauthByIp = new Map<string, number>();
   private unsubscribeBus: (() => void) | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
 
@@ -89,7 +98,16 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const state: SocketState = { ws, user: null, chats: new Set(), alive: true };
+    const peerIp = clientIpFromNodeRequest(req) ?? 'unknown';
+    const unauth = this.unauthByIp.get(peerIp) ?? 0;
+    if (unauth >= MAX_UNAUTH_PER_IP) {
+      this.send(ws, { type: 'error', code: 'REALTIME_IP_LIMIT', message: 'Too many connections from this IP.' });
+      ws.close(1013, 'ip limit');
+      return;
+    }
+    this.unauthByIp.set(peerIp, unauth + 1);
+
+    const state: SocketState = { ws, user: null, chats: new Set(), alive: true, peerIp, unauthSlot: true };
     this.sockets.add(state);
 
     state.authTimer = setTimeout(() => {
@@ -110,10 +128,12 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
   private originAllowed(req: IncomingMessage): boolean {
     const origin = req.headers.origin;
     if (!origin) {
-      // Same-origin browser WS often sends Origin; non-browser may omit — allow omit
-      // (Telegram WebView quirks / native clients).
+      const allowMissing = (process.env.REALTIME_ALLOW_NO_ORIGIN ?? '').trim().toLowerCase();
+      if (allowMissing === '1' || allowMissing === 'true') return true;
+      if ((process.env.NODE_ENV ?? '').toLowerCase() === 'production') return false;
       return true;
     }
+    if (TELEGRAM_WEB_ORIGINS.has(origin)) return true;
     const allowed = resolveCorsOrigins();
     if (allowed.includes(origin)) return true;
     // Same-host as this request (Render custom domain / www vs apex already in CORS;
@@ -195,6 +215,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       }
     }
     state.user = user;
+    this.releaseUnauthSlot(state);
     if (state.authTimer) {
       clearTimeout(state.authTimer);
       state.authTimer = undefined;
@@ -427,6 +448,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
 
   private detach(state: SocketState, opts?: { silent?: boolean }): void {
     if (state.authTimer) clearTimeout(state.authTimer);
+    this.releaseUnauthSlot(state);
     this.sockets.delete(state);
     const user = state.user;
     if (!user) return;
@@ -447,6 +469,14 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         watchers: [],
       });
     }
+  }
+
+  private releaseUnauthSlot(state: SocketState): void {
+    if (!state.unauthSlot || !state.peerIp) return;
+    state.unauthSlot = false;
+    const n = this.unauthByIp.get(state.peerIp) ?? 0;
+    if (n <= 1) this.unauthByIp.delete(state.peerIp);
+    else this.unauthByIp.set(state.peerIp, n - 1);
   }
 
   private heartbeat(): void {

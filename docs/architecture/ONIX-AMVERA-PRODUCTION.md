@@ -118,7 +118,26 @@ Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (
 
 ---
 
-## Related docs
+## DDoS / WAF / Cloudflare (2026-09)
+
+**Не включайте оранжевое облако (Proxied) на `@` и `www`.** Российские сети рвут TLS до Cloudflare; сайт и вход перестанут открываться. DNS-only (серое облако) оставляем.
+
+Что реально защищает канал:
+
+| Слой | Как |
+| --- | --- |
+| Код (сделано) | Глобальный лимит ~240 req/мин на IP для `/api`, витрина 40/мин для гостей, JSON ≤ 128kb, WebSocket: Origin обязателен в production, 8 unauth-сокетов на IP, auth за 3с |
+| Amvera | Одна реплика; при реальном L3/L4 флуде — тикет в Amvera / смена IP / более жирный тариф |
+| Cloudflare | Только DNS-only на www. WAF/Bot Fight на orange **нельзя** для этого origin |
+| Redis | Не открывать `0.0.0.0/0`. Если URL утечёт — ротация |
+
+**Allowlist админки:** в админке → Сотрудники скопируйте «ваш IP» → Amvera env `ADMIN_IP_ALLOWLIST=1.2.3.4` (домашний/офисный публичный IP, не 127.0.0.1). Несколько через запятую. Перезапуск.
+
+**Выдача модераторам:** Сотрудники → email + роль «Модератор / саппорт» (`SUPPORT_ADMIN`). Пароль сгенерируется. Это логин `/admin/`, не аккаунт маркета.
+
+`ADMIN_IP_RESUME` по умолчанию выключен. Не включайте.
+
+---
 
 - Historical (webhook/Vercel **wrong** as of 2026-09): `ONIX-SINGLE-ORIGIN-MIGRATION.md`
 - Bot login diagnostics: `ONIX-TELEGRAM-BOT-CHAIN-BREAK.md`

@@ -26,6 +26,10 @@ export function hashIp(ip: string | null | undefined): string | null {
   return createHash('sha256').update(ip, 'utf8').digest('hex');
 }
 
+export function mintStaffPassword(): string {
+  return randomBytes(18).toString('base64url');
+}
+
 export function mintMfaCode(): string {
   // 6-digit, never log in production.
   return String(randomBytes(3).readUIntBE(0, 3) % 1_000_000).padStart(6, '0');

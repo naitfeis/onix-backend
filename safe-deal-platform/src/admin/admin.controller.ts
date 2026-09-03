@@ -1,12 +1,16 @@
 ﻿import {
-  Body, Controller, Delete, Get, Header, NotFoundException, Param, Patch, Post, Query, UseGuards,
+  Body, Controller, Delete, Get, Header, NotFoundException, Param, Patch, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  IsIn, IsInt, IsISO8601, IsOptional, IsString, Length, Max, Min,
+  IsEmail, IsIn, IsInt, IsISO8601, IsOptional, IsString, Length, Max, Min,
 } from 'class-validator';
+import type { Request } from 'express';
 import { Public } from '../common';
+import { resolveClientIp } from '../http/client-ip';
+import { parseAdminIpAllowlist } from './admin-ip-allowlist';
+import { AdminAuthService } from './admin-auth.service';
 import {
   AdminAccessGuard, AdminRoleGuard, AdminRoles, CurrentAdmin,
 } from './admin.guard';
@@ -35,6 +39,17 @@ class CreateManualPaymentDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
 }
 
+class CreateStaffDto {
+  @IsEmail() @Length(3, 191) email!: string;
+  @IsOptional() @IsString() @Length(12, 200) password?: string;
+  @IsIn(['SUPER_ADMIN', 'SECURITY_ADMIN', 'SUPPORT_ADMIN', 'FINANCE_ADMIN']) role!: AdminRole;
+  @IsOptional() @IsString() @Length(5, 20) telegramId?: string;
+}
+
+class ResetStaffPasswordDto {
+  @IsOptional() @IsString() @Length(12, 200) password?: string;
+}
+
 /**
  * Slice 6 Security Operations Console APIs.
  * Customer JWT rejected by AdminAccessGuard (typ must be admin_access).
@@ -47,17 +62,66 @@ export class AdminPlaneController {
   constructor(
     private readonly security: AdminSecurityService,
     private readonly tickets: SupportCenterService,
+    private readonly auth: AdminAuthService,
   ) {}
 
   @Get('me')
   @Header('Cache-Control', 'no-store')
-  me(@CurrentAdmin() admin: AdminActor) {
+  me(@CurrentAdmin() admin: AdminActor, @Req() req: Request) {
+    const allowlist = parseAdminIpAllowlist();
     return {
       id: admin.id.toString(),
       email: admin.email,
       role: admin.role,
       sessionId: admin.sessionId,
+      clientIp: resolveClientIp(req),
+      ipAllowlistConfigured: Boolean(allowlist),
     };
+  }
+
+  @Get('staff')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async staffList(@CurrentAdmin() admin: AdminActor) {
+    const staff = await this.auth.listStaff();
+    await this.security.logAction(admin, 'ADMIN_LIST_STAFF', { metadata: { count: staff.length } });
+    return { staff };
+  }
+
+  @Post('staff')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async staffCreate(@CurrentAdmin() admin: AdminActor, @Body() body: CreateStaffDto) {
+    const created = await this.auth.createStaff(body);
+    await this.security.logAction(admin, 'ADMIN_CREATE_STAFF', {
+      metadata: { email: created.email, role: created.role },
+    });
+    return created;
+  }
+
+  @Post('staff/:id/password')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async staffResetPassword(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: ResetStaffPasswordDto,
+  ) {
+    const updated = await this.auth.resetStaffPassword(id, body.password);
+    await this.security.logAction(admin, 'ADMIN_RESET_STAFF_PASSWORD', {
+      metadata: { email: updated.email },
+    });
+    return updated;
+  }
+
+  @Delete('staff/:id')
+  @AdminRoles(AdminRole.SUPER_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async staffDelete(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    const result = await this.auth.deleteStaff(admin.id, id);
+    await this.security.logAction(admin, 'ADMIN_DELETE_STAFF', { metadata: { id } });
+    return result;
   }
 
   @Get('dashboard')

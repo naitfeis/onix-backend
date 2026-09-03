@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AuthGuard, AuthModule } from './auth.module';
 import { AuthV2Module } from './auth-v2/auth-v2.module';
@@ -23,6 +23,7 @@ import { LoginChallengeModule } from './login-challenge/login-challenge.module';
 import { MfaModule } from './mfa/mfa.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { spaServeModules } from './spa-static';
+import { GlobalHttpRateLimitMiddleware } from './http/global-http-rate-limit.middleware';
 
 @Module({
   imports: [
@@ -40,6 +41,11 @@ import { spaServeModules } from './spa-static';
   providers: [
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
+    GlobalHttpRateLimitMiddleware,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(GlobalHttpRateLimitMiddleware).forRoutes('*');
+  }
+}

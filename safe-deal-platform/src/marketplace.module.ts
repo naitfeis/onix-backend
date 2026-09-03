@@ -12,6 +12,8 @@ import { Transform, Type } from 'class-transformer';
 import { assertSubcategoryForCategory, matchProductCategory, PRODUCT_CATEGORIES, publicSubcategoryCatalog } from './catalog';
 import { AuthUser, CurrentUser, Public } from './common';
 import { DualAccessService } from './auth-v2/dual-access.service';
+import { resolveClientIp } from './http/client-ip';
+import { DistributedRateLimiter } from './rate-limit';
 import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
 import { AuthModule, AuthService } from './auth.module';
@@ -553,6 +555,7 @@ export class MarketplaceService {
 export class MarketplaceController {
   constructor(
     private readonly service: MarketplaceService,
+    private readonly rateLimit: DistributedRateLimiter,
     @Optional() private readonly dualAccess?: DualAccessService,
     @Optional() private readonly auth?: AuthService,
   ) {}
@@ -579,12 +582,13 @@ export class MarketplaceController {
   @Public()
   @Get()
   async list(
-    @Req() req: { headers?: Record<string, string | string[] | undefined>; ip?: string },
+    @Req() req: { headers?: Record<string, string | string[] | undefined>; ip?: string; socket?: { remoteAddress?: string } },
     @Res({ passthrough: true }) res: Response,
     @Query() query: ProductQuery,
   ) {
-    assertRateLimit(`products:list:${req.ip ?? 'unknown'}`, 90, 60_000);
     const user = await this.optionalViewer(req);
+    const ip = resolveClientIp(req) ?? req.ip ?? 'unknown';
+    await this.rateLimit.assert(`products:list:${ip}`, user ? 90 : 40, 60_000);
     res.setHeader(
       'Cache-Control',
       user

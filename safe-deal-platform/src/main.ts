@@ -90,6 +90,8 @@ async function bootstrap(): Promise<void> {
     transformOptions: { enableImplicitConversion: true },
     exceptionFactory: validationExceptionFactory,
   }));
+  app.useBodyParser('json', { limit: '128kb' });
+  app.useBodyParser('urlencoded', { limit: '64kb', extended: true });
   app.useGlobalInterceptors(new ApiEnvelopeInterceptor());
   const origins = resolveCorsOrigins();
   app.enableCors({

@@ -6,15 +6,10 @@ html {
   color-scheme: dark;
   background: var(--page-bg, #0B0B0C);
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 html[data-theme="light"] { color-scheme: light; }
-
-/* Keep the desktop shell fixed when routes switch between a scrolling market
-   and the internally-scrolled messenger. */
-@media (min-width: 900px) {
-  html { scrollbar-gutter: stable; }
-}
 
 html,
 body {

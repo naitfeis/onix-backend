@@ -157,6 +157,13 @@ export class AdminSessionService {
     });
   }
 
+  async revokeAllForAdmin(adminUserId: bigint): Promise<void> {
+    await this.prisma.adminSession.updateMany({
+      where: { adminUserId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async revokeByRefreshToken(refreshToken: string): Promise<void> {
     const hash = this.tokens.hashRefreshToken(refreshToken);
     await this.prisma.adminSession.updateMany({

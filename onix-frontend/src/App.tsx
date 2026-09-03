@@ -243,7 +243,7 @@ export default function App() {
 
   useEffect(() => {
     if (!settingsOpen) return;
-    const { id } = pushModal(() => setSettingsOpen(false));
+    const { id } = pushModal(() => setSettingsOpen(false), { lockBody: false });
     return () => popModal(id);
   }, [settingsOpen]);
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
@@ -481,7 +481,7 @@ export default function App() {
     || core.sessionRestore === 'network';
   const chatImmersive = screen === 'chat';
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
-  const showMarketRail = screen === 'market' && !chatImmersive;
+  const showMarketRail = shellWidth >= 1280;
   const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = core.categoryLotCounts[cat]
       ?? core.products.filter((p) => p.category === cat).length;
@@ -653,8 +653,7 @@ export default function App() {
     </aside>
 
     {/* keep theme on mobile topbar */}
-    {!chatImmersive && (
-      <header className="topbar mobile-only">
+    <header className={`topbar mobile-only${chatImmersive ? ' topbar--chat' : ''}`}>
         <BrandMark />
         <div className="topbar__actions">
           <button
@@ -680,7 +679,6 @@ export default function App() {
           </div>
         </div>
       </header>
-    )}
 
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
       <div key={screen} className="screen-transition">

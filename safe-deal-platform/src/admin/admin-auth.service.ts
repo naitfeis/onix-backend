@@ -1,5 +1,4 @@
-import {
-  BadRequestException, Injectable, Logger, OnModuleInit, ServiceUnavailableException,
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, OnModuleInit, ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AdminRole } from '@prisma/client';
@@ -7,11 +6,17 @@ import { createId } from '../economy/wallet/cuid';
 import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { PrismaService } from '../prisma.service';
 import { assertRateLimit } from '../rate-limit';
-import { hashIp, hashMfaCode, hashPassword, mintMfaCode, verifyPassword } from './admin-crypto';
+import { hashIp, hashMfaCode, hashPassword, mintMfaCode, mintStaffPassword, verifyPassword } from './admin-crypto';
+import { parseAdminIpAllowlist } from './admin-ip-allowlist';
 import { AdminSessionService } from './admin-session.service';
 
 const MFA_TTL_MS = Number(process.env.ADMIN_MFA_TTL_MS ?? 10 * 60 * 1000);
 const IP_TRUST_TTL_MS = Number(process.env.ADMIN_IP_TRUST_TTL_MS ?? 7 * 24 * 60 * 60 * 1000);
+
+export function adminIpResumeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.ADMIN_IP_RESUME?.trim().toLowerCase();
+  return raw === '1' || raw === 'true';
+}
 
 @Injectable()
 export class AdminAuthService implements OnModuleInit {
@@ -23,6 +28,9 @@ export class AdminAuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    if (!parseAdminIpAllowlist() && (process.env.NODE_ENV ?? '').toLowerCase() === 'production') {
+      this.logger.warn('ADMIN_IP_ALLOWLIST is empty — admin login is allowed from any IP. Set it to your office/home public IP.');
+    }
     const email = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim().toLowerCase();
     const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
     if (!email || !password) return;
@@ -223,6 +231,9 @@ export class AdminAuthService implements OnModuleInit {
   }
 
   async resumeFromIp(input: { ip?: string | null; userAgent?: string | null }) {
+    if (!adminIpResumeEnabled()) {
+      throw new ForbiddenException('Вход в админку по IP выключен. Используйте email и пароль.');
+    }
     assertRateLimit(`admin-resume:${input.ip ?? 'unknown'}`, 20, 60_000);
     const ipHash = hashIp(input.ip);
     if (!ipHash) throw new UnauthorizedException('Не удалось определить IP.');
@@ -281,6 +292,94 @@ export class AdminAuthService implements OnModuleInit {
     };
   }
 
+  async listStaff() {
+    const rows = await this.prisma.adminUser.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        telegramId: true,
+        createdAt: true,
+        lastLoginAt: true,
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id.toString(),
+      email: row.email,
+      role: row.role,
+      telegramId: row.telegramId ? row.telegramId.toString() : null,
+      createdAt: row.createdAt.toISOString(),
+      lastLoginAt: row.lastLoginAt?.toISOString() ?? null,
+    }));
+  }
+
+  async createStaff(input: {
+    email: string;
+    password?: string;
+    role: AdminRole;
+    telegramId?: string | null;
+  }) {
+    const email = input.email.trim().toLowerCase();
+    if (!email) throw new BadRequestException('Нужен email.');
+    const password = input.password?.trim() || mintStaffPassword();
+    if (password.length < 12) {
+      throw new BadRequestException('Пароль админки не короче 12 символов.');
+    }
+    const telegramId = parseOptionalTelegramId(input.telegramId);
+    const existing = await this.prisma.adminUser.findUnique({ where: { email } });
+    if (existing) throw new ConflictException('Такой admin email уже есть.');
+    if (telegramId) {
+      const taken = await this.prisma.adminUser.findFirst({ where: { telegramId } });
+      if (taken) throw new ConflictException('Этот Telegram ID уже привязан к другой админ-учётке.');
+    }
+    const created = await this.prisma.adminUser.create({
+      data: {
+        email,
+        passwordHash: hashPassword(password),
+        role: input.role,
+        telegramId,
+      },
+    });
+    return {
+      id: created.id.toString(),
+      email: created.email,
+      role: created.role,
+      password,
+      telegramId: created.telegramId ? created.telegramId.toString() : null,
+    };
+  }
+
+  async resetStaffPassword(id: string, password?: string) {
+    const adminId = parseAdminRowId(id);
+    const next = password?.trim() || mintStaffPassword();
+    if (next.length < 12) {
+      throw new BadRequestException('Пароль админки не короче 12 символов.');
+    }
+    const existing = await this.prisma.adminUser.findUnique({ where: { id: adminId } });
+    if (!existing) throw new NotFoundException('Админ-учётка не найдена.');
+    await this.prisma.adminUser.update({
+      where: { id: adminId },
+      data: { passwordHash: hashPassword(next) },
+    });
+    await this.sessions.revokeAllForAdmin(adminId);
+    return { id, email: existing.email, role: existing.role, password: next };
+  }
+
+  async deleteStaff(actorId: bigint, id: string) {
+    const adminId = parseAdminRowId(id);
+    if (adminId === actorId) throw new BadRequestException('Нельзя удалить свою учётку.');
+    const existing = await this.prisma.adminUser.findUnique({ where: { id: adminId } });
+    if (!existing) throw new NotFoundException('Админ-учётка не найдена.');
+    if (existing.role === AdminRole.SUPER_ADMIN) {
+      const supers = await this.prisma.adminUser.count({ where: { role: AdminRole.SUPER_ADMIN } });
+      if (supers <= 1) throw new BadRequestException('Нельзя удалить последнего SUPER_ADMIN.');
+    }
+    await this.sessions.revokeAllForAdmin(adminId);
+    await this.prisma.adminUser.delete({ where: { id: adminId } });
+    return { ok: true };
+  }
+
   private async findTrustedIp(adminUserId: bigint, ip?: string | null) {
     const ipHash = hashIp(ip);
     if (!ipHash) return null;
@@ -304,4 +403,18 @@ export class AdminAuthService implements OnModuleInit {
   private async touchTrustedIp(adminUserId: bigint, ip?: string | null): Promise<void> {
     await this.rememberTrustedIp(adminUserId, ip);
   }
+}
+
+function parseOptionalTelegramId(raw?: string | null): bigint | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  if (!/^\d+$/.test(value)) {
+    throw new BadRequestException('Telegram ID — только цифры.');
+  }
+  return BigInt(value);
+}
+
+function parseAdminRowId(id: string): bigint {
+  if (!/^\d+$/.test(id)) throw new BadRequestException('Некорректный id.');
+  return BigInt(id);
 }

@@ -6,6 +6,7 @@
 type StackEntry = {
   id: number;
   close: () => void;
+  lockBody: boolean;
 };
 
 type TelegramBackButton = {
@@ -45,15 +46,20 @@ function onBackClick() {
 function syncChrome() {
   if (typeof document === 'undefined') return;
   const open = stack.length > 0;
-  document.body.classList.toggle('modal-open', open);
+  const lockBody = stack.some((entry) => entry.lockBody);
+  document.body.classList.toggle('modal-open', lockBody);
   if (open) {
     if (!keyBound) {
       window.addEventListener('keydown', onKeyDown, true);
       keyBound = true;
     }
-    if (stack.length === 1 && document.body.style.overflow !== 'hidden') {
+    if (lockBody && document.body.style.overflow !== 'hidden') {
       savedOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
+    }
+    if (!lockBody && document.body.style.overflow === 'hidden' && savedOverflow !== undefined) {
+      document.body.style.overflow = savedOverflow;
+      savedOverflow = '';
     }
   } else {
     if (keyBound) {
@@ -80,9 +86,12 @@ function syncChrome() {
 }
 
 /** @returns modal id + depth (0-based) for z-index */
-export function pushModal(close: () => void): { id: number; depth: number } {
+export function pushModal(
+  close: () => void,
+  options?: { lockBody?: boolean },
+): { id: number; depth: number } {
   const id = nextId++;
-  stack.push({ id, close });
+  stack.push({ id, close, lockBody: options?.lockBody !== false });
   syncChrome();
   return { id, depth: stack.length - 1 };
 }

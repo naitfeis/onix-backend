@@ -3,8 +3,9 @@ import test from 'node:test';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
-  hashMfaCode, hashPassword, mintMfaCode, verifyPassword,
+  hashMfaCode, hashPassword, mintMfaCode, mintStaffPassword, verifyPassword,
 } from '../src/admin/admin-crypto';
+import { adminIpResumeEnabled } from '../src/admin/admin-auth.service';
 import {
   ADMIN_ACCESS_AUD, ADMIN_ACCESS_ISS, ADMIN_ACCESS_TYP,
 } from '../src/admin/admin-token.service';
@@ -23,6 +24,24 @@ test('admin password hash verifies', () => {
   const stored = hashPassword('correct-horse-battery');
   assert.equal(verifyPassword('correct-horse-battery', stored), true);
   assert.equal(verifyPassword('wrong', stored), false);
+});
+
+test('staff password generator is long enough', () => {
+  const password = mintStaffPassword();
+  assert.ok(password.length >= 16);
+});
+
+test('admin IP resume is off unless ADMIN_IP_RESUME=true', () => {
+  const prev = process.env.ADMIN_IP_RESUME;
+  try {
+    delete process.env.ADMIN_IP_RESUME;
+    assert.equal(adminIpResumeEnabled(), false);
+    process.env.ADMIN_IP_RESUME = 'true';
+    assert.equal(adminIpResumeEnabled(), true);
+  } finally {
+    if (prev === undefined) delete process.env.ADMIN_IP_RESUME;
+    else process.env.ADMIN_IP_RESUME = prev;
+  }
 });
 
 test('admin MFA code hash is stable and distinct', () => {
