@@ -204,7 +204,17 @@ export function dealDto(order: {
   totalAmountCents: bigint;
   status: string;
   createdAt: Date;
-  product: { id: string; title: string; category: string; subcategory?: string | null; autoDeliver?: boolean };
+  updatedAt?: Date;
+  completedAt?: Date | null;
+  transitions?: Array<{ to: string; createdAt: Date }>;
+  product: {
+    id: string;
+    title: string;
+    category: string;
+    subcategory?: string | null;
+    autoDeliver?: boolean;
+    warrantyHours?: number | null;
+  };
   buyer: PublicUser;
   seller: PublicUser;
   reviews: Array<{ authorId: bigint }>;
@@ -221,6 +231,14 @@ export function dealDto(order: {
   } | null;
 }, viewer: AuthUser) {
   const buyer = order.buyerId === viewer.id;
+  const warrantyHours = order.product.warrantyHours ?? 10;
+  const deliveredAt = order.transitions?.find((item) => item.to === 'DELIVERING')?.createdAt
+    ?? (order.status === 'DELIVERING' || order.status === 'COMPLETED'
+      ? (order.completedAt ?? order.updatedAt ?? null)
+      : null);
+  const warrantyEndsAt = deliveredAt
+    ? new Date(deliveredAt.getTime() + warrantyHours * 3_600_000).toISOString()
+    : null;
   const hasTicket = Boolean(order.supportTickets?.length);
   const complaintOpen = hasTicket
     || order.status === 'DISPUTE'
@@ -234,9 +252,12 @@ export function dealDto(order: {
       category: order.product.category,
       ...(order.product.subcategory ? { subcategory: order.product.subcategory } : {}),
       autoDeliver: Boolean(order.product.autoDeliver),
+      warrantyHours,
     },
     totalAmountCents: order.totalAmountCents.toString(),
     status: order.status,
+    warrantyHours,
+    warrantyEndsAt,
     role: buyer ? 'buyer' as const : 'seller' as const,
     counterparty: sellerDto(buyer ? order.seller : order.buyer),
     createdAt: order.createdAt.toISOString(),

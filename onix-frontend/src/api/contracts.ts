@@ -72,9 +72,12 @@ export interface Deal {
   product: Pick<Product, 'id' | 'title' | 'category'> & {
     subcategory?: string;
     autoDeliver?: boolean;
+    warrantyHours?: number;
   };
   totalAmountCents: string;
   status: DealStatus;
+  warrantyHours?: number;
+  warrantyEndsAt?: string | null;
   role: 'buyer' | 'seller';
   counterparty: Seller;
   createdAt: string;

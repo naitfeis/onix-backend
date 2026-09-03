@@ -5,7 +5,8 @@ import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
-import { DEAL_FILTERS, PublicProfileModal, dealLabels, dealProgress } from './shared';
+import { DEAL_FILTERS, DEAL_PHASES, PublicProfileModal, dealLabels, dealProgress } from './shared';
+import { WARRANTY_DEFAULT_HOURS, formatDealCountdown } from '../utils/warranty';
 import { categoryLabel as displayCategory } from '../i18n';
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
@@ -132,7 +133,12 @@ export function Deals({
           <strong>{money(deal.totalAmountCents)}</strong>
         </div>
         <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
-        <ol className="timeline">{['Оплата', 'Сейф', 'Передача', 'Выплата'].map((item, index) => <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item} title={item}>{item}</li>)}</ol>
+        <ol className="timeline">{DEAL_PHASES.map((item, index) => (
+          <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item} title={item}>
+            <span>{item}</span>
+            {item === 'Выплата' ? <DealPayoutTimer deal={deal} /> : null}
+          </li>
+        ))}</ol>
         {deal.dispute && (
           <div className={`dispute-card${deal.dispute.status === 'RESOLVED' ? ' dispute-card--resolved' : ''}`} role="status">
             <h3>Ваш спор</h3>
@@ -203,4 +209,24 @@ export function Deals({
     />
   </div>;
 }
+function DealPayoutTimer({ deal }: { deal: Deal }) {
+  const hours = deal.warrantyHours ?? deal.product.warrantyHours ?? WARRANTY_DEFAULT_HOURS;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!deal.warrantyEndsAt || deal.status === 'COMPLETED' || deal.status === 'CANCELED' || deal.status === 'REFUNDED') {
+      return;
+    }
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [deal.status, deal.warrantyEndsAt]);
+  if (deal.status === 'COMPLETED') {
+    return <em className="timeline__timer">выплачено</em>;
+  }
+  const running = formatDealCountdown(deal.warrantyEndsAt, now);
+  if (running) {
+    return <em className="timeline__timer" aria-label={`Гарантия ${hours} ч`}>{running}</em>;
+  }
+  return <em className="timeline__timer">{hours} ч</em>;
+}
+
 export default Deals;

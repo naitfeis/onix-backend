@@ -31,7 +31,7 @@ import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
 import { buildLightDisputeCard, invalidateArbitrationContextCache } from './dispute-card';
 import { computeSaleAmounts } from './pricing';
-import { dealPartySelect, dealProductSelect } from './query-selects';
+import { dealPartySelect, dealProductSelect, dealWarrantySelect } from './query-selects';
 import { dealDto } from './response';
 import { hideReviewsForOrder } from './marketplace/review-aggregate';
 
@@ -126,6 +126,7 @@ export class EscrowService {
         totalAmountCents: true,
         status: true,
         createdAt: true,
+        ...dealWarrantySelect,
         product: { select: dealProductSelect },
         buyer: { select: dealPartySelect },
         seller: { select: dealPartySelect },
@@ -394,6 +395,7 @@ export class EscrowService {
       where: { id },
       select: {
         id: true, buyerId: true, sellerId: true, totalAmountCents: true, status: true, createdAt: true,
+        ...dealWarrantySelect,
         product: { select: dealProductSelect },
         buyer: { select: dealPartySelect },
         seller: { select: dealPartySelect },
@@ -737,6 +739,7 @@ export class EscrowService {
           totalAmountCents: true,
           status: true,
           createdAt: true,
+          ...dealWarrantySelect,
           product: { select: dealProductSelect },
           buyer: { select: dealPartySelect },
           seller: { select: dealPartySelect },
@@ -803,6 +806,7 @@ export class EscrowService {
         totalAmountCents: true,
         status: true,
         createdAt: true,
+        ...dealWarrantySelect,
         product: { select: dealProductSelect },
         buyer: { select: dealPartySelect },
         seller: { select: dealPartySelect },

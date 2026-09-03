@@ -97,4 +97,16 @@ export const dealProductSelect = {
   category: true,
   subcategory: true,
   autoDeliver: true,
+  warrantyHours: true,
+} as const;
+
+export const dealWarrantySelect = {
+  completedAt: true,
+  updatedAt: true,
+  transitions: {
+    where: { to: 'DELIVERING' as const },
+    orderBy: { createdAt: 'asc' as const },
+    take: 1,
+    select: { createdAt: true, to: true },
+  },
 } as const;

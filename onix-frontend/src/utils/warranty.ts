@@ -35,6 +35,18 @@ export function formatWarrantyHours(hours: number): string {
   return `Гарантия: ${h} ${hourWord(h)}`;
 }
 
+export function formatDealCountdown(endsAt: string | null | undefined, now = Date.now()): string | null {
+  if (!endsAt) return null;
+  const end = Date.parse(endsAt);
+  if (!Number.isFinite(end)) return null;
+  const left = Math.max(0, end - now);
+  const totalSec = Math.floor(left / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 export function lotWarrantyBadge(product: { warrantyHours?: number | null; warrantyLabel?: string | null }): string {
   const label = product.warrantyLabel?.trim();
   if (label) return label;

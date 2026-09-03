@@ -92,8 +92,18 @@ export function SectionHeader({ title, subtitle, action }: { title: string; subt
   return <div className="section-head"><div><h1>{title}</h1><p>{subtitle}</p></div>{action}</div>;
 }
 
+export const DEAL_PHASES = ['Оплата', 'Сейф', 'Передача', 'Подтверждение', 'Выплата'] as const;
+
 export function dealProgress(status: Deal['status']) {
-  return ({ PENDING: 0, PAYMENT_HOLD: 1, DELIVERING: 2, COMPLETED: 3, CANCELED: -1, DISPUTE: 1, REFUNDED: -1 })[status];
+  return ({
+    PENDING: 0,
+    PAYMENT_HOLD: 1,
+    DELIVERING: 3,
+    COMPLETED: 4,
+    CANCELED: -1,
+    DISPUTE: 1,
+    REFUNDED: -1,
+  })[status];
 }
 
 export function PublicProfileModal({

@@ -2646,7 +2646,7 @@ html[data-theme="dark"] .muted { color: rgba(255, 255, 255, 0.68); }
 .timeline {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 3px;
   color: var(--text-caption);
   font-size: 9px;
@@ -2659,8 +2659,23 @@ html[data-theme="dark"] .muted { color: rgba(255, 255, 255, 0.68); }
   padding-top: 6px;
   min-width: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.timeline li > span {
+  max-width: 100%;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.timeline__timer {
+  font-size: 8px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 html[data-theme="light"] .timeline li {
   border-top-color: rgba(40, 32, 60, 0.14);
