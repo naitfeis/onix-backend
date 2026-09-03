@@ -654,3 +654,11 @@ html[data-glass="vision"] .auth-notice {
   background: var(--glass-card-bg) !important;
   box-shadow: none !important;
 }
+html[data-glass="vision"] .widget.widget--new-lots {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #151517 !important;
+}
+html[data-theme="light"][data-glass="vision"] .widget.widget--new-lots {
+  background: #fff !important;
+}

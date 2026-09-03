@@ -63,7 +63,7 @@ describe('desktop and chat layout CSS regressions', () => {
       /\.widget-trend__row\s*\{[^}]*flex:\s*0 0 auto;/s,
     );
     expect(appCss).toMatch(
-      /\.widget-trend__row\s*\{[^}]*min-height:\s*48px;/s,
+      /\.widget-trend__row\s*\{[^}]*min-height:\s*36px;/s,
     );
   });
 
@@ -123,12 +123,21 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/\.settings-overlay\s*\{[^}]*z-index:\s*1200;/s);
     expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*transform:\s*translateX\(100%\);/s);
     expect(appCss).toMatch(/@media \(max-width: 699px\)\s*\{[\s\S]*?\.settings-sheet\s*\{[^}]*transform:\s*translateY\(-110%\);/s);
+    expect(appCss).toMatch(/\.settings-sheet__backdrop\s*\{[^}]*background:\s*transparent;/s);
+    expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*background:\s*#151517;/s);
   });
 
-  it('paints hero pager dots white in dark theme and black in light', () => {
-    expect(appCss).toMatch(/\.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*#fff;/s);
-    expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*#111;/s);
+  it('paints inactive hero pager dots grey and the active pill in theme ink', () => {
+    expect(appCss).toMatch(/\.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*rgba\(255, 255, 255, 0\.32\);/s);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*rgba\(17, 17, 17, 0\.28\);/s);
     expect(appCss).toMatch(/\.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#fff;/s);
     expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#111;/s);
+  });
+
+  it('keeps new-lot titles and prices high-contrast in both themes', () => {
+    expect(appCss).toMatch(/\.widget-trend__title\s*\{[^}]*color:\s*#fff;/s);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.widget-trend__title\s*\{[^}]*color:\s*#111;/s);
+    expect(appCss).toMatch(/\.widget-trend__row strong\s*\{[^}]*color:\s*#fff;/s);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.widget-trend__row strong\s*\{[^}]*color:\s*#111;/s);
   });
 });

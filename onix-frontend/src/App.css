@@ -80,13 +80,8 @@
   inset: 0;
   border: 0;
   padding: 0;
-  background: rgba(6, 6, 8, 0.46);
-  opacity: 0;
+  background: transparent;
   cursor: pointer;
-  transition: opacity 240ms var(--ease);
-}
-.settings-overlay.is-open .settings-sheet__backdrop {
-  opacity: 1;
 }
 .settings-sheet {
   position: absolute;
@@ -97,14 +92,19 @@
   display: flex;
   flex-direction: column;
   padding: 20px 18px 24px;
-  border-left: var(--glass-border);
-  background: var(--glass-card-bg, var(--bg-elevated));
-  color: var(--text-primary);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  background: #151517;
+  color: #fff;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
+}
+html[data-theme="light"] .settings-sheet {
+  border-left-color: rgba(17, 17, 17, 0.12);
+  background: #fff;
+  color: #111;
 }
 .settings-overlay.is-open .settings-sheet {
   transform: translateX(0);
@@ -715,12 +715,12 @@ html[data-theme="light"] .market-hero {
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.32);
   cursor: pointer;
   transition: width 180ms var(--ease), background 180ms var(--ease);
 }
 html[data-theme="light"] .market-hero .desktop-hero__dots button {
-  background: #111;
+  background: rgba(17, 17, 17, 0.28);
 }
 .market-hero .desktop-hero__dots button.active {
   width: 20px;
@@ -1865,6 +1865,7 @@ html[data-theme="light"] .profile-account__check {
   min-width: 0;
   border: 0;
   background: transparent;
+  color: inherit;
   cursor: pointer;
   text-align: left;
   font: inherit;
@@ -1875,12 +1876,19 @@ html[data-theme="light"] .profile-account__check {
   min-width: 0;
   display: grid;
   gap: 2px;
+  color: inherit;
 }
 .widget-trend__title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #fff;
+}
+html[data-theme="light"] .widget-trend__title {
+  color: #111;
 }
 .product-card h2 {
   font-family: var(--font-display), sans-serif;
@@ -4575,26 +4583,29 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     display: flex;
     align-items: center;
     flex: 0 0 auto;
-    gap: 10px;
-    padding: 8px 0;
+    gap: 8px;
+    padding: 4px 0;
     border-bottom: 0;
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 12px;
+    color: #fff;
     min-width: 0;
-    min-height: 48px;
+    min-height: 36px;
     max-width: 100%;
     overflow: hidden;
   }
+  html[data-theme="light"] .widget-trend__row {
+    color: #111;
+  }
   .widget-trend__emblem {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
-    border-radius: 8px;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    border-radius: 6px;
     display: grid;
     place-items: center;
     overflow: hidden;
     color: #fff;
-    font-size: 10px;
+    font-size: 8px;
     font-weight: 700;
   }
   .widget-trend__emblem--photo {
@@ -4609,11 +4620,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .widget-trend__row strong {
     justify-self: start;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    color: var(--text-primary);
+    color: #fff;
+  }
+  html[data-theme="light"] .widget-trend__row strong {
+    color: #111;
   }
   .desktop-search { margin-bottom: 16px; gap: 12px; }
   .desktop-hero:not(.market-hero) {
@@ -4653,11 +4667,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .desktop-hero__dots i {
     width: 6px; height: 6px; border-radius: 999px;
-    background: #fff;
+    background: rgba(255, 255, 255, 0.32);
     display: block;
   }
   html[data-theme="light"] .desktop-hero__dots i {
-    background: #111;
+    background: rgba(17, 17, 17, 0.28);
   }
   .desktop-hero__dots i.active {
     width: 20px;
