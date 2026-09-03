@@ -29,6 +29,60 @@
   background: var(--nav-active-bg) !important;
   color: var(--icon-color-hover, var(--text-primary));
 }
+.sidebar-settings {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+}
+.sidebar-settings__panel {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding: 10px 8px;
+  border: var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-card-bg);
+}
+.sidebar-settings__label {
+  margin: 6px 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-caption);
+}
+.sidebar-settings__langs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 4px 4px;
+}
+.sidebar-settings__lang {
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.sidebar-settings__lang.is-active {
+  background: var(--nav-active-bg);
+  color: var(--text-primary);
+  border-color: var(--nav-active-border);
+}
+.sidebar-settings--mobile {
+  width: auto;
+}
+.sidebar-settings--mobile .sidebar-settings__panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+  width: min(280px, 80vw);
+  margin-bottom: 0;
+}
 .sidebar-theme svg {
   width: 20px;
   height: 20px;
@@ -1738,9 +1792,10 @@ html[data-theme="light"] .profile-account__check {
 }
 .widget-trend__title {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .product-card h2 {
   font-family: var(--font-display), sans-serif;
@@ -4432,7 +4487,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .widget-trend { display: flex; flex-direction: column; justify-content: flex-start; gap: 0; min-width: 0; }
   .widget-trend__row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 8px 0;
     border-bottom: 0;
@@ -4441,7 +4496,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     min-width: 0;
     min-height: 0;
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible;
   }
   .widget-trend__emblem {
     width: 28px;

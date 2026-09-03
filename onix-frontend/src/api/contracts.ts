@@ -525,7 +525,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   PUBG: 'PUBG',
   MINECRAFT: 'Minecraft',
   PLAYSTATION: 'PlayStation',
-  STALCRAFT: 'Stalcraft',
+  STALCRAFT: 'Stalzone',
   PATH_OF_EXILE_2: 'Path of Exile 2',
   OTHER: 'Другое',
 };

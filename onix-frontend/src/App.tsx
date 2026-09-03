@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { money, moneyAmount } from './api/client';
-import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
+import { CATEGORIES, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
@@ -14,13 +14,15 @@ import {
   IconMarket,
   IconMoon,
   IconProfile,
+  IconSettings,
   IconSun,
   IconWallet,
 } from './components/NavIcons';
 import { Button, Card, Skeleton, Toast } from './design-system';
 import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
-import { t } from './i18n';
+import { t, categoryLabel, MARKET_ALL_CATEGORY } from './i18n';
+import { useLocale } from './i18n/useLocale';
 import AuthNotice, { WebsiteLoginBridge, isWebsiteLoginStartParam } from './screens/AuthGate';
 import type { Screen } from './screens/types';
 import PwaInstallBanner from './shell/PwaInstallBanner';
@@ -225,6 +227,7 @@ function syncThemeFromTelegram(): ThemeMode {
 
 export default function App() {
   const core = useOnixCore();
+  const { locale, setLocale } = useLocale();
   const [screen, setScreen] = useState<Screen>('market');
   const [direction, setDirection] = useState(1);
   const [toast, setToast] = useState('');
@@ -233,7 +236,8 @@ export default function App() {
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
   const [headerBlur, setHeaderBlur] = useState(0);
-  const [marketCategory, setMarketCategory] = useState<string>('Все');
+  const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
   const [glass, setGlass] = useState<GlassMode>(() => {
     const mode = readStoredGlass();
@@ -476,6 +480,47 @@ export default function App() {
     return acc;
   }, {});
 
+  const settingsFields = (
+    <>
+      <button
+        type="button"
+        className="sidebar-theme"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
+      >
+        {theme === 'dark' ? <IconSun /> : <IconMoon />}
+        <span>{theme === 'dark' ? t('theme.light') : t('theme.dark')}</span>
+      </button>
+      <button
+        type="button"
+        className={`sidebar-theme${glass === 'vision' ? ' is-active' : ''}`}
+        onClick={toggleGlass}
+        aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
+        aria-pressed={glass === 'vision'}
+      >
+        <IconEye />
+        <span>{t('theme.glass')}</span>
+      </button>
+      <p className="sidebar-settings__label">{t('settings.language')}</p>
+      <div className="sidebar-settings__langs">
+        <button
+          type="button"
+          className={`sidebar-settings__lang${locale === 'ru' ? ' is-active' : ''}`}
+          onClick={() => setLocale('ru')}
+        >
+          {t('settings.languageRu')}
+        </button>
+        <button
+          type="button"
+          className={`sidebar-settings__lang${locale === 'en' ? ' is-active' : ''}`}
+          onClick={() => setLocale('en')}
+        >
+          {t('settings.languageEn')}
+        </button>
+      </div>
+    </>
+  );
+
   return <>
     <SoftErrorBoundary label="Фон не загрузился — можно продолжать.">
       <Suspense fallback={null}>
@@ -552,7 +597,7 @@ export default function App() {
             <button
               key={cat}
               type="button"
-              aria-label={CATEGORY_LABELS[cat]}
+              aria-label={categoryLabel(cat)}
               onClick={() => {
                 setMarketCategory(cat);
                 switchTo('market');
@@ -572,32 +617,30 @@ export default function App() {
                   style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
                 >{style.letter}</span>
               )}
-              <span className="sidebar-cats__label">{CATEGORY_LABELS[cat]}</span>
+              <span className="sidebar-cats__label">{categoryLabel(cat)}</span>
               <em className="sidebar-cats__count" aria-hidden="true">{formatLotCount(count)}</em>
             </button>
           );
         })}
       </div>
       <div className="sidebar-spacer" />
-      <button
-        type="button"
-        className="sidebar-theme"
-        onClick={toggleTheme}
-        aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
-      >
-        {theme === 'dark' ? <IconSun /> : <IconMoon />}
-        <span>{theme === 'dark' ? t('theme.light') : t('theme.dark')}</span>
-      </button>
-      <button
-        type="button"
-        className={`sidebar-theme${glass === 'vision' ? ' is-active' : ''}`}
-        onClick={toggleGlass}
-        aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
-        aria-pressed={glass === 'vision'}
-      >
-        <IconEye />
-        <span>{t('theme.glass')}</span>
-      </button>
+      <div className={`sidebar-settings${settingsOpen ? ' is-open' : ''}`}>
+        {settingsOpen && (
+          <div className="sidebar-settings__panel" role="dialog" aria-label={t('settings.title')}>
+            {settingsFields}
+          </div>
+        )}
+        <button
+          type="button"
+          className={`sidebar-theme${settingsOpen ? ' is-active' : ''}`}
+          onClick={() => setSettingsOpen((open) => !open)}
+          aria-expanded={settingsOpen}
+          aria-label={t('settings.open')}
+        >
+          <IconSettings />
+          <span>{t('settings.title')}</span>
+        </button>
+      </div>
       <button
         type="button"
         className="sidebar-resizer sidebar-resizer--left"
@@ -611,23 +654,22 @@ export default function App() {
       <header className="topbar mobile-only">
         <BrandMark />
         <div className="topbar__actions">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
-          >
-            {theme === 'dark' ? <IconSun /> : <IconMoon />}
-          </button>
-          <button
-            type="button"
-            className={`icon-btn${glass === 'vision' ? ' is-active' : ''}`}
-            onClick={toggleGlass}
-            aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
-            aria-pressed={glass === 'vision'}
-          >
-            <IconEye />
-          </button>
+          <div className="sidebar-settings sidebar-settings--mobile">
+            {settingsOpen && (
+              <div className="sidebar-settings__panel" role="dialog" aria-label={t('settings.title')}>
+                {settingsFields}
+              </div>
+            )}
+            <button
+              type="button"
+              className={`icon-btn${settingsOpen ? ' is-active' : ''}`}
+              onClick={() => setSettingsOpen((open) => !open)}
+              aria-expanded={settingsOpen}
+              aria-label={t('settings.open')}
+            >
+              <IconSettings />
+            </button>
+          </div>
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (
               <strong>…</strong>
@@ -661,7 +703,7 @@ export default function App() {
               switchTo('chat');
             }}
             externalCategory={marketCategory}
-            onExternalCategoryConsumed={() => setMarketCategory('Все')}
+            onExternalCategoryConsumed={() => setMarketCategory(MARKET_ALL_CATEGORY)}
           />}
           {screen === 'deals' && <Deals
             core={core}
@@ -783,7 +825,7 @@ export default function App() {
               </div>
             </div>
             <div className="widget widget--glass widget--new-lots">
-              <h3>Новые лоты</h3>
+              <h3>{t('widgets.newLots')}</h3>
               <div className="widget-trend">
                 {core.products.length === 0 ? (
                   <p className="widget-empty">Лотов пока нет.</p>

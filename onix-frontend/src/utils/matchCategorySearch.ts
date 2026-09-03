@@ -20,7 +20,7 @@ const ALIASES: Array<{ re: RegExp; value: Cat }> = [
   { re: /app\s*store|апп\s*стор/i, value: 'APP_STORE' },
   { re: /\bminecraft\b|майнкрафт|\bмайн\b/i, value: 'MINECRAFT' },
   { re: /\bplaystation\b|плейстейшн|ps\s*[45]/i, value: 'PLAYSTATION' },
-  { re: /\bstalcraft\b|сталкрафт/i, value: 'STALCRAFT' },
+  { re: /\bstalzone\b|\bstalcraft\b|сталзон|сталкрафт/i, value: 'STALCRAFT' },
   { re: /path\s*of\s*exile\s*2|\bpoe\s*2\b|поэ\s*2/i, value: 'PATH_OF_EXILE_2' },
   { re: /\bдругое\b|\bother\b/i, value: 'OTHER' },
 ];

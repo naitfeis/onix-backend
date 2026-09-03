@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
+import { CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
 import { PLATFORM_VIDEO_RULE } from './platformCopy';
 import { Button, Card, Field, Input, Textarea } from '../design-system';
 import { minPriceRubles, validateDraft } from '../utils/productValidation';
 import type { Core } from './types';
 import { emptyDraft } from './shared';
+import { categoryLabel } from '../i18n';
 
 export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
@@ -41,7 +42,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
           aria-controls="lot-category-list"
           onClick={() => setCatsOpen((open) => !open)}
         >
-          <span>{CATEGORY_LABELS[draft.category as keyof typeof CATEGORY_LABELS] ?? draft.category}</span>
+          <span>{categoryLabel(draft.category)}</span>
         </button>
         {catsOpen && (
           <div id="lot-category-list" className="chips category-picker" role="list" aria-label="Все категории">
@@ -52,7 +53,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
                 key={item}
                 className={draft.category === item ? 'active' : ''}
                 onClick={() => pickCategory(item)}
-              >{CATEGORY_LABELS[item]}</button>
+              >{categoryLabel(item)}</button>
             ))}
           </div>
         )}

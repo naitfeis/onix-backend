@@ -1,11 +1,11 @@
 import { type ReactNode } from 'react';
 import { money } from '../api/client';
-import { CATEGORY_LABELS, sellerIsPresent, type Product } from '../api/contracts';
+import { sellerIsPresent, type Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { IconStar } from '../components/NavIcons';
 import { Card } from '../design-system';
 import { publicAt } from '../utils/publicAt';
-import { t } from '../i18n';
+import { categoryLabel, t } from '../i18n';
 import type { Core } from './types';
 
 function reviewCountLabel(n: number): string {
@@ -87,7 +87,7 @@ export function ProductLotCard({
         <div className="product-card__body">
           <h2>{title}</h2>
           <p className="product-card__meta">
-            {CATEGORY_LABELS[product.category as keyof typeof CATEGORY_LABELS] ?? product.category}
+            {categoryLabel(product.category)}
             {lotLabel(product) ? ` · ${lotLabel(product)}` : ''}
           </p>
         </div>

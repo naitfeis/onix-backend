@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, type Product, type TrustCard,
+  API_PATHS, SUBCATEGORY_LABELS, type Product, type TrustCard,
 } from '../api/contracts';
 import { Button } from '../design-system';
 import {
@@ -12,6 +12,7 @@ import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
 import { lotWarrantyBadge } from '../utils/warranty';
 import { CardLogo, OnixPayMark, SbpLogo } from '../components/BrandLogos';
+import { categoryLabel as displayCategory } from '../i18n';
 
 const PAYMENT_WARNING =
   'Не подтверждайте заказ, пока продавец не передал товар. Снимите передачу на видео — так проще решить спор.';
@@ -90,7 +91,7 @@ export function LotSheet({
   const priceCents = parseCents(product.priceCents);
   const lot = product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null;
   const canBuy = product.status === 'ACTIVE' && Boolean(core.profile);
-  const categoryLabel = CATEGORY_LABELS[product.category] ?? product.category;
+  const categoryName = displayCategory(product.category);
   const subLabel = product.subcategory
     ? (SUBCATEGORY_LABELS[product.subcategory] ?? product.subcategory)
     : '';
@@ -160,7 +161,7 @@ export function LotSheet({
         <div className="lot-sheet__hero">
           <p className="lot-sheet__kicker">Оформление заказа</p>
           <div className="lot-sheet__badges">
-            <span className="lot-sheet__badge">{categoryLabel}</span>
+            <span className="lot-sheet__badge">{categoryName}</span>
             {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
             <span className={`lot-sheet__badge${product.autoDeliver ? ' lot-sheet__badge--auto' : ''}`}>
               {product.autoDeliver ? '⚡ Автовыдача' : 'Без автовыдачи'}

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, money } from '../api/client';
-import { API_PATHS, CATEGORY_LABELS, SUBCATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
+import { API_PATHS, SUBCATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Badge, Button, Card, Confirm, Field, Modal, Select, Skeleton, StateView, Textarea } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import type { Core, Screen } from './types';
 import { DEAL_FILTERS, PublicProfileModal, dealLabels, dealProgress } from './shared';
+import { categoryLabel as displayCategory } from '../i18n';
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [rating, setRating] = useState(5);
@@ -96,7 +97,7 @@ export function Deals({
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
       deals.map(deal => {
-        const categoryLabel = CATEGORY_LABELS[deal.product.category] ?? deal.product.category;
+        const categoryName = displayCategory(deal.product.category);
         const subLabel = deal.product.subcategory
           ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)
           : null;
@@ -122,7 +123,7 @@ export function Deals({
                 <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
               </div>
               <div className="deal-lot-tags">
-                <span className="lot-sheet__badge">{categoryLabel}</span>
+                <span className="lot-sheet__badge">{categoryName}</span>
                 {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
                 {deal.product.autoDeliver ? <span className="lot-sheet__badge lot-sheet__badge--auto">⚡ Автовыдача</span> : null}
               </div>

@@ -49,9 +49,9 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('keeps new-lot titles ellipsized and prices fully visible in the right rail', () => {
+  it('keeps new-lot titles wrapping and prices fully visible in the right rail', () => {
     expect(appCss).toMatch(
-      /\.widget-trend__title\s*\{[^}]*text-overflow:\s*ellipsis;/s,
+      /\.widget-trend__title\s*\{[^}]*overflow-wrap:\s*anywhere;/s,
     );
     expect(appCss).toMatch(
       /\.widget-trend__copy\s*\{[^}]*min-width:\s*0;/s,

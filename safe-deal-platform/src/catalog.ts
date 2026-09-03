@@ -55,7 +55,7 @@ export const CATEGORY_LABELS: Record<ProductCategory, string> = {
   PUBG: 'PUBG',
   MINECRAFT: 'Minecraft',
   PLAYSTATION: 'PlayStation',
-  STALCRAFT: 'Stalcraft',
+  STALCRAFT: 'Stalzone',
   PATH_OF_EXILE_2: 'Path of Exile 2',
   OTHER: 'Другое',
 };
@@ -79,7 +79,7 @@ const CATEGORY_ALIASES: Array<{ re: RegExp; value: ProductCategory }> = [
   { re: /^(app\s*store|апп\s*стор)$/i, value: 'APP_STORE' },
   { re: /^(minecraft|майнкрафт|майн)$/i, value: 'MINECRAFT' },
   { re: /^(playstation|плейстейшн|ps\s*[45])$/i, value: 'PLAYSTATION' },
-  { re: /^(stalcraft|сталкрафт)$/i, value: 'STALCRAFT' },
+  { re: /^(stalzone|stalcraft|сталзон|сталкрафт)$/i, value: 'STALCRAFT' },
   { re: /^(path\s*of\s*exile\s*2|poe\s*2|поэ\s*2)$/i, value: 'PATH_OF_EXILE_2' },
   { re: /^(другое|other)$/i, value: 'OTHER' },
 ];

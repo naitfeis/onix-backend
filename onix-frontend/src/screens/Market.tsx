@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, friendlyError } from '../api/client';
 import {
-  API_PATHS, CATEGORIES, CATEGORY_LABELS, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
+  API_PATHS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
   type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import { Button, Card, Input, Skeleton, StateView } from '../design-system';
@@ -13,7 +13,7 @@ import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
 import { PublicProfileModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
-import { t } from '../i18n';
+import { t, categoryLabel, isMarketAllCategory, MARKET_ALL_CATEGORY } from '../i18n';
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
 import { AllGridIcon } from '../components/BrandLogos';
 
@@ -69,8 +69,8 @@ function toServerSort(sort: string) {
 }
 
 function catalogBackLabel(category: string, subcategory: string): string {
-  if (category === t('market.all')) return 'Назад ко всем лотам';
-  const cat = CATEGORY_LABELS[category] ?? category;
+  if (isMarketAllCategory(category)) return t('market.backAll');
+  const cat = categoryLabel(category);
   const sub = subcategory ? (SUBCATEGORY_LABELS[subcategory] ?? subcategory) : '';
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
@@ -144,7 +144,7 @@ export function Market({
   const profileReturnRef = useRef<PublicProfile | null>(null);
   const [sellerProfile, setSellerProfile] = useState<PublicProfile | null>(null);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState(t('market.all'));
+  const [category, setCategory] = useState(MARKET_ALL_CATEGORY);
   const [subcategory, setSubcategory] = useState('');
   const [sort, setSort] = useState('new');
   const [sortOpen, setSortOpen] = useState(false);
@@ -228,12 +228,12 @@ export function Market({
   const onixLotMatch = query.trim().match(/^ONIXLOT-(\d+)$/i);
   const onixLotNumber = onixLotMatch ? Number(onixLotMatch[1]) : null;
   const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
-  const marketSubs = category !== t('market.all')
+  const marketSubs = !isMarketAllCategory(category)
     ? (catalog[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
     : [];
 
   useEffect(() => {
-    if (!externalCategory || externalCategory === t('market.all')) return;
+    if (!externalCategory || isMarketAllCategory(externalCategory)) return;
     setCategory(externalCategory);
     setSubcategory('');
     onExternalCategoryConsumed?.();
@@ -260,7 +260,7 @@ export function Market({
 
   useEffect(() => {
     const isDefaultBrowse =
-      category === t('market.all') && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
+      isMarketAllCategory(category) && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
 
     // Default home feed: reuse bootstrap catalog — do not fire a second /api/products
     // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
@@ -287,12 +287,12 @@ export function Market({
       setMarketState('loading');
       setOffset(0);
       const q = query.trim();
-        const searchCat = category === t('market.all') ? matchCategorySearch(q) : undefined;
+        const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
       void core.listProducts({
         // Exact category name → filter by category (all lots in that game).
         // Otherwise keep free-text title/seller search.
         search: searchCat ? undefined : (q || undefined),
-        category: category === t('market.all') ? searchCat : category,
+        category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
         autoDeliver: autoDeliverOnly || undefined,
@@ -366,10 +366,10 @@ export function Market({
     const next = offset + PAGE;
     try {
       const q = query.trim();
-      const searchCat = category === t('market.all') ? matchCategorySearch(q) : undefined;
+      const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
       const data = await core.listProducts({
         search: searchCat ? undefined : (q || undefined),
-        category: category === t('market.all') ? searchCat : category,
+        category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
         sort: toServerSort(sort),
         autoDeliver: autoDeliverOnly || undefined,
@@ -619,8 +619,8 @@ export function Market({
         <button
           type="button"
           role="listitem"
-          className={`cat-card${category === t('market.all') ? ' active' : ''}`}
-          onClick={() => { setCategory(t('market.all')); setSubcategory(''); }}
+          className={`cat-card${isMarketAllCategory(category) ? ' active' : ''}`}
+          onClick={() => { setCategory(MARKET_ALL_CATEGORY); setSubcategory(''); }}
         >
           <span className="cat-card__icon">
             <span className="cat-card__emblem cat-card__emblem--all">
@@ -667,7 +667,7 @@ export function Market({
                 )}
                 <CategoryShareRing count={count} total={totalLots} />
               </span>
-              <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
+              <span className="cat-card__name">{categoryLabel(cat)}</span>
             </button>
           );
         })}
