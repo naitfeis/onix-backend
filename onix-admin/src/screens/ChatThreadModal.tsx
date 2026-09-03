@@ -45,7 +45,7 @@ export function ChatThreadModal({ chatId, onClose }: { chatId: string; onClose: 
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ marginBottom: 4 }}>{data?.title || 'Чат'}</h2>
-            <p className="muted">{chatId} · {data?.kind || '…'}</p>
+            <p className="muted">{data?.kind === 'AI' ? 'Onix AI' : data?.kind === 'SUPPORT' ? 'Поддержка' : 'Чат'}</p>
           </div>
           <button className="ghost" type="button" onClick={onClose}>Закрыть</button>
         </div>

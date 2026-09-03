@@ -97,18 +97,19 @@
   display: flex;
   flex-direction: column;
   padding: 20px 18px 24px;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  background: #151517;
+  isolation: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(16, 16, 22, 0.18) !important;
   color: #fff;
   box-shadow: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+  -webkit-backdrop-filter: blur(48px) saturate(190%) !important;
+  backdrop-filter: blur(48px) saturate(190%) !important;
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
 }
 html[data-theme="light"] .settings-sheet {
-  border-left-color: rgba(17, 17, 17, 0.12);
-  background: #fff;
+  border-left-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.22) !important;
   color: #111;
 }
 .settings-overlay.is-open .settings-sheet {
@@ -4520,6 +4521,13 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     flex: 0 0 auto;
     min-width: 0;
     overflow: hidden;
+  }
+  .widget.widget--new-lots {
+    isolation: auto;
+    overflow: hidden;
+    background: color-mix(in srgb, rgba(16, 16, 22, 0.28) 55%, #4d7cff 45%) !important;
+    -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
+    backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
   }
   .sidebar-right > .widget:last-child,
   .sidebar-right > .widget--new-lots {

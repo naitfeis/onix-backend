@@ -20,7 +20,7 @@ export function DashboardScreen() {
   useEffect(() => {
     void adminApi<Dashboard>('/api/admin/dashboard')
       .then(setData)
-      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Failed'));
+      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Не удалось загрузить'));
   }, []);
 
   return (
@@ -34,10 +34,10 @@ export function DashboardScreen() {
           <div className="stat panel"><span className="muted">Баны / стёртые</span><strong>{data.bannedTotal ?? '—'}</strong></div>
           <div className="stat panel"><span className="muted">Открытые тикеты</span><strong>{data.openTickets ?? '—'}</strong></div>
           <div className="stat panel"><span className="muted">Жалобы</span><strong>{data.openReports ?? '—'}</strong></div>
-          <div className="stat panel"><span className="muted">YELLOW флаги</span><strong>{data.yellowFlagCount}</strong></div>
+          <div className="stat panel"><span className="muted">Жёлтые флаги</span><strong>{data.yellowFlagCount}</strong></div>
           <div className="stat panel"><span className="muted">Выводы 24ч</span><strong>{data.withdrawals24h}</strong></div>
           <div className="stat panel"><span className="muted">Риск 24ч</span><strong>{data.securityEvents24h}</strong></div>
-          <div className="stat panel"><span className="muted">Clawbacks</span><strong>{data.openClawbacks}</strong></div>
+          <div className="stat panel"><span className="muted">Долги по возвратам</span><strong>{data.openClawbacks}</strong></div>
         </div>
       )}
     </div>

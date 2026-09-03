@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
+import { humanFlag, ruLedgerType, ruOrderStatus, ruPlatformStatus, ruRiskType } from '../i18n';
 
 type UserRow = {
   id: string;
@@ -65,11 +66,13 @@ function money(cents: string) {
 export function UsersScreen({
   adminRole,
   onOpenChat,
+  initialOnixId,
 }: {
   adminRole: string;
   onOpenChat: (chatId: string) => void;
+  initialOnixId?: string | null;
 }) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialOnixId ?? '');
   const [list, setList] = useState<UserRow[]>([]);
   const [data, setData] = useState<Investigation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,11 @@ export function UsersScreen({
   }
 
   useEffect(() => { void loadList().catch(() => undefined); }, []);
+  useEffect(() => {
+    if (!initialOnixId) return;
+    setQuery(initialOnixId);
+    void loadUser(initialOnixId);
+  }, [initialOnixId]);
 
   async function loadUser(id: string) {
     setBusy(true);
@@ -113,7 +121,7 @@ export function UsersScreen({
       await loadList(query);
       if (/^(?:ONIX-)?\d+$/i.test(query.trim())) await loadUser(query.trim());
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : 'Failed');
+      setError(err instanceof AdminApiError ? err.message : 'Не удалось найти');
     } finally {
       setBusy(false);
     }
@@ -127,7 +135,7 @@ export function UsersScreen({
       await loadUser(data.profile.onixId);
       await loadList(query);
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : 'Action failed');
+      setError(err instanceof AdminApiError ? err.message : 'Не удалось выполнить');
     } finally {
       setActionBusy(false);
     }
@@ -166,9 +174,9 @@ export function UsersScreen({
             {' · '}
             {data.profile.username || '—'}
             {' · '}
-            age {data.profile.accountAgeDays}d
+            аккаунту {data.profile.accountAgeDays} дн.
             {' · '}
-            {data.profile.wiped ? 'СТЁРТ' : data.profile.deletedAt ? 'БАН' : (data.profile.platformStatus || 'active')}
+            {data.profile.wiped ? 'СТЁРТ' : data.profile.deletedAt ? 'БАН' : ruPlatformStatus(data.profile.platformStatus || 'active')}
           </p>
           <p className="muted">
             Баланс {money(data.profile.balanceCents)}
@@ -188,6 +196,8 @@ export function UsersScreen({
                   <option value="THIRD_PARTY_ADS">Чужая реклама</option>
                   <option value="OFF_PLATFORM_DEAL">Сделка вне ONIX</option>
                   <option value="FRAUD">Мошенничество</option>
+                  <option value="SELLER_NO_RESPONSE">Продавец не отвечает</option>
+                  <option value="SALE_PAYOUT">Выплата за продажу от 100 ₽</option>
                   <option value="OTHER">Другое</option>
                 </select>
               </label>
@@ -204,13 +214,18 @@ export function UsersScreen({
                 <>
                   <label>Статус
                     <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                      <option>USER</option><option>VERIFIED_SELLER</option><option>MODERATOR</option><option>ADMIN</option><option>SUPER_ADMIN</option><option>VIP</option>
+                      <option value="USER">Пользователь</option>
+                      <option value="VERIFIED_SELLER">Проверенный продавец</option>
+                      <option value="MODERATOR">Модератор</option>
+                      <option value="ADMIN">Администратор</option>
+                      <option value="SUPER_ADMIN">Основатель</option>
+                      <option value="VIP">VIP</option>
                     </select>
                   </label>
                   <button className="primary" type="button" disabled={actionBusy || status === data.profile.platformStatus} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })}>Сменить статус</button>
                 </>
               )}
-              <label>Корректировка баланса, копейки<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 или -1000" /></label>
+              <label>Корректировка баланса (в копейках)<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 или -1000" /></label>
               <button className="primary" type="button" disabled={actionBusy || !balance} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/balance`, { method: 'POST', body: JSON.stringify({ amountCents: balance, reason: comment, idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}` }) })}>Списать/начислить</button>
             </div>
           </div>
@@ -270,7 +285,7 @@ export function UsersScreen({
             <div className="admin-actions">
               <h3>Стереть аккаунт</h3>
               <p className="muted">
-                Нельзя удалить строку User в Prisma: проводки LedgerEntry с RESTRICT. Здесь профиль становится томбстоуном:
+                Здесь профиль становится томбстоуном: проводки остаются, войти нельзя.
                 Telegram/Google отвязываются, вход закрыт, лоты снимаются, <strong>леджер остаётся</strong>.
                 Сначала закройте сделки и обнулите баланс/залог.
               </p>
@@ -326,11 +341,11 @@ export function UsersScreen({
           )}
           <h3>Покупки</h3>
           <table><thead><tr><th>ID</th><th>Товар</th><th>Продавец</th><th>Статус</th><th>Сумма</th></tr></thead>
-            <tbody>{data.purchases.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.product.title}</td><td>{o.seller.onixId}</td><td>{o.status}</td><td>{money(o.totalAmountCents)}</td></tr>)}</tbody>
+            <tbody>{data.purchases.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.product.title}</td><td>{o.seller.onixId}</td><td>{ruOrderStatus(o.status)}</td><td>{money(o.totalAmountCents)}</td></tr>)}</tbody>
           </table>
           <h3>Продажи</h3>
           <table><thead><tr><th>ID</th><th>Товар</th><th>Статус</th><th>Итого</th><th>Выплата</th></tr></thead>
-            <tbody>{data.sales.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.productId}</td><td>{o.status}</td><td>{money(o.totalAmountCents)}</td><td>{money(o.payoutCents)}</td></tr>)}</tbody>
+            <tbody>{data.sales.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.productId}</td><td>{ruOrderStatus(o.status)}</td><td>{money(o.totalAmountCents)}</td><td>{money(o.payoutCents)}</td></tr>)}</tbody>
           </table>
           <h3>Чаты</h3>
           <table><thead><tr><th>Чат</th><th>Последнее</th><th>Обновлён</th></tr></thead>
@@ -345,24 +360,26 @@ export function UsersScreen({
           </table>
           <h3>Флаги</h3>
           {data.flags.length === 0 ? <p className="muted">Нет</p> : data.flags.map((f, i) => (
-            <div key={i} className="flag"><pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(f, null, 2)}</pre></div>
+            <div key={i} className="flag">
+              {humanFlag(f).map((line) => <div key={line}>{line}</div>)}
+            </div>
           ))}
           <h3>События безопасности</h3>
           <table>
-            <thead><tr><th>Тип</th><th>Severity</th><th>Когда</th></tr></thead>
+            <thead><tr><th>Тип</th><th>Уровень</th><th>Когда</th></tr></thead>
             <tbody>
               {data.securityEvents.map((e) => (
-                <tr key={e.id}><td>{e.type}</td><td>{e.severity || '—'}</td><td>{new Date(e.createdAt).toLocaleString('ru-RU')}</td></tr>
+                <tr key={e.id}><td>{ruRiskType(e.type)}</td><td>{e.severity || '—'}</td><td>{new Date(e.createdAt).toLocaleString('ru-RU')}</td></tr>
               ))}
             </tbody>
           </table>
-          <h3>Леджер (не удаляется)</h3>
+          <h3>Движение денег</h3>
           <table>
-            <thead><tr><th>Тип</th><th>Сумма</th><th>Fund/Sale</th><th>Когда</th></tr></thead>
+            <thead><tr><th>Тип</th><th>Сумма</th><th>Источник</th><th>Когда</th></tr></thead>
             <tbody>
               {data.ledger.map((w) => (
                 <tr key={w.id}>
-                  <td>{w.type}</td>
+                  <td>{ruLedgerType(w.type)}</td>
                   <td>{money(w.amountCents)}</td>
                   <td>{[w.fundKind, w.saleKind].filter(Boolean).join('/') || '—'}</td>
                   <td>{new Date(w.createdAt).toLocaleString('ru-RU')}</td>

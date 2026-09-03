@@ -206,7 +206,7 @@ export function dealDto(order: {
   createdAt: Date;
   updatedAt?: Date;
   completedAt?: Date | null;
-  transitions?: Array<{ to: string; createdAt: Date }>;
+  transitions?: Array<{ to: string; createdAt: Date; actorId?: bigint | null; reason?: string | null }>;
   product: {
     id: string;
     title: string;
@@ -239,6 +239,14 @@ export function dealDto(order: {
   const warrantyEndsAt = deliveredAt
     ? new Date(deliveredAt.getTime() + warrantyHours * 3_600_000).toISOString()
     : null;
+  const refunded = [...(order.transitions ?? [])].find((item) => item.to === 'REFUNDED');
+  const completed = [...(order.transitions ?? [])].find((item) => item.to === 'COMPLETED');
+  const refundKind = refunded
+    ? (refunded.actorId === order.sellerId ? 'SELLER' as const : 'ADMIN' as const)
+    : null;
+  const payoutKind = completed
+    ? (completed.actorId === order.buyerId ? 'BUYER' as const : 'ADMIN' as const)
+    : null;
   const hasTicket = Boolean(order.supportTickets?.length);
   const complaintOpen = hasTicket
     || order.status === 'DISPUTE'
@@ -258,6 +266,8 @@ export function dealDto(order: {
     status: order.status,
     warrantyHours,
     warrantyEndsAt,
+    refundKind,
+    payoutKind,
     role: buyer ? 'buyer' as const : 'seller' as const,
     counterparty: sellerDto(buyer ? order.seller : order.buyer),
     createdAt: order.createdAt.toISOString(),

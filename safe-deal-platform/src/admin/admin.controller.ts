@@ -371,6 +371,16 @@ export class AdminPlaneController {
     return { products };
   }
 
+  @Get('products/:id')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async product(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    const product = await this.security.getProduct(id);
+    await this.security.logAction(admin, 'ADMIN_VIEW_PRODUCT', { type: 'Product', id });
+    return product;
+  }
+
   @Delete('products/:id')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN, AdminRole.SUPPORT_ADMIN)
   @UseGuards(AdminRoleGuard)

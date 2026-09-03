@@ -78,6 +78,8 @@ export interface Deal {
   status: DealStatus;
   warrantyHours?: number;
   warrantyEndsAt?: string | null;
+  refundKind?: 'SELLER' | 'ADMIN' | null;
+  payoutKind?: 'BUYER' | 'ADMIN' | null;
   role: 'buyer' | 'seller';
   counterparty: Seller;
   createdAt: string;
@@ -492,6 +494,7 @@ export type BanReasonCode =
   | 'OFF_PLATFORM_DEAL'
   | 'FRAUD'
   | 'SELLER_NO_RESPONSE'
+  | 'SALE_PAYOUT'
   | 'OTHER';
 
 export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hint: string }> = [
@@ -500,6 +503,7 @@ export const BAN_REASON_OPTIONS: Array<{ value: BanReasonCode; label: string; hi
   { value: 'OFF_PLATFORM_DEAL', label: 'Попытка сделки вне ONIX', hint: 'Навсегда' },
   { value: 'FRAUD', label: 'Мошенничество', hint: 'Навсегда' },
   { value: 'SELLER_NO_RESPONSE', label: 'Продавец не отвечает', hint: '7 дней' },
+  { value: 'SALE_PAYOUT', label: 'Выплата за продажу от 100 ₽', hint: '7 дней' },
   { value: 'OTHER', label: 'Другое', hint: 'Срок вручную' },
 ];
 

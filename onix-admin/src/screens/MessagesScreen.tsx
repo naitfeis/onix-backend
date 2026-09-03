@@ -51,7 +51,7 @@ export function MessagesScreen({ onOpenChat }: { onOpenChat: (chatId: string) =>
           {messages.map((message) => (
             <tr key={message.id}>
               <td>#{message.id}<br /><span className="muted">{message.chatId}</span></td>
-              <td>{message.senderId ?? 'system'}</td>
+              <td>{message.senderId ?? 'система'}</td>
               <td className="message-text">
                 {message.deletedAt
                   ? <><s>{message.text}</s><br /><span className="muted">{message.deletedReason}</span></>

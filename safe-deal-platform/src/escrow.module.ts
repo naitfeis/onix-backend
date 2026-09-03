@@ -385,7 +385,7 @@ export class EscrowService {
     const notifyIds = await this.finishAsCompleted(actor, id, key, {
       allowedFrom: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'],
       requireBuyer: false,
-      supportReason: reason,
+      supportReason: reason?.trim() ? `Администратор: ${reason.trim()}` : 'Администратор',
     });
     await this.prisma.supportTicket.updateMany({
       where: { orderId: id, status: 'OPEN' },
@@ -591,7 +591,6 @@ export class EscrowService {
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
     const key = `order:${id}:admin-refund`;
-    // Support may refund even after COMPLETED (clawback via Escrow ledger only).
     return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'], 'REFUNDED', key, reason);
   }
 
@@ -609,7 +608,7 @@ export class EscrowService {
       ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'],
       'REFUNDED',
       key,
-      trimmed,
+      `Продавец: ${trimmed}`,
       { sellerInitiated: true },
     );
   }

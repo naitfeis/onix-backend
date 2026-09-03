@@ -36,7 +36,7 @@ export function LoginScreen({ onAuthed }: Props) {
       }
       onAuthed(data.accessToken, data.admin);
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : 'Login failed');
+      setError(err instanceof AdminApiError ? err.message : 'Не удалось войти');
     } finally {
       setBusy(false);
     }
@@ -54,7 +54,7 @@ export function LoginScreen({ onAuthed }: Props) {
       });
       onAuthed(data.accessToken, data.admin);
     } catch (err) {
-      setError(err instanceof AdminApiError ? err.message : 'MFA failed');
+      setError(err instanceof AdminApiError ? err.message : 'Неверный код');
     } finally {
       setBusy(false);
     }
@@ -63,26 +63,26 @@ export function LoginScreen({ onAuthed }: Props) {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Security Operations</h1>
-        <p className="muted">Separate admin plane. Customer session is not accepted.</p>
+        <h1>Админ-панель ONIX</h1>
+        <p className="muted">Отдельный вход для сотрудников. Сессия маркетплейса сюда не подходит.</p>
         {!challengeId ? (
           <form onSubmit={onLogin}>
             <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
-              <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
+              <label>Почта<input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
+              <label>Пароль<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
             </div>
             {error && <p className="error">{error}</p>}
-            <button className="primary" type="submit" disabled={busy}>{busy ? '…' : 'Continue'}</button>
+            <button className="primary" type="submit" disabled={busy}>{busy ? '…' : 'Войти'}</button>
           </form>
         ) : (
           <form onSubmit={onMfa}>
-            <p className="muted">Enter MFA code from Telegram / authenticator.</p>
-            {debugCode && <p className="muted">Debug code: <strong>{debugCode}</strong></p>}
+            <p className="muted">Код подтверждения из Telegram.</p>
+            {debugCode && <p className="muted">Код: <strong>{debugCode}</strong></p>}
             <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <label>MFA code<input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" required /></label>
+              <label>Код<input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" required /></label>
             </div>
             {error && <p className="error">{error}</p>}
-            <button className="primary" type="submit" disabled={busy}>{busy ? '…' : 'Verify'}</button>
+            <button className="primary" type="submit" disabled={busy}>{busy ? '…' : 'Подтвердить'}</button>
           </form>
         )}
       </div>

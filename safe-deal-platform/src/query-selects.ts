@@ -104,9 +104,8 @@ export const dealWarrantySelect = {
   completedAt: true,
   updatedAt: true,
   transitions: {
-    where: { to: 'DELIVERING' as const },
-    orderBy: { createdAt: 'asc' as const },
-    take: 1,
-    select: { createdAt: true, to: true },
+    orderBy: { createdAt: 'desc' as const },
+    take: 12,
+    select: { createdAt: true, to: true, actorId: true, reason: true },
   },
 } as const;

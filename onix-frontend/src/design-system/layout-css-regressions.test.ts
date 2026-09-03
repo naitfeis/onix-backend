@@ -125,7 +125,7 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/@media \(max-width: 699px\)\s*\{[\s\S]*?\.settings-sheet\s*\{[^}]*transform:\s*translateY\(-110%\);/s);
     expect(appCss).toMatch(/\.settings-sheet__backdrop\s*\{[^}]*background:\s*transparent/s);
     expect(appCss).toMatch(/\.settings-overlay\s*\{[^}]*backdrop-filter:\s*none/s);
-    expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*background:\s*#151517;/s);
+    expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*backdrop-filter:\s*blur\(48px\) saturate\(190%\)/s);
   });
 
   it('does not collapse shell padding or hide the dock when opening chat', () => {

@@ -132,7 +132,14 @@ export function Deals({
           </div>
           <strong>{money(deal.totalAmountCents)}</strong>
         </div>
-        <div className="deal-status"><span>ФАЗА</span><Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge></div>
+        <div className="deal-status">
+          <span>ФАЗА</span>
+          <Badge tone={deal.status === 'COMPLETED' ? 'success' : deal.status === 'DISPUTE' ? 'danger' : 'warning'}>{dealLabels[deal.status]}</Badge>
+        </div>
+        {deal.refundKind === 'SELLER' && <p className="muted">Возврат оформил продавец.</p>}
+        {deal.refundKind === 'ADMIN' && <p className="muted">Возврат с вмешательством администратора.</p>}
+        {deal.payoutKind === 'BUYER' && deal.status === 'COMPLETED' && <p className="muted">Выплату подтвердил покупатель.</p>}
+        {deal.payoutKind === 'ADMIN' && deal.status === 'COMPLETED' && <p className="muted">Выплату подтвердил администратор.</p>}
         <ol className="timeline">{DEAL_PHASES.map((item, index) => (
           <li className={dealProgress(deal.status) >= index ? 'done' : ''} key={item} title={item}>
             <span>{item}</span>
@@ -163,14 +170,18 @@ export function Deals({
         )}
         <div className="card-actions">
           {role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
-          {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Товар получен</Button>}
+          {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Подтверждение продавцу</Button>}
           {deal.status === 'PAYMENT_HOLD' && (
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'cancel' })}>Отменить сделку</Button>
           )}
           {!deal.complaintOpen && !['COMPLETED', 'CANCELED', 'DISPUTE', 'REFUNDED'].includes(deal.status) && (
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'dispute' })}>Открыть спор</Button>
           )}
-          {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>Возврат</Button>}
+          {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && (
+            <Button variant="secondary" onClick={() => { setRefundDeal(deal); setRefundReason(''); }}>
+              Возврат покупателю (продавец)
+            </Button>
+          )}
           {!deal.complaintOpen && (
             <Button variant="secondary" busy={core.actionBusy === `support-${deal.id}`} onClick={async () => {
               const ticket = await core.openSupport(deal.id);

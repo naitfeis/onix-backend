@@ -654,11 +654,23 @@ html[data-glass="vision"] .auth-notice {
   background: var(--glass-card-bg) !important;
   box-shadow: none !important;
 }
-html[data-glass="vision"] .widget.widget--new-lots {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: #151517 !important;
+html[data-glass="vision"] .settings-sheet {
+  isolation: auto !important;
+  -webkit-backdrop-filter: blur(48px) saturate(190%) !important;
+  backdrop-filter: blur(48px) saturate(190%) !important;
+  background: rgba(16, 16, 22, 0.18) !important;
+  box-shadow: none !important;
 }
-html[data-theme="light"][data-glass="vision"] .widget.widget--new-lots {
-  background: #fff !important;
+html[data-theme="light"][data-glass="vision"] .settings-sheet {
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+html[data-glass="vision"] .widget.widget--new-lots,
+.widget.widget--new-lots {
+  isolation: auto !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
+  backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
+  background: color-mix(in srgb, rgba(16, 16, 22, 0.28) 55%, #4d7cff 45%) !important;
+}
+html[data-theme="light"] .widget.widget--new-lots {
+  background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 70%, #6c8cff 30%) !important;
 }

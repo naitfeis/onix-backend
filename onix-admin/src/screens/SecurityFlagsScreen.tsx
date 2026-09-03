@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
+import { humanFlag } from '../i18n';
 
 type Flag = {
   code?: string;
@@ -20,25 +21,22 @@ export function SecurityFlagsScreen() {
   useEffect(() => {
     void adminApi<{ flags: Flag[] }>('/api/admin/security-flags')
       .then((data) => setFlags(data.flags ?? []))
-      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Failed'));
+      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Не удалось загрузить'));
   }, []);
 
   return (
     <div className="panel">
-      <h2>Security Alerts (YELLOW)</h2>
-      <p className="muted">Account-sale / velocity protection and related flags.</p>
+      <h2>Алерты</h2>
+      <p className="muted">Защита новых аккаунтов после продажи аккаунта и связанные пометки.</p>
       {error && <p className="error">{error}</p>}
-      {!error && flags.length === 0 && <p className="muted">No open flags.</p>}
+      {!error && flags.length === 0 && <p className="muted">Открытых пометок нет.</p>}
       {flags.map((f, i) => (
         <div key={`${f.onixId ?? f.userId ?? 'flag'}-${i}`} className="flag">
-          <strong>{f.onixId || f.userId || '—'}</strong>
-          <div className="muted">
-            {f.code || f.reason || 'flag'} · {f.severity || 'YELLOW'}
-            {f.createdAt ? ` · ${new Date(f.createdAt).toLocaleString()}` : ''}
-          </div>
-          {f.restrictedAccountSaleCents && (
-            <div className="muted">Restricted ACCOUNT cents: {f.restrictedAccountSaleCents}</div>
-          )}
+          <strong>{f.onixId || '—'}</strong>
+          {humanFlag(f as Record<string, unknown>).map((line) => (
+            <div className="muted" key={line}>{line}</div>
+          ))}
+          {f.createdAt ? <div className="muted">{new Date(f.createdAt).toLocaleString('ru-RU')}</div> : null}
         </div>
       ))}
     </div>

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
+import { ruRole } from '../i18n';
 
 type StaffRow = {
   id: string;
@@ -94,11 +95,10 @@ export function StaffScreen({ clientIp, ipAllowlistConfigured }: { clientIp?: st
   return (
     <div>
       <div className="panel">
-        <h2>IP для allowlist</h2>
+        <h2>Ваш адрес для доступа</h2>
         <p className="muted">
-          Это ваш текущий публичный IP при входе в админку. Добавьте его в переменную Amvera{' '}
-          <code>ADMIN_IP_ALLOWLIST</code> (несколько IP через запятую), затем перезапустите сервис.
-          Без списка админка открыта с любого IP.
+          Это ваш текущий публичный адрес при входе в админку. Добавьте его в список разрешённых адресов в панели хостинга (несколько через запятую), затем перезапустите сервис.
+          Без списка админка открыта с любого адреса.
         </p>
         <p>
           <strong>{clientIp ?? 'не определён'}</strong>
@@ -113,20 +113,20 @@ export function StaffScreen({ clientIp, ipAllowlistConfigured }: { clientIp?: st
             </button>
           ) : null}
         </p>
-        <p className="muted">{ipAllowlistConfigured ? 'Allowlist задан.' : 'Allowlist сейчас пустой.'}</p>
+        <p className="muted">{ipAllowlistConfigured ? 'Список адресов задан.' : 'Список адресов сейчас пустой.'}</p>
       </div>
 
       <div className="panel">
         <h2>Выдать доступ модератору</h2>
-        <p className="muted">Это отдельная почта и пароль для /admin/, не логин маркетплейса. Пароль покажите человеку один раз.</p>
+        <p className="muted">Это отдельная почта и пароль для админ-панели, не вход в маркетплейс. Пароль покажите человеку один раз.</p>
         {issued && (
           <p className="flag">
-            Готово: <strong>{issued.email}</strong> / роль {issued.role}. Пароль: <strong>{issued.password}</strong>
+            Готово: <strong>{issued.email}</strong> / роль {ruRole(issued.role)}. Пароль: <strong>{issued.password}</strong>
           </p>
         )}
         <form onSubmit={onCreate}>
           <div className="row">
-            <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+            <label>Почта<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
             <label>Пароль (пусто = сгенерировать)<input type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} placeholder="минимум 12 символов" /></label>
             <label>Роль
               <select value={role} onChange={(e) => setRole(e.target.value)}>
@@ -144,7 +144,7 @@ export function StaffScreen({ clientIp, ipAllowlistConfigured }: { clientIp?: st
         <h2>Админ-учётки</h2>
         {staff.map((row) => (
           <div key={row.id} className="flag">
-            <strong>{row.email}</strong> — {row.role}
+            <strong>{row.email}</strong> — {ruRole(row.role)}
             <div className="muted">Последний вход: {row.lastLoginAt ?? 'ещё не входил'}</div>
             <div className="row" style={{ marginTop: 8 }}>
               <button type="button" className="primary" disabled={busy} onClick={() => void resetPassword(row.id)}>Новый пароль</button>

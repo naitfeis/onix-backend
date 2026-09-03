@@ -23,7 +23,14 @@ type AdminMe = {
   clientIp?: string | null;
   ipAllowlistConfigured?: boolean;
 };
-function adminRoleLabel(role: string) { return role === 'SUPER_ADMIN' ? 'FOUNDER' : role; }
+function adminRoleLabel(role: string) {
+  return ({
+    SUPER_ADMIN: 'Основатель',
+    SECURITY_ADMIN: 'Безопасность',
+    SUPPORT_ADMIN: 'Поддержка',
+    FINANCE_ADMIN: 'Финансы',
+  } as Record<string, string>)[role] ?? role;
+}
 type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk' | 'payments' | 'staff';
 
 export function App() {
@@ -31,6 +38,8 @@ export function App() {
   const [booting, setBooting] = useState(true);
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [chatId, setChatId] = useState<string | null>(null);
+  const [openUserId, setOpenUserId] = useState<string | null>(null);
+  const [openProductId, setOpenProductId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,11 +101,11 @@ export function App() {
   return (
     <div className="admin-shell">
       <nav className="admin-nav">
-        <h1>ONIX Admin</h1>
+        <h1>Админ ONIX</h1>
         <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{adminRoleLabel(admin.role)}</p>
         <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Дашборд</button>
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Сделки</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Support & Security</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Поддержка и безопасность</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'products' ? 'active' : ''} onClick={() => setScreen('products')}>Лоты</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'messages' ? 'active' : ''} onClick={() => setScreen('messages')}>Чаты</button>}
         <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Аудит</button>
@@ -105,7 +114,7 @@ export function App() {
         {(admin.role === 'SUPER_ADMIN' || admin.role === 'FINANCE_ADMIN') && <button type="button" className={screen === 'payments' ? 'active' : ''} onClick={() => setScreen('payments')}>Платежи</button>}
         {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>Пользователи / баны</button>}
         {admin.role === 'SUPER_ADMIN' && <button type="button" className={screen === 'staff' ? 'active' : ''} onClick={() => setScreen('staff')}>Сотрудники</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Risk Center</button>}
+        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Центр риска</button>}
         <div style={{ marginTop: '1.5rem' }}>
           <button
             type="button"
@@ -116,21 +125,34 @@ export function App() {
               setAdmin(null);
             }}
           >
-            Logout
+            Выйти
           </button>
         </div>
       </nav>
       <main className="admin-main">
         {screen === 'dashboard' && <DashboardScreen />}
-        {screen === 'orders' && <OrdersScreen onOpenChat={setChatId} />}
+        {screen === 'orders' && (
+          <OrdersScreen
+            onOpenChat={setChatId}
+            onOpenLot={(id) => { setOpenProductId(id); setScreen('products'); }}
+            onOpenUser={(id) => { setOpenUserId(id); setScreen('users'); }}
+          />
+        )}
         {screen === 'support' && <SupportScreen onOpenChat={setChatId} />}
-        {screen === 'products' && <ProductsScreen />}
+        {screen === 'products' && (
+          <ProductsScreen
+            initialId={openProductId}
+            onOpenSeller={(id) => { setOpenUserId(id); setScreen('users'); }}
+          />
+        )}
         {screen === 'messages' && <MessagesScreen onOpenChat={setChatId} />}
         {screen === 'audit' && <AuditLogScreen />}
         {screen === 'flags' && <SecurityFlagsScreen />}
         {screen === 'withdrawals' && <WithdrawalsScreen />}
         {screen === 'payments' && <PaymentsScreen />}
-        {screen === 'users' && <UsersScreen adminRole={admin.role} onOpenChat={setChatId} />}
+        {screen === 'users' && (
+          <UsersScreen adminRole={admin.role} onOpenChat={setChatId} initialOnixId={openUserId} />
+        )}
         {screen === 'staff' && admin.role === 'SUPER_ADMIN' && (
           <StaffScreen clientIp={admin.clientIp} ipAllowlistConfigured={admin.ipAllowlistConfigured} />
         )}

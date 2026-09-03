@@ -13,6 +13,7 @@ import { formatOnixId, onixIdLookupCandidates } from '../onix-id';
 import { flagsFromPlatformStatus, isPlatformStatus } from '../platform-status';
 import { PrismaService } from '../prisma.service';
 import type { AdminActor } from './admin-session.service';
+import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { recomputeSellerRating } from '../marketplace/review-aggregate';
 
 const WIPED_DISPLAY_NAME = 'Удалённый аккаунт';
@@ -137,7 +138,7 @@ export class AdminSecurityService {
       flags.push({
         ...flag,
         onixId: formatOnixId(user.onixId),
-        reason: 'New account received ACCOUNT sale proceeds',
+        reason: 'Новый аккаунт получил выплату за продажу аккаунта',
         createdAt: user.createdAt.toISOString(),
         status: 'ACTIVE',
       });
@@ -1096,7 +1097,11 @@ export class AdminSecurityService {
     const escrowActor = await this.legacyEscrowActor(actor);
     const audit = await this.createEscrowAuditIntent(actor, 'ADMIN_ORDER_REFUND', orderId, reason);
     try {
-      const result = await this.escrow.refundByAdmin(escrowActor, BigInt(orderId), reason);
+      const result = await this.escrow.refundByAdmin(
+        escrowActor,
+        BigInt(orderId),
+        reason?.trim() ? `Администратор: ${reason.trim()}` : 'Возврат администратором',
+      );
       await this.finishEscrowAudit(audit.id, 'ADMIN_ORDER_REFUND', 'COMPLETED', reason)
         .catch(() => undefined);
       return result;
@@ -1145,6 +1150,50 @@ export class AdminSecurityService {
     }));
   }
 
+  async getProduct(productId: string) {
+    const row = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        lotNumber: true,
+        title: true,
+        description: true,
+        status: true,
+        priceCents: true,
+        quantity: true,
+        category: true,
+        subcategory: true,
+        warrantyHours: true,
+        autoDeliver: true,
+        createdAt: true,
+        seller: {
+          select: {
+            id: true,
+            onixId: true,
+            displayName: true,
+            telegramId: true,
+            completedSales: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+    if (!row) throw new NotFoundException('Лот не найден.');
+    return {
+      ...row,
+      priceCents: row.priceCents.toString(),
+      createdAt: row.createdAt.toISOString(),
+      seller: {
+        id: row.seller.id.toString(),
+        onixId: formatOnixId(row.seller.onixId),
+        displayName: row.seller.displayName,
+        telegramId: row.seller.telegramId?.toString() ?? null,
+        completedSales: row.seller.completedSales,
+        registeredAt: row.seller.createdAt.toISOString(),
+      },
+    };
+  }
+
   async moderateProduct(actor: AdminActor, productId: string, reason?: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Товар не найден.');
@@ -1162,6 +1211,41 @@ export class AdminSecurityService {
         },
       });
     });
+    const why = reason?.trim().slice(0, 500) || 'Без указания причины';
+    const text = [
+      `Лот ONIXLOT-${product.lotNumber} («${product.title}») отклонён модерацией.`,
+      `Причина: ${why}`,
+    ].join('\n');
+    const seller = await this.prisma.user.findUnique({
+      where: { id: product.sellerId },
+      select: { id: true, telegramId: true },
+    });
+    if (seller?.telegramId) {
+      await sendTelegramMessage({
+        chatId: seller.telegramId.toString(),
+        text,
+      }).catch(() => undefined);
+    }
+    if (seller) {
+      let chat = await this.prisma.chat.findFirst({
+        where: { kind: 'AI', members: { some: { userId: seller.id } } },
+        select: { id: true },
+      });
+      if (!chat) {
+        chat = await this.prisma.chat.create({
+          data: {
+            kind: 'AI',
+            title: 'Onix AI',
+            members: { create: { userId: seller.id } },
+          },
+          select: { id: true },
+        });
+      }
+      await this.prisma.message.create({
+        data: { chatId: chat.id, kind: 'SYSTEM', senderId: null, text },
+      });
+      await this.prisma.chat.update({ where: { id: chat.id }, data: { updatedAt: new Date() } });
+    }
     return { id: productId, status: 'ARCHIVED' as const };
   }
 
