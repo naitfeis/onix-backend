@@ -108,8 +108,10 @@ export function ruRiskType(type: string) {
 
 export function ruRiskReason(reason: string) {
   return ({
-    NEW_IP: 'Вход с нового адреса',
+    NEW_IP: 'новый адрес',
     'device seen on banned account': 'Это устройство уже встречалось на заблокированном аккаунте',
+    'ip seen on banned account': 'Этот адрес уже встречался на заблокированном аккаунте',
+    'linked banned telegram account': 'Тот же Telegram уже был на заблокированном аккаунте',
   } as Record<string, string>)[reason] ?? reason.replaceAll('_', ' ');
 }
 
@@ -125,7 +127,12 @@ export function ruRiskLevel(level: string) {
 export function ruFactor(factor: string) {
   return ({
     NEW_IP: 'новый адрес',
+    NEW_DEVICE: 'новое устройство',
+    NEW_COUNTRY: 'новая страна',
     LOGIN: 'вход',
+    BAN_EVASION: 'обход блокировки',
+    CONTEXT_SHIFT: 'смена языка или пояса',
+    SECURITY_LOCK_ACTIVE: 'уже есть ограничение',
   } as Record<string, string>)[factor] ?? factor.replaceAll('_', ' ').toLowerCase();
 }
 
@@ -136,6 +143,9 @@ export function ruRiskAction(action: string) {
     LOCK: 'ограничили доступ',
     CHALLENGE: 'запросили подтверждение',
     BAN: 'заблокировали',
+    SECURITY_LOCK: 'ограничили доступ',
+    MONITOR: 'наблюдаем',
+    ALLOW: 'без вмешательства',
   } as Record<string, string>)[action] ?? action;
 }
 
@@ -169,6 +179,14 @@ export function humanPayload(payload: Record<string, unknown>): string[] {
   if (payload.timezone == null) lines.push('Часовой пояс не передан');
   if (typeof payload.refreshGeneration === 'number') {
     lines.push(`Сессия обновлялась ${payload.refreshGeneration} раз`);
+  }
+  const banned = Array.isArray(payload.bannedAccounts) ? payload.bannedAccounts : [];
+  for (const hit of banned) {
+    if (!hit || typeof hit !== 'object') continue;
+    const row = hit as { onixId?: unknown; via?: unknown };
+    if (typeof row.onixId !== 'string') continue;
+    const how = row.via === 'device' ? 'то же устройство' : row.via === 'ip' ? 'тот же адрес' : row.via === 'telegram' ? 'тот же Telegram' : 'совпадение';
+    lines.push(`Забаненный аккаунт: ${row.onixId} (${how})`);
   }
   const related = payload.related as { orderId?: string; listingId?: string; chatId?: string } | undefined;
   if (related?.orderId) lines.push(`Сделка: ${related.orderId}`);

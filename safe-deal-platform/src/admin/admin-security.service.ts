@@ -1179,6 +1179,16 @@ export class AdminSecurityService {
       },
     });
     if (!row) throw new NotFoundException('Лот не найден.');
+    const [riskEvents, bannedAccounts] = await Promise.all([
+      this.prisma.securityEvent.findMany({
+        where: { userId: row.seller.id },
+        orderBy: { createdAt: 'desc' },
+        take: 12,
+        select: { id: true, type: true, severity: true, createdAt: true, payload: true },
+      }),
+      this.bannedAccountHits(row.seller.id),
+    ]);
+    const score = Math.max(0, ...riskEvents.map((event) => event.severity));
     return {
       ...row,
       priceCents: row.priceCents.toString(),
@@ -1190,8 +1200,79 @@ export class AdminSecurityService {
         telegramId: row.seller.telegramId?.toString() ?? null,
         completedSales: row.seller.completedSales,
         registeredAt: row.seller.createdAt.toISOString(),
+        riskScore: score,
+        risk: riskEvents.map((event) => {
+          const payload = (event.payload && typeof event.payload === 'object')
+            ? { ...(event.payload as Record<string, unknown>) }
+            : {};
+          if (!Array.isArray(payload.bannedAccounts) || payload.bannedAccounts.length === 0) {
+            payload.bannedAccounts = bannedAccounts;
+          }
+          return {
+            id: event.id.toString(),
+            type: event.type,
+            severity: event.severity,
+            createdAt: event.createdAt.toISOString(),
+            payload,
+          };
+        }),
       },
     };
+  }
+
+  private async bannedAccountHits(userId: bigint) {
+    const hits: Array<{ onixId: string; via: 'device' | 'ip' | 'telegram' }> = [];
+    const remember = (onixId: string, via: 'device' | 'ip' | 'telegram') => {
+      const id = formatOnixId(onixId);
+      if (!id || hits.some((hit) => hit.onixId === id && hit.via === via)) return;
+      hits.push({ onixId: id, via });
+    };
+    const session = await this.prisma.session.findFirst({
+      where: { userId },
+      orderBy: { lastSeenAt: 'desc' },
+      select: { fingerprintHash: true, ipAddress: true },
+    });
+    const seller = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { telegramId: true },
+    });
+    if (session?.fingerprintHash) {
+      const rows = await this.prisma.session.findMany({
+        where: {
+          fingerprintHash: session.fingerprintHash,
+          userId: { not: userId },
+          user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
+        },
+        select: { user: { select: { onixId: true } } },
+        take: 12,
+      });
+      for (const row of rows) remember(row.user.onixId, 'device');
+    }
+    if (session?.ipAddress) {
+      const rows = await this.prisma.session.findMany({
+        where: {
+          ipAddress: session.ipAddress,
+          userId: { not: userId },
+          user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
+        },
+        select: { user: { select: { onixId: true } } },
+        take: 12,
+      });
+      for (const row of rows) remember(row.user.onixId, 'ip');
+    }
+    if (seller?.telegramId != null) {
+      const twins = await this.prisma.user.findMany({
+        where: {
+          telegramId: seller.telegramId,
+          id: { not: userId },
+          OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }],
+        },
+        select: { onixId: true },
+        take: 8,
+      });
+      for (const twin of twins) remember(twin.onixId, 'telegram');
+    }
+    return hits;
   }
 
   async moderateProduct(actor: AdminActor, productId: string, reason?: string) {
@@ -1464,11 +1545,19 @@ export class AdminSecurityService {
       })
       : [];
     const byId = new Map(users.map((u) => [u.id.toString(), u]));
+    const hitsByUser = new Map<string, Array<{ onixId: string; via: 'device' | 'ip' | 'telegram' }>>();
+    await Promise.all(userIds.map(async (id) => {
+      hitsByUser.set(id.toString(), await this.bannedAccountHits(id));
+    }));
     return {
       counts: { critical, high, medium, low },
       events: events.map((e) => {
         const user = e.userId ? byId.get(e.userId.toString()) : null;
-        const payload = (e.payload && typeof e.payload === 'object') ? e.payload as Record<string, unknown> : {};
+        const payload = (e.payload && typeof e.payload === 'object') ? { ...(e.payload as Record<string, unknown>) } : {};
+        const existing = Array.isArray(payload.bannedAccounts) ? payload.bannedAccounts : [];
+        if (existing.length === 0 && e.userId) {
+          payload.bannedAccounts = hitsByUser.get(e.userId.toString()) ?? [];
+        }
         const reasons = Array.isArray(payload.reasons) ? payload.reasons.map(String) : [];
         const level = e.severity >= 85 ? 'CRITICAL' : e.severity >= 70 ? 'HIGH' : e.severity >= 40 ? 'MEDIUM' : 'LOW';
         return {

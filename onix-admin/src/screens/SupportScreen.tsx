@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
-import { humanPayload, ruPriority, ruRiskType, ruTicketCategory, ruTicketStatus } from '../i18n';
+import { ruPriority, ruRiskType, ruTicketCategory, ruTicketStatus } from '../i18n';
+import { RiskEvidence } from './RiskEvidence';
 
 type TicketListItem = {
   id: string;
@@ -151,11 +152,7 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
             {selected.related.riskEvents.map((ev) => (
               <div key={ev.id} className="flag">
                 <strong>{ruRiskType(ev.type)}</strong> · {ev.severity}
-                <ul>
-                  {humanPayload((ev.payload && typeof ev.payload === 'object' ? ev.payload : {}) as Record<string, unknown>).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
+                <RiskEvidence payload={(ev.payload && typeof ev.payload === 'object' ? ev.payload : {}) as Record<string, unknown>} />
               </div>
             ))}
           </div>

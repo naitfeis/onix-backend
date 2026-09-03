@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
-import { ruProductStatus } from '../i18n';
+import { ruProductStatus, ruRiskType } from '../i18n';
+import { RiskEvidence } from './RiskEvidence';
 
 type Product = {
   id: string;
@@ -26,6 +27,14 @@ type ProductDetail = Product & {
     id?: string;
     completedSales?: number;
     registeredAt?: string;
+    riskScore?: number;
+    risk?: Array<{
+      id: string;
+      type: string;
+      severity: number;
+      createdAt: string;
+      payload: Record<string, unknown>;
+    }>;
   };
 };
 
@@ -72,14 +81,17 @@ export function ProductsScreen({
     }
   }
 
-  async function reject(id: string) {
+  async function reject(id: string, withReason: boolean) {
     const why = reason.trim();
-    if (why.length < 4) {
-      setError('Укажите причину отклонения (минимум 4 символа).');
+    if (withReason && why.length < 4) {
+      setError('Укажите причину отклонения (минимум 4 символа) или снимите лот без причины.');
       return;
     }
     try {
-      await adminApi(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ reason: why }) });
+      await adminApi(`/api/admin/products/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ reason: withReason ? why : undefined }),
+      });
       setDetail(null);
       await load();
     } catch (e) {
@@ -101,7 +113,7 @@ export function ProductsScreen({
           </select>
         </label>
         <label>Причина отклонения
-          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="почему лот снят" />
+          <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="можно оставить пустым" />
         </label>
         <button className="primary" type="button" onClick={() => void load()}>Обновить</button>
       </div>
@@ -119,19 +131,29 @@ export function ProductsScreen({
         </thead>
         <tbody>
           {products.map((product) => (
-            <tr key={product.id}>
+            <tr key={product.id} className="click-row" onClick={() => void openLot(product.id)}>
               <td>
-                <button className="link-button" type="button" onClick={() => void openLot(product.id)}>
+                <button className="link-button" type="button" onClick={(ev) => { ev.stopPropagation(); void openLot(product.id); }}>
                   ONIXLOT-{product.lotNumber}
                 </button>
               </td>
               <td>{product.title}</td>
-              <td>{product.seller.onixId}</td>
+              <td>
+                {onOpenSeller ? (
+                  <button className="link-button" type="button" onClick={(ev) => { ev.stopPropagation(); onOpenSeller(product.seller.onixId); }}>
+                    {product.seller.onixId}
+                  </button>
+                ) : product.seller.onixId}
+              </td>
               <td>{ruProductStatus(product.status)}</td>
               <td>{money(product.priceCents)} / {product.quantity}</td>
-              <td>
+              <td onClick={(ev) => ev.stopPropagation()}>
                 {product.status !== 'ARCHIVED' && (
-                  <button className="danger" type="button" onClick={() => void reject(product.id)}>Отклонить с причиной</button>
+                  <>
+                    <button className="ghost" type="button" onClick={() => void reject(product.id, false)}>Снять</button>
+                    {' '}
+                    <button className="danger" type="button" onClick={() => void reject(product.id, true)}>Отклонить с причиной</button>
+                  </>
                 )}
               </td>
             </tr>
@@ -146,22 +168,37 @@ export function ProductsScreen({
           {detail.warrantyHours != null && <p className="muted">Гарантия: {detail.warrantyHours} ч</p>}
           {detail.autoDeliver ? <p className="muted">Автовыдача включена</p> : null}
           {detail.category ? <p className="muted">Категория: {detail.category}{detail.subcategory ? ` · ${detail.subcategory}` : ''}</p> : null}
+          <h3>Продавец</h3>
           <p>
-            Продавец: {detail.seller.onixId}
+            {onOpenSeller ? (
+              <button className="link-button" type="button" onClick={() => onOpenSeller(detail.seller.onixId)}>{detail.seller.onixId}</button>
+            ) : detail.seller.onixId}
             {detail.seller.displayName ? ` · ${detail.seller.displayName}` : ''}
             {detail.seller.telegramId ? ` · Telegram ${detail.seller.telegramId}` : ''}
             {detail.seller.completedSales != null ? ` · продаж: ${detail.seller.completedSales}` : ''}
           </p>
           {detail.seller.registeredAt && (
-            <p className="muted">Продавец зарегистрирован {new Date(detail.seller.registeredAt).toLocaleString('ru-RU')}</p>
+            <p className="muted">Зарегистрирован {new Date(detail.seller.registeredAt).toLocaleString('ru-RU')}</p>
           )}
+          <h3>Риск-движок · набрано {detail.seller.riskScore ?? 0}</h3>
+          {(detail.seller.risk ?? []).length === 0 ? (
+            <p className="muted">Сигналов риска нет.</p>
+          ) : (detail.seller.risk ?? []).map((event) => (
+            <div key={event.id} className="flag">
+              <strong>{ruRiskType(event.type)}</strong> · оценка {event.severity} · {new Date(event.createdAt).toLocaleString('ru-RU')}
+              <RiskEvidence payload={event.payload} onOpenUser={onOpenSeller} />
+            </div>
+          ))}
           <div className="row">
             <button className="ghost" type="button" onClick={() => setDetail(null)}>Закрыть</button>
             {onOpenSeller && (
               <button className="primary" type="button" onClick={() => onOpenSeller(detail.seller.onixId)}>Карточка продавца</button>
             )}
             {detail.status !== 'ARCHIVED' && (
-              <button className="danger" type="button" onClick={() => void reject(detail.id)}>Отклонить с причиной</button>
+              <>
+                <button className="ghost" type="button" onClick={() => void reject(detail.id, false)}>Снять без причины</button>
+                <button className="danger" type="button" onClick={() => void reject(detail.id, true)}>Отклонить с причиной</button>
+              </>
             )}
           </div>
         </div>

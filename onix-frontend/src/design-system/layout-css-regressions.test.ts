@@ -73,7 +73,7 @@ describe('desktop and chat layout CSS regressions', () => {
       /\.sidebar-right > \.widget--new-lots\s*\{[^}]*flex:\s*1 1 auto;/s,
     );
     expect(appCss).toMatch(
-      /\.sidebar-right > \.widget--new-lots\s*\{[^}]*min-height:\s*180px;/s,
+      /\.sidebar-right > \.widget--new-lots\s*\{[^}]*min-height:\s*0;/s,
     );
     expect(appCss).toMatch(
       /\.app-shell--market > \.sidebar-right\s*\{[^}]*overflow:\s*hidden;/s,

@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { Injectable, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { formatOnixId } from '../onix-id';
 import { MfaStepUpService } from '../mfa/mfa-step-up.service';
 import { PrismaService } from '../prisma.service';
 import {
@@ -133,6 +134,7 @@ export class RiskEngineService {
           score,
           level,
           reasons: evasion.reasons,
+          bannedAccounts: evasion.bannedAccounts,
           deviceIdPresent: Boolean(input.deviceId),
           trustedDevice: input.trustedDevice,
           timezone: input.timezone ?? null,
@@ -559,9 +561,15 @@ export class RiskEngineService {
     userId: bigint,
     input: { ipAddress?: string | null; deviceId?: string | null; telegramId?: bigint | null },
     db: Db = this.prisma,
-  ): Promise<{ factors: RiskFactor[]; reasons: string[] }> {
+  ): Promise<{ factors: RiskFactor[]; reasons: string[]; bannedAccounts: Array<{ onixId: string; via: 'device' | 'ip' | 'telegram' }> }> {
     const factors: RiskFactor[] = [];
     const reasons: string[] = [];
+    const bannedAccounts: Array<{ onixId: string; via: 'device' | 'ip' | 'telegram' }> = [];
+    const remember = (onixId: string, via: 'device' | 'ip' | 'telegram') => {
+      const id = formatOnixId(onixId);
+      if (!id || bannedAccounts.some((hit) => hit.onixId === id && hit.via === via)) return;
+      bannedAccounts.push({ onixId: id, via });
+    };
     try {
       const user = await db.user.findUnique({
         where: { id: userId },
@@ -573,45 +581,57 @@ export class RiskEngineService {
       const signals: string[] = [];
 
       if (telegramId != null) {
-        const bannedTwin = await db.user.findFirst({
+        const bannedTwins = await db.user.findMany({
           where: {
             telegramId,
             id: { not: userId },
             OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }],
           },
-          select: { id: true },
+          select: { onixId: true },
+          take: 8,
         });
-        if (bannedTwin) signals.push('linked banned telegram account');
+        for (const twin of bannedTwins) {
+          signals.push('linked banned telegram account');
+          remember(twin.onixId, 'telegram');
+        }
       }
 
       let deviceHit = false;
       let ipHit = false;
       if (input.deviceId) {
-        const device = await db.session.findFirst({
+        const devices = await db.session.findMany({
           where: {
             fingerprintHash: input.deviceId,
             userId: { not: userId },
             user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
           },
-          select: { id: true },
+          select: { user: { select: { onixId: true } } },
+          take: 12,
         });
-        if (device) deviceHit = true;
+        for (const row of devices) {
+          deviceHit = true;
+          remember(row.user.onixId, 'device');
+        }
       }
       if (input.ipAddress) {
-        const ip = await db.session.findFirst({
+        const ips = await db.session.findMany({
           where: {
             ipAddress: input.ipAddress,
             userId: { not: userId },
             user: { OR: [{ deletedAt: { not: null } }, { bannedAt: { not: null } }] },
           },
-          select: { id: true },
+          select: { user: { select: { onixId: true } } },
+          take: 12,
         });
-        if (ip) ipHit = true;
+        for (const row of ips) {
+          ipHit = true;
+          remember(row.user.onixId, 'ip');
+        }
       }
 
       if (deviceHit) reasons.push('device seen on banned account');
       if (ipHit) reasons.push('ip seen on banned account');
-      reasons.push(...signals);
+      reasons.push(...[...new Set(signals)]);
 
       if (signals.length >= 1 && (deviceHit || ipHit || signals.length >= 2)) {
         factors.push('BAN_EVASION');
@@ -619,7 +639,7 @@ export class RiskEngineService {
     } catch {
       /* tests / partial prisma mocks */
     }
-    return { factors: [...new Set(factors)], reasons };
+    return { factors: [...new Set(factors)], reasons, bannedAccounts };
   }
 }
 

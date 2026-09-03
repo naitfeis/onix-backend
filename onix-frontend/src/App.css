@@ -4539,20 +4539,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     min-width: 0;
     overflow: hidden;
   }
-  .widget.widget--new-lots {
-    isolation: auto;
-    overflow: hidden;
-    background: color-mix(in srgb, rgba(16, 16, 22, 0.28) 55%, #4d7cff 45%) !important;
-    -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
-    backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
-  }
   .sidebar-right > .widget:last-child,
   .sidebar-right > .widget--new-lots {
     flex: 1 1 auto;
-    min-height: 180px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding-bottom: 18px;
   }
   .sidebar-right > .widget:last-child > h3,
   .sidebar-right > .widget--new-lots > h3 {
@@ -4561,7 +4555,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-right > .widget:last-child .widget-trend,
   .sidebar-right > .widget--new-lots .widget-trend {
     flex: 1 1 auto;
-    min-height: 120px;
+    min-height: 0;
+    padding-bottom: 8px;
     overflow-x: hidden;
     overflow-y: auto;
   }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
-import { humanPayload, ruRiskAction, ruRiskLevel, ruRiskReason, ruRiskType } from '../i18n';
+import { ruRiskAction, ruRiskLevel, ruRiskType } from '../i18n';
+import { RiskEvidence } from './RiskEvidence';
 
 type RiskEvent = {
   id: string;
@@ -29,7 +30,7 @@ type Center = {
   events: RiskEvent[];
 };
 
-export function RiskEventsScreen() {
+export function RiskEventsScreen({ onOpenUser }: { onOpenUser?: (onixId: string) => void }) {
   const [data, setData] = useState<Center | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -41,7 +42,6 @@ export function RiskEventsScreen() {
   }, []);
 
   const selected = data?.events.find((e) => e.id === openId) ?? null;
-  const details = selected ? humanPayload(selected.payload) : [];
 
   return (
     <div className="panel">
@@ -78,24 +78,18 @@ export function RiskEventsScreen() {
       {selected && (
         <div className="admin-modal" onClick={() => setOpenId(null)}>
           <div className="admin-modal__panel" onClick={(ev) => ev.stopPropagation()}>
-            <h2>{selected.user?.onixId || 'Пользователь'}</h2>
+            <h2>
+              {onOpenUser && selected.user?.onixId ? (
+                <button className="link-button" type="button" onClick={() => onOpenUser(selected.user!.onixId)}>{selected.user.onixId}</button>
+              ) : (selected.user?.onixId || 'Пользователь')}
+            </h2>
             <p>
               {ruRiskLevel(selected.level)} · {ruRiskType(selected.type)}
               {selected.action ? ` · ${ruRiskAction(selected.action)}` : ''}
             </p>
             {selected.user?.caseId && <p>Дело: {selected.user.caseId}</p>}
             <h3>Доказательства риска</h3>
-            <ul>
-              {(selected.reasons.length ? selected.reasons.map(ruRiskReason) : details.length ? details : ['Нет подробностей']).map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-            {details.length > 0 && selected.reasons.length > 0 && (
-              <>
-                <h3>Подробности</h3>
-                <ul>{details.map((line) => <li key={line}>{line}</li>)}</ul>
-              </>
-            )}
+            <RiskEvidence payload={selected.payload} onOpenUser={onOpenUser} />
             <h3>Связи</h3>
             <ul className="muted">
               <li>Пользователь: {selected.user?.onixId || '—'}</li>

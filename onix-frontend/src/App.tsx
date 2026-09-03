@@ -824,7 +824,7 @@ export default function App() {
                 {core.products.length === 0 ? (
                   <p className="widget-empty">Лотов пока нет.</p>
                 ) : (
-                  core.products.slice(0, 5).map((product: Product) => {
+                  core.products.slice(0, 12).map((product: Product) => {
                     const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
                     const image = CATEGORY_IMAGES[product.category];
                     return (

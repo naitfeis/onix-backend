@@ -666,16 +666,6 @@ html[data-glass="vision"] .settings-sheet {
 html[data-theme="light"][data-glass="vision"] .settings-sheet {
   background: rgba(255, 255, 255, 0.22) !important;
 }
-html[data-glass="vision"] .widget.widget--new-lots,
-.widget.widget--new-lots {
-  isolation: auto !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
-  backdrop-filter: blur(var(--glass-blur, 22px)) saturate(var(--glass-saturate, 130%)) !important;
-  background: color-mix(in srgb, rgba(16, 16, 22, 0.28) 55%, #4d7cff 45%) !important;
-}
-html[data-theme="light"] .widget.widget--new-lots {
-  background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 70%, #6c8cff 30%) !important;
-}
 html[data-glass="vision"] .market-hero,
 html[data-theme="dark"] .market-hero,
 html[data-theme="light"] .market-hero,

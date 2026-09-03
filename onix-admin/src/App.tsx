@@ -156,7 +156,9 @@ export function App() {
         {screen === 'staff' && admin.role === 'SUPER_ADMIN' && (
           <StaffScreen clientIp={admin.clientIp} ipAllowlistConfigured={admin.ipAllowlistConfigured} />
         )}
-        {screen === 'risk' && <RiskEventsScreen />}
+        {screen === 'risk' && (
+          <RiskEventsScreen onOpenUser={(id) => { setOpenUserId(id); setScreen('users'); }} />
+        )}
         {chatId && <ChatThreadModal chatId={chatId} onClose={() => setChatId(null)} />}
       </main>
     </div>
