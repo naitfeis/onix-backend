@@ -149,6 +149,15 @@ export function IconMoon({ size = 20 }: { size?: number }) {
   );
 }
 
+export function IconEye({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M2.5 12s3.6-7 9.5-7 9.5 7 9.5 7-3.6 7-9.5 7-9.5-7-9.5-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 export function BrandMark() {
   return (
     <div className="brand" aria-label="ONIX">

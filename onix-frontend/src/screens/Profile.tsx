@@ -13,7 +13,7 @@ import {
   waitAndLinkBotTelegram,
 } from '../auth';
 import UserAvatar from '../components/UserAvatar';
-import { CardLogo, SbpLogo } from '../components/BrandLogos';
+import { CardLogo, GoogleLogo, SbpLogo, TelegramLogo } from '../components/BrandLogos';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
@@ -54,8 +54,9 @@ function AccountLinkPanel({
   onLinked: () => Promise<unknown>;
   setToast: (text: string) => void;
 }) {
-  const needTelegram = profile.hasTelegram === false;
-  const needGoogle = profile.hasTelegram !== false && profile.hasGoogle === false;
+  const telegramLinked = profile.hasTelegram !== false;
+  const googleLinked = profile.hasGoogle === true;
+  const needGoogle = !googleLinked;
   const [busy, setBusy] = useState<'telegram' | 'google' | null>(null);
   const [hint, setHint] = useState('');
   const abortRef = useRef<AbortController | null>(null);
@@ -87,8 +88,6 @@ function AccountLinkPanel({
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
-  if (!needTelegram && !needGoogle) return null;
-
   const linkTelegram = async () => {
     setBusy('telegram');
     setHint('Откройте Telegram и подтвердите привязку…');
@@ -112,44 +111,48 @@ function AccountLinkPanel({
   };
 
   return (
-    <div className="profile-link-banner" role="status">
-      {needTelegram && (
-        <>
-          <p>
-            Аккаунт Google: покупки доступны. Чтобы продавать, привяжите Telegram — имя и аватар тогда возьмутся из Telegram.
-          </p>
-          <Button
+    <div className="profile-accounts" role="status">
+      <div className="profile-account">
+        <span className={`profile-account__mark${telegramLinked ? ' is-linked' : ''}`}>
+          <TelegramLogo size={22} />
+          {telegramLinked ? (
+            <em className="profile-account__check" aria-label="Telegram привязан">✓</em>
+          ) : null}
+        </span>
+        {!telegramLinked && (
+          <button
             type="button"
-            variant="secondary"
-            busy={busy === 'telegram'}
+            className="auth-btn auth-btn--telegram"
             disabled={busy !== null}
             onClick={() => void linkTelegram()}
           >
-            {busy === 'telegram' ? 'Ожидание Telegram…' : 'Привязать Telegram'}
-          </Button>
-        </>
-      )}
-      {needGoogle && (
-        <>
-          <p>Привяжите Google, чтобы входить в этот же аккаунт и через Google.</p>
-          {googleClientId ? (
-            <Button
-              type="button"
-              variant="secondary"
-              busy={busy === 'google'}
-              disabled={busy !== null}
-              onClick={() => {
-                setBusy('google');
-                startGoogleOAuth(googleClientId, googleRedirect, { intent: 'link' });
-              }}
-            >
-              Привязать Google
-            </Button>
-          ) : (
-            <p>Google вход на сервере не настроен.</p>
-          )}
-        </>
-      )}
+            <TelegramLogo size={18} />
+            <span>{busy === 'telegram' ? 'Ожидание…' : 'Привязать'}</span>
+          </button>
+        )}
+      </div>
+      <div className="profile-account">
+        <span className={`profile-account__mark${googleLinked ? ' is-linked' : ''}`}>
+          <GoogleLogo size={22} />
+          {googleLinked ? (
+            <em className="profile-account__check" aria-label="Google привязан">✓</em>
+          ) : null}
+        </span>
+        {!googleLinked && googleClientId ? (
+          <button
+            type="button"
+            className="auth-btn auth-btn--google"
+            disabled={busy !== null}
+            onClick={() => {
+              setBusy('google');
+              startGoogleOAuth(googleClientId, googleRedirect, { intent: 'link' });
+            }}
+          >
+            <GoogleLogo size={18} />
+            <span>{busy === 'google' ? 'Переход…' : 'Привязать'}</span>
+          </button>
+        ) : null}
+      </div>
       {hint ? <small>{hint}</small> : null}
     </div>
   );

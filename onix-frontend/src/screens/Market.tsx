@@ -78,8 +78,8 @@ function catalogBackLabel(category: string, subcategory: string): string {
 function CategoryShareRing({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
   const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
-  const size = 80;
-  const stroke = 4;
+  const size = 32;
+  const stroke = 3.25;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   return (
@@ -643,11 +643,12 @@ export function Market({
               onClick={() => { setCategory(cat); setSubcategory(''); }}
             >
               <span className="cat-card__icon">
-                {image ? (
-                  <span
-                    className={`cat-card__emblem cat-card__emblem--photo${cat === 'OTHER' ? ' cat-card__emblem--other' : ''}`}
-                    style={{ background: style.bg }}
-                  >
+                {cat === 'OTHER' ? (
+                  <span className="cat-card__emblem cat-card__emblem--other">
+                    <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+                  </span>
+                ) : image ? (
+                  <span className="cat-card__emblem cat-card__emblem--photo">
                     <img
                       src={image}
                       alt=""

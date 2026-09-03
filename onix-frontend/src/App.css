@@ -25,10 +25,9 @@
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
-.sidebar-theme:hover {
-  background: var(--nav-hover-bg) !important;
+.sidebar-theme.is-active {
+  background: var(--nav-active-bg) !important;
   color: var(--icon-color-hover, var(--text-primary));
-  box-shadow: none !important;
 }
 .sidebar-theme svg {
   width: 20px;
@@ -973,7 +972,7 @@ html[data-theme="light"] .product-card__rating-count {
 .product-card__price {
   grid-area: price;
   font-family: var(--font-body), sans-serif;
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.03em;
@@ -1294,6 +1293,7 @@ html[data-theme="light"] .cat-more:hover {
   width: 80px;
   height: 80px;
   flex-shrink: 0;
+  overflow: visible;
 }
 .cat-card__emblem {
   width: 80px;
@@ -1323,7 +1323,7 @@ html[data-theme="light"] .cat-card__emblem--all {
   color: #111;
 }
 .cat-card__emblem--photo {
-  background: #111;
+  background: #0B0B0C;
   padding: 0;
 }
 .cat-card__emblem--photo img {
@@ -1355,20 +1355,24 @@ html[data-theme="light"] .cat-card__emblem--all {
 }
 .cat-card__ring {
   position: absolute;
-  inset: 0;
+  top: -5px;
+  right: -5px;
   z-index: 2;
   pointer-events: none;
   display: grid;
   place-items: center;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   overflow: hidden;
+  box-shadow: 0 0 0 2px var(--bg-scene-2, #0B0B0C);
 }
 .cat-card__ring::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  background: rgba(8, 8, 12, 0.55);
+  background: #0b0b0c;
 }
 .cat-card__ring-svg {
   position: absolute;
@@ -1381,11 +1385,11 @@ html[data-theme="light"] .cat-card__emblem--all {
 .cat-card__ring-track,
 .cat-card__ring-value {
   fill: none;
-  stroke-width: 4;
+  stroke-width: 3.25;
   stroke-linecap: butt;
 }
 .cat-card__ring-track {
-  stroke: rgba(255, 255, 255, 0.38);
+  stroke: rgba(255, 255, 255, 0.28);
 }
 .cat-card__ring-value {
   stroke: #fff;
@@ -1395,25 +1399,52 @@ html[data-theme="light"] .cat-card__emblem--all {
   z-index: 1;
   color: #fff;
   font-family: var(--font-body), sans-serif;
-  font-size: 22px;
+  font-size: 10px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
   letter-spacing: -0.04em;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55);
 }
 .cat-card__emblem--other {
-  background: linear-gradient(145deg, #8A8B96, #63646E) !important;
+  background: #0a0a0c !important;
 }
-.cat-card__emblem--other img {
-  mix-blend-mode: luminosity;
-  opacity: 0.92;
+.cat-card__dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.cat-card__dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+}
+.cat-card__emblem--other .cat-card__dots {
+  gap: 6px;
+}
+.sidebar-cats .cat-card__emblem--other .cat-card__dots {
+  gap: 3px;
+}
+.sidebar-cats .cat-card__dots i {
+  width: 4px;
+  height: 4px;
+}
+html[data-theme="light"] .cat-card__emblem--other {
+  background: #fff !important;
+  box-shadow: 0 8px 16px rgba(16, 18, 24, 0.12);
+}
+html[data-theme="light"] .cat-card__dots i {
+  background: #111;
 }
 html[data-theme="light"] .cat-card__ring-track {
-  stroke: rgba(255, 255, 255, 0.55);
+  stroke: rgba(255, 255, 255, 0.35);
 }
 html[data-theme="light"] .cat-card__ring::before {
-  background: rgba(12, 12, 16, 0.38);
+  background: #0b0b0c;
+}
+html[data-theme="light"] .cat-card__ring {
+  box-shadow: 0 0 0 2px #F4F2F8;
 }
 
 /* Mobile home wallet widget (Vision Pro glass card) */
@@ -1537,6 +1568,59 @@ html[data-theme="light"] .cat-card__ring::before {
   line-height: 1.45;
   overflow-wrap: break-word;
   word-break: normal;
+}
+.profile-accounts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  min-width: 0;
+}
+.profile-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.profile-account .auth-btn {
+  width: auto;
+  min-width: 148px;
+  min-height: 40px;
+}
+.profile-accounts small {
+  flex: 1 1 100%;
+  color: var(--text-secondary);
+}
+.profile-account__mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  color: #2AABEE;
+}
+.profile-account__check {
+  position: absolute;
+  top: -3px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--glass-card-bg, #151517);
+}
+html[data-theme="light"] .profile-account__check {
+  background: #111;
+  color: #fff;
 }
 .profile-link-banner p {
   margin: 0;
@@ -4034,6 +4118,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .sidebar-nav button .user-avatar-wrap {
     flex: 0 0 auto;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    line-height: 0;
+  }
+  .sidebar-nav button .user-avatar--small {
+    width: 22px;
+    height: 22px;
   }
   .sidebar-nav__badge {
     flex: 0 0 auto;
@@ -4337,17 +4429,17 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     transition: gap 160ms;
   }
   .widget-link:hover { gap: 8px; }
-  .widget-trend { display: grid; min-width: 0; }
+  .widget-trend { display: flex; flex-direction: column; justify-content: flex-start; gap: 0; min-width: 0; }
   .widget-trend__row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 0;
+    padding: 8px 0;
     border-bottom: 0;
     font-size: 13px;
     color: var(--text-primary);
     min-width: 0;
-    min-height: 48px;
+    min-height: 0;
     max-width: 100%;
     overflow: hidden;
   }
@@ -4375,6 +4467,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .widget-trend__row strong {
     justify-self: start;
+    font-size: 16px;
+    font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     color: var(--text-primary);

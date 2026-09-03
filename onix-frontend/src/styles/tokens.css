@@ -609,3 +609,48 @@ html[data-theme="dark"] .wallet-hero {
     background: rgba(255, 255, 255, 0.55) !important;
   }
 }
+
+html[data-glass="vision"] {
+  --glass-blur: 48px;
+  --glass-blur-thin: 32px;
+  --glass-blur-regular: 48px;
+  --glass-blur-thick: 64px;
+  --glass-saturate: 190%;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  --glass-bg: rgba(14, 14, 18, 0.18);
+  --glass-thin-bg: rgba(14, 14, 18, 0.12);
+  --glass-regular-bg: rgba(16, 16, 22, 0.22);
+  --glass-thick-bg: rgba(18, 18, 26, 0.28);
+  --glass-card-bg: rgba(16, 16, 22, 0.2);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+}
+html[data-theme="light"][data-glass="vision"] {
+  --glass-bg: rgba(255, 255, 255, 0.22);
+  --glass-thin-bg: rgba(255, 255, 255, 0.14);
+  --glass-regular-bg: rgba(255, 255, 255, 0.26);
+  --glass-thick-bg: rgba(255, 255, 255, 0.34);
+  --glass-card-bg: rgba(255, 255, 255, 0.24);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.42);
+}
+
+html[data-glass="vision"] .card,
+html[data-glass="vision"] .widget,
+html[data-glass="vision"] .product-card,
+html[data-glass="vision"] .topbar,
+html[data-glass="vision"] .section-head,
+html[data-glass="vision"] .desktop-hero,
+html[data-glass="vision"] .market-hero,
+html[data-glass="vision"] .wallet-hero,
+html[data-glass="vision"] .sidebar-left,
+html[data-glass="vision"] .sidebar-right,
+html[data-glass="vision"] .chat-layout,
+html[data-glass="vision"] .conversation,
+html[data-glass="vision"] .thread-list,
+html[data-glass="vision"] .modal__panel,
+html[data-glass="vision"] .bottom-nav,
+html[data-glass="vision"] .auth-notice {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  background: var(--glass-card-bg) !important;
+  box-shadow: none !important;
+}

@@ -9,6 +9,7 @@ import {
   BrandMark,
   IconChat,
   IconDeals,
+  IconEye,
   IconLot,
   IconMarket,
   IconMoon,
@@ -151,7 +152,9 @@ function clampSidebarWidths(shellWidth: number, left: number, right: number, sho
 }
 
 const THEME_KEY = 'onix-theme';
+const GLASS_KEY = 'onix-glass';
 type ThemeMode = 'dark' | 'light';
+type GlassMode = 'solid' | 'vision';
 
 function readStoredTheme(): ThemeMode | null {
   try {
@@ -159,6 +162,14 @@ function readStoredTheme(): ThemeMode | null {
     if (v === 'light' || v === 'dark') return v;
   } catch { /* ignore */ }
   return null;
+}
+
+function readStoredGlass(): GlassMode {
+  try {
+    const v = localStorage.getItem(GLASS_KEY);
+    if (v === 'vision' || v === 'solid') return v;
+  } catch { /* ignore */ }
+  return 'solid';
 }
 
 function applyTheme(theme: ThemeMode) {
@@ -169,6 +180,13 @@ function applyTheme(theme: ThemeMode) {
   });
   try {
     localStorage.setItem(THEME_KEY, theme);
+  } catch { /* ignore */ }
+}
+
+function applyGlass(mode: GlassMode) {
+  document.documentElement.setAttribute('data-glass', mode);
+  try {
+    localStorage.setItem(GLASS_KEY, mode);
   } catch { /* ignore */ }
 }
 
@@ -217,6 +235,11 @@ export default function App() {
   const [headerBlur, setHeaderBlur] = useState(0);
   const [marketCategory, setMarketCategory] = useState<string>('Все');
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
+  const [glass, setGlass] = useState<GlassMode>(() => {
+    const mode = readStoredGlass();
+    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-glass', mode);
+    return mode;
+  });
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
   const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
   const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
@@ -358,8 +381,16 @@ export default function App() {
     telegramImpact('light');
   };
 
+  const toggleGlass = () => {
+    const next: GlassMode = glass === 'vision' ? 'solid' : 'vision';
+    setGlass(next);
+    applyGlass(next);
+    telegramImpact('light');
+  };
+
   useEffect(() => {
     setTheme(syncThemeFromTelegram());
+    applyGlass(readStoredGlass());
   }, []);
 
   useEffect(() => {
@@ -527,7 +558,11 @@ export default function App() {
                 switchTo('market');
               }}
             >
-              {image ? (
+              {cat === 'OTHER' ? (
+                <span className="cat-card__emblem cat-card__emblem--other" style={{ width: 28, height: 28 }}>
+                  <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+                </span>
+              ) : image ? (
                 <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
                   <img src={image} alt="" width={56} height={56} loading="lazy" decoding="async" draggable={false} />
                 </span>
@@ -555,6 +590,16 @@ export default function App() {
       </button>
       <button
         type="button"
+        className={`sidebar-theme${glass === 'vision' ? ' is-active' : ''}`}
+        onClick={toggleGlass}
+        aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
+        aria-pressed={glass === 'vision'}
+      >
+        <IconEye />
+        <span>{t('theme.glass')}</span>
+      </button>
+      <button
+        type="button"
         className="sidebar-resizer sidebar-resizer--left"
         aria-label={t('sidebar.resizeLeft')}
         onPointerDown={(e) => startResize('left', e)}
@@ -573,6 +618,15 @@ export default function App() {
             aria-label={theme === 'dark' ? t('theme.enableLight') : t('theme.enableDark')}
           >
             {theme === 'dark' ? <IconSun /> : <IconMoon />}
+          </button>
+          <button
+            type="button"
+            className={`icon-btn${glass === 'vision' ? ' is-active' : ''}`}
+            onClick={toggleGlass}
+            aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
+            aria-pressed={glass === 'vision'}
+          >
+            <IconEye />
           </button>
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (

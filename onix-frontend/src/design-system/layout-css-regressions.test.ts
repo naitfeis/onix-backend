@@ -97,12 +97,15 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('renders category lot share as a closed white ring with a centered count', () => {
+  it('renders category lot share as a corner badge with a black core', () => {
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?position:\s*absolute;/);
-    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?border-radius:\s*50%;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?top:\s*-5px;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?right:\s*-5px;/);
+    expect(appCss).toMatch(/\.cat-card__ring::before[\s\S]*?background:\s*#0b0b0c;/);
     expect(appCss).toMatch(/\.cat-card__ring-value[\s\S]*?stroke:\s*#fff;/);
     expect(appCss).toMatch(/\.cat-card__ring-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
-    expect(appCss).toMatch(/\.cat-card__emblem--other[\s\S]*?background:\s*linear-gradient/);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__emblem--other[\s\S]*?background:\s*#fff/);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__dots i[\s\S]*?background:\s*#111;/);
   });
 
   it('keeps market notifications clipped instead of scrollable', () => {
