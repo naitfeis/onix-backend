@@ -75,12 +75,34 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function CategoryCountBadge({ count }: { count: number }) {
-  if (count <= 0) return null;
+function CategoryShareRing({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
+  const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
+  const size = 80;
+  const stroke = 3.75;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
   return (
-    <span className="cat-card__count" aria-label={`${shown} новых лотов`}>
-      {shown}
+    <span className="cat-card__ring" aria-label={`${count} лотов`}>
+      <svg className="cat-card__ring-svg" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle
+          className="cat-card__ring-track"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+        />
+        {fraction > 0 && (
+          <circle
+            className="cat-card__ring-value"
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - fraction)}
+          />
+        )}
+      </svg>
+      <span className="cat-card__ring-num">{shown}</span>
     </span>
   );
 }
@@ -168,7 +190,6 @@ export function Market({
   ];
 
   const viewedIdsRef = useRef<Set<string>>(readViewedLots());
-  const [viewedRev, setViewedRev] = useState(0);
 
   const openProduct = async (product: Product, origin: 'catalog' | 'profile' = 'catalog') => {
     if (origin === 'catalog') {
@@ -192,7 +213,6 @@ export function Market({
       if (trust) setSellerTrust(trust);
       if (!viewedIdsRef.current.has(full.id)) {
         rememberViewedLot(full.id, viewedIdsRef.current);
-        setViewedRev((n) => n + 1);
       }
       if (core.profile) {
         void api.post(API_PATHS.productView(full.id), {
@@ -442,17 +462,22 @@ export function Market({
   }, [focusProductId]);
 
   const categoryCounts = useMemo(() => {
-    void viewedRev;
-    const viewed = viewedIdsRef.current;
+    const fromApi = core.categoryLotCounts;
+    const hasApi = Object.values(fromApi).some((n) => n > 0);
+    if (hasApi) {
+      const acc: Record<string, number> = {};
+      for (const cat of CATEGORIES) acc[cat] = fromApi[cat] ?? 0;
+      return acc;
+    }
     const byId = new Map<string, Product>();
     for (const product of [...core.products, ...items]) byId.set(product.id, product);
     const acc: Record<string, number> = {};
     for (const cat of CATEGORIES) {
-      acc[cat] = [...byId.values()].filter((p) => p.category === cat && !viewed.has(p.id)).length;
+      acc[cat] = [...byId.values()].filter((p) => p.category === cat).length;
     }
     return acc;
-  }, [core.products, items, viewedRev]);
-  const totalNew = useMemo(
+  }, [core.categoryLotCounts, core.products, items]);
+  const totalLots = useMemo(
     () => Object.values(categoryCounts).reduce((sum, n) => sum + n, 0),
     [categoryCounts],
   );
@@ -602,7 +627,7 @@ export function Market({
             <span className="cat-card__emblem cat-card__emblem--all">
               <AllGridIcon />
             </span>
-            {totalNew > 0 && <CategoryCountBadge count={totalNew} />}
+            <CategoryShareRing count={totalLots} total={totalLots || 1} />
           </span>
           <span className="cat-card__name">{t('market.all')}</span>
         </button>
@@ -620,7 +645,10 @@ export function Market({
             >
               <span className="cat-card__icon">
                 {image ? (
-                  <span className="cat-card__emblem cat-card__emblem--photo">
+                  <span
+                    className={`cat-card__emblem cat-card__emblem--photo${cat === 'OTHER' ? ' cat-card__emblem--other' : ''}`}
+                    style={cat === 'OTHER' ? { background: style.bg } : undefined}
+                  >
                     <img
                       src={image}
                       alt=""
@@ -637,7 +665,7 @@ export function Market({
                     style={{ background: style.bg }}
                   >{style.letter}</span>
                 )}
-                {count > 0 && <CategoryCountBadge count={count} />}
+                <CategoryShareRing count={count} total={totalLots} />
               </span>
               <span className="cat-card__name">{CATEGORY_LABELS[cat]}</span>
             </button>

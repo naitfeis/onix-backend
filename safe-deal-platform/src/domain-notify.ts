@@ -36,6 +36,12 @@ export function notificationOrderId(data: unknown): string | null {
   return typeof orderId === 'string' ? orderId : null;
 }
 
+export function notificationChatId(data: unknown): string | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const chatId = (data as { chatId?: unknown }).chatId;
+  return typeof chatId === 'string' && chatId ? chatId : null;
+}
+
 /**
  * After-commit / worker: send Telegram once, then stamp telegramPushedAt.
  * Never throws — caller treats 'failed' as retry-later.

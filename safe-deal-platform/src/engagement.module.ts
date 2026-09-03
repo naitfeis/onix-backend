@@ -711,7 +711,7 @@ export class NotificationService {
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       take: 100,
-      select: { id: true, title: true, body: true, readAt: true, createdAt: true },
+      select: { id: true, title: true, body: true, readAt: true, createdAt: true, type: true, data: true },
     });
     return items.map(notificationDto);
   }

@@ -4,6 +4,7 @@ import { CATEGORIES, CATEGORY_LABELS, refreshBanInfo, type BanInfo, type Notific
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
+import { publicAt } from './utils/publicAt';
 import {
   BrandMark,
   IconChat,
@@ -439,7 +440,8 @@ export default function App() {
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
   const showMarketRail = screen === 'market' && !chatImmersive;
   const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat] = core.products.filter((p) => p.category === cat).length;
+    acc[cat] = core.categoryLotCounts[cat]
+      ?? core.products.filter((p) => p.category === cat).length;
     return acc;
   }, {});
 
@@ -487,11 +489,20 @@ export default function App() {
             type="button"
             className={screen === item.id ? 'active' : ''}
             onClick={() => switchTo(item.id)}
-            aria-label={t(item.labelKey)}
+            aria-label={item.id === 'profile' && core.profile ? publicAt(core.profile.username) : t(item.labelKey)}
             aria-current={screen === item.id ? 'page' : undefined}
           >
-            {item.icon}
-            <span>{t(item.labelKey)}</span>
+            {item.id === 'profile' && core.profile ? (
+              <UserAvatar
+                userId={core.profile.id}
+                avatarUrl={core.profile.avatarUrl}
+                name={core.profile.username}
+                size="small"
+              />
+            ) : item.icon}
+            <span className={item.id === 'profile' && core.profile ? 'sidebar-nav__nick' : undefined}>
+              {item.id === 'profile' && core.profile ? publicAt(core.profile.username) : t(item.labelKey)}
+            </span>
             {item.id === 'chat' && core.unread > 0 && (
               <em className="sidebar-nav__badge" aria-label={`${core.unread} ${t('chat.unread')}`}>
                 {unread}
@@ -683,13 +694,23 @@ export default function App() {
                 ) : core.notifications.length === 0 ? (
                   <p className="widget-empty">Пока нет уведомлений — здесь появятся оплаты, сделки и системные события.</p>
                 ) : (
-                  core.notifications.slice(0, 6).map((item: Notification) => (
+                  core.notifications.slice(0, 5).map((item: Notification) => (
                     <button
                       key={item.id}
                       type="button"
                       className={`widget-notify__row${item.read ? '' : ' is-unread'}`}
                       onClick={() => {
-                        if (!item.read) void core.markNotificationRead(item.id);
+                        if (item.chatId) {
+                          setFocusChatId(item.chatId);
+                          switchTo('chat');
+                          return;
+                        }
+                        if (item.orderId) {
+                          setFocusDealId(item.orderId);
+                          switchTo('deals');
+                          return;
+                        }
+                        if (item.title === 'Новое сообщение') switchTo('chat');
                       }}
                     >
                       <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />

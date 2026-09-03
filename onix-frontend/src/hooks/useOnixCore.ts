@@ -274,6 +274,7 @@ export function useOnixCore() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sessionRestore, setSessionRestore] = useState<SessionRestore>('pending');
   const [catalogSubcategories, setCatalogSubcategories] = useState<SubcategoryCatalog>(SUBCATEGORIES_BY_CATEGORY);
+  const [categoryLotCounts, setCategoryLotCounts] = useState<Record<string, number>>({});
   const [store, setStore] = useState<Store>(emptyStore);
   const [states, setStates] = useState<Record<CollectionKey | 'profile', AsyncState>>({
     profile: 'loading', products: 'idle', deals: 'idle', chats: 'idle', notifications: 'idle', reviews: 'idle',
@@ -320,6 +321,14 @@ export function useOnixCore() {
       }
     } catch {
       // Keep bootstrap fallback — form still works offline / on API blip.
+    }
+    try {
+      const payload = await api.get<{ counts?: Record<string, number> }>(API_PATHS.productCategoryCounts);
+      if (payload?.counts && typeof payload.counts === 'object') {
+        setCategoryLotCounts(payload.counts);
+      }
+    } catch {
+      /* catalog rings fall back to loaded products */
     }
   }, []);
 
@@ -803,6 +812,9 @@ export function useOnixCore() {
         return;
       }
       if (msg.type === 'notification') {
+        const chatId = typeof msg.data?.chatId === 'string' ? msg.data.chatId : undefined;
+        const orderId = typeof msg.data?.orderId === 'string' ? msg.data.orderId : undefined;
+        const viewing = Boolean(chatId && activeChatIdRef.current === chatId);
         setStore((previous) => ({
           ...previous,
           notifications: [
@@ -811,12 +823,14 @@ export function useOnixCore() {
               title: msg.title,
               body: msg.body,
               createdAt: msg.createdAt,
-              read: false,
+              read: viewing,
+              ...(chatId ? { chatId } : {}),
+              ...(orderId ? { orderId } : {}),
             },
             ...previous.notifications,
           ].slice(0, 100),
         }));
-        if (!isOrderNotification(msg.title, msg.body)) playSound('notify');
+        if (!viewing && !isOrderNotification(msg.title, msg.body)) playSound('notify');
       }
     });
     // Keep token provider warm; reconnect if socket dropped auth.
@@ -831,11 +845,6 @@ export function useOnixCore() {
       window.clearInterval(tokenRefresh);
     };
   }, [profile?.onixId, load]);
-
-  const setActiveChatId = useCallback((chatId: string | null) => {
-    activeChatIdRef.current = chatId;
-    if (chatId) getRealtimeClient().markRead(chatId);
-  }, []);
 
   const subscribeRealtimeChat = useCallback((chatId: string) => {
     getRealtimeClient().subscribeChat(chatId);
@@ -1206,6 +1215,31 @@ export function useOnixCore() {
     }));
   }, []);
 
+  const markChatNotificationsRead = useCallback(async (chatId: string) => {
+    let ids: string[] = [];
+    setStore((previous) => {
+      ids = previous.notifications
+        .filter((item) => !item.read && item.chatId === chatId && /^\d+$/.test(item.id))
+        .map((item) => item.id);
+      if (ids.length === 0) return previous;
+      return {
+        ...previous,
+        notifications: previous.notifications.map((item) => (
+          item.chatId === chatId ? { ...item, read: true } : item
+        )),
+      };
+    });
+    await Promise.all(ids.map((id) => api.patch(API_PATHS.notificationRead(id), {}).catch(() => undefined)));
+  }, []);
+
+  const setActiveChatId = useCallback((chatId: string | null) => {
+    activeChatIdRef.current = chatId;
+    if (chatId) {
+      getRealtimeClient().markRead(chatId);
+      void markChatNotificationsRead(chatId);
+    }
+  }, [markChatNotificationsRead]);
+
   const listDeals = useCallback(async (query: OrderListQuery = {}, signal?: AbortSignal) => {
     setStates((previous) => (
       previous.deals === 'success' ? previous : { ...previous, deals: 'loading' }
@@ -1274,7 +1308,7 @@ export function useOnixCore() {
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return {
-    profile, catalogSubcategories, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    profile, catalogSubcategories, categoryLotCounts, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     sessionRestore,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,

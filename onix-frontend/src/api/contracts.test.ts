@@ -25,6 +25,7 @@ describe('ONIX API paths', () => {
     expect(API_PATHS.orderRefundRequest('42')).toBe('/api/orders/42/refund-request');
     expect(API_PATHS.dealCancel('42')).toBe('/api/orders/42/cancel');
     expect(API_PATHS.subcategories).toBe('/api/products/catalog/subcategories');
+    expect(API_PATHS.productCategoryCounts).toBe('/api/products/catalog/counts');
   });
 
   it('builds orders list query', () => {

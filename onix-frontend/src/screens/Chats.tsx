@@ -16,12 +16,8 @@ import { t } from '../i18n';
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
-const CHAT_PANEL_W_KEY = 'onix-chat-panel-w';
-const CHAT_PANEL_H_KEY = 'onix-chat-panel-h';
 const CHAT_LIST_DEFAULT = 280;
 const CHAT_LIST_MIN = 200;
-const CHAT_PANEL_W_MIN = 520;
-const CHAT_PANEL_H_MIN = 280;
 
 function readStoredChatSize(key: string, fallback: number, min: number): number {
   try {
@@ -31,24 +27,6 @@ function readStoredChatSize(key: string, fallback: number, min: number): number 
   } catch {
     return fallback;
   }
-}
-
-/** Available height for the chat panel (no phantom mobile-nav gap on desktop). */
-function chatViewportH(): number {
-  if (typeof window === 'undefined') return 800;
-  const desktop = window.matchMedia('(min-width: 1100px)').matches;
-  const chrome = desktop ? 24 : 88;
-  return Math.max(320, (window.visualViewport?.height ?? window.innerHeight) - chrome);
-}
-
-function defaultChatPanelSize(): { w: number; h: number } {
-  if (typeof window === 'undefined') return { w: 960, h: 640 };
-  const vh = chatViewportH();
-  return {
-    w: Math.min(1100, Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 320)),
-    /* Leave room above/below so height can be dragged both ways */
-    h: Math.round(vh * 0.78),
-  };
 }
 
 export function Chats({
@@ -126,14 +104,7 @@ export function Chats({
   const lastTypingSentRef = useRef(0);
   const [aiFaqs, setAiFaqs] = useState<Array<{ id: string; title: string }>>([]);
   const [aiFaqsOpen, setAiFaqsOpen] = useState(true);
-  const defaults = defaultChatPanelSize();
   const [listW, setListW] = useState(() => readStoredChatSize(CHAT_LIST_W_KEY, CHAT_LIST_DEFAULT, CHAT_LIST_MIN));
-  const [panelW, setPanelW] = useState(() => readStoredChatSize(CHAT_PANEL_W_KEY, defaults.w, CHAT_PANEL_W_MIN));
-  const [panelH, setPanelH] = useState(() => {
-    const vh = chatViewportH();
-    const raw = readStoredChatSize(CHAT_PANEL_H_KEY, defaults.h, CHAT_PANEL_H_MIN);
-    return Math.min(vh, Math.max(CHAT_PANEL_H_MIN, raw));
-  });
 
   const startListResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -150,7 +121,7 @@ export function Chats({
       layout?.style.setProperty('--chat-list-w', `${next}px`);
     };
     const onMove = (ev: PointerEvent) => {
-      const max = Math.floor(panelW * 0.55);
+      const max = Math.floor((layout?.clientWidth || window.innerWidth) * 0.5);
       const next = Math.max(CHAT_LIST_MIN, Math.min(max, startW + (ev.clientX - startX)));
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => apply(next));
@@ -167,70 +138,6 @@ export function Chats({
     };
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
-  };
-
-  const startPanelResize = (
-    mode: 'x' | 'y' | 'xy',
-    event: ReactPointerEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startW = panelW;
-    const startH = panelH;
-    const target = event.currentTarget;
-    const layout = target.closest('.chat-layout') as HTMLElement | null;
-    try { target.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-    document.body.classList.add('is-resizing-chat');
-    document.body.dataset.chatResize = mode;
-    let latestW = startW;
-    let latestH = startH;
-    let raf = 0;
-    // Recalculate each move so desktop/mobile chrome stays correct.
-    const apply = (w: number, h: number) => {
-      latestW = w;
-      latestH = h;
-      if (!layout) return;
-      layout.style.setProperty('--chat-panel-w', `${w}px`);
-      layout.style.setProperty('--chat-panel-h', `${h}px`);
-      layout.style.width = `${w}px`;
-      layout.style.height = `${h}px`;
-      layout.style.maxHeight = 'none';
-      layout.style.flex = '0 0 auto';
-    };
-    const onMove = (ev: PointerEvent) => {
-      const maxW = Math.max(CHAT_PANEL_W_MIN, window.innerWidth - 48);
-      const maxH = chatViewportH();
-      const nextW = mode === 'y'
-        ? startW
-        : Math.max(CHAT_PANEL_W_MIN, Math.min(maxW, startW + (ev.clientX - startX)));
-      const nextH = mode === 'x'
-        ? startH
-        : Math.max(CHAT_PANEL_H_MIN, Math.min(maxH, startH + (ev.clientY - startY)));
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => apply(nextW, nextH));
-    };
-    const onUp = (ev: PointerEvent) => {
-      try { target.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
-      if (raf) cancelAnimationFrame(raf);
-      document.body.classList.remove('is-resizing-chat');
-      delete document.body.dataset.chatResize;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      const w = Math.round(latestW);
-      const h = Math.round(latestH);
-      setPanelW(w);
-      setPanelH(h);
-      try {
-        localStorage.setItem(CHAT_PANEL_W_KEY, String(w));
-        localStorage.setItem(CHAT_PANEL_H_KEY, String(h));
-      } catch { /* ignore */ }
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
   };
 
   const openOnixProfile = async (onixId: string) => {
@@ -270,6 +177,10 @@ export function Chats({
     core.setActiveChatId(threadId || null);
     return () => core.setActiveChatId(null);
   }, [threadId, core.setActiveChatId]);
+
+  useEffect(() => {
+    if (threadId) core.setActiveChatId(threadId);
+  }, [threadId, core.notifications, core.setActiveChatId]);
 
   useEffect(() => {
     if (!threadId) return;
@@ -540,13 +451,7 @@ export function Chats({
 
   return <div
     className="chat-layout"
-    style={{
-      '--chat-list-w': `${listW}px`,
-      '--chat-panel-w': `${panelW}px`,
-      '--chat-panel-h': `${panelH}px`,
-      width: panelW,
-      height: panelH,
-    } as CSSProperties}
+    style={{ '--chat-list-w': `${listW}px` } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
       <div className="chat-toolbar">
@@ -858,24 +763,6 @@ export function Chats({
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
-    <button
-      type="button"
-      className="chat-edge-resizer chat-edge-resizer--x desktop-only"
-      aria-label="Изменить ширину окна чата"
-      onPointerDown={(event) => startPanelResize('x', event)}
-    />
-    <button
-      type="button"
-      className="chat-edge-resizer chat-edge-resizer--y desktop-only"
-      aria-label="Растянуть чат вниз"
-      onPointerDown={(event) => startPanelResize('y', event)}
-    />
-    <button
-      type="button"
-      className="chat-edge-resizer chat-edge-resizer--xy desktop-only"
-      aria-label="Изменить размер окна чата"
-      onPointerDown={(event) => startPanelResize('xy', event)}
-    />
     <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); resetMemberPicker(); }}>
       <div className="form">
         <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>

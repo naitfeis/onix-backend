@@ -556,8 +556,7 @@ html[data-theme="dark"] .wallet-hero {
 .icon-btn,
 .chips button,
 .segmented button,
-.message-menu,
-.ai-quick-replies__btn {
+.message-menu {
   position: relative;
   overflow: hidden;
   background: var(--icon-glass-bg, var(--glass-thin-bg));

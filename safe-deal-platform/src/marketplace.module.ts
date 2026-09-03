@@ -156,6 +156,17 @@ export class MarketplaceService {
     return publicSubcategoryCatalog();
   }
 
+  async categoryCounts() {
+    const rows = await this.prisma.product.groupBy({
+      by: ['category'],
+      where: { status: ProductStatus.ACTIVE, shadowBannedAt: null },
+      _count: { _all: true },
+    });
+    const counts: Record<string, number> = {};
+    for (const row of rows) counts[row.category] = row._count._all;
+    return { counts };
+  }
+
   async list(user: AuthUser | null, query: ProductQuery) {
     if (
       query.minPriceCents !== undefined
@@ -551,6 +562,13 @@ export class MarketplaceController {
   @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=3600')
   catalog() {
     return this.service.catalog();
+  }
+
+  @Public()
+  @Get('catalog/counts')
+  @Header('Cache-Control', 'public, max-age=30, stale-while-revalidate=120')
+  categoryCounts() {
+    return this.service.categoryCounts();
   }
 
   /**

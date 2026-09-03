@@ -324,13 +324,23 @@ export function messageDto(message: {
 
 export function notificationDto(item: {
   id: bigint; title: string; body: string; readAt: Date | null; createdAt: Date;
+  type?: string;
+  data?: unknown;
 }) {
+  const payload = item.data && typeof item.data === 'object' && !Array.isArray(item.data)
+    ? item.data as { chatId?: unknown; orderId?: unknown }
+    : null;
+  const chatId = typeof payload?.chatId === 'string' && payload.chatId ? payload.chatId : null;
+  const orderId = typeof payload?.orderId === 'string' && payload.orderId ? payload.orderId : null;
   return {
     id: item.id.toString(),
     title: item.title,
     body: item.body,
     read: Boolean(item.readAt),
     createdAt: item.createdAt.toISOString(),
+    ...(item.type ? { type: item.type } : {}),
+    ...(chatId ? { chatId } : {}),
+    ...(orderId ? { orderId } : {}),
   };
 }
 

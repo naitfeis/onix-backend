@@ -156,6 +156,9 @@ export interface Notification {
   body: string;
   read: boolean;
   createdAt: string;
+  type?: string;
+  chatId?: string;
+  orderId?: string;
 }
 
 export interface Profile extends Seller {
@@ -446,6 +449,7 @@ export const API_PATHS = {
   notifications: '/api/notifications',
   notificationRead: (id: string) => `/api/notifications/${encodeURIComponent(id)}/read`,
   subcategories: '/api/products/catalog/subcategories',
+  productCategoryCounts: '/api/products/catalog/counts',
   productByLot: (lotNumber: string | number) => `/api/products/lot/${encodeURIComponent(String(lotNumber))}`,
 } as const;
 
@@ -459,6 +463,7 @@ export const API_PATH_STATUS = {
   dealComplete: 'LIVE',
   dealDispute: 'LIVE',
   subcategories: 'LIVE',
+  productCategoryCounts: 'LIVE',
   meVerifications: 'FUTURE',
   mePro: 'FUTURE',
   supportClose: 'DEPRECATED',

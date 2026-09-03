@@ -40,12 +40,12 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
   });
 
-  it('keeps AI helper questions as a hideable overlay above the transcript', () => {
+  it('keeps AI helper questions in the composer stack with glass', () => {
     expect(appCss).toMatch(
-      /\.ai-actions\s*\{[^}]*position:\s*absolute;/s,
+      /\.ai-actions\s*\{[^}]*position:\s*relative;/s,
     );
     expect(appCss).toMatch(
-      /\.ai-actions\s*\{[^}]*z-index:\s*8;/s,
+      /\.ai-actions\s*\{[^}]*backdrop-filter:\s*blur\(18px\) saturate\(160%\);/s,
     );
   });
 
@@ -97,9 +97,9 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('renders category new-lot counts as a small light circle', () => {
-    expect(appCss).toMatch(/\.cat-card__count[\s\S]*?background:\s*#ececef;/);
-    expect(appCss).toMatch(/\.cat-card__count[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
-    expect(appCss).toMatch(/\.cat-card__count,\s*\.cat-card__share\s*\{[^}]*position:\s*absolute;/s);
+  it('renders category lot share as a closed white ring with a centered count', () => {
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?position:\s*absolute;/);
+    expect(appCss).toMatch(/\.cat-card__ring-value[\s\S]*?stroke:\s*#fff;/);
+    expect(appCss).toMatch(/\.cat-card__ring-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
   });
 });
