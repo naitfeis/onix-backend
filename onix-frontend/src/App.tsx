@@ -8,6 +8,7 @@ import { publicAt } from './utils/publicAt';
 import {
   BrandMark,
   IconChat,
+  IconClose,
   IconDeals,
   IconEye,
   IconLot,
@@ -19,6 +20,7 @@ import {
   IconWallet,
 } from './components/NavIcons';
 import { Button, Card, Skeleton, Toast } from './design-system';
+import { popModal, pushModal } from './design-system/modalStack';
 import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
 import { t, categoryLabel, MARKET_ALL_CATEGORY } from './i18n';
@@ -238,6 +240,12 @@ export default function App() {
   const [headerBlur, setHeaderBlur] = useState(0);
   const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const { id } = pushModal(() => setSettingsOpen(false));
+    return () => popModal(id);
+  }, [settingsOpen]);
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
   const [glass, setGlass] = useState<GlassMode>(() => {
     const mode = readStoredGlass();
@@ -624,12 +632,7 @@ export default function App() {
         })}
       </div>
       <div className="sidebar-spacer" />
-      <div className={`sidebar-settings${settingsOpen ? ' is-open' : ''}`}>
-        {settingsOpen && (
-          <div className="sidebar-settings__panel" role="dialog" aria-label={t('settings.title')}>
-            {settingsFields}
-          </div>
-        )}
+      <div className="sidebar-settings">
         <button
           type="button"
           className={`sidebar-theme${settingsOpen ? ' is-active' : ''}`}
@@ -654,22 +657,15 @@ export default function App() {
       <header className="topbar mobile-only">
         <BrandMark />
         <div className="topbar__actions">
-          <div className="sidebar-settings sidebar-settings--mobile">
-            {settingsOpen && (
-              <div className="sidebar-settings__panel" role="dialog" aria-label={t('settings.title')}>
-                {settingsFields}
-              </div>
-            )}
-            <button
-              type="button"
-              className={`icon-btn${settingsOpen ? ' is-active' : ''}`}
-              onClick={() => setSettingsOpen((open) => !open)}
-              aria-expanded={settingsOpen}
-              aria-label={t('settings.open')}
-            >
-              <IconSettings />
-            </button>
-          </div>
+          <button
+            type="button"
+            className={`icon-btn${settingsOpen ? ' is-active' : ''}`}
+            onClick={() => setSettingsOpen((open) => !open)}
+            aria-expanded={settingsOpen}
+            aria-label={t('settings.open')}
+          >
+            <IconSettings />
+          </button>
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (
               <strong>…</strong>
@@ -881,5 +877,33 @@ export default function App() {
     {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
     {toast && <Toast message={toast} />}
   </div>
+    <div className={`settings-overlay${settingsOpen ? ' is-open' : ''}`} aria-hidden={!settingsOpen}>
+      <button
+        type="button"
+        className="settings-sheet__backdrop"
+        tabIndex={settingsOpen ? 0 : -1}
+        disabled={!settingsOpen}
+        aria-label={t('common.close')}
+        onClick={() => setSettingsOpen(false)}
+      />
+      <aside className="settings-sheet" role="dialog" aria-modal={settingsOpen} aria-label={t('settings.title')}>
+        <header className="settings-sheet__head">
+          <h2>{t('settings.title')}</h2>
+          <button
+            type="button"
+            className="settings-sheet__close"
+            tabIndex={settingsOpen ? 0 : -1}
+            disabled={!settingsOpen}
+            onClick={() => setSettingsOpen(false)}
+            aria-label={t('common.close')}
+          >
+            <IconClose />
+          </button>
+        </header>
+        <fieldset className="settings-sheet__body" disabled={!settingsOpen}>
+          {settingsFields}
+        </fieldset>
+      </aside>
+    </div>
   </>;
 }

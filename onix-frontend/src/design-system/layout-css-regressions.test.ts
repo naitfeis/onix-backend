@@ -49,15 +49,21 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('keeps new-lot titles wrapping and prices fully visible in the right rail', () => {
+  it('keeps new-lot rows from collapsing and clips long titles', () => {
     expect(appCss).toMatch(
-      /\.widget-trend__title\s*\{[^}]*overflow-wrap:\s*anywhere;/s,
+      /\.widget-trend__title\s*\{[^}]*text-overflow:\s*ellipsis;/s,
     );
     expect(appCss).toMatch(
       /\.widget-trend__copy\s*\{[^}]*min-width:\s*0;/s,
     );
     expect(appCss).toMatch(
       /\.widget-trend__row strong\s*\{[^}]*white-space:\s*nowrap;/s,
+    );
+    expect(appCss).toMatch(
+      /\.widget-trend__row\s*\{[^}]*flex:\s*0 0 auto;/s,
+    );
+    expect(appCss).toMatch(
+      /\.widget-trend__row\s*\{[^}]*min-height:\s*48px;/s,
     );
   });
 
@@ -111,5 +117,18 @@ describe('desktop and chat layout CSS regressions', () => {
   it('keeps market notifications clipped instead of scrollable', () => {
     expect(appCss).toMatch(/\.widget-notify\s*\{[^}]*overflow:\s*hidden;/s);
     expect(appCss).toMatch(/\.sidebar-right > \.widget--notify\s*\{[^}]*overflow:\s*hidden;/s);
+  });
+
+  it('slides settings in from the right on desktop and from the top on phones', () => {
+    expect(appCss).toMatch(/\.settings-overlay\s*\{[^}]*z-index:\s*1200;/s);
+    expect(appCss).toMatch(/\.settings-sheet\s*\{[^}]*transform:\s*translateX\(100%\);/s);
+    expect(appCss).toMatch(/@media \(max-width: 699px\)\s*\{[\s\S]*?\.settings-sheet\s*\{[^}]*transform:\s*translateY\(-110%\);/s);
+  });
+
+  it('paints hero pager dots white in dark theme and black in light', () => {
+    expect(appCss).toMatch(/\.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*#fff;/s);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\s*\{[^}]*background:\s*#111;/s);
+    expect(appCss).toMatch(/\.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#fff;/s);
+    expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#111;/s);
   });
 });
