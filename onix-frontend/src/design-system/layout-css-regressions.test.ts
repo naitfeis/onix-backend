@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const appCss = readFileSync(new URL('../App.css', import.meta.url), 'utf8');
+const tokensCss = readFileSync(new URL('../styles/tokens.css', import.meta.url), 'utf8');
 
 describe('desktop and chat layout CSS regressions', () => {
   it('keeps the virtual message scroller block-based and aligns nested outgoing rows', () => {
@@ -142,10 +143,14 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#111;/s);
   });
 
-  it('keeps new-lot titles and prices high-contrast in both themes', () => {
-    expect(appCss).toMatch(/\.widget-trend__title\s*\{[^}]*color:\s*#fff;/s);
-    expect(appCss).toMatch(/html\[data-theme="light"\] \.widget-trend__title\s*\{[^}]*color:\s*#111;/s);
-    expect(appCss).toMatch(/\.widget-trend__row strong\s*\{[^}]*color:\s*#fff;/s);
-    expect(appCss).toMatch(/html\[data-theme="light"\] \.widget-trend__row strong\s*\{[^}]*color:\s*#111;/s);
+  it('does not blur the market banner so the violet CTA cannot paint edge fringes', () => {
+    expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.desktop-hero:not\(\.market-hero\)/);
+    expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.market-hero[\s\S]*?backdrop-filter:\s*none !important;/s);
+  });
+
+  it('keeps the Google bind row on its own full-width profile grid line', () => {
+    expect(appCss).toMatch(/\.profile-card > \.profile-accounts[\s\S]*?grid-column:\s*1 \/ -1;/s);
+    expect(appCss).toMatch(/\.card\.profile-card\s*\{[^}]*overflow:\s*visible;/s);
+    expect(appCss).toMatch(/\.profile-account \.auth-btn\s*\{[^}]*flex-shrink:\s*0;/s);
   });
 });

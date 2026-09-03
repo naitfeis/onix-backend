@@ -1722,17 +1722,19 @@ html[data-theme="light"] .cat-card__ring {
   align-items: center;
   gap: 12px 16px;
   min-width: 0;
+  overflow: visible;
 }
 .profile-account {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  flex: 0 0 auto;
 }
 .profile-account .auth-btn {
   width: auto;
   min-width: 148px;
   min-height: 40px;
+  flex-shrink: 0;
 }
 .profile-accounts small {
   flex: 1 1 100%;
@@ -3266,7 +3268,22 @@ html[data-theme="light"] .ai-actions {
 }
 .conversation .ai-actions + .composer { border-top: 1px solid var(--line); }
 
-.profile-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; min-width: 0; }
+.profile-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+  overflow: visible;
+}
+.card.profile-card {
+  overflow: visible;
+}
+.profile-card > .wallet-strip,
+.profile-card > .profile-accounts,
+.profile-card > .profile-logout {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
 .profile-main { min-width: 0; }
 .profile-main h1 {
   font-family: var(--font-body), sans-serif;

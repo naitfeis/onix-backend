@@ -56,7 +56,6 @@ function AccountLinkPanel({
 }) {
   const telegramLinked = profile.hasTelegram !== false;
   const googleLinked = profile.hasGoogle === true;
-  const needGoogle = !googleLinked;
   const [busy, setBusy] = useState<'telegram' | 'google' | null>(null);
   const [hint, setHint] = useState('');
   const abortRef = useRef<AbortController | null>(null);
@@ -74,7 +73,7 @@ function AccountLinkPanel({
   }, [setToast]);
 
   useEffect(() => {
-    if (!needGoogle) return;
+    if (googleLinked) return;
     let cancelled = false;
     void getAuthV2PublicConfig()
       .then((cfg) => {
@@ -84,7 +83,7 @@ function AccountLinkPanel({
       })
       .catch(() => { /* keep baked client id */ });
     return () => { cancelled = true; };
-  }, [needGoogle]);
+  }, [googleLinked]);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
@@ -138,14 +137,35 @@ function AccountLinkPanel({
             <em className="profile-account__check" aria-label="Google привязан">✓</em>
           ) : null}
         </span>
-        {!googleLinked && googleClientId ? (
+        {!googleLinked ? (
           <button
             type="button"
             className="auth-btn auth-btn--google"
             disabled={busy !== null}
             onClick={() => {
-              setBusy('google');
-              startGoogleOAuth(googleClientId, googleRedirect, { intent: 'link' });
+              void (async () => {
+                setBusy('google');
+                try {
+                  let clientId = googleClientId;
+                  let redirect = googleRedirect;
+                  if (!clientId) {
+                    const cfg = await getAuthV2PublicConfig();
+                    clientId = cfg.googleClientId?.trim() || import.meta.env.VITE_GOOGLE_CLIENT_ID?.trim() || null;
+                    redirect = cfg.googleRedirectUri?.trim() || redirect;
+                    if (clientId) setGoogleClientId(clientId);
+                    if (redirect) setGoogleRedirect(redirect);
+                  }
+                  if (!clientId) {
+                    setToast('Google сейчас недоступен. Обновите страницу.');
+                    setBusy(null);
+                    return;
+                  }
+                  startGoogleOAuth(clientId, redirect, { intent: 'link' });
+                } catch (error) {
+                  setToast(friendlyError(error));
+                  setBusy(null);
+                }
+              })();
             }}
           >
             <GoogleLogo size={18} />

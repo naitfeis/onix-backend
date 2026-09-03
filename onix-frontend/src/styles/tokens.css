@@ -244,7 +244,7 @@ html[data-theme="light"] {
 html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
 html[data-theme="light"] .wallet-hero,
-html[data-theme="light"] .desktop-hero,
+html[data-theme="light"] .desktop-hero:not(.market-hero),
 html[data-theme="light"] .section-head,
 html[data-theme="light"] .topbar,
 html[data-theme="light"] .modal__panel,
@@ -252,7 +252,7 @@ html[data-theme="light"] .product-card,
 html[data-theme="dark"] .card,
 html[data-theme="dark"] .widget,
 html[data-theme="dark"] .wallet-hero,
-html[data-theme="dark"] .desktop-hero,
+html[data-theme="dark"] .desktop-hero:not(.market-hero),
 html[data-theme="dark"] .section-head,
 html[data-theme="dark"] .topbar,
 html[data-theme="dark"] .modal__panel,
@@ -479,13 +479,16 @@ html[data-theme="light"] .topbar::after {
 .topbar { border-radius: var(--radius-xl); }
 /* Prefer clip over hidden — less backdrop-filter compositor banding */
 .card,
-.desktop-hero,
-.market-hero,
+.desktop-hero:not(.market-hero),
 .wallet-hero,
 .widget {
   overflow: clip;
   /* Avoid nested blur sampling that paints horizontal bands */
   isolation: isolate;
+}
+.market-hero {
+  overflow: hidden;
+  isolation: auto;
 }
 html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
@@ -638,8 +641,7 @@ html[data-glass="vision"] .widget,
 html[data-glass="vision"] .product-card,
 html[data-glass="vision"] .topbar,
 html[data-glass="vision"] .section-head,
-html[data-glass="vision"] .desktop-hero,
-html[data-glass="vision"] .market-hero,
+html[data-glass="vision"] .desktop-hero:not(.market-hero),
 html[data-glass="vision"] .wallet-hero,
 html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right,
@@ -673,4 +675,12 @@ html[data-glass="vision"] .widget.widget--new-lots,
 }
 html[data-theme="light"] .widget.widget--new-lots {
   background: color-mix(in srgb, rgba(255, 255, 255, 0.35) 70%, #6c8cff 30%) !important;
+}
+html[data-glass="vision"] .market-hero,
+html[data-theme="dark"] .market-hero,
+html[data-theme="light"] .market-hero,
+.market-hero {
+  isolation: auto !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
