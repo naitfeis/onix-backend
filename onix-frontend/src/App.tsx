@@ -613,17 +613,17 @@ export default function App() {
               }}
             >
               {cat === 'OTHER' ? (
-                <span className="cat-card__emblem cat-card__emblem--other" style={{ width: 28, height: 28 }}>
+                <span className="cat-card__emblem cat-card__emblem--other" style={{ width: 34, height: 34 }}>
                   <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
                 </span>
               ) : image ? (
-                <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 28, height: 28 }}>
-                  <img src={image} alt="" width={56} height={56} loading="lazy" decoding="async" draggable={false} />
+                <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 34, height: 34 }}>
+                  <img src={image} alt="" width={68} height={68} loading="lazy" decoding="async" draggable={false} />
                 </span>
               ) : (
                 <span
                   className="cat-card__emblem"
-                  style={{ width: 28, height: 28, fontSize: 10, background: style.bg }}
+                  style={{ width: 34, height: 34, fontSize: 11, background: style.bg }}
                 >{style.letter}</span>
               )}
               <span className="sidebar-cats__label">{categoryLabel(cat)}</span>

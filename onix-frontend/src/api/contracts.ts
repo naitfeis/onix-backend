@@ -649,6 +649,14 @@ export function formatLedgerAmount(amountCents: string): string {
   return formatted;
 }
 
+function ruPlural(n: number, one: string, few: string, many: string): string {
+  const n10 = n % 10;
+  const n100 = n % 100;
+  if (n10 === 1 && n100 !== 11) return one;
+  if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return few;
+  return many;
+}
+
 /** lastSeen display — precise online arrives with WebSocket (5.6). */
 export function formatLastSeen(iso?: string | null): string {
   if (!iso) return 'был(а) недавно';
@@ -656,11 +664,12 @@ export function formatLastSeen(iso?: string | null): string {
   if (!Number.isFinite(at)) return 'был(а) недавно';
   const diffMs = Date.now() - at;
   if (diffMs < ONLINE_WINDOW_MS) return 'Online';
-  if (diffMs < 60 * 60_000) return `Был ${Math.max(1, Math.round(diffMs / 60_000))} минут назад`;
-  const dayStart = new Date();
-  dayStart.setHours(0, 0, 0, 0);
-  if (at >= dayStart.getTime() - 86400_000 && at < dayStart.getTime()) return 'Был вчера';
-  return `Был ${new Date(iso).toLocaleDateString('ru-RU')}`;
+  if (diffMs < 24 * 3600_000) {
+    const hours = Math.max(1, Math.floor(diffMs / 3600_000));
+    return `Был ${hours} ${ruPlural(hours, 'час', 'часа', 'часов')} назад`;
+  }
+  const days = Math.max(1, Math.floor(diffMs / 86400_000));
+  return `Был ${days} ${ruPlural(days, 'день', 'дня', 'дней')} назад`;
 }
 
 export function formatBanRemaining(ban: BanInfo): string {
