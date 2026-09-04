@@ -734,6 +734,19 @@ export default function App() {
         </Suspense>
         </SoftErrorBoundary>
       </div>
+      {!miniApp && !showAuth && !chatImmersive ? (
+        <SiteFooter
+          onSupport={() => {
+            void (async () => {
+              try {
+                const thread = await api.get<{ id: string }>(API_PATHS.aiChat);
+                setFocusChatId(thread.id);
+              } catch { /* open chat list */ }
+              switchTo('chat');
+            })();
+          }}
+        />
+      ) : null}
     </main>
 
     {/* Market-only right rail */}
@@ -873,19 +886,6 @@ export default function App() {
         </button>
       ))}
     </nav>
-    {!miniApp && !showAuth && !chatImmersive ? (
-      <SiteFooter
-        onSupport={() => {
-          void (async () => {
-            try {
-              const thread = await api.get<{ id: string }>(API_PATHS.aiChat);
-              setFocusChatId(thread.id);
-            } catch { /* open chat list */ }
-            switchTo('chat');
-          })();
-        }}
-      />
-    ) : null}
     {toast && <Toast message={toast} />}
     {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
   </div>

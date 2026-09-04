@@ -29,5 +29,6 @@ describe('lotWarrantyBadge', () => {
     expect(warrantyMinHoursForSeller(old)).toBe(5);
     expect(clampListingWarranty(10, young)).toBe(24);
     expect(clampListingWarranty(10, old)).toBe(10);
+    expect(clampListingWarranty(10, null)).toBe(24);
   });
 });

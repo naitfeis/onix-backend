@@ -43,6 +43,8 @@ export interface ProfileDto {
   roles: PlatformStatusCode[];
   balanceCents: string;
   walletHistory: LedgerDto[];
+  /** Account creation time — used for new-seller warranty floor. */
+  registeredAt?: string;
   /** Additive Stage 1 — owner deposit after lazy unlock. */
   deposit?: {
     availableCents: string;
@@ -126,6 +128,7 @@ export function profileDto(
     isAdmin: boolean;
     isSupport?: boolean;
     bio?: string | null;
+    createdAt?: Date;
   },
   ledger: Array<{ id: bigint; type: string; amountCents: bigint; createdAt: Date }>,
 ): ProfileDto {
@@ -133,6 +136,7 @@ export function profileDto(
   return {
     ...sellerDto(user),
     ...(user.bio ? { bio: user.bio } : {}),
+    ...(user.createdAt ? { registeredAt: user.createdAt.toISOString() } : {}),
     balanceCents: user.balanceCents.toString(),
     isAdmin: statusIsAdmin(status, user.isAdmin),
     status,

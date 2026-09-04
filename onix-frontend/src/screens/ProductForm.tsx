@@ -14,24 +14,48 @@ import type { Core } from './types';
 import { emptyDraft } from './shared';
 import { categoryLabel } from '../i18n';
 
+function sellerRegisteredAt(core: Core): string | null {
+  return core.profile?.registeredAt
+    ?? core.profile?.trustCard?.registeredAt
+    ?? null;
+}
+
 export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
-  const registeredAt = core.profile?.trustCard?.registeredAt ?? null;
-  const newSeller = Boolean(registeredAt && isNewSellerAccount(registeredAt));
-  const minWarranty = warrantyMinHoursForSeller(registeredAt);
+  const registeredAt = sellerRegisteredAt(core);
+  const profileReady = core.states.profile === 'success' && Boolean(core.profile);
+  const knownMature = Boolean(
+    profileReady && registeredAt && !isNewSellerAccount(registeredAt),
+  );
+  const newSeller = !knownMature;
+  const minWarranty = warrantyMinHoursForSeller(knownMature ? registeredAt : null);
   const [draft, setDraft] = useState<ProductDraft>(() => ({
     ...emptyDraft,
-    warrantyHours: newSeller ? NEW_SELLER_WARRANTY_MIN_HOURS : (emptyDraft.warrantyHours ?? WARRANTY_DEFAULT_HOURS),
+    warrantyHours: NEW_SELLER_WARRANTY_MIN_HOURS,
   }));
   const [errors, setErrors] = useState<string[]>([]);
   const [catsOpen, setCatsOpen] = useState(false);
 
   useEffect(() => {
-    if (!newSeller) return;
-    setDraft((prev) => ({
-      ...prev,
-      warrantyHours: clampListingWarranty(prev.warrantyHours ?? WARRANTY_DEFAULT_HOURS, registeredAt),
-    }));
-  }, [newSeller, registeredAt]);
+    if (!profileReady) {
+      setDraft((prev) => ({ ...prev, warrantyHours: NEW_SELLER_WARRANTY_MIN_HOURS }));
+      return;
+    }
+    if (registeredAt && isNewSellerAccount(registeredAt)) {
+      setDraft((prev) => ({
+        ...prev,
+        warrantyHours: clampListingWarranty(prev.warrantyHours ?? NEW_SELLER_WARRANTY_MIN_HOURS, registeredAt),
+      }));
+      return;
+    }
+    setDraft((prev) => {
+      const current = prev.warrantyHours ?? WARRANTY_DEFAULT_HOURS;
+      const next = current === NEW_SELLER_WARRANTY_MIN_HOURS ? WARRANTY_DEFAULT_HOURS : current;
+      return {
+        ...prev,
+        warrantyHours: clampListingWarranty(next, registeredAt),
+      };
+    });
+  }, [registeredAt, profileReady]);
 
   const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
   const subs = catalog[draft.category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
@@ -60,6 +84,8 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
     const nextSubs = catalog[category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
     setDraft({ ...draft, category, subcategory: nextSubs[0] });
   };
+  const showNewSellerNote = !profileReady || newSeller;
+
   return <div className="stack narrow lot-form">
     <Card><form className="form" onSubmit={submit}>
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
@@ -109,10 +135,10 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
       {draft.autoDeliver && <Field label="Текст товара" hint="login / password / код / ссылка — выдаётся только после оплаты"><Textarea required maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} /></Field>}
       <Field
-        label="Срок гарантии"
-        hint={newSeller
-          ? `Пока аккаунту меньше 7 дней, гарантия не короче ${minWarranty} часов.`
-          : 'Необязательно. От 5 часов до 30 дней, по умолчанию 10 часов.'}
+        label="Заморозка денег продавца"
+        hint={showNewSellerNote
+          ? `Пока аккаунту меньше 7 дней, деньги после продажи заморожены минимум на ${minWarranty} ч. Короче поставить нельзя.`
+          : 'Сколько часов после передачи товара деньги ещё не уходят продавцу (от 5 часов до 30 дней, по умолчанию 10).'}
       >
         <Input
           type="number"
@@ -139,11 +165,11 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       )}
       <div className="summary-line"><span>К получению (после 5%)</span><strong>{payout ? `${payout} ₽` : '—'}</strong></div>
       <Button type="submit" variant="violet" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
-      {newSeller ? (
+      {showNewSellerNote ? (
         <p className="muted lot-form__new-seller-note">
-          Аккаунту меньше 7 дней: при выставлении лота гарантия зафиксирована минимум на 24 часа.
-          Отдельной блокировки денег на сутки после продажи нет — защита покупателя идёт через эту гарантию.
-          Когда с регистрации пройдёт неделя, можно будет ставить гарантию от 5 часов, как у остальных продавцов.
+          Аккаунту меньше 7 дней: срок заморозки денег при выставлении лота — минимум 24 часа.
+          Это и есть гарантия покупателю в безопасной сделке: пока идёт этот срок, выплата продавцу не завершается.
+          Отдельной блокировки баланса «ещё на сутки» после выплаты нет. Через 7 дней с регистрации можно ставить от 5 часов.
         </p>
       ) : null}
     </form></Card></div>;

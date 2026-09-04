@@ -12,9 +12,8 @@ export function isNewSellerAccount(accountCreatedAt: Date | string, now = new Da
 }
 
 export function warrantyMinHoursForSeller(accountCreatedAt?: Date | string | null, now = new Date()): number {
-  if (accountCreatedAt && isNewSellerAccount(accountCreatedAt, now)) {
-    return NEW_SELLER_WARRANTY_MIN_HOURS;
-  }
+  if (!accountCreatedAt) return NEW_SELLER_WARRANTY_MIN_HOURS;
+  if (isNewSellerAccount(accountCreatedAt, now)) return NEW_SELLER_WARRANTY_MIN_HOURS;
   return WARRANTY_MIN_HOURS;
 }
 

@@ -174,6 +174,8 @@ export interface Profile extends Seller {
   status: PlatformStatus;
   roles: PlatformStatus[];
   walletHistory: WalletOperation[];
+  /** Account registration time from GET /users/me. */
+  registeredAt?: string;
   /** Embedded by GET /users/me after Stage 1 — prefer over extra RTT. */
   deposit?: DepositWallet;
   trustCard?: TrustCard;
