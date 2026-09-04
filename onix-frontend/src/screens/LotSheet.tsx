@@ -151,6 +151,7 @@ export function LotSheet({
   };
 
   return (
+    <>
     <div className="lot-sheet" role="region" aria-label={title}>
       <div className="lot-sheet__bar">
         <button type="button" className="lot-sheet__back" onClick={onBack}>
@@ -278,5 +279,6 @@ export function LotSheet({
         })();
       }}
     />
+    </>
   );
 }
