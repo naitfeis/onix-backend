@@ -78,8 +78,8 @@ function catalogBackLabel(category: string, subcategory: string): string {
 function CategoryShareRing({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
   const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
-  const size = 32;
-  const stroke = 3.25;
+  const size = 28;
+  const stroke = 2.75;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   return (
@@ -652,8 +652,8 @@ export function Market({
                     <img
                       src={image}
                       alt=""
-                      width={80}
-                      height={80}
+                      width={48}
+                      height={48}
                       loading="lazy"
                       decoding="async"
                       draggable={false}

@@ -109,8 +109,8 @@ describe('desktop and chat layout CSS regressions', () => {
 
   it('renders category lot share as a corner badge with a black core', () => {
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?position:\s*absolute;/);
-    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?top:\s*-5px;/);
-    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?right:\s*-5px;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?top:\s*-4px;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?right:\s*-4px;/);
     expect(appCss).toMatch(/\.cat-card__ring::before[\s\S]*?background:\s*#0b0b0c;/);
     expect(appCss).toMatch(/\.cat-card__ring-value[\s\S]*?stroke:\s*#fff;/);
     expect(appCss).toMatch(/\.cat-card__ring-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);

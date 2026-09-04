@@ -1334,7 +1334,7 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 .cat-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
   justify-content: stretch;
   align-items: start;
   gap: 12px 10px;
@@ -1361,14 +1361,14 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 @media (max-width: 719px) {
   .cat-row {
-    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-    gap: 10px 8px;
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 8px 6px;
   }
 }
 @media (min-width: 720px) {
   .cat-row {
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-    gap: 16px 14px;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 10px 8px;
   }
 }
 .cat-scroll-slider {
@@ -1437,15 +1437,15 @@ html[data-theme="light"] .cat-more:hover {
   position: relative;
   display: grid;
   place-items: center;
-  width: 80px;
-  height: 80px;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   overflow: visible;
 }
 .cat-card__emblem {
-  width: 80px;
-  height: 80px;
-  border-radius: 22px;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -1485,7 +1485,7 @@ html[data-theme="light"] .cat-card__emblem--all {
   user-select: none;
 }
 .cat-card__name {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -1504,14 +1504,14 @@ html[data-theme="light"] .cat-card__emblem--all {
 }
 .cat-card__ring {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -4px;
+  right: -4px;
   z-index: 2;
   pointer-events: none;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   overflow: hidden;
   box-shadow: 0 0 0 2px var(--bg-scene-2, #0B0B0C);
@@ -1548,7 +1548,7 @@ html[data-theme="light"] .cat-card__emblem--all {
   z-index: 1;
   color: #fff;
   font-family: var(--font-body), sans-serif;
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -4776,8 +4776,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .live-pill:last-child { flex: 0 0 140px; max-width: 140px; }
   .cat-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-    gap: 16px 14px;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 10px 8px;
     overflow: visible;
     margin: 0;
     padding: 0;
