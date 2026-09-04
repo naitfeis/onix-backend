@@ -4934,6 +4934,15 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
   color: var(--text-secondary);
   font-size: 13px;
 }
+@media (min-width: 1100px) {
+  /* Sticky left rail is 100dvh; keep footer in the content columns so cats never paint over it. */
+  .site-footer {
+    grid-column: 2 / -1;
+    position: relative;
+    z-index: 3;
+    background: var(--page-bg);
+  }
+}
 .site-footer__brand strong {
   display: block;
   color: var(--text-primary);

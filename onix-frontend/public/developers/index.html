@@ -3,11 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ONIX API 1.0 — OAS 3.0</title>
+  <title>ONIX API — чаты и лоты</title>
   <link rel="stylesheet" href="/legal.css" />
   <style>
-    code, pre { font-family: ui-monospace, monospace; font-size: 12px; }
-    pre { background: #1a1a1a; padding: 12px; border-radius: 10px; overflow: auto; color: #ddd; }
+    code { font-family: ui-monospace, monospace; font-size: 12px; }
     .verb { display: inline-block; min-width: 3.5rem; font-weight: 800; color: #7dd3c0; }
     h2 { border-top: 1px solid #2a2a2a; padding-top: 1.2rem; }
   </style>
@@ -19,55 +18,20 @@
       <a href="/developers/index.html">API</a>
       <a href="/contacts.html">Контакты</a>
     </nav>
-    <h1>ONIX API 1.0</h1>
-    <p>OAS 3.0. База: <code>https://www.onixtg.shop</code>. Авторизация: <code>Authorization: Bearer &lt;access&gt;</code> (JWT Ed25519) + cookie refresh <code>__Host-onix_rt</code>. Access в localStorage не кладётся.</p>
-    <p>Это API той же сессии, что и сайт (как кабинет STARVELL), не отдельный ключ мерчанта. Для ботов продавца используйте тот же вход (Telegram-бот / Google), затем вызывайте методы ниже. Ключи Т-Банка задаются только на сервере, клиенту не выдаются.</p>
-    <pre>openapi: 3.0.3
-info:
-  title: ONIX API
-  version: "1.0"
-servers:
-  - url: https://www.onixtg.shop</pre>
+    <h1>ONIX API</h1>
+    <p>База: <code>https://www.onixtg.shop</code>. Нужна та же сессия, что и на сайте.</p>
 
-    <h2>PROFILES</h2>
-    <p><span class="verb">GET</span> <code>/api/users/me</code> — профиль текущего пользователя (аналог STARVELL <code>/api/profiles/me</code>).</p>
-    <p><span class="verb">GET</span> <code>/api/users/{onixId}</code> — публичный профиль.</p>
-
-    <h2>CHATS</h2>
-    <p><span class="verb">GET</span> <code>/api/chats</code> — список чатов (аналог POST <code>/api/chats/list</code>).</p>
-    <p><span class="verb">GET</span> <code>/api/chats?q=</code> — поиск.</p>
+    <h2>Чаты</h2>
+    <p><span class="verb">GET</span> <code>/api/chats</code> — список. Поиск: <code>?q=</code>.</p>
     <p><span class="verb">POST</span> <code>/api/chats/direct</code> — открыть диалог <code>{ "onixId" }</code>.</p>
-    <p>Печатание — WebSocket <code>/api/realtime</code>, не отдельный HTTP send-typing.</p>
+    <p><span class="verb">GET</span> <code>/api/chats/{id}/messages</code> — история.</p>
+    <p><span class="verb">POST</span> <code>/api/chats/{id}/messages</code> — текст <code>{ "text" }</code>.</p>
 
-    <h2>MESSAGES</h2>
-    <p><span class="verb">GET</span> <code>/api/chats/{id}/messages</code> — история (аналог list-v2).</p>
-    <p><span class="verb">POST</span> <code>/api/chats/{id}/messages</code> — отправить текст <code>{ "text" }</code> (аналог <code>/api/messages/send</code>). Вложения в чате временно выключены.</p>
-
-    <h2>OFFERS (лоты)</h2>
+    <h2>Лоты</h2>
     <p><span class="verb">GET</span> <code>/api/products/mine</code> — мои предложения.</p>
     <p><span class="verb">GET</span> <code>/api/products/{id}</code> и <code>/api/products/lot/{n}</code>.</p>
     <p><span class="verb">POST</span> <code>/api/products</code> — создать. <span class="verb">PATCH</span> <code>/api/products/{id}</code> — обновить.</p>
 
-    <h2>ORDERS</h2>
-    <p><span class="verb">GET</span> <code>/api/orders</code> — список сделок.</p>
-    <p><span class="verb">GET</span> <code>/api/orders/{id}</code> — сделка.</p>
-    <p><span class="verb">POST</span> <code>/api/orders/product/{productId}</code> — купить (идемпотентность: заголовок/тело <code>idempotencyKey</code>).</p>
-    <p><span class="verb">POST</span> <code>/api/orders/{id}/deliver</code> · <code>/complete</code> · <code>/cancel</code> · <code>/dispute</code> · <code>/refund-request</code> · <code>/support</code>.</p>
-
-    <h2>REVIEWS</h2>
-    <p><span class="verb">GET</span> <code>/api/users/{onixId}/reviews</code></p>
-    <p><span class="verb">POST</span> <code>/api/orders/{id}/reviews</code></p>
-
-    <h2>PAYMENTS (Т-Банк sandbox)</h2>
-    <p><span class="verb">GET</span> <code>/api/payments/methods</code> — <code>sbp</code>/<code>card</code> true, когда на API заданы <code>TINKOFF_TERMINAL_KEY</code> и <code>TINKOFF_PASSWORD</code>.</p>
-    <p><span class="verb">POST</span> <code>/api/payments/intents</code> — <code>wallet: MAIN|DEPOSIT</code>, <code>provider: YOOKASSA</code> (СБП) или <code>CARD</code>, <code>amountCents</code>, <code>idempotencyKey</code>. В ответе metadata: <code>paymentUrl</code>, <code>qrPayload</code>.</p>
-    <p><span class="verb">GET</span> <code>/api/payments/intents/{id}</code> — статус до SUCCEEDED.</p>
-    <p>Нотификация банка: <code>POST /api/payments/tinkoff/notification</code> (публичный, без Bearer). В кабинете Т-Банка укажите этот URL.</p>
-
-    <h2>SUPPORT</h2>
-    <p><span class="verb">GET</span> <code>/api/support/tickets</code> — мои тикеты.</p>
-    <p><span class="verb">POST</span> <code>/api/support/appeals</code> — апелляция.</p>
-    <p>Почта: <a href="mailto:onixtg.shop@gmail.com">onixtg.shop@gmail.com</a></p>
     <p><a href="/">← На главную</a></p>
   </main>
 </body>

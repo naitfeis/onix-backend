@@ -1,17 +1,16 @@
 type Props = {
   onSupport: () => void;
-  onTickets: () => void;
 };
 
 const MAIL = 'onixtg.shop@gmail.com';
 
-export default function SiteFooter({ onSupport, onTickets }: Props) {
+export default function SiteFooter({ onSupport }: Props) {
   const year = new Date().getFullYear();
   return (
     <footer className="site-footer">
       <div className="site-footer__brand">
         <strong>ONIX</strong>
-        <p>© {year} ONIX, биржа игровых товаров с эскроу</p>
+        <p>© {year} ONIX</p>
         <p><a href={`mailto:${MAIL}`}>{MAIL}</a></p>
       </div>
       <div className="site-footer__col">
@@ -26,7 +25,6 @@ export default function SiteFooter({ onSupport, onTickets }: Props) {
       <div className="site-footer__col">
         <h3>Помощь</h3>
         <button type="button" onClick={onSupport}>Написать в поддержку</button>
-        <button type="button" onClick={onTickets}>Мои тикеты</button>
         <a href="/contacts.html">Контакты</a>
       </div>
       <div className="site-footer__social">
