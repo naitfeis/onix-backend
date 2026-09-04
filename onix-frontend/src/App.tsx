@@ -481,7 +481,7 @@ export default function App() {
     || core.sessionRestore === 'network';
   const chatImmersive = screen === 'chat';
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
-  const showMarketRail = shellWidth >= 1280;
+  const showMarketRail = showRightRail;
   const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = core.categoryLotCounts[cat]
       ?? core.products.filter((p) => p.category === cat).length;

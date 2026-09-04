@@ -194,7 +194,7 @@ export function moneyAmount(cents: string): string {
   return new Intl.NumberFormat('ru-RU', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(value / 100);
+  }).format(value / 100).replace(/\u00A0/g, '\u202F');
 }
 
 export function friendlyError(error: unknown): string {

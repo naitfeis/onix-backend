@@ -81,6 +81,9 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(
       /\.sidebar-right > \.widget--new-lots \.widget-trend\s*\{[^}]*overflow-y:\s*auto;/s,
     );
+    expect(appCss).toMatch(
+      /\.sidebar-right > \.widget--new-lots \.widget-trend\s*\{[^}]*scrollbar-width:\s*thin;/s,
+    );
   });
 
   it('keeps checkout and deal lot badges outlined without fill', () => {
@@ -152,5 +155,6 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/\.profile-card > \.profile-accounts[\s\S]*?grid-column:\s*1 \/ -1;/s);
     expect(appCss).toMatch(/\.card\.profile-card\s*\{[^}]*overflow:\s*visible;/s);
     expect(appCss).toMatch(/\.profile-account \.auth-btn\s*\{[^}]*flex-shrink:\s*0;/s);
+    expect(appCss).toMatch(/\.profile-card\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\) auto;/s);
   });
 });

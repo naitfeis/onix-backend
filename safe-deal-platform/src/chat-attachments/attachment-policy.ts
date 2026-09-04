@@ -55,3 +55,8 @@ export function sanitizeOriginalName(name: string): string {
   const base = name.replace(/[/\\]/g, '').trim().slice(0, 200);
   return base || 'file';
 }
+
+/** Uploads to R2 are off until RF connectivity is proven. Opt in with CHAT_ATTACHMENTS_ENABLED=true. */
+export function chatAttachmentsUploadsEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CHAT_ATTACHMENTS_ENABLED === 'true';
+}

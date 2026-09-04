@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { AttachmentStatus, MessageContentType, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { AuthUser } from '../common';
@@ -17,6 +12,7 @@ import { sanitizeChatText } from '../sanitize-user-text';
 import {
   ALLOWED_MIME,
   attachmentTierForUser,
+  chatAttachmentsUploadsEnabled,
   contentTypeForMime,
   getAttachmentMaxBytes,
   sanitizeOriginalName,
@@ -53,6 +49,9 @@ export class ChatAttachmentsService {
     chatId: string,
     body: { mimeType: string; sizeBytes: number; originalName: string },
   ) {
+    if (!chatAttachmentsUploadsEnabled()) {
+      throw new ServiceUnavailableException('Вложения в чате временно отключены. Отправьте текстовое сообщение.');
+    }
     if (!this.r2.isConfigured()) {
       throw new BadRequestException('Загрузка файлов временно недоступна.');
     }
@@ -112,6 +111,9 @@ export class ChatAttachmentsService {
     attachmentId: string,
     caption?: string,
   ) {
+    if (!chatAttachmentsUploadsEnabled()) {
+      throw new ServiceUnavailableException('Вложения в чате временно отключены. Отправьте текстовое сообщение.');
+    }
     if (!this.r2.isConfigured()) {
       throw new BadRequestException('Загрузка файлов временно недоступна.');
     }

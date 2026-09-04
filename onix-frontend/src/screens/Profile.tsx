@@ -550,6 +550,13 @@ export function Profile({
       </Card>
     )}
     <Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+      {showWebsiteLogout && (
+        <div className="profile-logout">
+          <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
+            Выйти из аккаунта
+          </Button>
+        </div>
+      )}
       <div className="wallet-strip">
         <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
           <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
@@ -565,13 +572,6 @@ export function Profile({
         )}
       </div>
       <AccountLinkPanel profile={profile} onLinked={() => core.loadProfile()} setToast={setToast} />
-      {showWebsiteLogout && (
-        <div className="profile-logout">
-          <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
-            Выйти из аккаунта
-          </Button>
-        </div>
-      )}
     </Card>
     {showWebsiteLogout && (
       <Confirm
@@ -607,7 +607,7 @@ export function Profile({
           analytics: t('profile.analytics'),
         })[item]}</button>)}
       {isAdmin && (
-        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>ADMIN</button>
+        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>{t('profile.admin')}</button>
       )}
     </div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>

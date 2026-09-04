@@ -22,6 +22,7 @@ function ruStatus(status: string) {
   return ({
     PENDING: 'ожидает',
     REVIEW: 'проверка',
+    RECORDED: 'в реестре',
     APPROVED: 'одобрен',
     REJECTED: 'отклонён',
     PAID: 'выплачен',
@@ -42,7 +43,7 @@ export function WithdrawalsScreen() {
   return (
     <div className="panel">
       <h2>Выводы</h2>
-      <p className="muted">Последние заявки на вывод и их проверка.</p>
+      <p className="muted">Заявки на вывод (ledger WITHDRAWAL) и флаги проверки новых аккаунтов. Автоплатежи не подключены — статус REVIEW требует ручной выплаты.</p>
       {error && <p className="error">{error}</p>}
       <table>
         <thead>
