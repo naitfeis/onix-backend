@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
-import { PLATFORM_VIDEO_RULE } from './platformCopy';
 import { Button, Card, Field, Input, Textarea } from '../design-system';
 import { minPriceRubles, validateDraft } from '../utils/productValidation';
 import {
@@ -13,6 +12,9 @@ import {
 import type { Core } from './types';
 import { emptyDraft } from './shared';
 import { categoryLabel } from '../i18n';
+
+const NEW_SELLER_HOLD_HINT =
+  'Для безопасности новых пользователей средства с аккаунтов младше 7 дней становятся доступны для вывода через 24 часа после продажи. В будущем срок будет сокращён до 5 часов.';
 
 function sellerRegisteredAt(core: Core): string | null {
   return core.profile?.registeredAt
@@ -137,7 +139,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       <Field
         label="Заморозка денег продавца"
         hint={showNewSellerNote
-          ? `Пока аккаунту меньше 7 дней, деньги после продажи заморожены минимум на ${minWarranty} ч. Короче поставить нельзя.`
+          ? NEW_SELLER_HOLD_HINT
           : 'Сколько часов после передачи товара деньги ещё не уходят продавцу (от 5 часов до 30 дней, по умолчанию 10).'}
       >
         <Input
@@ -151,7 +153,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
           })}
         />
       </Field>
-      <p className="muted">{PLATFORM_VIDEO_RULE}</p>
       <label className="check-row">
         <input
           type="checkbox"
@@ -165,13 +166,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       )}
       <div className="summary-line"><span>К получению (после 5%)</span><strong>{payout ? `${payout} ₽` : '—'}</strong></div>
       <Button type="submit" variant="violet" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
-      {showNewSellerNote ? (
-        <p className="muted lot-form__new-seller-note">
-          Аккаунту меньше 7 дней: срок заморозки денег при выставлении лота — минимум 24 часа.
-          Это и есть гарантия покупателю в безопасной сделке: пока идёт этот срок, выплата продавцу не завершается.
-          Отдельной блокировки баланса «ещё на сутки» после выплаты нет. Через 7 дней с регистрации можно ставить от 5 часов.
-        </p>
-      ) : null}
     </form></Card></div>;
 }
 export default ProductForm;

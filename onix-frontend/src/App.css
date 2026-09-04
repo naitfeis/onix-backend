@@ -1334,7 +1334,7 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 .cat-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   justify-content: stretch;
   align-items: start;
   gap: 12px 10px;
@@ -1361,13 +1361,13 @@ html[data-theme="light"] .cat-scroll-slider::-moz-range-track {
 }
 @media (max-width: 719px) {
   .cat-row {
-    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
     gap: 8px 6px;
   }
 }
 @media (min-width: 720px) {
   .cat-row {
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: 10px 8px;
   }
 }
@@ -1437,15 +1437,15 @@ html[data-theme="light"] .cat-more:hover {
   position: relative;
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
   overflow: visible;
 }
 .cat-card__emblem {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -4776,7 +4776,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .live-pill:last-child { flex: 0 0 140px; max-width: 140px; }
   .cat-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: 10px 8px;
     overflow: visible;
     margin: 0;
@@ -4953,9 +4953,13 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     min-height: 0;
   }
   .sidebar-right {
-    padding: 20px 14px 24px 16px;
+    padding: 0;
     box-sizing: border-box;
     align-self: start;
+  }
+  /* Wallet top edge matches market hero / banner in the center column. */
+  .app-shell--market > .sidebar-right > .widget:first-of-type {
+    margin-top: 0;
   }
 }
 .site-footer__brand strong {
