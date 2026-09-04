@@ -33,7 +33,10 @@ import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
 import { ROBLOX_RECO_SUBCATEGORIES } from './marketplace/platform-rules';
 import { reliabilityScore } from './marketplace/reliability';
-import { clampWarrantyHours, WARRANTY_DEFAULT_HOURS } from './marketplace/warranty';
+import {
+  clampWarrantyHoursForSeller,
+  WARRANTY_DEFAULT_HOURS,
+} from './marketplace/warranty';
 
 function toBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -350,7 +353,7 @@ export class MarketplaceService {
   async create(user: AuthUser, dto: ProductDto) {
     const seller = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { sellBannedAt: true, telegramId: true },
+      select: { sellBannedAt: true, telegramId: true, createdAt: true },
     });
     if (seller?.sellBannedAt) {
       throw new BadRequestException('Продажа товаров запрещена администратором.');
@@ -382,7 +385,10 @@ export class MarketplaceService {
         priceCents: BigInt(dto.priceCents),
         sellerId: user.id,
         expiresAt: new Date(Date.now() + 30 * 86400_000),
-        warrantyHours: clampWarrantyHours(warrantyHours ?? WARRANTY_DEFAULT_HOURS),
+        warrantyHours: clampWarrantyHoursForSeller(
+          warrantyHours ?? WARRANTY_DEFAULT_HOURS,
+          seller.createdAt,
+        ),
         ...secret,
       },
     });
@@ -419,7 +425,7 @@ export class MarketplaceService {
   async update(user: AuthUser, id: string, dto: UpdateProductDto) {
     const seller = await this.prisma.user.findUnique({
       where: { id: user.id },
-      select: { sellBannedAt: true },
+      select: { sellBannedAt: true, createdAt: true },
     });
     if (seller?.sellBannedAt) {
       throw new BadRequestException('Продажа товаров запрещена администратором.');
@@ -443,7 +449,9 @@ export class MarketplaceService {
     const patch: Prisma.ProductUpdateInput = {
       ...data,
       ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
-      ...(warrantyHours !== undefined ? { warrantyHours: clampWarrantyHours(warrantyHours) } : {}),
+      ...(warrantyHours !== undefined
+        ? { warrantyHours: clampWarrantyHoursForSeller(warrantyHours, seller?.createdAt) }
+        : {}),
     };
     if (autoDeliver !== undefined || deliveryText !== undefined) {
       if (item.deliveryConsumedAt) {

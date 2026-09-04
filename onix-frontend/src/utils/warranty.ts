@@ -1,10 +1,27 @@
 export const WARRANTY_DEFAULT_HOURS = 10;
+export const WARRANTY_MIN_HOURS = 5;
 const WARRANTY_MAX_HOURS = 30 * 24;
+export const NEW_SELLER_DAYS = 7;
+export const NEW_SELLER_WARRANTY_MIN_HOURS = 24;
 
-function clampWarrantyHours(value: unknown): number {
+export function isNewSellerAccount(accountCreatedAt: Date | string, now = new Date()): boolean {
+  const created = accountCreatedAt instanceof Date ? accountCreatedAt : new Date(accountCreatedAt);
+  if (!Number.isFinite(created.getTime())) return false;
+  return now.getTime() < created.getTime() + NEW_SELLER_DAYS * 86_400_000;
+}
+
+export function warrantyMinHoursForSeller(accountCreatedAt?: Date | string | null, now = new Date()): number {
+  if (accountCreatedAt && isNewSellerAccount(accountCreatedAt, now)) {
+    return NEW_SELLER_WARRANTY_MIN_HOURS;
+  }
+  return WARRANTY_MIN_HOURS;
+}
+
+function clampWarrantyHours(value: unknown, minHours = WARRANTY_MIN_HOURS): number {
+  const floor = Math.max(WARRANTY_MIN_HOURS, Math.min(WARRANTY_MAX_HOURS, Math.round(minHours)));
   const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return WARRANTY_DEFAULT_HOURS;
-  return Math.min(WARRANTY_MAX_HOURS, Math.max(5, Math.round(n)));
+  if (!Number.isFinite(n)) return Math.max(floor, WARRANTY_DEFAULT_HOURS);
+  return Math.min(WARRANTY_MAX_HOURS, Math.max(floor, Math.round(n)));
 }
 
 function dayWord(n: number): string {
@@ -35,20 +52,26 @@ export function formatWarrantyHours(hours: number): string {
   return `Гарантия: ${h} ${hourWord(h)}`;
 }
 
-export function formatDealCountdown(endsAt: string | null | undefined, now = Date.now()): string | null {
+export function formatDealCountdown(endsAt: string | null | undefined, nowMs = Date.now()): string | null {
   if (!endsAt) return null;
-  const end = Date.parse(endsAt);
+  const end = new Date(endsAt).getTime();
   if (!Number.isFinite(end)) return null;
-  const left = Math.max(0, end - now);
+  const left = Math.max(0, end - nowMs);
   const totalSec = Math.floor(left / 1000);
-  const hours = Math.floor(totalSec / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 export function lotWarrantyBadge(product: { warrantyHours?: number | null; warrantyLabel?: string | null }): string {
-  const label = product.warrantyLabel?.trim();
-  if (label) return label;
+  if (product.warrantyLabel?.trim()) return product.warrantyLabel.trim();
   return formatWarrantyHours(product.warrantyHours ?? WARRANTY_DEFAULT_HOURS);
+}
+
+export function clampListingWarranty(
+  value: unknown,
+  accountCreatedAt?: string | null,
+): number {
+  return clampWarrantyHours(value, warrantyMinHoursForSeller(accountCreatedAt ?? null));
 }

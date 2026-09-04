@@ -9,7 +9,7 @@ export function minPriceRubles(subcategory?: string): number {
 
 export function validateDraft(
   draft: ProductDraft,
-  opts?: { keepDeliverySecret?: boolean },
+  opts?: { keepDeliverySecret?: boolean; minWarrantyHours?: number },
 ): string[] {
   const errors: string[] = [];
   const title = draft.title.trim();
@@ -28,9 +28,14 @@ export function validateDraft(
   if (!opts?.keepDeliverySecret && !draft.acceptedRules) {
     errors.push('Нужно согласиться с правилами платформы');
   }
+  const minWarranty = opts?.minWarrantyHours ?? 5;
   const warranty = draft.warrantyHours ?? 10;
-  if (!Number.isInteger(warranty) || warranty < 5 || warranty > 720) {
-    errors.push('Срок гарантии — от 5 часов до 30 дней');
+  if (!Number.isInteger(warranty) || warranty < minWarranty || warranty > 720) {
+    errors.push(
+      minWarranty > 5
+        ? `Срок гарантии — от ${minWarranty} часов до 30 дней (для новых аккаунтов минимум сутки)`
+        : 'Срок гарантии — от 5 часов до 30 дней',
+    );
   }
   return errors;
 }

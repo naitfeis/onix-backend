@@ -18,4 +18,16 @@ describe('lotWarrantyBadge', () => {
     expect(formatDealCountdown('2026-09-03T11:00:00.000Z', now)).toBe('00:00:00');
     expect(formatDealCountdown(null, now)).toBeNull();
   });
+
+  it('raises the warranty floor for sellers younger than 7 days', async () => {
+    const { isNewSellerAccount, warrantyMinHoursForSeller, clampListingWarranty } = await import('./warranty');
+    const young = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const old = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    expect(isNewSellerAccount(young)).toBe(true);
+    expect(isNewSellerAccount(old)).toBe(false);
+    expect(warrantyMinHoursForSeller(young)).toBe(24);
+    expect(warrantyMinHoursForSeller(old)).toBe(5);
+    expect(clampListingWarranty(10, young)).toBe(24);
+    expect(clampListingWarranty(10, old)).toBe(10);
+  });
 });

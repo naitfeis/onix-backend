@@ -1,11 +1,38 @@
 export const WARRANTY_DEFAULT_HOURS = 10;
 export const WARRANTY_MIN_HOURS = 5;
 export const WARRANTY_MAX_HOURS = 30 * 24;
+/** First week after signup — listing warranty cannot be shorter than 24h. */
+export const NEW_SELLER_DAYS = 7;
+export const NEW_SELLER_WARRANTY_MIN_HOURS = 24;
 
-export function clampWarrantyHours(value: unknown): number {
+export function isNewSellerAccount(accountCreatedAt: Date | string, now = new Date()): boolean {
+  const created = accountCreatedAt instanceof Date ? accountCreatedAt : new Date(accountCreatedAt);
+  if (!Number.isFinite(created.getTime())) return false;
+  return now.getTime() < created.getTime() + NEW_SELLER_DAYS * 86_400_000;
+}
+
+export function warrantyMinHoursForSeller(accountCreatedAt?: Date | string | null, now = new Date()): number {
+  if (accountCreatedAt && isNewSellerAccount(accountCreatedAt, now)) {
+    return NEW_SELLER_WARRANTY_MIN_HOURS;
+  }
+  return WARRANTY_MIN_HOURS;
+}
+
+export function clampWarrantyHours(value: unknown, minHours = WARRANTY_MIN_HOURS): number {
+  const floor = Math.max(WARRANTY_MIN_HOURS, Math.min(WARRANTY_MAX_HOURS, Math.round(minHours)));
   const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return WARRANTY_DEFAULT_HOURS;
-  return Math.min(WARRANTY_MAX_HOURS, Math.max(WARRANTY_MIN_HOURS, Math.round(n)));
+  if (!Number.isFinite(n)) {
+    return Math.max(floor, WARRANTY_DEFAULT_HOURS);
+  }
+  return Math.min(WARRANTY_MAX_HOURS, Math.max(floor, Math.round(n)));
+}
+
+export function clampWarrantyHoursForSeller(
+  value: unknown,
+  accountCreatedAt?: Date | string | null,
+  now = new Date(),
+): number {
+  return clampWarrantyHours(value, warrantyMinHoursForSeller(accountCreatedAt, now));
 }
 
 export function formatWarranty(hours: number): string {
