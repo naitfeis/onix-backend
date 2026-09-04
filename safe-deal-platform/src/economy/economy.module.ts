@@ -3,6 +3,7 @@ import { EconomyController } from './economy.controller';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { ManualPaymentProvider } from './payments/manual.provider';
+import { TinkoffAcquiringProvider } from './payments/tinkoff.provider';
 import { PaymentsService } from './payments/payments.service';
 import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
@@ -17,6 +18,7 @@ import { WithdrawVelocityService } from './wallet/withdraw-velocity';
   controllers: [EconomyController],
   providers: [
     ManualPaymentProvider,
+    TinkoffAcquiringProvider,
     PaymentsService,
     BalanceService,
     ClawbackService,

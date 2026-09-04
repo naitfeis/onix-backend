@@ -20,6 +20,7 @@ import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
 import { parseRublesToCents } from '../utils/moneyCents';
 import type { Core, Screen } from './types';
+import PaymentCheckout from './PaymentCheckout';
 import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
 import { t } from '../i18n';
@@ -277,6 +278,7 @@ export function Profile({
   const [editing, setEditing] = useState<Product | null>(null);
   const [amount, setAmount] = useState('');
   const [payMethod, setPayMethod] = useState<'SBP' | 'CARD'>('SBP');
+  const [payIntentId, setPayIntentId] = useState<string | null>(null);
   const [authorProfile, setAuthorProfile] = useState<PublicProfile | null>(null);
   const [favoriteProducts, setFavoriteProducts] = useState<Product[]>([]);
   const [favoritesState, setFavoritesState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -470,9 +472,11 @@ export function Profile({
           provider: payMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
           idempotencyKey: key,
         });
-        await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
-        await core.loadProfile();
-        setToast('Баланс пополнен.');
+        setMoneyModal(null);
+        setAmount('');
+        setPayIntentId(intent.id);
+        setToast('Откройте оплату Т-Банка. Баланс обновится после QR/СБП.');
+        return;
       } else if (moneyModal === 'DEPOSIT_FUND') {
         await api.post(API_PATHS.walletDepositTopup, { amountCents, idempotencyKey: key });
         await core.loadProfile();
@@ -487,7 +491,7 @@ export function Profile({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Операция недоступна.';
       if (moneyModal === 'MAIN_TOPUP' && (message.includes('не подключ') || message.includes('отключено') || message.includes('Manual'))) {
-        setToast('Скоро: Telegram Wallet / ЮKassa. Manual-пополнение пока отключено.');
+        setToast(message.includes('TINKOFF') ? message : 'Скоро: Telegram Wallet / ЮKassa. Manual-пополнение пока отключено.');
       } else {
         setToast(message);
       }
@@ -798,6 +802,15 @@ export function Profile({
         </div>
       </form>
     </Modal>
+    <PaymentCheckout
+      intentId={payIntentId}
+      onCancel={() => setPayIntentId(null)}
+      onDone={() => {
+        setPayIntentId(null);
+        void core.loadProfile();
+        setToast('Баланс пополнен.');
+      }}
+    />
   </div>;
 }
 export default Profile;

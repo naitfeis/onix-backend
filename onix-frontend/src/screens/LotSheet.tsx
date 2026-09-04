@@ -8,6 +8,7 @@ import {
   LOT_PAY_METHODS, lotDisplayTitle, lotPayMethodLabel, lotPayMethodMeta, parseCents, quoteLotCheckout,
   type LotPayMethod,
 } from '../utils/lotCheckout';
+import PaymentCheckout from './PaymentCheckout';
 import type { Core } from './types';
 import { SellerIdentityCard } from './SellerIdentityCard';
 import { lotWarrantyBadge } from '../utils/warranty';
@@ -82,6 +83,7 @@ export function LotSheet({
   const [method, setMethod] = useState<LotPayMethod>('BALANCE');
   const [methodsOpen, setMethodsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [payIntentId, setPayIntentId] = useState<string | null>(null);
   const payLockRef = useRef(false);
   const intentKeyRef = useRef(crypto.randomUUID());
   const toppedUpRef = useRef(false);
@@ -136,9 +138,8 @@ export function LotSheet({
           provider: activeMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
           idempotencyKey: intentKeyRef.current,
         });
-        await api.post(API_PATHS.paymentIntentConfirm(intent.id), {});
-        toppedUpRef.current = true;
-        await core.loadProfile();
+        setPayIntentId(intent.id);
+        return;
       }
       await onBuy();
     } catch (error) {
@@ -265,5 +266,17 @@ export function LotSheet({
         </section>
       </div>
     </div>
+    <PaymentCheckout
+      intentId={payIntentId}
+      onCancel={() => setPayIntentId(null)}
+      onDone={() => {
+        void (async () => {
+          toppedUpRef.current = true;
+          setPayIntentId(null);
+          await core.loadProfile();
+          await onBuy();
+        })();
+      }}
+    />
   );
 }

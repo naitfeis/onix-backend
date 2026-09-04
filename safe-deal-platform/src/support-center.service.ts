@@ -144,6 +144,20 @@ export class SupportCenterService {
     return rows.map((row) => serializeTicketListItem(row));
   }
 
+  async listMine(userId: bigint) {
+    const rows = await this.prisma.supportTicket.findMany({
+      where: { openedById: userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        openedBy: { select: { onixId: true, displayName: true } },
+        reportedUser: { select: { onixId: true, displayName: true, securityCasePublicId: true, securityLockLevel: true } },
+        order: { select: { id: true, status: true } },
+      },
+    });
+    return { tickets: rows.map((row) => serializeTicketListItem(row)) };
+  }
+
   async getTicket(id: string) {
     const ticket = await this.prisma.supportTicket.findUnique({
       where: { id },

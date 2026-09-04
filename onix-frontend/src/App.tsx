@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
-import { money, moneyAmount } from './api/client';
-import { CATEGORIES, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
+import SiteFooter from './components/SiteFooter';
+import { api, money, moneyAmount } from './api/client';
+import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
@@ -19,7 +20,7 @@ import {
   IconSun,
   IconWallet,
 } from './components/NavIcons';
-import { Button, Card, Skeleton, Toast } from './design-system';
+import { Button, Card, Modal, Skeleton, Toast } from './design-system';
 import { popModal, pushModal } from './design-system/modalStack';
 import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
@@ -253,6 +254,8 @@ export default function App() {
     return mode;
   });
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
+  const [ticketsOpen, setTicketsOpen] = useState(false);
+  const [tickets, setTickets] = useState<Array<{ id: string; publicId: string; status: string; subject: string | null; chatId: string | null }>>([]);
   const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
   const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
   const [shellWidth, setShellWidth] = useState(() => (
@@ -872,8 +875,47 @@ export default function App() {
         </button>
       ))}
     </nav>
-    {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
+    {!miniApp && !showAuth && !chatImmersive ? (
+      <SiteFooter
+        onSupport={() => {
+          void (async () => {
+            try {
+              const thread = await api.get<{ id: string }>(API_PATHS.aiChat);
+              setFocusChatId(thread.id);
+            } catch { /* open chat list */ }
+            switchTo('chat');
+          })();
+        }}
+        onTickets={() => {
+          setTicketsOpen(true);
+          void api.get<{ tickets: typeof tickets }>(API_PATHS.supportTickets)
+            .then((data) => setTickets(data.tickets ?? []))
+            .catch(() => setTickets([]));
+        }}
+      />
+    ) : null}
+    <Modal open={ticketsOpen} title="Мои тикеты" onClose={() => setTicketsOpen(false)}>
+      <div className="stack compact">
+        {tickets.length === 0 ? (
+          <p className="muted">Открытых обращений нет. Напишите в поддержку — тикет появится здесь.</p>
+        ) : tickets.map((row) => (
+          <button
+            key={row.id}
+            type="button"
+            className="linkish"
+            onClick={() => {
+              if (row.chatId) setFocusChatId(row.chatId);
+              setTicketsOpen(false);
+              switchTo('chat');
+            }}
+          >
+            {row.publicId} · {row.status}{row.subject ? ` · ${row.subject}` : ''}
+          </button>
+        ))}
+      </div>
+    </Modal>
     {toast && <Toast message={toast} />}
+    {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
   </div>
     <div className={`settings-overlay${settingsOpen ? ' is-open' : ''}`} aria-hidden={!settingsOpen}>
       <button

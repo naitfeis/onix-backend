@@ -1,6 +1,4 @@
-import {
-  BadRequestException, Body, Controller, Injectable, Module, NotFoundException, Param, Post,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Header, Injectable, Module, NotFoundException, Param, Post } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
@@ -128,6 +126,12 @@ export class SupportController {
     const text = dto.explanation.trim();
     if (text.length < 8) throw new BadRequestException('Опишите ситуацию подробнее.');
     return this.center.createAppeal(user.id, text);
+  }
+
+  @Get('support/tickets')
+  @Header('Cache-Control', 'private, no-store')
+  myTickets(@CurrentUser() user: AuthUser) {
+    return this.center.listMine(user.id);
   }
 }
 

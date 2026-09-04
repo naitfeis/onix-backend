@@ -109,6 +109,7 @@ test('top-up serialization retry calls the external provider exactly once', asyn
       {} as never,
       {} as never,
       provider as never,
+      { isConfigured: () => false } as never,
     );
 
     const result = await service.createManualTopUpForAdmin(
@@ -190,6 +191,7 @@ test('two concurrent identical top-ups share one DB claim and one provider call'
       {} as never,
       {} as never,
       provider as never,
+      { isConfigured: () => false } as never,
     );
     const input = {
       wallet: 'MAIN' as const,
@@ -275,6 +277,7 @@ test('stale CREATED top-up is recovered with the original provider idempotency k
       {} as never,
       {} as never,
       provider as never,
+      { isConfigured: () => false } as never,
     );
 
     const result = await service.createManualTopUpForAdmin(

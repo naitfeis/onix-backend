@@ -10,6 +10,7 @@ import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
+import { TinkoffAcquiringProvider, tinkoffCredentials } from './tinkoff.provider';
 import type { PaymentProvider, ProviderWebhookVerification } from './payment-provider';
 import { BalanceService } from '../wallet/balance.service';
 import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
@@ -41,22 +42,34 @@ export class PaymentsService {
     private readonly trust: TrustService,
     private readonly idempotency: IdempotencyService,
     manual: ManualPaymentProvider,
+    tinkoff: TinkoffAcquiringProvider,
   ) {
     this.providers = new Map();
-    for (const p of [manual]) {
-      this.providers.set(p.code, p);
+    this.providers.set(manual.code, manual);
+    if (tinkoff.isConfigured()) {
+      this.providers.set('YOOKASSA', tinkoff);
+      this.providers.set('CARD', tinkoff);
     }
+  }
+
+  paymentMethodsPublic() {
+    const live = tinkoffCredentials() != null;
+    return {
+      sbp: live,
+      card: live,
+      sandbox: (process.env.TINKOFF_SANDBOX ?? 'true').trim() !== 'false',
+    };
   }
 
   private provider(code: PaymentProviderCode): PaymentProvider {
     const p = this.providers.get(code);
-    if (!p) {
-      throw new BadRequestException(`Провайдер ${code} не зарегистрирован.`);
+    if (p) return p;
+    if (code === 'YOOKASSA' || code === 'CARD') {
+      throw new ForbiddenException(
+        'СБП и карта: задайте TINKOFF_TERMINAL_KEY и TINKOFF_PASSWORD (sandbox Т-Банка) в переменных API.',
+      );
     }
-    if (code !== 'MANUAL') {
-      throw new ForbiddenException(`Платёжный провайдер ${code} ещё не подключён.`);
-    }
-    return p;
+    throw new ForbiddenException(`Платёжный провайдер ${code} ещё не подключён.`);
   }
 
   async createTopUp(
@@ -159,6 +172,7 @@ export class PaymentsService {
       wallet: dto.wallet,
       amountCents,
       idempotencyKey: dto.idempotencyKey,
+      metadata: { payWay: dto.provider === 'CARD' ? 'card' : 'sbp' },
     });
 
     const finalized = await this.prisma.paymentIntent.updateMany({
@@ -254,7 +268,12 @@ export class PaymentsService {
     if (!verified.ok || !verified.eventId || !verified.intentId || !verified.status || !verified.providerPaymentId) {
       throw new UnauthorizedException('Неверная подпись или payload провайдера.');
     }
-    return this.applyProviderEvent(provider, {
+    const stored = await this.prisma.paymentIntent.findUnique({
+      where: { id: verified.intentId },
+      select: { provider: true },
+    });
+    const settleProvider = stored?.provider ?? provider;
+    return this.applyProviderEvent(settleProvider, {
       eventId: verified.eventId,
       providerPaymentId: verified.providerPaymentId,
       intentId: verified.intentId,

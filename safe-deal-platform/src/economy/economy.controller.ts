@@ -1,12 +1,13 @@
 import {
-  Body, Controller, Get, Header, Param, Post, Query,
+  Body, Controller, Get, Header, Param, Post, Query, Req, Res,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { Type } from 'class-transformer';
 import {
   IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
 } from 'class-validator';
 import type { PaymentProviderCode, PaymentWallet } from '@prisma/client';
-import { AuthUser, CurrentUser } from '../common';
+import { AuthUser, CurrentUser, Public } from '../common';
 import { assertRateLimit } from '../rate-limit';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
@@ -60,6 +61,21 @@ export class EconomyController {
   createIntent(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentIntentDto) {
     assertRateLimit(`payment:create:${user.id}`, 30, 60_000);
     return this.payments.createTopUp(user, dto);
+  }
+
+  @Public()
+  @Get('payments/methods')
+  @Header('Cache-Control', 'public, max-age=30')
+  paymentMethods() {
+    return this.payments.paymentMethodsPublic();
+  }
+
+  @Public()
+  @Post('payments/tinkoff/notification')
+  async tinkoffNotification(@Req() req: Request, @Res() res: Response) {
+    const raw = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
+    await this.payments.handleProviderWebhook('YOOKASSA', req.headers, raw);
+    res.type('text/plain').send('OK');
   }
 
   @Get('payments/intents/:id')

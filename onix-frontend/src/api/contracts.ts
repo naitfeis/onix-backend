@@ -439,7 +439,9 @@ export const API_PATHS = {
   walletDepositTopup: '/api/wallet/deposit/topup',
   walletDepositWithdraw: '/api/wallet/deposit/withdrawals',
   paymentsIntents: '/api/payments/intents',
+  paymentIntent: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}`,
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,
+  supportTickets: '/api/support/tickets',
   meTrust: '/api/users/me/trust',
   meTrustHistory: '/api/users/me/trust/history',
   meAnalytics: (weekOffset?: number) => (
