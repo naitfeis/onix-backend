@@ -50,7 +50,11 @@ const SORT_OPTIONS = [
 ] as const;
 
 function catalogScroller(): HTMLElement | Window {
-  return (document.querySelector('.app-main') as HTMLElement | null) ?? window;
+  // Prefer the document scrolling element — `.viewport` is often overflow:visible
+  // and does not receive scroll events (that was breaking ↑ on PC/mobile).
+  const doc = document.scrollingElement as HTMLElement | null;
+  if (doc && doc.scrollHeight > doc.clientHeight + 1) return doc;
+  return window;
 }
 
 function readCatalogScroll(): number {
@@ -58,10 +62,22 @@ function readCatalogScroll(): number {
   return el === window ? window.scrollY : (el as HTMLElement).scrollTop;
 }
 
-function writeCatalogScroll(top: number) {
+function writeCatalogScroll(top: number, behavior: ScrollBehavior = 'auto') {
   const el = catalogScroller();
-  if (el === window) window.scrollTo({ top });
-  else (el as HTMLElement).scrollTo({ top });
+  if (el === window) window.scrollTo({ top, behavior });
+  else (el as HTMLElement).scrollTo({ top, behavior });
+}
+
+function scrollCatalogToSearch() {
+  const search = document.querySelector('.search-row') as HTMLElement | null;
+  const y = window.scrollY || document.documentElement.scrollTop || 0;
+  if (search) {
+    const fixedTopbar = window.matchMedia('(max-width: 1099px)').matches ? 72 : 12;
+    const top = search.getBoundingClientRect().top + y - fixedTopbar;
+    writeCatalogScroll(Math.max(0, top), 'smooth');
+    return;
+  }
+  writeCatalogScroll(0, 'smooth');
 }
 
 function toServerSort(sort: string) {
@@ -124,7 +140,7 @@ function rememberViewedLot(id: string, store: Set<string>) {
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
-  externalCategory, onExternalCategoryConsumed,
+  externalCategory, onExternalCategoryConsumed, onRequestLogin,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -136,6 +152,7 @@ export function Market({
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
+  onRequestLogin?: () => void;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [lotOrigin, setLotOrigin] = useState<'catalog' | 'profile'>('catalog');
@@ -530,6 +547,7 @@ export function Market({
         onBack={closeLot}
         onBuy={() => buySelected(selected)}
         onToast={setToast}
+        onRequestLogin={onRequestLogin}
         onOpenSeller={async () => {
           const onixId = selected.seller.onixId;
           try {
@@ -540,7 +558,12 @@ export function Market({
         }}
         onWrite={async () => {
           const onixId = selected.seller.onixId;
-          if (core.profile?.onixId === onixId) {
+          if (!core.profile) {
+            setToast('Войдите, чтобы написать продавцу.');
+            onRequestLogin?.();
+            return;
+          }
+          if (core.profile.onixId === onixId) {
             setToast('Нельзя открыть чат с собой.');
             return;
           }
@@ -776,6 +799,11 @@ export function Market({
           core={core}
           onOpen={() => void openProduct(product)}
           onFavorite={() => {
+            if (!core.profile) {
+              setToast('Войдите, чтобы добавить в избранное.');
+              onRequestLogin?.();
+              return;
+            }
             setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
             void core.toggleFavorite(product);
           }}
@@ -818,11 +846,8 @@ export function Market({
       <button
         type="button"
         className="scroll-top"
-        aria-label="Наверх к лотам"
-        onClick={() => {
-          const grid = document.querySelector('.product-grid');
-          grid?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }}
+        aria-label="Наверх к поиску"
+        onClick={() => scrollCatalogToSearch()}
       >↑</button>
     )}
   </div>;

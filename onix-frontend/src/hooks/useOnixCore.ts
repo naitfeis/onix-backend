@@ -452,7 +452,7 @@ export function useOnixCore() {
         }));
         setErrors((previous) => ({
           ...previous,
-          profile: 'Войдите через Telegram, чтобы продолжить.',
+          profile: 'Войдите через Telegram, чтобы покупать, продавать и писать в чат.',
         }));
         printBootstrapSummary('bootstrap-guest');
         markAppReady('bootstrap-settled');

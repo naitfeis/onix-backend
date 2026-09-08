@@ -67,19 +67,24 @@ export function AuthNotice({
   miniApp,
   message,
   ban,
+  soft,
   onAuthenticated,
   onBan,
 }: {
   miniApp: boolean;
   message?: string;
   ban?: BanInfo;
+  /** Guest chose a protected action — browse stays available behind this banner. */
+  soft?: boolean;
   onAuthenticated: () => void;
   onBan?: (ban: BanInfo) => void;
 }) {
   const live = ban ? refreshBanInfo(ban) : undefined;
   const title = live
     ? 'Аккаунт заблокирован'
-    : miniApp ? 'Не удалось подтвердить Telegram' : 'Войдите через Telegram';
+    : soft || !miniApp
+      ? 'Войдите через Telegram'
+      : 'Не удалось подтвердить Telegram';
   const expired = Boolean(live && !live.permanent && (live.remainingMs ?? 0) <= 0);
   return <div className="auth-notice" role="alert"><div>
     <strong>{title}</strong>
@@ -97,7 +102,9 @@ export function AuthNotice({
           <span className="ban-notice__row">{formatBanRemaining(live)}</span>
         </>}
       {expired && <span className="ban-notice__row">Повторите вход — блокировка будет снята автоматически.</span>}
-    </> : <span>{message || 'Войдите через Telegram, чтобы продолжить.'}</span>}
+    </> : <span>{message || (soft
+      ? 'Войдите, чтобы покупать, продавать и писать в чат. Маркет и лоты можно смотреть без входа.'
+      : 'Войдите через Telegram, чтобы продолжить.')}</span>}
   </div>
     {miniApp ? <Button variant="secondary" onClick={() => location.reload()}>Повторить</Button> :
       <WebsiteLoginEntry onAuthenticated={onAuthenticated} onBan={onBan} />}

@@ -235,6 +235,8 @@ export default function App() {
   const [direction, setDirection] = useState(1);
   const [toast, setToast] = useState('');
   const [banNotice, setBanNotice] = useState<BanInfo | undefined>();
+  /** Soft login CTA for guests (buy / protected tabs) — does not block market browse. */
+  const [loginPrompt, setLoginPrompt] = useState(false);
   const [focusChatId, setFocusChatId] = useState<string | null>(null);
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
@@ -383,6 +385,16 @@ export default function App() {
     const from = TABS.findIndex(tab => tab.id === screen);
     const to = TABS.findIndex(tab => tab.id === next);
     setDirection(to >= from ? 1 : -1);
+    // Guests may browse market/lots freely; other tabs ask to sign in.
+    if (
+      !core.profile
+      && core.sessionRestore === 'guest'
+      && (next === 'deals' || next === 'create' || next === 'chat' || next === 'profile')
+    ) {
+      setLoginPrompt(true);
+    } else if (next === 'market') {
+      setLoginPrompt(false);
+    }
     setScreen(next);
     telegramImpact('light');
   };
@@ -413,7 +425,10 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (core.profile) setBanNotice(undefined);
+    if (core.profile) {
+      setBanNotice(undefined);
+      setLoginPrompt(false);
+    }
   }, [core.profile]);
 
   useEffect(() => {
@@ -451,6 +466,7 @@ export default function App() {
 
   const onAuthenticated = () => {
     setBanNotice(undefined);
+    setLoginPrompt(false);
     void core.refreshAll();
   };
   const openDirectChat = async (onixId: string) => {
@@ -471,9 +487,11 @@ export default function App() {
 
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
+  // Guests browse market + lots without a login wall. Auth UI only for ban,
+  // website login bridge, soft login prompt, or hard session/network failure.
   const showAuth = Boolean(banNotice)
     || websiteLoginBridge
-    || core.sessionRestore === 'guest'
+    || (loginPrompt && !core.profile)
     || (core.sessionRestore === 'network' && !core.profile && core.states.profile === 'error');
   const shellReady = core.states.products === 'success'
     || core.states.products === 'error'
@@ -556,7 +574,10 @@ export default function App() {
       <SoftErrorBoundary label="Не удалось открыть вход. Обновите страницу.">
         <AuthNotice
           miniApp={miniApp}
-          message={core.errors.profile}
+          soft={loginPrompt && !banNotice}
+          message={loginPrompt && !banNotice
+            ? 'Войдите, чтобы покупать, продавать и писать в чат. Маркет и лоты можно смотреть без входа.'
+            : core.errors.profile}
           ban={banNotice}
           onAuthenticated={onAuthenticated}
           onBan={setBanNotice}
@@ -693,6 +714,7 @@ export default function App() {
             onFocusProductHandled={() => setFocusProductId(null)}
             openDirectChat={openDirectChat}
             openProductCard={openProductCard}
+            onRequestLogin={() => setLoginPrompt(true)}
             openDealChat={(chatId: string) => {
               setFocusChatId(chatId);
               switchTo('chat');
@@ -734,10 +756,15 @@ export default function App() {
         </Suspense>
         </SoftErrorBoundary>
       </div>
-      {!miniApp && !showAuth && !chatImmersive ? (
+      {!miniApp && !banNotice && !websiteLoginBridge && !chatImmersive ? (
         <SiteFooter
           onSupport={() => {
             void (async () => {
+              if (!core.profile) {
+                setLoginPrompt(true);
+                setToast('Войдите, чтобы написать в поддержку.');
+                return;
+              }
               try {
                 const thread = await api.get<{ id: string }>(API_PATHS.aiChat);
                 setFocusChatId(thread.id);
@@ -887,7 +914,7 @@ export default function App() {
       ))}
     </nav>
     {toast && <Toast message={toast} />}
-    {!miniApp && !showAuth ? <PwaInstallBanner /> : null}
+    {!miniApp && !banNotice && !websiteLoginBridge ? <PwaInstallBanner /> : null}
   </div>
     <div className={`settings-overlay${settingsOpen ? ' is-open' : ''}`} aria-hidden={!settingsOpen}>
       <button

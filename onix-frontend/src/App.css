@@ -248,6 +248,28 @@ html[data-theme="light"] .settings-sheet {
   /* glass: tokens.css (.topbar) — полноценный large glass */
   transition: background 180ms, border-color 180ms, box-shadow 180ms, backdrop-filter 180ms;
 }
+/* Keep identity (profile) pinned on mobile — sticky fails under Telegram overscroll. */
+@media (max-width: 1099px) {
+  .topbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    margin: 0;
+    padding:
+      calc(10px + env(safe-area-inset-top, 0px))
+      max(16px, env(safe-area-inset-right, 0px))
+      10px
+      max(16px, env(safe-area-inset-left, 0px));
+    border-radius: 0;
+  }
+  .app-shell:not(.app-shell--chat) {
+    padding-top: calc(64px + env(safe-area-inset-top, 0px));
+  }
+  .app-shell--chat .topbar--chat {
+    position: fixed;
+  }
+}
 .brand {
   display: inline-flex;
   align-items: center;
@@ -3345,6 +3367,12 @@ html[data-theme="light"] .stats b { color: #1a1625; }
 html[data-theme="dark"] .stats span { color: rgba(255, 255, 255, 0.72); }
 html[data-theme="dark"] .stats b { color: #fff; }
 .public-profile { min-width: 0; max-width: 100%; }
+.public-profile > .profile-card {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--glass-card-bg);
+}
 .public-profile__bio, .public-profile .muted { overflow-wrap: anywhere; word-break: break-word; }
 .public-profile .product-grid h2, .public-profile .card h2 { overflow-wrap: anywhere; word-break: break-word; }
 .public-profile .seller-row { flex-wrap: wrap; min-width: 0; }
@@ -3778,7 +3806,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   left: 16px;
   right: auto;
   bottom: calc(88px + env(safe-area-inset-bottom));
-  z-index: 60;
+  z-index: 90;
   width: 44px;
   height: 44px;
   border-radius: 999px;
@@ -3786,6 +3814,9 @@ html[data-theme="light"] .seller-identity__actions .button {
   background: var(--bg);
   color: var(--text);
   font-size: 18px;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
 }
 @media (min-width: 1100px) {
   .scroll-top {
@@ -4028,7 +4059,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   /* Mini-app chat: same chrome as other tabs so the dock / categories do not jump */
   .app-shell--chat {
     padding:
-      calc(12px + env(safe-area-inset-top))
+      calc(64px + env(safe-area-inset-top))
       16px
       calc(96px + env(safe-area-inset-bottom));
   }

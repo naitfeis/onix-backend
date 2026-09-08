@@ -93,7 +93,12 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
       {core.errors['product-form'] && <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>}
       <Field label="Название" hint="До 32 символов"><Input required minLength={5} maxLength={32} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Например, Butterfly | Fade" /></Field>
-      <Field label="Описание"><Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field>
+      <Field
+        label="Описание"
+        hint="Пишите правду: логины, ключи, коды, игровой ID — как есть. Пишите что получить покупатель : услугу, аккаунт, предмет, ключ доступа."
+      >
+        <Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} />
+      </Field>
       <div className="field">
         <span className="field__label">Категория</span>
         <button

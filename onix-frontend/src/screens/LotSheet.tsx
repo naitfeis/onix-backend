@@ -67,6 +67,7 @@ export function LotSheet({
   onOpenSeller,
   onWrite,
   onToast,
+  onRequestLogin,
 }: {
   product: Product;
   detailReady: boolean;
@@ -79,6 +80,7 @@ export function LotSheet({
   onOpenSeller: () => void;
   onWrite: () => void;
   onToast: (text: string) => void;
+  onRequestLogin?: () => void;
 }) {
   const [method, setMethod] = useState<LotPayMethod>('BALANCE');
   const [methodsOpen, setMethodsOpen] = useState(false);
@@ -122,6 +124,7 @@ export function LotSheet({
     if (payLockRef.current || busy) return;
     if (!canBuy) {
       onToast('Войдите, чтобы купить лот.');
+      onRequestLogin?.();
       return;
     }
     if (!activeMeta.live && !activeQuote.coveredByBalance) {
