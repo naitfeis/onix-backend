@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
@@ -49,35 +50,32 @@ const SORT_OPTIONS = [
   { value: 'warranty', label: 'По сроку гарантии', server: 'warranty' as const },
 ] as const;
 
-function catalogScroller(): HTMLElement | Window {
-  // Prefer the document scrolling element — `.viewport` is often overflow:visible
-  // and does not receive scroll events (that was breaking ↑ on PC/mobile).
-  const doc = document.scrollingElement as HTMLElement | null;
-  if (doc && doc.scrollHeight > doc.clientHeight + 1) return doc;
-  return window;
-}
-
 function readCatalogScroll(): number {
-  const el = catalogScroller();
-  return el === window ? window.scrollY : (el as HTMLElement).scrollTop;
+  return window.scrollY
+    || document.documentElement.scrollTop
+    || document.body.scrollTop
+    || 0;
 }
 
 function writeCatalogScroll(top: number, behavior: ScrollBehavior = 'auto') {
-  const el = catalogScroller();
-  if (el === window) window.scrollTo({ top, behavior });
-  else (el as HTMLElement).scrollTo({ top, behavior });
+  window.scrollTo({ top, behavior });
+  try {
+    document.documentElement.scrollTo({ top, behavior });
+  } catch { /* older WebViews */ }
 }
 
 function scrollCatalogToSearch() {
-  const search = document.querySelector('.search-row') as HTMLElement | null;
-  const y = window.scrollY || document.documentElement.scrollTop || 0;
-  if (search) {
-    const fixedTopbar = window.matchMedia('(max-width: 1099px)').matches ? 72 : 12;
-    const top = search.getBoundingClientRect().top + y - fixedTopbar;
-    writeCatalogScroll(Math.max(0, top), 'smooth');
+  const target = (document.querySelector('.search-row')
+    || document.querySelector('.cat-block')
+    || document.querySelector('.market-hero')) as HTMLElement | null;
+  if (!target) {
+    writeCatalogScroll(0, 'smooth');
     return;
   }
-  writeCatalogScroll(0, 'smooth');
+  const topbar = document.querySelector('.topbar') as HTMLElement | null;
+  const offset = (topbar?.getBoundingClientRect().height ?? 56) + 12;
+  const top = Math.max(0, target.getBoundingClientRect().top + readCatalogScroll() - offset);
+  writeCatalogScroll(top, 'smooth');
 }
 
 function toServerSort(sort: string) {
@@ -368,13 +366,16 @@ export function Market({
   };
 
   useEffect(() => {
-    const el = catalogScroller();
     const onScroll = () => {
-      const top = el === window ? window.scrollY : (el as HTMLElement).scrollTop;
-      setShowTop(top > 720);
+      setShowTop(readCatalogScroll() > 360);
     };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      document.removeEventListener('scroll', onScroll, true);
+    };
   }, []);
 
   const loadMore = async () => {
@@ -842,13 +843,14 @@ export function Market({
       }}
       setToast={setToast}
     />
-    {showTop && !selected && (
+    {showTop && !selected && createPortal(
       <button
         type="button"
         className="scroll-top"
         aria-label="Наверх к поиску"
         onClick={() => scrollCatalogToSearch()}
-      >↑</button>
+      >↑</button>,
+      document.body,
     )}
   </div>;
 }
