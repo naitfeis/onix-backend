@@ -658,7 +658,7 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: 999px;
   box-shadow: none;
 }
-/* Market hero carousel — above categories */
+/* Market / profile banners — same glass rim, original fills (not a global recolor) */
 .market-hero {
   position: relative;
   margin-bottom: 16px;
@@ -666,7 +666,7 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: var(--radius-hero);
   background: #1c1c1c;
   border: var(--glass-border);
-  box-shadow: var(--glass-highlight);
+  box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   overflow: clip;
@@ -876,14 +876,14 @@ html[data-theme="dark"] .button--secondary {
   position: relative;
   border-radius: var(--radius-card);
   border: var(--glass-border);
-  background: #1c1c1c;
-  box-shadow: var(--glass-highlight);
+  background: var(--glass-card-bg);
+  box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   animation: card-in 320ms var(--ease) both;
 }
 html[data-theme="light"] .product-card {
-  background: #ffffff;
+  background: var(--glass-card-bg);
 }
 .product-grid .product-card:nth-child(1) { animation-delay: 0ms; }
 .product-grid .product-card:nth-child(2) { animation-delay: 40ms; }
@@ -2637,7 +2637,7 @@ html[data-theme="light"] .search-row .sort-picker__list {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   overflow: visible;
   padding-bottom: 3px;
   margin-top: 2px;
@@ -2648,7 +2648,7 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips.profile-tabs {
   justify-content: flex-start;
-  gap: 6px;
+  gap: 10px;
   margin: 0;
   padding-bottom: 0;
 }
@@ -2677,6 +2677,57 @@ html[data-theme="light"] .search-row .sort-picker__list {
   text-align: center;
   /* subtle glass: tokens.css */
   transition: background 200ms, color 200ms, border-color 200ms;
+}
+.chips.profile-tabs button {
+  padding: 9px 16px;
+}
+.deal-role-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 0;
+  margin: 0 0 8px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.deal-peer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.deal-peer-actions .button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  min-width: 96px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+.deal-peer-actions .button:hover {
+  border-color: var(--accent-violet);
+  color: #fff;
+  background: color-mix(in srgb, var(--accent-violet-deep) 35%, transparent);
+}
+.deal-lot-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 13px;
+  min-width: 0;
 }
 .chips button.active, .segmented button.active {
   color: #fff;
@@ -2763,52 +2814,11 @@ html[data-theme="light"] .category-toggle.is-open {
   background: var(--glass-thin-bg);
   border: var(--glass-border);
   border-radius: 999px;
-  box-shadow: var(--glass-highlight);
-}
-.deal-role-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  padding: 0;
-  margin: 0 0 4px;
-  border: 0;
-  background: none;
   box-shadow: none;
 }
 .deal-peer-name {
   margin: 2px 0 0;
   font-size: 12px;
-}
-.deal-peer-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.deal-peer-actions .button {
-  flex: 0 1 auto;
-  min-height: 32px;
-  min-width: 0;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  color: var(--text);
-}
-.deal-peer-actions .button:hover {
-  border-color: var(--accent-violet);
-  color: #fff;
-  background: color-mix(in srgb, var(--accent-violet-deep) 35%, transparent);
-}
-.deal-lot-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-  min-width: 0;
 }
 .deal-lot-tags .lot-sheet__badge {
   max-width: 100%;
@@ -2928,7 +2938,7 @@ html[data-theme="light"] .timeline li {
   border-top-color: rgba(40, 32, 60, 0.14);
 }
 .timeline li.done { color: var(--text-primary); border-color: var(--success); }
-.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; min-width: 0; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 13px; min-width: 0; }
 .card-actions .button { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .deal-card .card-actions .button {
   min-height: 36px;
@@ -3645,7 +3655,7 @@ html[data-theme="dark"] .stats b { color: #fff; }
 .public-profile__bio, .public-profile .muted { overflow-wrap: anywhere; word-break: break-word; }
 .public-profile .product-grid h2, .public-profile .card h2 { overflow-wrap: anywhere; word-break: break-word; }
 .public-profile .seller-row { flex-wrap: wrap; min-width: 0; }
-.public-profile .card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.public-profile .card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .public-profile .card-actions .button { flex: 1 1 auto; min-width: 0; }
 .public-profile .profile-card > .card-actions { grid-column: 1 / -1; }
 .modal__panel .product-grid .card { min-width: 0; }
