@@ -382,7 +382,10 @@ class OperationsService {
   }
 
   async withdraw(user: AuthUser, dto: WithdrawalDto, correlationId?: string) {
-    // Stage 1: no external payout rail — keep debit disabled until WITHDRAWALS_ENABLED=true.
+    // Stage 1: no external payout rail / cancel / PENDING→PAID machine.
+    // WITHDRAWAL ledger debit is the money move (funds leave available immediately).
+    // Enable only when ops are ready: WITHDRAWALS_ENABLED=true.
+    // Retry-after-timeout: FE keeps idempotencyKey until success; claim+debit share one Serializable TX.
     const enabled = (process.env.WITHDRAWALS_ENABLED ?? '').trim().toLowerCase();
     if (enabled !== '1' && enabled !== 'true' && enabled !== 'yes') {
       throw new BadRequestException(
@@ -401,19 +404,44 @@ class OperationsService {
       stepUpChallengeId: dto.stepUpChallengeId,
     });
 
-    // Idempotency first: completed retries return without velocity/debit.
-    // Velocity runs inside the Serializable TX under User FOR UPDATE (no parallel bypass).
+    // Idempotency claim + debit are one Serializable TX.
+    // Concurrent withdraws with *different* keys still serialize on the same user via
+    // pg_advisory_xact_lock(wallet.user:{id}) + User FOR UPDATE + balanceCents >= amount.
+    const ledgerKey = `wallet.withdraw:${user.id}:${dto.idempotencyKey}`.slice(0, 128);
     const result = await this.idempotency.runTransactional(
       'wallet.withdraw',
       dto.idempotencyKey,
       { userId: user.id.toString(), amountCents: dto.amountCents },
       async (tx) => {
+        // Serialize all wallet.withdraw money ops for this user (not just same idempotency key).
+        await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${`wallet.user:${user.id}`}, 0))
+        `;
+        await lockUsersInIdOrder(tx, [user.id]);
+
+        const live = await tx.user.findUniqueOrThrow({
+          where: { id: user.id },
+          select: {
+            deletedAt: true,
+            withdrawBlockedAt: true,
+            securityLockedAt: true,
+            suspiciousFundsHoldAt: true,
+          },
+        });
+        if (live.deletedAt) {
+          throw new BadRequestException('Аккаунт недоступен.');
+        }
+        if (live.withdrawBlockedAt || live.securityLockedAt) {
+          throw new BadRequestException('Вывод средств заблокирован. Обратитесь в поддержку ONIX.');
+        }
+
         const assertInput: WithdrawAssertInput = {
           userId: user.id,
           amountCents: amount,
           db: tx,
-          lockUser: true,
-          excludeIdempotencyKey: dto.idempotencyKey,
+          // User row already locked above — skip second FOR UPDATE.
+          lockUser: false,
+          excludeIdempotencyKey: ledgerKey,
         };
         await this.withdrawVelocity.assertAllowed(assertInput);
 
@@ -425,17 +453,19 @@ class OperationsService {
           );
         }
 
+        const available = await this.balance.getAvailable(tx, user.id);
         const withdrawable = await spendableBalanceCents(tx, this.balance, user.id);
+        if (amount > available) {
+          throw new BadRequestException('Недостаточно средств.');
+        }
         if (amount > withdrawable) {
           throw new BadRequestException(
-            withdrawable < amount
-              ? 'Часть баланса недоступна (гарантия, clawback или блокировка). Уменьшите сумму вывода.'
-              : 'Недостаточно средств.',
+            'Часть баланса недоступна (гарантия, clawback или блокировка). Уменьшите сумму вывода.',
           );
         }
 
         const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
-          idempotencyKey: dto.idempotencyKey,
+          idempotencyKey: ledgerKey,
           description: 'Заявка пользователя на вывод средств',
           actorUserId: user.id,
           source: 'USER',
@@ -450,6 +480,7 @@ class OperationsService {
             metadata: {
               amountCents: dto.amountCents,
               idempotencyKey: dto.idempotencyKey,
+              ledgerIdempotencyKey: ledgerKey,
               correlationId: corr,
             },
           },
