@@ -1,7 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-
-const OPEN_ORDER_STATUSES = new Set(['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE']);
+import { OPEN_ORDER_STATUSES } from './order-state-machine';
 
 /**
  * Support tickets linked to an order cannot close until the order reaches a terminal state.

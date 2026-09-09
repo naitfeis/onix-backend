@@ -38,6 +38,16 @@ import { dealPartySelect, dealProductSelect, dealWarrantySelect } from './query-
 import { dealDto } from './response';
 import { hideReviewsForOrder } from './marketplace/review-aggregate';
 import { CHECKOUT_SETTLEMENT, type PurchaseInTxOptions } from './checkout-settlement';
+import {
+  ADMIN_COMPLETE_FROM,
+  BUYER_CANCEL_FROM,
+  BUYER_COMPLETE_FROM,
+  OPEN_SUPPORT_TICKET_STATUSES,
+  REFUND_FROM,
+  SELLER_DELIVER_FROM,
+  assertNotTerminalForMutation,
+  assertStatusIn,
+} from './order-state-machine';
 
 class PurchaseDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
@@ -59,15 +69,11 @@ class OrderQuery {
 }
 
 /**
- * Escrow state machine (canonical Prisma OrderStatus):
- *   PENDING (create transition only) → PAYMENT_HOLD → DELIVERING → COMPLETED
- *   PAYMENT_HOLD → CANCELED (refund buyer)
- *   PAYMENT_HOLD | DELIVERING → DISPUTE (funds stay held)
- *   PAYMENT_HOLD | DELIVERING | DISPUTE → REFUNDED (admin)
- *
+ * Escrow state machine — see order-state-machine.ts (single source of truth).
  * Money: buyer debit on purchase (PURCHASE_HOLD); seller credit only on COMPLETED (SALE_PAYOUT).
  * PAYMENT_HOLD → CANCELED: buyer or support only (seller cannot cancel).
- * COMPLETED → REFUNDED: debit available seller balance; remainder → OrderClawback (never negative ledger).
+ * COMPLETED → REFUNDED: clawback totalAmount from seller (never negative ledger).
+ * Admin MUST NOT complete from PAYMENT_HOLD (no payout without deliver/dispute).
  */
 @Injectable()
 export class EscrowService {
@@ -388,7 +394,7 @@ export class EscrowService {
   }
 
   async deliver(user: AuthUser, id: bigint, key: string) {
-    await this.transition(id, user, 'PAYMENT_HOLD', 'DELIVERING', 'seller', key);
+    await this.transition(id, user, SELLER_DELIVER_FROM, 'DELIVERING', 'seller', key);
     const order = await this.prisma.order.findUniqueOrThrow({
       where: { id },
       select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
@@ -399,7 +405,7 @@ export class EscrowService {
 
   async complete(user: AuthUser, id: bigint, key: string) {
     const notifyIds = await this.finishAsCompleted(user, id, key, {
-      allowedFrom: ['DELIVERING'],
+      allowedFrom: [...BUYER_COMPLETE_FROM],
       requireBuyer: true,
     });
     const order = await this.prisma.order.findUniqueOrThrow({
@@ -411,19 +417,19 @@ export class EscrowService {
     return this.one(user, id);
   }
 
-  /** Support/admin: release escrow to seller (confirm deal for seller). */
+  /** Support/admin: release escrow to seller after deliver or dispute resolution. */
   async completeByAdmin(actor: AuthUser, id: bigint, reason?: string) {
     if (!canActAsSupport(actor)) {
       throw new BadRequestException('Подтвердить сделку продавцу может только поддержка.');
     }
     const key = `order:${id}:admin-complete`;
     const notifyIds = await this.finishAsCompleted(actor, id, key, {
-      allowedFrom: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'],
+      allowedFrom: [...ADMIN_COMPLETE_FROM],
       requireBuyer: false,
       supportReason: reason?.trim() ? `Администратор: ${reason.trim()}` : 'Администратор',
     });
     await this.prisma.supportTicket.updateMany({
-      where: { orderId: id, status: 'OPEN' },
+      where: { orderId: id, status: { in: [...OPEN_SUPPORT_TICKET_STATUSES] } },
       data: { status: 'CLOSED', closedAt: new Date() },
     });
     const order = await this.prisma.order.findUniqueOrThrow({
@@ -488,9 +494,11 @@ export class EscrowService {
       if (order.status === 'COMPLETED') {
         return this.pendingOrderNotifyIds(tx, id, [order.sellerId]);
       }
+      assertNotTerminalForMutation(order.status, 'complete');
+      assertStatusIn(order.status, opts.allowedFrom, 'complete');
       if (opts.requireBuyer) {
         const openTicket = await tx.supportTicket.findFirst({
-          where: { orderId: id, status: { in: ['OPEN', 'IN_REVIEW', 'WAITING_USER'] } },
+          where: { orderId: id, status: { in: [...OPEN_SUPPORT_TICKET_STATUSES] } },
           select: { id: true },
         });
         if (openTicket) {
@@ -588,7 +596,7 @@ export class EscrowService {
     if (order.buyerId !== user.id && !canActAsSupport(user)) {
       throw new BadRequestException('Отменить заказ на этапе оплаты может только покупатель.');
     }
-    return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
+    return this.refund(user, id, [...BUYER_CANCEL_FROM], 'CANCELED', key, reason);
   }
 
   /** @deprecated Use POST /orders/:id/support — kept as alias for older clients. */
@@ -604,7 +612,7 @@ export class EscrowService {
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
     const key = `order:${id}:admin-refund`;
-    return this.refund(actor, id, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'], 'REFUNDED', key, reason);
+    return this.refund(actor, id, [...REFUND_FROM], 'REFUNDED', key, reason);
   }
 
   /**
@@ -618,7 +626,7 @@ export class EscrowService {
     return this.refund(
       seller,
       id,
-      ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'],
+      [...REFUND_FROM],
       'REFUNDED',
       key,
       `Продавец: ${trimmed}`,
@@ -664,6 +672,11 @@ export class EscrowService {
       if (order.status === target) {
         return this.pendingOrderNotifyIds(tx, id, [order.buyerId, order.sellerId]);
       }
+      // CANCELED/REFUNDED/COMPLETED (wrong target) cannot morph into another terminal via this path.
+      if (order.status === 'CANCELED' || order.status === 'REFUNDED') {
+        throw new ConflictException(`Сделка уже в статусе ${order.status}: возврат/отмена недоступны.`);
+      }
+      assertStatusIn(order.status, allowed, target === 'CANCELED' ? 'cancel' : 'refund');
       await lockProductForUpdate(tx, order.productId);
       await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
@@ -817,6 +830,10 @@ export class EscrowService {
       const ownerId = role === 'seller' ? order.sellerId : order.buyerId;
       if (ownerId !== actor.id) throw new BadRequestException('Нет прав на это действие.');
       if (order.status === to) return order;
+      assertNotTerminalForMutation(order.status, `${from}→${to}`);
+      if (order.status !== from) {
+        throw new ConflictException(`Недопустимый переход состояния сделки из ${order.status}.`);
+      }
       const changed = await tx.order.updateMany({ where: { id, status: from }, data: { status: to } });
       if (!changed.count) {
         throw new ConflictException('Недопустимый переход состояния сделки.');

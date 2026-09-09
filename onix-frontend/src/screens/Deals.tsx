@@ -175,7 +175,7 @@ export function Deals({
         <div className="card-actions">
           {role === 'seller' && deal.status === 'PAYMENT_HOLD' && <Button onClick={() => setConfirm({ deal, action: 'deliver' })}>Товар передан</Button>}
           {role === 'buyer' && deal.status === 'DELIVERING' && <Button onClick={() => setConfirm({ deal, action: 'complete' })}>Подтверждение продавцу</Button>}
-          {deal.status === 'PAYMENT_HOLD' && (
+          {deal.status === 'PAYMENT_HOLD' && role === 'buyer' && (
             <Button variant="danger" onClick={() => setConfirm({ deal, action: 'cancel' })}>Отменить сделку</Button>
           )}
           {role === 'seller' && !['REFUNDED', 'CANCELED'].includes(deal.status) && (

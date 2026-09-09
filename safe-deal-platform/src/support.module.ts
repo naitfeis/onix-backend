@@ -14,6 +14,10 @@ import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { SupportCenterService } from './support-center.service';
 import { RiskModule } from './risk/risk.module';
+import {
+  DISPUTE_FROM,
+  OPEN_SUPPORT_TICKET_STATUSES as OPEN_TICKET_STATUSES,
+} from './order-state-machine';
 
 class AppealDto {
   @IsString() @MaxLength(2000) explanation!: string;
@@ -25,7 +29,7 @@ class OpenSupportDto {
   @IsOptional() @IsString() @Length(16, 100) idempotencyKey?: string;
 }
 
-const OPEN_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'] as const;
+const SUPPORT_ELIGIBLE_ORDER = new Set<string>([...DISPUTE_FROM, 'DISPUTE']);
 
 @Injectable()
 export class SupportService {
@@ -58,7 +62,7 @@ export class SupportService {
       return { ticketId: openExisting.id, chatId: openExisting.chatId, status: openExisting.status };
     }
 
-    if (!['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'].includes(orderPeek.status)) {
+    if (!SUPPORT_ELIGIBLE_ORDER.has(orderPeek.status)) {
       throw new BadRequestException('Обращение в поддержку недоступно в текущем статусе сделки.');
     }
 
@@ -81,7 +85,7 @@ export class SupportService {
         return { ticket: stillOpen, notifyIds: [] as bigint[] };
       }
 
-      if (!['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'].includes(order.status)) {
+      if (!SUPPORT_ELIGIBLE_ORDER.has(order.status)) {
         throw new ConflictException('Обращение в поддержку недоступно в текущем статусе сделки.');
       }
 
@@ -94,7 +98,7 @@ export class SupportService {
         await tx.order.update({ where: { id: orderId }, data: { chatId: chat.id } });
       }
 
-      if (order.status === 'PAYMENT_HOLD' || order.status === 'DELIVERING') {
+      if ((DISPUTE_FROM as readonly string[]).includes(order.status)) {
         const changed = await tx.order.updateMany({
           where: { id: orderId, status: order.status },
           data: { status: 'DISPUTE', disputeReason: trimmed },
