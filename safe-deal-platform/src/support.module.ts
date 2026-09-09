@@ -2,7 +2,7 @@ import {
   BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable, Module,
   NotFoundException, Param, Post,
 } from '@nestjs/common';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { lockOrderForUpdate, lockUsersInIdOrder } from './database/money-locks';
@@ -21,6 +21,8 @@ class AppealDto {
 
 class OpenSupportDto {
   @IsOptional() @IsString() @MaxLength(1000) reason?: string;
+  /** Optional client key — natural reuse of open ticket is primary; key binds dispute transition. */
+  @IsOptional() @IsString() @Length(16, 100) idempotencyKey?: string;
 }
 
 const OPEN_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'] as const;
@@ -37,7 +39,7 @@ export class SupportService {
    * - creates/reuses ticket
    * - moves PAYMENT_HOLD|DELIVERING → DISPUTE (blocks buyer complete / seller deliver)
    */
-  async open(user: AuthUser, orderId: bigint, reason?: string) {
+  async open(user: AuthUser, orderId: bigint, reason?: string, idempotencyKey?: string) {
     const orderPeek = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { product: { select: { title: true } } },
@@ -98,7 +100,9 @@ export class SupportService {
           data: { status: 'DISPUTE', disputeReason: trimmed },
         });
         if (!changed.count) throw new ConflictException('Состояние сделки уже изменилось.');
-        const disputeKey = `order:${orderId}:support-dispute`;
+        const disputeKey = (idempotencyKey?.trim() && idempotencyKey.trim().length >= 16)
+          ? idempotencyKey.trim()
+          : `order:${orderId}:support-dispute`;
         const existingTransition = await tx.orderTransition.findUnique({
           where: { idempotencyKey: disputeKey },
           select: { id: true },
@@ -198,7 +202,7 @@ export class SupportController {
     @Param('id') id: string,
     @Body() dto: OpenSupportDto,
   ) {
-    return this.support.open(user, parseId(id), dto.reason);
+    return this.support.open(user, parseId(id), dto.reason, dto.idempotencyKey);
   }
 
   @Post('support/appeals')

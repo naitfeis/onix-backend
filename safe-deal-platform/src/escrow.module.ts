@@ -592,8 +592,8 @@ export class EscrowService {
   }
 
   /** @deprecated Use POST /orders/:id/support — kept as alias for older clients. */
-  async dispute(user: AuthUser, id: bigint, _key: string, reason?: string) {
-    await this.support.open(user, id, reason);
+  async dispute(user: AuthUser, id: bigint, key: string, reason?: string) {
+    await this.support.open(user, id, reason, key);
     const row = await this.prisma.order.findUnique({
       where: { id },
       select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },

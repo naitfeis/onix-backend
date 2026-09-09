@@ -1123,15 +1123,24 @@ export function useOnixCore() {
     return thread;
   }), [run]);
 
-  const openSupport = useCallback((dealId: string, reason?: string) => run(`support-${dealId}`, () =>
-    api.post<{ ticketId: string; chatId: string }>(API_PATHS.orderSupport(dealId), {
-      ...(reason ? { reason } : {}),
-    }), () => {
-      void load('chats', API_PATHS.chats);
-      void load('deals', API_PATHS.orders);
-    }), [load, run]);
-
   const dealIdempotencyRef = useRef(new Map<string, string>());
+
+  const openSupport = useCallback((dealId: string, reason?: string) => {
+    const stamp = `${dealId}:support`;
+    let key = dealIdempotencyRef.current.get(stamp);
+    if (!key) {
+      key = crypto.randomUUID();
+      dealIdempotencyRef.current.set(stamp, key);
+    }
+    return run(`support-${dealId}`, () =>
+      api.post<{ ticketId: string; chatId: string }>(API_PATHS.orderSupport(dealId), {
+        idempotencyKey: key,
+        ...(reason ? { reason } : {}),
+      }), () => {
+        void load('chats', API_PATHS.chats);
+        void load('deals', API_PATHS.orders);
+      });
+  }, [load, run]);
 
   const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
     if (action === 'dispute') {
@@ -1154,12 +1163,20 @@ export function useOnixCore() {
     }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
   }, [load, openSupport, run]);
 
-  const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => run('withdraw', () =>
-    api.post(API_PATHS.walletWithdraw, {
-      amountCents: rublesToCentsString(amountRubles),
-      idempotencyKey: crypto.randomUUID(),
-      ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
-    }), loadProfile), [loadProfile, run]);
+  const withdrawKeyRef = useRef<string | null>(null);
+  const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => {
+    if (!withdrawKeyRef.current) withdrawKeyRef.current = crypto.randomUUID();
+    const key = withdrawKeyRef.current;
+    return run('withdraw', () =>
+      api.post(API_PATHS.walletWithdraw, {
+        amountCents: rublesToCentsString(amountRubles),
+        idempotencyKey: key,
+        ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
+      }), async () => {
+        withdrawKeyRef.current = null;
+        await loadProfile();
+      });
+  }, [loadProfile, run]);
 
   const submitReview = useCallback((dealId: string, rating: number, text: string) => run('review', () =>
     api.post<Review>(API_PATHS.reviewCreate(dealId), { rating, text: text.trim() }), () => {
@@ -1227,7 +1244,10 @@ export function useOnixCore() {
     }
     return run(`seller-refund-${dealId}`, () =>
       api.post(API_PATHS.orderRefundRequest(dealId), { reason, idempotencyKey: key }),
-    () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
+    () => {
+      dealIdempotencyRef.current.delete(stamp);
+      void load('deals', API_PATHS.orders, { silent: true, fresh: true });
+    });
   }, [load, run]);
 
   /** Website / PWA only — revoke session and return to AuthGate. Hidden in Telegram Mini App. */
