@@ -7,6 +7,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
+import { assertRateLimit } from './rate-limit';
 import { withSerializableTransaction } from './database/transaction-retry';
 import {
   lockOrderForUpdate,
@@ -281,7 +282,7 @@ export class EscrowService {
     });
     await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 
-    // Auto-delivery: one secret per listing — only when the last unit is sold (quantity was 1).
+    // Auto-delivery: one secret per listing — only when the last unit sells (stockAfterQty === 0).
     const isLastUnit = stockAfterQty === 0;
     if (
       isLastUnit
@@ -903,18 +904,23 @@ export class EscrowController {
     return this.service.list(user, query);
   }
   @Post('product/:productId') purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {
+    assertRateLimit(`order:purchase:${user.id}`, 30, 60_000);
     return this.service.purchase(user, id, dto.idempotencyKey, dto.quantity);
   }
   @Post(':id/deliver') deliver(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.deliver(user, parseId(id), dto.idempotencyKey);
   }
   @Post(':id/complete') complete(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.complete(user, parseId(id), dto.idempotencyKey);
   }
   @Post(':id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.cancel(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
   @Post(':id/dispute') dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    assertRateLimit(`order:support:${user.id}`, 20, 60_000);
     return this.service.dispute(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
   @Post(':id/refund-request') refundRequest(
@@ -922,6 +928,7 @@ export class EscrowController {
     @Param('id') id: string,
     @Body() dto: SellerRefundDto,
   ) {
+    assertRateLimit(`order:refund:${user.id}`, 20, 60_000);
     return this.service.refundBySeller(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
 }

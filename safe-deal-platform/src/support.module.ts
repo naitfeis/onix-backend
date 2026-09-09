@@ -5,6 +5,7 @@ import {
 import { IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
+import { assertRateLimit } from './rate-limit';
 import { lockOrderForUpdate, lockUsersInIdOrder } from './database/money-locks';
 import { withSerializableTransaction } from './database/transaction-retry';
 import { createDomainNotification, deliverTelegramAfterCommit, pushTelegramToChatId } from './domain-notify';
@@ -206,11 +207,13 @@ export class SupportController {
     @Param('id') id: string,
     @Body() dto: OpenSupportDto,
   ) {
+    assertRateLimit(`order:support:${user.id}`, 20, 60_000);
     return this.support.open(user, parseId(id), dto.reason, dto.idempotencyKey);
   }
 
   @Post('support/appeals')
   appeal(@CurrentUser() user: AuthUser, @Body() dto: AppealDto) {
+    assertRateLimit(`support:appeal:${user.id}`, 8, 60_000);
     const text = dto.explanation.trim();
     if (text.length < 8) throw new BadRequestException('Опишите ситуацию подробнее.');
     return this.center.createAppeal(user.id, text);

@@ -34,6 +34,11 @@ export class PaymentIntentExpireJob {
         if (!intent || (intent.status !== 'CREATED' && intent.status !== 'PENDING')) {
           return false;
         }
+        // PSP already accepted / assigned a payment id — wait for webhook; do not EXPIRE
+        // (late SUCCEEDED after stock release would leave paid-but-uncledited money).
+        if (intent.providerRef) {
+          return false;
+        }
         const checkout = parsePaymentCheckoutMetadata(intent.metadata);
         if (checkout?.stockReserved) {
           await lockProductForUpdate(tx, checkout.productId);
