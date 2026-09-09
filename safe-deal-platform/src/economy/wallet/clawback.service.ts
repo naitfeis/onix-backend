@@ -23,19 +23,23 @@ export class ClawbackService {
   }
 
   /**
-   * During COMPLETED → REFUNDED: claw back seller payout without failing if short.
-   * Buyer refund is caller's responsibility (always full totalAmount).
+   * During COMPLETED → REFUNDED: claw back seller funds without failing if short.
+   * amountCents should be the full buyer refund (totalAmount) so platform fee is recovered.
+   * Buyer refund is caller's responsibility.
    */
   async clawbackOnRefund(
     tx: Tx,
     opts: {
       orderId: bigint;
       sellerId: bigint;
-      payoutCents: bigint;
+      amountCents: bigint;
+      /** @deprecated use amountCents */
+      payoutCents?: bigint;
       reason?: string;
     },
   ): Promise<{ debitedCents: bigint; remainingCents: bigint; clawbackId: string | null }> {
-    if (opts.payoutCents <= 0n) {
+    const target = opts.amountCents > 0n ? opts.amountCents : (opts.payoutCents ?? 0n);
+    if (target <= 0n) {
       return { debitedCents: 0n, remainingCents: 0n, clawbackId: null };
     }
 
@@ -49,7 +53,7 @@ export class ClawbackService {
     }
 
     const available = await this.balance.getAvailable(tx, opts.sellerId);
-    const take = available < opts.payoutCents ? available : opts.payoutCents;
+    const take = available < target ? available : target;
 
     if (take > 0n) {
       await this.balance.debit(tx, opts.sellerId, take, 'CLAWBACK', {
@@ -61,13 +65,13 @@ export class ClawbackService {
       });
     }
 
-    const remaining = opts.payoutCents - take;
-    const status = this.statusFor(opts.payoutCents, take);
+    const remaining = target - take;
+    const status = this.statusFor(target, take);
     const row = await tx.orderClawback.create({
       data: {
         orderId: opts.orderId,
         sellerId: opts.sellerId,
-        amountCents: opts.payoutCents,
+        amountCents: target,
         recoveredCents: take,
         status,
         reason: opts.reason?.trim() || null,

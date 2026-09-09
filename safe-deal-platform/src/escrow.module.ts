@@ -24,6 +24,7 @@ import { RiskModule } from './risk/risk.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { assertSpendableBalance } from './economy/wallet/sale-proceeds-hold';
+import { reserveProductStock } from './economy/wallet/product-stock';
 import { SupportModule, SupportService } from './support.module';
 import { saleKindFromSubcategory } from './economy/wallet/fund-provenance';
 import type { LedgerWriteMeta } from './economy/wallet/ledger-write.types';
@@ -36,7 +37,7 @@ import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect, dealWarrantySelect } from './query-selects';
 import { dealDto } from './response';
 import { hideReviewsForOrder } from './marketplace/review-aggregate';
-import { CHECKOUT_SETTLEMENT } from './checkout-settlement';
+import { CHECKOUT_SETTLEMENT, type PurchaseInTxOptions } from './checkout-settlement';
 
 class PurchaseDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
@@ -175,6 +176,7 @@ export class EscrowService {
     productId: string,
     key: string,
     quantity: number,
+    opts?: PurchaseInTxOptions,
   ) {
     const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
     if (existing) {
@@ -186,30 +188,37 @@ export class EscrowService {
         notifyIds: await this.pendingOrderNotifyIds(tx, existing.id, [existing.buyerId, existing.sellerId]),
       };
     }
-    await lockProductForUpdate(tx, productId);
+    if (!opts?.locksHeld) {
+      await lockProductForUpdate(tx, productId);
+    }
     const product = await tx.product.findUnique({ where: { id: productId } });
-    if (!product || product.status !== 'ACTIVE' || product.expiresAt <= new Date() || product.quantity < quantity) {
+    if (!product || product.expiresAt <= new Date()) {
       throw new ConflictException('Товар недоступен.');
     }
     if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
     if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
-    await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
-    const totalAmountCents = product.priceCents * BigInt(quantity);
+    const unitPrice = opts?.frozenUnitPriceCents ?? product.priceCents;
+    if (opts?.frozenUnitPriceCents != null && product.priceCents !== opts.frozenUnitPriceCents) {
+      throw new ConflictException('Цена лота изменилась. Создайте оплату заново.');
+    }
+    if (!opts?.locksHeld) {
+      await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
+    }
+    const totalAmountCents = unitPrice * BigInt(quantity);
     const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
-    const reserved = await tx.product.updateMany({
-      where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
-      data: { quantity: { decrement: quantity } },
-    });
-    if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
-    const stockAfter = await tx.product.findUniqueOrThrow({
-      where: { id: product.id },
-      select: { quantity: true },
-    });
-    if (stockAfter.quantity < 1) {
-      await tx.product.update({
-        where: { id: product.id },
-        data: { status: stockAfter.quantity === 0 ? 'SOLD_OUT' : 'RESERVED' },
-      });
+    let stockAfterQty: number;
+    if (opts?.stockPreReserved) {
+      // Stock already decremented at PaymentIntent create; product may be ACTIVE/RESERVED/SOLD_OUT.
+      if (!['ACTIVE', 'RESERVED', 'SOLD_OUT'].includes(product.status)) {
+        throw new ConflictException('Товар недоступен.');
+      }
+      stockAfterQty = product.quantity;
+    } else {
+      if (product.status !== 'ACTIVE' || product.quantity < quantity) {
+        throw new ConflictException('Товар недоступен.');
+      }
+      const reserved = await reserveProductStock(tx, product.id, quantity);
+      stockAfterQty = reserved.quantityAfter;
     }
     if (totalAmountCents > 0n) {
       await assertSpendableBalance(
@@ -265,7 +274,7 @@ export class EscrowService {
     await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
 
     // Auto-delivery: one secret per listing — only when the last unit is sold (quantity was 1).
-    const isLastUnit = stockAfter.quantity === 0;
+    const isLastUnit = stockAfterQty === 0;
     if (
       isLastUnit
       && product.autoDeliver
@@ -667,11 +676,12 @@ export class EscrowService {
 
       // After COMPLETED payout left escrow → clawback available balance; remainder → OrderClawback.
       // Buyer always receives full refund; BalanceService never goes negative.
-      if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
+      if (order.status === 'COMPLETED' && order.totalAmountCents > 0n) {
         await this.clawbacks.clawbackOnRefund(tx, {
           orderId: id,
           sellerId: order.sellerId,
-          payoutCents: order.payoutCents,
+          // Recover full buyer refund (payout + platform fee) from seller.
+          amountCents: order.totalAmountCents,
           reason,
         });
       }
@@ -688,7 +698,8 @@ export class EscrowService {
         };
         await this.balance.credit(tx, order.buyerId, order.totalAmountCents, 'REFUND', refundMeta);
       }
-      // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.
+      // Release deposit freeze tied to this order (COMPLETED refund / cancel).
+      await this.locks.releaseForOrder(tx, id);
       if (order.status !== 'COMPLETED') {
         const product = await tx.product.findUniqueOrThrow({
           where: { id: order.productId },
@@ -715,7 +726,7 @@ export class EscrowService {
           ? {
             feeCents: order.feeCents.toString(),
             payoutCents: order.payoutCents.toString(),
-            platformFeeAbsorbedCents: order.feeCents.toString(),
+            clawbackAmountCents: order.totalAmountCents.toString(),
           }
           : {}),
       });

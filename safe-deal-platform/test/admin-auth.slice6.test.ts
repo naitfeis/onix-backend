@@ -166,7 +166,6 @@ test('customer plane rejects MANUAL even for legacy admin customer claims', asyn
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
     { isConfigured: () => false } as never,
   );
   await assert.rejects(

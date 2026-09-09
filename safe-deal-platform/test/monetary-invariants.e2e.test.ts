@@ -53,8 +53,9 @@ test('e2e: post-complete refund clawback from seller then credit buyer', () => {
   m.refund('o4');
   assert.equal(m.getUser('buyer').balanceCents, 5_000_00n);
   assert.equal(m.getUser('seller').balanceCents, 0n);
-  // Deposit freeze stays (platform policy) — locked not auto-released on refund.
-  assert.equal(m.getUser('seller').depositLockedCents, 2_000_00n);
+  // Deposit freeze released on refund (same as LockService.releaseForOrder).
+  assert.equal(m.getUser('seller').depositLockedCents, 0n);
+  assert.equal(m.getUser('seller').depositAvailableCents, 10_000_00n);
   m.assertInvariants();
 });
 
@@ -180,14 +181,14 @@ test('e2e: post-complete refund with short seller balance → clawback debt', ()
   assert.equal(m.getUser('seller').balanceCents, 0n);
   const cb = m.getClawback('o-short');
   assert.ok(cb);
-  assert.equal(cb!.amountCents, 1_900_00n);
+  assert.equal(cb!.amountCents, 2_000_00n);
   assert.equal(cb!.recoveredCents, 400_00n);
   assert.equal(cb!.status, 'PARTIAL');
-  // Later top-up recovers remainder.
+  // Later top-up recovers remainder (full total including platform fee).
   m.credit('seller', 2_000_00n, 'DEPOSIT', 'top-1');
-  assert.equal(m.recoverClawback('o-short'), 1_500_00n);
+  assert.equal(m.recoverClawback('o-short'), 1_600_00n);
   assert.equal(m.getClawback('o-short')!.status, 'RECOVERED');
-  assert.equal(m.getUser('seller').balanceCents, 500_00n);
+  assert.equal(m.getUser('seller').balanceCents, 400_00n);
   m.assertInvariants();
 });
 

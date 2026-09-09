@@ -61,6 +61,14 @@ export class LockService {
     return lock;
   }
 
+  /** Release ACTIVE / HELD_DISPUTE lock for an order (refund / cancel path). */
+  async releaseForOrder(tx: Tx, orderId: bigint) {
+    const lock = await tx.depositLock.findUnique({ where: { orderId } });
+    if (!lock) return null;
+    if (lock.status === 'RELEASED' || lock.status === 'SEIZED') return lock;
+    return this.releaseLock(tx, lock.id);
+  }
+
   /** Keep frozen until dispute resolution. */
   async holdForDispute(tx: Tx, orderId: bigint) {
     const lock = await tx.depositLock.findUnique({ where: { orderId } });

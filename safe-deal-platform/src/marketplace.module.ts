@@ -25,6 +25,8 @@ import { assertListingPrice } from './pricing';
 import { PrismaService } from './prisma.service';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
+import { lockProductForUpdate } from './database/money-locks';
+import { withSerializableTransaction } from './database/transaction-retry';
 import {
   productDetailSelect, productListSelect, sellerCatalogSelect, sellerPublicSelect,
 } from './query-selects';
@@ -433,55 +435,64 @@ export class MarketplaceService {
     if (seller?.sellBannedAt) {
       throw new BadRequestException('Продажа товаров запрещена администратором.');
     }
-    const item = await this.ownedActive(user, id);
-    const category = dto.category ?? item.category;
-    const subcategory = dto.subcategory !== undefined ? dto.subcategory : item.subcategory;
-    try {
-      assertSubcategoryForCategory(category, subcategory);
-    } catch (e) {
-      throw fieldBadRequest('subcategory', (e as Error).message);
-    }
-    const { priceCents, deliveryText, autoDeliver, warrantyHours, ...data } = dto;
-    const nextQuantity = dto.quantity ?? item.quantity;
-    const wantAutoDeliver = autoDeliver ?? item.autoDeliver;
-    if (wantAutoDeliver && nextQuantity > 1) {
-      throw fieldBadRequest('autoDeliver', 'Автовыдача доступна только для лотов с количеством 1.');
-    }
-    if (priceCents) {
+    await withSerializableTransaction(this.prisma, async (tx) => {
+      await lockProductForUpdate(tx, id);
+      const item = await tx.product.findFirst({
+        where: { id, sellerId: user.id, status: { in: ['ACTIVE', 'RESERVED'] } },
+      });
+      if (!item) throw new NotFoundException('Товар не найден.');
+      if (item.status === 'RESERVED') {
+        throw new BadRequestException('Товар участвует в сделке — сначала дождитесь завершения.');
+      }
+      const category = dto.category ?? item.category;
+      const subcategory = dto.subcategory !== undefined ? dto.subcategory : item.subcategory;
       try {
-        assertListingPrice(BigInt(priceCents), subcategory);
+        assertSubcategoryForCategory(category, subcategory);
       } catch (e) {
-        throw fieldBadRequest('priceCents', (e as Error).message);
+        throw fieldBadRequest('subcategory', (e as Error).message);
       }
-    }
-    const patch: Prisma.ProductUpdateInput = {
-      ...data,
-      ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
-      ...(warrantyHours !== undefined
-        ? { warrantyHours: clampWarrantyHoursForSeller(warrantyHours, seller?.createdAt) }
-        : {}),
-    };
-    if (autoDeliver !== undefined || deliveryText !== undefined) {
-      if (item.deliveryConsumedAt) {
-        throw fieldBadRequest('deliveryText', 'already consumed and cannot be changed');
+      const { priceCents, deliveryText, autoDeliver, warrantyHours, ...data } = dto;
+      const nextQuantity = dto.quantity ?? item.quantity;
+      const wantAutoDeliver = autoDeliver ?? item.autoDeliver;
+      if (wantAutoDeliver && nextQuantity > 1) {
+        throw fieldBadRequest('autoDeliver', 'Автовыдача доступна только для лотов с количеством 1.');
       }
-      const wantAuto = autoDeliver ?? item.autoDeliver;
-      if (!wantAuto) {
-        Object.assign(patch, {
-          autoDeliver: false,
-          deliveryCiphertext: null,
-          deliveryIv: null,
-          deliveryConsumedAt: null,
-        });
-      } else if (deliveryText?.trim()) {
-        Object.assign(patch, deliveryFields({ autoDeliver: true, deliveryText }));
-      } else if (item.deliveryCiphertext && item.deliveryIv) {
-        Object.assign(patch, { autoDeliver: true });
-      } else {
-        throw fieldBadRequest('deliveryText', 'required when autoDeliver=true');
+      if (priceCents) {
+        try {
+          assertListingPrice(BigInt(priceCents), subcategory);
+        } catch (e) {
+          throw fieldBadRequest('priceCents', (e as Error).message);
+        }
       }
-    }
-    await this.prisma.product.update({ where: { id }, data: patch });
+      const patch: Prisma.ProductUpdateInput = {
+        ...data,
+        ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
+        ...(warrantyHours !== undefined
+          ? { warrantyHours: clampWarrantyHoursForSeller(warrantyHours, seller?.createdAt) }
+          : {}),
+      };
+      if (autoDeliver !== undefined || deliveryText !== undefined) {
+        if (item.deliveryConsumedAt) {
+          throw fieldBadRequest('deliveryText', 'already consumed and cannot be changed');
+        }
+        const wantAuto = autoDeliver ?? item.autoDeliver;
+        if (!wantAuto) {
+          Object.assign(patch, {
+            autoDeliver: false,
+            deliveryCiphertext: null,
+            deliveryIv: null,
+            deliveryConsumedAt: null,
+          });
+        } else if (deliveryText?.trim()) {
+          Object.assign(patch, deliveryFields({ autoDeliver: true, deliveryText }));
+        } else if (item.deliveryCiphertext && item.deliveryIv) {
+          Object.assign(patch, { autoDeliver: true });
+        } else {
+          throw fieldBadRequest('deliveryText', 'required when autoDeliver=true');
+        }
+      }
+      await tx.product.update({ where: { id }, data: patch });
+    });
     const updated = await this.get(user, id);
     this.emitProductChanged({
       id: updated.id,
@@ -492,24 +503,29 @@ export class MarketplaceService {
   }
 
   async status(user: AuthUser, id: string, status: 'ACTIVE' | 'ARCHIVED') {
-    const product = await this.prisma.product.findUnique({ where: { id } });
-    if (!product || product.sellerId !== user.id) throw new NotFoundException('Товар не найден.');
-    if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке.');
-    if (status === 'ACTIVE') {
-      const seller = await this.prisma.user.findUnique({
-        where: { id: user.id },
-        select: { sellBannedAt: true },
-      });
-      if (seller?.sellBannedAt) {
-        throw new BadRequestException('Продажа товаров запрещена администратором.');
+    await withSerializableTransaction(this.prisma, async (tx) => {
+      await lockProductForUpdate(tx, id);
+      const product = await tx.product.findUnique({ where: { id } });
+      if (!product || product.sellerId !== user.id) throw new NotFoundException('Товар не найден.');
+      if (product.status === 'RESERVED') throw new BadRequestException('Товар участвует в сделке.');
+      if (status === 'ACTIVE') {
+        const seller = await tx.user.findUnique({
+          where: { id: user.id },
+          select: { sellBannedAt: true },
+        });
+        if (seller?.sellBannedAt) {
+          throw new BadRequestException('Продажа товаров запрещена администратором.');
+        }
       }
-    }
-    await this.prisma.$transaction(async (tx) => {
       await tx.product.update({
         where: { id },
-        data: { status, ...(status === 'ACTIVE' ? { publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400_000) } : {}) },
+        data: {
+          status,
+          ...(status === 'ACTIVE'
+            ? { publishedAt: new Date(), expiresAt: new Date(Date.now() + 30 * 86400_000) }
+            : {}),
+        },
       });
-      // Favorites policy: archived listings are removed (not shown as «Недоступен»).
       if (status === 'ARCHIVED') {
         await tx.favorite.deleteMany({ where: { productId: id } });
       }
@@ -556,14 +572,6 @@ export class MarketplaceService {
     });
     scored.sort((a, b) => b.rank - a.rank);
     return scored.slice(0, limit).map((row) => row.product);
-  }
-
-  private async ownedActive(user: AuthUser, id: string) {
-    const item = await this.prisma.product.findFirst({
-      where: { id, sellerId: user.id, status: { in: ['ACTIVE', 'ARCHIVED'] } },
-    });
-    if (!item) throw new NotFoundException('Доступный для редактирования товар не найден.');
-    return item;
   }
 }
 

@@ -32,7 +32,7 @@ export function quoteLotCheckout(priceCents: number, balanceCents: number, metho
   const fromBalance = Math.min(balance, price);
   const remaining = price - fromBalance;
   const feeBps = remaining > 0 ? LOT_PAY_FEE_BPS[method] : 0;
-  const feeCents = Math.round((remaining * feeBps) / 10_000);
+  const feeCents = remaining > 0 ? Math.floor((remaining * feeBps) / 10_000) : 0;
   const externalCents = remaining + feeCents;
   return {
     priceCents: price,

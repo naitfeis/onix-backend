@@ -108,7 +108,6 @@ test('top-up serialization retry calls the external provider exactly once', asyn
       {} as never,
       {} as never,
       {} as never,
-      { purchaseInTx: async () => ({ order: {}, notifyIds: [] }) } as never,
       provider as never,
       { isConfigured: () => false } as never,
     );
@@ -191,7 +190,6 @@ test('two concurrent identical top-ups share one DB claim and one provider call'
       {} as never,
       {} as never,
       {} as never,
-      undefined,
       provider as never,
       { isConfigured: () => false } as never,
     );
@@ -278,7 +276,6 @@ test('stale CREATED top-up is recovered with the original provider idempotency k
       {} as never,
       {} as never,
       {} as never,
-      { purchaseInTx: async () => ({ order: {}, notifyIds: [] }) } as never,
       provider as never,
       { isConfigured: () => false } as never,
     );

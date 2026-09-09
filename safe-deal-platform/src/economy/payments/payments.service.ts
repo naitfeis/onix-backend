@@ -5,7 +5,7 @@ import {
 import { PaymentProviderCode, PaymentWallet, Prisma, type PaymentIntent } from '@prisma/client';
 import { AuthUser } from '../../common';
 import { withSerializableTransaction } from '../../database/transaction-retry';
-import { lockUsersInIdOrder, lockPaymentIntentForUpdate } from '../../database/money-locks';
+import { lockUsersInIdOrder, lockPaymentIntentForUpdate, lockProductForUpdate } from '../../database/money-locks';
 import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
@@ -16,8 +16,15 @@ import { BalanceService } from '../wallet/balance.service';
 import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
 import { DepositService } from '../wallet/deposit.service';
 import { TrustService } from '../trust/trust.service';
+import { spendableBalanceCents } from '../wallet/sale-proceeds-hold';
+import { releaseProductStock, reserveProductStock } from '../wallet/product-stock';
 import { CHECKOUT_SETTLEMENT, type CheckoutSettlementPort } from '../../checkout-settlement';
-import { parsePaymentCheckoutMetadata } from '../../payments-checkout.types';
+import {
+  checkoutAcquiringFeeBps,
+  checkoutBindFingerprint,
+  computeCheckoutExternalCents,
+  parsePaymentCheckoutMetadata,
+} from '../../payments-checkout.types';
 
 export type ProviderEventInput = {
   eventId: string;
@@ -43,9 +50,9 @@ export class PaymentsService {
     private readonly deposit: DepositService,
     private readonly trust: TrustService,
     private readonly idempotency: IdempotencyService,
-    @Optional() @Inject(CHECKOUT_SETTLEMENT) private readonly checkout?: CheckoutSettlementPort,
     manual: ManualPaymentProvider,
     tinkoff: TinkoffAcquiringProvider,
+    @Optional() @Inject(CHECKOUT_SETTLEMENT) private readonly checkout?: CheckoutSettlementPort,
   ) {
     this.providers = new Map();
     this.providers.set(manual.code, manual);
@@ -131,18 +138,12 @@ export class PaymentsService {
       if (!dto.checkout.productId?.trim() || !dto.checkout.purchaseIdempotencyKey?.trim()) {
         throw new BadRequestException('Некорректные параметры checkout.');
       }
+      if (!Number.isInteger(dto.checkout.quantity) || dto.checkout.quantity < 1 || dto.checkout.quantity > 10_000) {
+        throw new BadRequestException('Некорректное количество checkout.');
+      }
     }
     const provider = this.provider(dto.provider);
     const amountCents = BigInt(dto.amountCents);
-    const checkoutMeta = dto.checkout
-      ? ({
-        checkout: {
-          productId: dto.checkout.productId.trim(),
-          quantity: dto.checkout.quantity,
-          purchaseIdempotencyKey: dto.checkout.purchaseIdempotencyKey,
-        },
-      } satisfies Prisma.InputJsonObject)
-      : undefined;
 
     const assertMatchingIntent = <T extends {
       userId: bigint;
@@ -160,14 +161,14 @@ export class PaymentsService {
         throw new ConflictException('Ключ идемпотентности уже использован.');
       }
       const existingCheckout = parsePaymentCheckoutMetadata(existing.metadata);
-      const wantCheckout = dto.checkout
+      const wantBind = dto.checkout
         ? {
           productId: dto.checkout.productId.trim(),
           quantity: dto.checkout.quantity,
           purchaseIdempotencyKey: dto.checkout.purchaseIdempotencyKey,
         }
         : null;
-      if (JSON.stringify(existingCheckout) !== JSON.stringify(wantCheckout)) {
+      if (checkoutBindFingerprint(existingCheckout) !== checkoutBindFingerprint(wantBind)) {
         throw new ConflictException('Ключ идемпотентности уже использован.');
       }
       return existing;
@@ -176,8 +177,51 @@ export class PaymentsService {
     let claim: PaymentIntent;
     let ownsClaim = false;
     try {
-      claim = await withSerializableTransaction(this.prisma, (tx) =>
-        tx.paymentIntent.create({
+      claim = await withSerializableTransaction(this.prisma, async (tx) => {
+        let metadata: Prisma.InputJsonValue | undefined;
+        if (dto.checkout) {
+          const productId = dto.checkout.productId.trim();
+          const quantity = dto.checkout.quantity;
+          await lockProductForUpdate(tx, productId);
+          const product = await tx.product.findUnique({ where: { id: productId } });
+          if (
+            !product
+            || product.status !== 'ACTIVE'
+            || product.expiresAt <= new Date()
+            || product.quantity < quantity
+          ) {
+            throw new ConflictException('Товар недоступен.');
+          }
+          if (product.sellerId === userId) {
+            throw new BadRequestException('Нельзя купить собственный товар.');
+          }
+          await lockUsersInIdOrder(tx, [userId, product.sellerId]);
+          const totalAmountCents = product.priceCents * BigInt(quantity);
+          const spendable = await spendableBalanceCents(tx, this.balance, userId);
+          const feeBps = checkoutAcquiringFeeBps(dto.provider);
+          const quote = computeCheckoutExternalCents(totalAmountCents, spendable, feeBps);
+          if (quote.externalCents < 100n) {
+            throw new BadRequestException('Внешний платёж не требуется — оплатите с баланса.');
+          }
+          if (amountCents !== quote.externalCents) {
+            throw new BadRequestException(
+              `Сумма оплаты устарела. Ожидается ${quote.externalCents.toString()} коп. Обновите экран покупки.`,
+            );
+          }
+          await reserveProductStock(tx, product.id, quantity);
+          metadata = {
+            checkout: {
+              productId,
+              quantity,
+              purchaseIdempotencyKey: dto.checkout.purchaseIdempotencyKey,
+              unitPriceCents: product.priceCents.toString(),
+              totalAmountCents: totalAmountCents.toString(),
+              stockReserved: true,
+              externalFeeCents: quote.feeCents.toString(),
+            },
+          };
+        }
+        return tx.paymentIntent.create({
           data: {
             userId,
             wallet: dto.wallet,
@@ -186,9 +230,10 @@ export class PaymentsService {
             currency: 'RUB',
             status: 'CREATED',
             idempotencyKey: dto.idempotencyKey,
-            ...(checkoutMeta ? { metadata: checkoutMeta } : {}),
+            ...(metadata ? { metadata } : {}),
           },
-        }));
+        });
+      });
       ownsClaim = true;
     } catch (error) {
       if (!this.isUniqueConflict(error)) throw error;
@@ -397,7 +442,17 @@ export class PaymentsService {
       if (intent.status !== 'CREATED' && intent.status !== 'PENDING') {
         throw new ConflictException('Платёж нельзя подтвердить в текущем статусе.');
       }
-      await lockUsersInIdOrder(tx, [intent.userId]);
+
+      const checkout = parsePaymentCheckoutMetadata(intent.metadata);
+      // Canonical lock order: Product (if checkout) → Users ascending.
+      if (checkout) {
+        await lockProductForUpdate(tx, checkout.productId);
+        const product = await tx.product.findUnique({ where: { id: checkout.productId } });
+        if (!product) throw new ConflictException('Товар недоступен.');
+        await lockUsersInIdOrder(tx, [intent.userId, product.sellerId]);
+      } else {
+        await lockUsersInIdOrder(tx, [intent.userId]);
+      }
 
       // Optional claims — must match DB; never used as credit source.
       if (opts.claimedAmountCents !== undefined && opts.claimedAmountCents !== intent.amountCents) {
@@ -424,18 +479,22 @@ export class PaymentsService {
         await provider.confirmIntent(intent.id, intent.providerRef);
       }
 
-      // Credit ONLY intent.amountCents from DB via ledger idempotency key.
+      // Credit ONLY intent amount from DB. Checkout acquiring fee is not credited to the user
+      // (covers PSP cost); purchase debit uses frozen product total.
       if (intent.wallet === 'MAIN') {
-        const depositMeta: LedgerWriteMeta = {
-          idempotencyKey: `payment:${intent.id}:main`,
-          description: `Пополнение основного баланса (${intent.provider})`,
-          actorUserId: intent.userId,
-          source: 'PAYMENT_PROVIDER',
-          fundKind: 'USER_OWNED',
-        };
-        await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', depositMeta);
+        const feeCents = checkout ? BigInt(checkout.externalFeeCents) : 0n;
+        const creditCents = intent.amountCents > feeCents ? intent.amountCents - feeCents : 0n;
+        if (creditCents > 0n) {
+          const depositMeta: LedgerWriteMeta = {
+            idempotencyKey: `payment:${intent.id}:main`,
+            description: `Пополнение основного баланса (${intent.provider})`,
+            actorUserId: intent.userId,
+            source: 'PAYMENT_PROVIDER',
+            fundKind: 'USER_OWNED',
+          };
+          await this.balance.credit(tx, intent.userId, creditCents, 'DEPOSIT', depositMeta);
+        }
 
-        const checkout = parsePaymentCheckoutMetadata(intent.metadata);
         if (checkout) {
           if (!this.checkout) {
             throw new ConflictException('Checkout-покупка недоступна: модуль сделок не подключён.');
@@ -446,7 +505,16 @@ export class PaymentsService {
             checkout.productId,
             checkout.purchaseIdempotencyKey,
             checkout.quantity,
+            {
+              locksHeld: true,
+              stockPreReserved: checkout.stockReserved,
+              frozenUnitPriceCents: BigInt(checkout.unitPriceCents),
+            },
           );
+          // Stock consumed by order — clear reservation flag so expire/fail won't re-increment.
+          if (checkout.stockReserved) {
+            await this.clearCheckoutStockFlag(tx, intent.id, intent.metadata);
+          }
         }
       } else {
         await this.deposit.creditAvailable(tx, intent.userId, intent.amountCents, 'TOPUP', {
@@ -465,6 +533,36 @@ export class PaymentsService {
         where: { id: intent.id },
         data: { status: 'SUCCEEDED', succeededAt: new Date() },
       });
+  }
+
+  private async releaseCheckoutReservation(
+    tx: Prisma.TransactionClient,
+    intent: { id: string; metadata: unknown },
+  ): Promise<void> {
+    const checkout = parsePaymentCheckoutMetadata(intent.metadata);
+    if (!checkout?.stockReserved) return;
+    await lockProductForUpdate(tx, checkout.productId);
+    await releaseProductStock(tx, checkout.productId, checkout.quantity);
+    await this.clearCheckoutStockFlag(tx, intent.id, intent.metadata);
+  }
+
+  private async clearCheckoutStockFlag(
+    tx: Prisma.TransactionClient,
+    intentId: string,
+    metadata: unknown,
+  ): Promise<void> {
+    if (!metadata || typeof metadata !== 'object') return;
+    const next = {
+      ...(metadata as Record<string, unknown>),
+      checkout: {
+        ...((metadata as { checkout?: Record<string, unknown> }).checkout ?? {}),
+        stockReserved: false,
+      },
+    };
+    await tx.paymentIntent.update({
+      where: { id: intentId },
+      data: { metadata: next as Prisma.InputJsonValue },
+    });
   }
 
   private async markTerminalInTx(
@@ -491,6 +589,7 @@ export class PaymentsService {
         data: { providerRef: opts.providerPaymentId },
       });
     }
+    await this.releaseCheckoutReservation(tx, intent);
     return tx.paymentIntent.update({
       where: { id: intent.id },
       data: { status },

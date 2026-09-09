@@ -276,10 +276,15 @@ export class LedgerModel {
     const order = this.orders.get(orderId);
     if (!order) throw new MonetaryInvariantError('order missing');
     if (order.status === 'REFUNDED' || order.status === 'CANCELED') return;
-    if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
-      this.clawbackSellerPayout(orderId, order.sellerId, order.payoutCents);
+    if (order.status === 'COMPLETED' && order.totalAmountCents > 0n) {
+      this.clawbackSellerPayout(orderId, order.sellerId, order.totalAmountCents);
     }
     this.credit(order.buyerId, order.totalAmountCents, 'REFUND', `order:${orderId}:refund`);
+    const lockKey = `deposit-lock:order:${orderId}`;
+    const lock = this.depositLedger.get(lockKey);
+    if (lock) {
+      this.unlockDeposit(order.sellerId, -lock.amountCents, `deposit-unlock:order:${orderId}`);
+    }
     order.status = order.status === 'COMPLETED' ? 'REFUNDED' : 'CANCELED';
   }
 
