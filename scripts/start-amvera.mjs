@@ -42,6 +42,18 @@ const migrate = spawnSync('npx', ['prisma', 'migrate', 'deploy'], {
   env: process.env,
 });
 if ((migrate.status ?? 1) !== 0) {
+  const dbUrl = process.env.DATABASE_URL ?? '';
+  let host = '(unparsed)';
+  try {
+    host = new URL(dbUrl.replace(/^postgresql:/, 'http:')).hostname || host;
+  } catch {
+    /* ignore */
+  }
+  console.error('[amvera] prisma migrate deploy failed.');
+  console.error(`[amvera] DATABASE_URL host=${host} (password redacted)`);
+  console.error(
+    '[amvera] Typical causes: Neon suspended / wrong password / IP allowlist / SSL. Fix DATABASE_URL in Amvera Variables, then redeploy.',
+  );
   process.exit(migrate.status ?? 1);
 }
 
