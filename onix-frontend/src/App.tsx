@@ -487,11 +487,15 @@ export default function App() {
 
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
-  // Guests browse market + lots without a login wall. Auth UI only for ban,
-  // website login bridge, soft login prompt, or hard session/network failure.
+  // Guests browse market + lots; soft login CTA stays visible on every screen.
+  // Hard wall only for ban, website login bridge, or network session failure.
+  const guestSoftAuth = !core.profile
+    && !miniApp
+    && !websiteLoginBridge
+    && (core.sessionRestore === 'guest' || core.sessionRestore === 'network' || loginPrompt);
   const showAuth = Boolean(banNotice)
     || websiteLoginBridge
-    || (loginPrompt && !core.profile)
+    || guestSoftAuth
     || (core.sessionRestore === 'network' && !core.profile && core.states.profile === 'error');
   const shellReady = core.states.products === 'success'
     || core.states.products === 'error'
@@ -574,8 +578,8 @@ export default function App() {
       <SoftErrorBoundary label="Не удалось открыть вход. Обновите страницу.">
         <AuthNotice
           miniApp={miniApp}
-          soft={loginPrompt && !banNotice}
-          message={loginPrompt && !banNotice
+          soft={!banNotice && !core.profile}
+          message={!banNotice && !core.profile
             ? 'Войдите, чтобы покупать, продавать и писать в чат. Маркет и лоты можно смотреть без входа.'
             : core.errors.profile}
           ban={banNotice}

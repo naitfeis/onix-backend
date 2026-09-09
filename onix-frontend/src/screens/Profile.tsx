@@ -25,6 +25,7 @@ import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
 import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { ReviewCard } from '../components/ReviewCard';
+import { LedgerOpIcon } from '../components/LedgerOpIcon';
 import { t } from '../i18n';
 
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
@@ -134,13 +135,12 @@ function AccountLinkPanel({
         )}
       </div>
       <div className="profile-account">
-        <span className={`profile-account__mark${googleLinked ? ' is-linked' : ''}`}>
-          <GoogleLogo size={22} />
-          {googleLinked ? (
+        {googleLinked ? (
+          <span className="profile-account__mark is-linked">
+            <GoogleLogo size={22} />
             <em className="profile-account__check" aria-label="Google привязан">✓</em>
-          ) : null}
-        </span>
-        {!googleLinked ? (
+          </span>
+        ) : (
           <button
             type="button"
             className="auth-btn auth-btn--google"
@@ -174,7 +174,7 @@ function AccountLinkPanel({
             <GoogleLogo size={18} />
             <span>{busy === 'google' ? 'Переход…' : 'Привязать'}</span>
           </button>
-        ) : null}
+        )}
       </div>
       {hint ? <small>{hint}</small> : null}
     </div>
@@ -617,7 +617,16 @@ export function Profile({
       )}
     </div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
-      <div className="operations">{walletHistory.map(item => <div key={item.id}><span><b>{ledgerTypeLabel(item.type)}</b><small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small></span><strong>{formatLedgerAmount(item.amountCents)}</strong></div>)}</div>
+      <div className="operations">{walletHistory.map(item => (
+        <div key={item.id} className="operations__row">
+          <LedgerOpIcon type={item.type} />
+          <span>
+            <b>{ledgerTypeLabel(item.type)}</b>
+            <small>{new Date(item.createdAt).toLocaleDateString('ru-RU')}</small>
+          </span>
+          <strong>{formatLedgerAmount(item.amountCents)}</strong>
+        </div>
+      ))}</div>
       {historyHasMore && (
         <div className="card-actions" style={{ marginTop: 12 }}>
           <Button variant="secondary" busy={historyLoadingMore} onClick={() => void loadMoreHistory()}>{t('common.showMore')}</Button>

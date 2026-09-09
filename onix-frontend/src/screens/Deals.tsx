@@ -119,14 +119,14 @@ export function Deals({
               <p className="muted deal-peer-name">
                 {publicAt(deal.counterparty.username)} · {present ? 'Online' : formatLastSeen(core.presenceOf(deal.counterparty.onixId)?.lastOnline ?? deal.counterparty.lastOnline)}
               </p>
-              <div className="deal-peer-actions">
-                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
-                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
-              </div>
               <div className="deal-lot-tags">
                 <span className="lot-sheet__badge">{categoryName}</span>
                 {subLabel ? <span className="lot-sheet__badge">{subLabel}</span> : null}
                 {deal.product.autoDeliver ? <span className="lot-sheet__badge lot-sheet__badge--auto">⚡ Автовыдача</span> : null}
+              </div>
+              <div className="deal-peer-actions">
+                <Button variant="secondary" onClick={() => { void goToChat(deal); }}>Написать</Button>
+                <Button variant="secondary" onClick={() => { void openPeer(deal); }}>Профиль</Button>
               </div>
             </div>
           </div>
