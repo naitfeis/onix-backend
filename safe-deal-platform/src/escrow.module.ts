@@ -463,6 +463,15 @@ export class EscrowService {
       if (order.status === 'COMPLETED') {
         return this.pendingOrderNotifyIds(tx, id, [order.sellerId]);
       }
+      if (opts.requireBuyer) {
+        const openTicket = await tx.supportTicket.findFirst({
+          where: { orderId: id, status: { in: ['OPEN', 'IN_REVIEW', 'WAITING_USER'] } },
+          select: { id: true },
+        });
+        if (openTicket) {
+          throw new ConflictException('Пока открыто обращение в поддержку, подтвердить получение нельзя.');
+        }
+      }
       await lockProductForUpdate(tx, order.productId);
       await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
       const changed = await tx.order.updateMany({
@@ -550,17 +559,20 @@ export class EscrowService {
   async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Сделка не найдена.');
-    const support = canActAsSupport(user);
-    if (!support && order.buyerId !== user.id) {
-      throw new BadRequestException('Отменить заказ на этапе оплаты может только покупатель или поддержка.');
+    // Customer API: only the buyer. Support cancel/refund goes through admin plane (adminEscrow).
+    if (order.buyerId !== user.id && !canActAsSupport(user)) {
+      throw new BadRequestException('Отменить заказ на этапе оплаты может только покупатель.');
     }
     return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
   }
 
   async dispute(user: AuthUser, id: bigint, key: string, reason?: string) {
-    const priorTicket = await this.prisma.supportTicket.findFirst({ where: { orderId: id }, select: { id: true } });
-    if (priorTicket) {
-      throw new BadRequestException('По этой сделке обращение уже было создано.');
+    const openTicket = await this.prisma.supportTicket.findFirst({
+      where: { orderId: id, status: { in: ['OPEN', 'IN_REVIEW', 'WAITING_USER'] } },
+      select: { id: true, chatId: true },
+    });
+    if (openTicket) {
+      throw new BadRequestException('По этой сделке уже открыто обращение в поддержку.');
     }
     const notifyIds = await withSerializableTransaction(this.prisma, async (tx) => {
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });

@@ -29,7 +29,9 @@ test('isStaffViewer prefers platformStatus when flags are stale', () => {
   assert.equal(isStaffViewer(user({ isSupport: true, platformStatus: 'USER' })), true);
 });
 
-test('canActAsSupport mirrors staff viewer', () => {
-  assert.equal(canActAsSupport(user({ platformStatus: 'ADMIN' })), true);
+test('canActAsSupport only via adminEscrow bridge (not platformStatus)', () => {
+  assert.equal(canActAsSupport(user({ platformStatus: 'ADMIN' })), false);
+  assert.equal(canActAsSupport(user({ isAdmin: true, isSupport: true })), false);
+  assert.equal(canActAsSupport(user({ adminEscrow: true })), true);
   assert.equal(canActAsSupport(user({})), false);
 });

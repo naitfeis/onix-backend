@@ -740,6 +740,48 @@ export class AdminSecurityService {
     };
   }
 
+  /** Admin-plane reply into a deal/user chat (SYSTEM, no ChatMember required). */
+  async replyToChat(actor: AdminActor, chatId: string, text: string) {
+    const body = text.trim();
+    if (body.length < 1) throw new BadRequestException('Введите текст сообщения.');
+    if (body.length > 4000) throw new BadRequestException('Сообщение слишком длинное.');
+    const id = chatId.trim();
+    if (!id || id.length > 64) throw new BadRequestException('Некорректный чат.');
+    const chat = await this.prisma.chat.findUnique({ where: { id }, select: { id: true, kind: true } });
+    if (!chat) throw new NotFoundException('Чат не найден.');
+    if (chat.kind === 'AI') throw new BadRequestException('В чат Onix AI писать из админки нельзя.');
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({
+        data: {
+          chatId: id,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: `🛡 Поддержка ONIX:\n${body}`,
+        },
+        select: { id: true, kind: true, text: true, createdAt: true },
+      });
+      await tx.chat.update({ where: { id }, data: { updatedAt: new Date() } });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_CHAT_REPLY',
+          targetType: 'Chat',
+          targetId: id,
+          metadataJson: { messageId: created.id.toString(), length: body.length },
+        },
+      });
+      return created;
+    });
+
+    return {
+      id: message.id.toString(),
+      kind: message.kind,
+      text: message.text,
+      createdAt: message.createdAt.toISOString(),
+    };
+  }
+
   async sellBanUser(actor: AdminActor, targetId: string, input: { comment: string; banned: boolean }) {
     const target = await this.resolveTarget(targetId);
     if (input.banned && !input.comment?.trim()) throw new BadRequestException('Нужен комментарий к бану продаж.');
@@ -1069,7 +1111,7 @@ export class AdminSecurityService {
       select: { id: true, telegramId: true, onixId: true, platformStatus: true },
     });
     if (!user) throw new BadRequestException('Для Escrow-действия нужен связанный пользователь платформы.');
-    return { ...user, isAdmin: true, isSupport: true };
+    return { ...user, isAdmin: true, isSupport: true, adminEscrow: true };
   }
 
   private async createEscrowAuditIntent(

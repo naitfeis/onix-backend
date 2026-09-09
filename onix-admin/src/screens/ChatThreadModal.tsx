@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
 
 type ChatThread = {
@@ -28,16 +28,44 @@ function formatExactDateTime(iso: string) {
 export function ChatThreadModal({ chatId, onClose }: { chatId: string; onClose: () => void }) {
   const [data, setData] = useState<ChatThread | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const load = () => {
+    setError(null);
+    return adminApi<ChatThread>(`/api/admin/chats/${encodeURIComponent(chatId)}`)
+      .then(setData)
+      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Не удалось открыть чат'));
+  };
 
   useEffect(() => {
     setData(null);
-    setError(null);
-    void adminApi<ChatThread>(`/api/admin/chats/${encodeURIComponent(chatId)}`)
-      .then(setData)
-      .catch((err) => setError(err instanceof AdminApiError ? err.message : 'Не удалось открыть чат'));
+    setReply('');
+    void load();
   }, [chatId]);
 
   const nameById = new Map((data?.members ?? []).map((m) => [m.userId, `${m.username || m.onixId} (${m.onixId})`]));
+  const canReply = data && data.kind !== 'AI';
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    const text = reply.trim();
+    if (!text || !canReply || sending) return;
+    setSending(true);
+    setError(null);
+    try {
+      await adminApi(`/api/admin/chats/${encodeURIComponent(chatId)}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+      setReply('');
+      await load();
+    } catch (err) {
+      setError(err instanceof AdminApiError ? err.message : 'Не удалось отправить');
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
     <div className="admin-modal" role="dialog" aria-modal="true" aria-label="Чат" onClick={onClose}>
@@ -63,6 +91,21 @@ export function ChatThreadModal({ chatId, onClose }: { chatId: string; onClose: 
                 </div>
               ))}
             </div>
+            {canReply ? (
+              <form className="row" style={{ marginTop: 12, gap: 8 }} onSubmit={(e) => void onSubmit(e)}>
+                <input
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  placeholder="Ответ поддержки…"
+                  maxLength={4000}
+                  style={{ flex: 1 }}
+                  disabled={sending}
+                />
+                <button type="submit" disabled={sending || !reply.trim()}>
+                  {sending ? '…' : 'Отправить'}
+                </button>
+              </form>
+            ) : null}
           </>
         )}
       </div>

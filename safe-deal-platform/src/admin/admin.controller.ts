@@ -9,7 +9,7 @@ import {
 import type { Request } from 'express';
 import { Public } from '../common';
 import { resolveClientIp } from '../http/client-ip';
-import { parseAdminIpAllowlist } from './admin-ip-allowlist';
+import { parseAdminIpAllowlist, assertDangerousAdminIp } from './admin-ip-allowlist';
 import { AdminAuthService } from './admin-auth.service';
 import {
   AdminAccessGuard, AdminRoleGuard, AdminRoles, CurrentAdmin,
@@ -48,6 +48,10 @@ class CreateStaffDto {
 
 class ResetStaffPasswordDto {
   @IsOptional() @IsString() @Length(12, 200) password?: string;
+}
+
+class AdminChatReplyDto {
+  @IsString() @Length(1, 4000) text!: string;
 }
 
 /**
@@ -181,14 +185,26 @@ export class AdminPlaneController {
   @Patch('users/:id/ban')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
   @UseGuards(AdminRoleGuard)
-  banUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason: string; comment: string; durationDays?: number }) {
+  banUser(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { reason: string; comment: string; durationDays?: number },
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.banUser(admin, id, body);
   }
 
   @Patch('users/:id/unban')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
   @UseGuards(AdminRoleGuard)
-  unbanUser(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { comment?: string }) {
+  unbanUser(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.unbanUser(admin, id, body.comment);
   }
 
@@ -199,7 +215,9 @@ export class AdminPlaneController {
     @CurrentAdmin() admin: AdminActor,
     @Param('id') id: string,
     @Body() body: WipeUserDto,
+    @Req() req: Request,
   ) {
+    assertDangerousAdminIp(req);
     return this.security.wipeUser(admin, id, body);
   }
 
@@ -238,7 +256,13 @@ export class AdminPlaneController {
   @Post('users/:id/balance')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
   @UseGuards(AdminRoleGuard)
-  adjustUserBalance(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { amountCents: string; reason: string; idempotencyKey: string }) {
+  adjustUserBalance(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { amountCents: string; reason: string; idempotencyKey: string },
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.adjustUserBalance(admin, id, body);
   }
 
@@ -263,14 +287,21 @@ export class AdminPlaneController {
     @CurrentAdmin() admin: AdminActor,
     @Param('id') id: string,
     @Body() body: CreateManualPaymentDto,
+    @Req() req: Request,
   ) {
+    assertDangerousAdminIp(req);
     return this.security.createManualPayment(admin, id, body);
   }
 
   @Post('payments/intents/:id/confirm')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
   @UseGuards(AdminRoleGuard)
-  confirmManualPayment(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+  confirmManualPayment(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.confirmManualPayment(admin, id);
   }
 
@@ -302,14 +333,26 @@ export class AdminPlaneController {
   @Post('orders/:id/refund')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.FINANCE_ADMIN)
   @UseGuards(AdminRoleGuard)
-  refundOrder(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+  refundOrder(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.refundOrder(admin, id, body.reason);
   }
 
   @Post('orders/:id/complete')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
   @UseGuards(AdminRoleGuard)
-  completeOrder(@CurrentAdmin() admin: AdminActor, @Param('id') id: string, @Body() body: { reason?: string }) {
+  completeOrder(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
     return this.security.completeOrder(admin, id, body.reason);
   }
 
@@ -406,6 +449,17 @@ export class AdminPlaneController {
     const chat = await this.security.getChatThread(id);
     await this.security.logAction(admin, 'ADMIN_VIEW_CHAT', { type: 'Chat', id: chat.id });
     return chat;
+  }
+
+  @Post('chats/:id/messages')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  replyToChat(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: AdminChatReplyDto,
+  ) {
+    return this.security.replyToChat(admin, id, body.text);
   }
 
   @Delete('messages/:id')

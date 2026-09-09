@@ -3,6 +3,7 @@
  * Empty env = not enforced (dev-friendly). When set, client IP must match exactly.
  */
 
+import { ForbiddenException } from '@nestjs/common';
 import { normalizeIp, resolveClientIp, type ClientIpRequestLike } from '../http/client-ip';
 
 /** Parse ADMIN_IP_ALLOWLIST. Returns null when unset / empty (allow all). */
@@ -39,6 +40,23 @@ export function assertAdminIpAllowed(req: ClientIpRequestLike): void {
   }
 }
 
-export function adminIpFromRequest(req: ClientIpRequestLike): string | null {
-  return resolveClientIp(req);
+/**
+ * Money / ban / wipe mutations in production require ADMIN_IP_ALLOWLIST
+ * and a matching client IP. Dev without allowlist stays open.
+ */
+export function assertDangerousAdminIp(req: ClientIpRequestLike): void {
+  const allowlist = parseAdminIpAllowlist();
+  const isProd = (process.env.NODE_ENV ?? '').toLowerCase() === 'production';
+  if (!allowlist) {
+    if (isProd) {
+      throw new ForbiddenException(
+        'В production задайте ADMIN_IP_ALLOWLIST для опасных admin-операций (ban/wipe/money).',
+      );
+    }
+    return;
+  }
+  const ip = resolveClientIp(req);
+  if (!isAdminIpAllowed(ip, allowlist)) {
+    throw new ForbiddenException('IP не в ADMIN_IP_ALLOWLIST.');
+  }
 }

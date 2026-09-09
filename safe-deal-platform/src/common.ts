@@ -16,25 +16,32 @@ export interface AuthUser {
   telegramId: bigint | null;
   onixId: string;
   isAdmin: boolean;
-  /** SUPPORT staff (or admin). Used for tickets/refunds — not a bypass of Escrow. */
+  /** SUPPORT staff badge / UI — does NOT unlock escrow money ops on customer API. */
   isSupport: boolean;
   /** Canonical RBAC source when present — prefer over boolean flags for staff UI. */
   platformStatus?: PlatformStatus;
   /** Present for EdDSA / v2 access tokens — used by Risk Engine. */
   sessionId?: string;
-}
-
-/** Admin or dedicated SUPPORT agent. */
-export function canActAsSupport(user: Pick<AuthUser, 'isAdmin' | 'isSupport' | 'platformStatus'>): boolean {
-  return user.isAdmin || user.isSupport || isStaffPlatformStatus(user.platformStatus);
+  /**
+   * Set ONLY by admin-plane → escrow bridge (legacyEscrowActor).
+   * Never issued on customer JWT. Required for cancel/refund/complete-as-support.
+   */
+  adminEscrow?: boolean;
 }
 
 /**
- * Staff message viewer (read receipts, deleted originals).
- * Uses platformStatus when available; falls back to legacy isAdmin/isSupport flags.
+ * Escrow money powers for support/admin.
+ * Customer JWT cannot gain this via platformStatus / isAdmin / isSupport flags.
+ */
+export function canActAsSupport(user: Pick<AuthUser, 'adminEscrow' | 'isAdmin' | 'isSupport' | 'platformStatus'>): boolean {
+  return user.adminEscrow === true;
+}
+
+/**
+ * Staff message viewer (read receipts, deleted originals) — UI only, not money.
  */
 export function isStaffViewer(user: Pick<AuthUser, 'isAdmin' | 'isSupport' | 'platformStatus'>): boolean {
-  return canActAsSupport(user);
+  return user.isAdmin || user.isSupport || isStaffPlatformStatus(user.platformStatus);
 }
 
 /** Resolve SUPPORT flag from env (comma-separated Telegram IDs) + admin. */
