@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { api, ApiError, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
+  API_PATHS, formatLedgerAmount, ledgerTypeLabel,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import { isTelegramMiniApp } from '../auth/telegramEnv';
@@ -23,6 +23,8 @@ import type { Core, Screen } from './types';
 import PaymentCheckout from './PaymentCheckout';
 import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
+import { TrustLevelMeter } from '../components/TrustLevelMeter';
+import { ReviewCard } from '../components/ReviewCard';
 import { t } from '../i18n';
 
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
@@ -553,7 +555,7 @@ export function Profile({
         <Button type="button" onClick={() => setAppealOpen(true)}>Обжаловать решение</Button>
       </Card>
     )}
-    <Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <span><b>Уровень {ownerTrust.level}</b> доверия</span>}</div></div>
+    <Card className="profile-card profile-card--float"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <TrustLevelMeter level={ownerTrust.level} progress={ownerTrust.progress} className="trust-meter--inline" />}</div></div>
       {showWebsiteLogout && (
         <div className="profile-logout">
           <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
@@ -625,20 +627,17 @@ export function Profile({
     {section === 'favorites' && (favoritesState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       favoritesState === 'error' ? <StateView title="Избранное недоступно" text="Не удалось загрузить список." /> :
       favoriteProducts.length === 0 ? <StateView title="Избранное пусто" text="Отмечайте товары сердцем на витрине." action={<Button onClick={() => switchTo('market')}>На рынок</Button>} /> :
-      <div className="product-grid">{favoriteProducts.map(item => (
-        <Card key={item.id} interactive className="product-card">
-          <button type="button" className="product-main" onClick={() => openProductCard(item.id)} aria-label={`Открыть ${item.title}`}>
-            {item.lotNumber != null && <div className="product-card__top"><span className="onixlot-id">ONIXLOT-{item.lotNumber}</span></div>}
-            <h2>{item.title}</h2>
-            <div className="seller-row">
-              <span className="user-summary">
-                <UserAvatar userId={item.seller.id} avatarUrl={item.seller.avatarUrl} name={item.seller.username} online={sellerIsPresent(item.seller, core.profile, core.presenceOf(item.seller.onixId))} />
-                <span>{publicAt(item.seller.username)}</span>
-              </span>
-              <strong>{money(item.priceCents)}</strong>
-            </div>
-          </button>
-        </Card>
+      <div className="product-grid product-grid--compact">{favoriteProducts.map(item => (
+        <ProductLotCard
+          key={item.id}
+          product={item}
+          core={core}
+          onOpen={() => openProductCard(item.id)}
+          onFavorite={() => {
+            setFavoriteProducts((prev) => prev.filter((row) => row.id !== item.id));
+            void core.toggleFavorite(item);
+          }}
+        />
       ))}</div>)}
     {section === 'listings' && (listingsState === 'loading' ? <Card><Skeleton lines={4} /></Card> :
       listingsState === 'error' ? <StateView title="Не удалось загрузить товары" text="Обновите вкладку или войдите снова." /> :
@@ -665,12 +664,15 @@ export function Profile({
       )}
       </>)}
     {section === 'reviews' && (core.reviews.length === 0 ? <StateView title="Отзывов пока нет" text="Отзывы можно оставить после завершённой сделки." /> :
-      core.reviews.map(review => <Card key={review.id}><div className="seller-row">
-        {review.author.onixId
-          ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
-          : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
-        <span>{'★'.repeat(review.rating)}</span>
-      </div><p className="muted">{review.text}</p></Card>))}
+      <div className="review-list">{core.reviews.map(review => (
+        <ReviewCard
+          key={review.id}
+          review={review}
+          author={review.author.onixId
+            ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
+            : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
+        />
+      ))}</div>)}
     {section === 'analytics' && (
       <Suspense fallback={<Card><Skeleton lines={6} /></Card>}>
         <SellerAnalyticsPanel />

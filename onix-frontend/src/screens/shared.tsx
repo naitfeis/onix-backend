@@ -2,13 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type ProductDraft, type PublicProfile, type TrustCard,
+  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
+import { TrustLevelMeter } from '../components/TrustLevelMeter';
+import { ReviewCard } from '../components/ReviewCard';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
+import { ProductLotCard } from './ProductLotCard';
 
 export const emptyDraft: ProductDraft = {
   title: '', description: '', priceRubles: '', quantity: 1,
@@ -145,9 +148,36 @@ export function PublicProfileModal({
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
 
+  const asMarketProduct = (item: NonNullable<PublicProfile['products']>[number]): Product => ({
+    id: item.id,
+    lotNumber: item.lotNumber,
+    title: item.title,
+    description: item.description,
+    priceCents: item.priceCents,
+    quantity: item.quantity,
+    category: item.category,
+    subcategory: item.subcategory,
+    status: (item.status as ProductStatus) || 'ACTIVE',
+    seller: {
+      id: profile.id,
+      onixId: profile.onixId,
+      username: profile.username,
+      avatarUrl: profile.avatarUrl,
+      rating: profile.rating,
+      reviewCount: profile.reviewCount,
+      salesCount: profile.salesCount,
+      followersCount: followersCount,
+      lastOnline: profile.lastOnline,
+      badge: profile.badge,
+      status: profile.status,
+    },
+    createdAt: item.createdAt,
+    warrantyHours: item.warrantyHours,
+  });
+
   return <Modal open={Boolean(profile)} title={title} onClose={onClose} size="wide">
     <div className="stack public-profile">
-      <Card className="profile-card">
+      <Card className="profile-card profile-card--float">
         <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online={isOnline(profile.lastOnline)} />
         <div className="profile-main">
           <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge} /></h1>
@@ -156,7 +186,7 @@ export function PublicProfileModal({
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
             <span><b>{followersCount}</b> подписчиков</span>
-            {trustCard && <span><b>Уровень {trustCard.level}</b> доверия</span>}
+            {trustCard && <TrustLevelMeter level={trustCard.level} progress={trustCard.progress} className="trust-meter--inline" />}
             {trustCard && <span><b>{money(trustCard.depositTotal)}</b> залог</span>}
           </div>
         </div>
@@ -205,37 +235,44 @@ export function PublicProfileModal({
       </div>
       {section === 'products' && (products.length === 0
         ? <StateView title="Товаров нет" text="Продавец ещё не разместил лоты." />
-        : <div className="product-grid">{products.map(item => (
-          <Card
-            key={item.id}
-            interactive={Boolean(onOpenProduct && item.status === 'ACTIVE')}
-            className="product-card"
-          >
-            <button
-              type="button"
-              className="product-main"
-              disabled={!onOpenProduct || item.status !== 'ACTIVE'}
-              onClick={() => onOpenProduct?.(item.id)}
-              aria-label={`Открыть ${item.title}`}
-            >
-              <Badge tone={item.status === 'ACTIVE' ? 'success' : 'warning'}>{item.status}</Badge>
-              <h2>{item.title}</h2>
-              <div className="seller-row"><span className="muted">{item.category}</span><strong>{money(item.priceCents)}</strong></div>
-            </button>
-          </Card>
-        ))}</div>)}
+        : <div className="product-grid product-grid--compact">{products.map(item => {
+          const product = asMarketProduct(item);
+          if (!core) {
+            return (
+              <Card key={item.id} interactive={Boolean(onOpenProduct && item.status === 'ACTIVE')} className="product-card product-card--compact">
+                <button type="button" className="product-main" disabled={!onOpenProduct || item.status !== 'ACTIVE'} onClick={() => onOpenProduct?.(item.id)} aria-label={`Открыть ${item.title}`}>
+                  <h2>{item.title}</h2>
+                  <div className="seller-row"><span className="muted">{item.category}</span><strong>{money(item.priceCents)}</strong></div>
+                </button>
+              </Card>
+            );
+          }
+          return (
+            <ProductLotCard
+              key={item.id}
+              product={product}
+              core={core}
+              onOpen={() => onOpenProduct?.(item.id)}
+              hidePrice={false}
+              footer={item.status !== 'ACTIVE' ? (
+                <div className="product-card__footer product-card__footer--bar">
+                  <Badge tone="warning">{item.status}</Badge>
+                  <strong className="product-card__price">{money(item.priceCents)}</strong>
+                </div>
+              ) : undefined}
+            />
+          );
+        })}</div>)}
       {section === 'reviews' && (reviews.length === 0
         ? <StateView title="Отзывов нет" text="Пока никто не оставил отзыв." />
-        : reviews.map(review => <Card key={review.id}><div className="seller-row">
-          {review.author.onixId && onOpenOnix
-            ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
-            : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
-          <span>{'★'.repeat(review.rating)}</span>
-        </div><p className="muted">{review.text}</p>
-        {isSelf && core && setToast && (
-          <Button
-            variant="secondary"
-            onClick={async () => {
+        : <div className="review-list">{reviews.map(review => (
+          <ReviewCard
+            key={review.id}
+            review={review}
+            author={review.author.onixId && onOpenOnix
+              ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
+              : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
+            onAppeal={isSelf && core && setToast ? async () => {
               const comment = window.prompt('Почему отзыв нужно снять?');
               if (!comment?.trim()) return;
               try {
@@ -244,10 +281,9 @@ export function PublicProfileModal({
               } catch (error) {
                 setToast(friendlyError(error));
               }
-            }}
-          >Обжаловать</Button>
-        )}
-        </Card>))}
+            } : undefined}
+          />
+        ))}</div>)}
     </div>
     {core && setToast && reportOpen && (
       <ReportUserModal

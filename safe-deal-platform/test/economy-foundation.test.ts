@@ -17,9 +17,10 @@ test('depositHoldDays defaults to 10 and clamps invalid env', () => {
   else process.env.DEPOSIT_HOLD_DAYS = prev;
 });
 
-test('public trust card never exposes trustScore and has buyer aliases', () => {
+.test('public trust card never exposes trustScore and has buyer aliases', () => {
   const card = buildPublicTrustCard({
     trustLevel: 4,
+    trustScore: 620,
     depositAvailableCents: 42000_00n,
     depositLockedCents: 8000_00n,
     createdAt: new Date('2024-01-15T00:00:00.000Z'),
@@ -30,6 +31,7 @@ test('public trust card never exposes trustScore and has buyer aliases', () => {
   });
   assert.equal(card.level, 4);
   assert.equal(card.trustLevel, 4);
+  assert.equal(card.progress, 62);
   assert.equal(card.depositTotal, '5000000');
   assert.equal(card.depositTotalCents, '5000000');
   assert.equal('trustScore' in card, false);

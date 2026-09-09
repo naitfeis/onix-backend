@@ -71,7 +71,7 @@ export class ProfilesService {
           id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
           balanceCents: true,
           depositAvailableCents: true, depositLockedCents: true,
-          trustLevel: true, createdAt: true,
+          trustLevel: true, trustScore: true, createdAt: true,
           ratingAverage: true, ratingCount: true, completedSales: true,
           lastSeenAt: true, isAdmin: true, isSupport: true, platformStatus: true,
           telegramId: true, sellBannedAt: true,
@@ -122,6 +122,7 @@ export class ProfilesService {
       },
       trustCard: buildPublicTrustCard({
         trustLevel: profile.trustLevel,
+        trustScore: profile.trustScore,
         depositAvailableCents: profile.depositAvailableCents,
         depositLockedCents: profile.depositLockedCents,
         createdAt: profile.createdAt,
@@ -162,7 +163,10 @@ export class ProfilesService {
           where: { hiddenAt: null },
           orderBy: { createdAt: 'desc' },
           take: 50,
-          include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
+          include: {
+            author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } },
+            order: { select: { totalAmountCents: true, product: { select: { title: true } } } },
+          },
         },
       },
     });

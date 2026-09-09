@@ -733,7 +733,10 @@ export class ReviewService {
     const subject = await requireUserByOnixId(this.prisma, onixId);
     const reviews = await this.prisma.review.findMany({
       where: { subjectId: subject.id, hiddenAt: null },
-      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
+      include: {
+        author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } },
+        order: { select: { totalAmountCents: true, product: { select: { title: true } } } },
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -829,8 +832,11 @@ export class ReviewService {
         });
         const row = await tx.review.findUniqueOrThrow({
           where: { id: review.id },
-      include: { author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } } },
-    });
+          include: {
+            author: { select: { id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true } },
+            order: { select: { totalAmountCents: true, product: { select: { title: true } } } },
+          },
+        });
         return { dto: reviewDto(row), notifyIds: [note.id] };
       });
 

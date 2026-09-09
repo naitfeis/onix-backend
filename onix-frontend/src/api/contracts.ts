@@ -235,6 +235,8 @@ export interface DepositWallet {
 export interface TrustCard {
   trustLevel: number;
   level: number;
+  /** 0–100 meter fill derived from internal score. */
+  progress?: number;
   depositTotalCents: string;
   depositTotal: string;
   registeredAt: string;
@@ -279,6 +281,10 @@ export interface Review {
   rating: number;
   text: string;
   createdAt: string;
+  /** Order lot title when available. */
+  productTitle?: string;
+  /** Order total in kopecks when available. */
+  totalAmountCents?: string;
 }
 
 export interface BanInfo {

@@ -385,6 +385,10 @@ export function reviewDto(item: {
   text: string | null;
   createdAt: Date;
   author: Pick<PublicUser, 'id' | 'onixId' | 'telegramNick' | 'displayName' | 'avatarUrl' | 'isAdmin' | 'isSupport' | 'platformStatus'>;
+  order?: {
+    totalAmountCents: bigint;
+    product: { title: string };
+  } | null;
 }) {
   const badge = statusBadge(resolveStatus(item.author));
   const onixId = formatOnixId(item.author.onixId);
@@ -400,5 +404,9 @@ export function reviewDto(item: {
     rating: item.rating,
     text: item.text ?? '',
     createdAt: item.createdAt.toISOString(),
+    ...(item.order ? {
+      productTitle: item.order.product.title,
+      totalAmountCents: item.order.totalAmountCents.toString(),
+    } : {}),
   };
 }

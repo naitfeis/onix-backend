@@ -180,6 +180,7 @@ export class WalletEconomyService {
         id: true,
         deletedAt: true,
         trustLevel: true,
+        trustScore: true,
         depositAvailableCents: true,
         depositLockedCents: true,
         createdAt: true,
@@ -197,6 +198,7 @@ export class WalletEconomyService {
     );
     const card = buildPublicTrustCard({
       trustLevel: full.trustLevel,
+      trustScore: full.trustScore,
       depositAvailableCents: full.depositAvailableCents,
       depositLockedCents: full.depositLockedCents,
       createdAt: full.createdAt,
@@ -243,6 +245,7 @@ export class WalletEconomyService {
       deposit,
       card: buildPublicTrustCard({
         trustLevel: profile.trustLevel,
+        trustScore: profile.trustScore,
         depositAvailableCents: profile.depositAvailableCents,
         depositLockedCents: profile.depositLockedCents,
         createdAt: profile.createdAt,
