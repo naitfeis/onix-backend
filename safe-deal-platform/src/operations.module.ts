@@ -18,6 +18,7 @@ import { ClawbackService } from './economy/wallet/clawback.service';
 import { resolveCorrelationId } from './economy/wallet/correlation-id';
 import type { LedgerWriteMeta, WithdrawAssertInput } from './economy/wallet/ledger-write.types';
 import { WithdrawVelocityService } from './economy/wallet/withdraw-velocity';
+import { warrantyHeldSaleProceedsCents } from './economy/wallet/sale-proceeds-hold';
 import { IdempotencyService } from './idempotency/idempotency.service';
 import { formatOnixId } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
@@ -423,6 +424,19 @@ class OperationsService {
             'Вывод недоступен: есть непогашенный clawback по возврату сделки. Пополните баланс или обратитесь в поддержку.',
           );
         }
+
+        // SALE_PAYOUT stays non-withdrawable until product warranty ends.
+        const held = await warrantyHeldSaleProceedsCents(tx, user.id);
+        const available = await this.balance.getAvailable(tx, user.id);
+        const withdrawable = available > held ? available - held : 0n;
+        if (amount > withdrawable) {
+          throw new BadRequestException(
+            held > 0n
+              ? 'Часть баланса заморожена до конца гарантии по завершённым сделкам. Подождите окончания гарантии или уменьшите сумму вывода.'
+              : 'Недостаточно средств.',
+          );
+        }
+
         const entry = await this.balance.debit(tx, user.id, amount, 'WITHDRAWAL', {
           idempotencyKey: dto.idempotencyKey,
           description: 'Заявка пользователя на вывод средств',

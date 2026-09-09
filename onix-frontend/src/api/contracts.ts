@@ -148,7 +148,7 @@ export interface ChatUserHit {
 
 export interface WalletOperation {
   id: string;
-  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
+  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'CLAWBACK' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
   amountCents: string;
   /** API contract: matches ledgerDto — no DB status column. */
   status: 'COMPLETED';
@@ -634,6 +634,7 @@ export const LEDGER_TYPE_LABELS: Record<WalletOperation['type'], string> = {
   REFUND: 'Возврат',
   SALE_PAYOUT: 'Выплата с продажи',
   ADMIN_ADJUSTMENT: 'Корректировка',
+  CLAWBACK: 'Возврат с продавца',
   WITHDRAWAL: 'Вывод',
 };
 

@@ -666,7 +666,7 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: var(--radius-hero);
   background: #1c1c1c;
   border: var(--glass-border);
-  box-shadow: none;
+  box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   overflow: clip;
@@ -875,10 +875,15 @@ html[data-theme="dark"] .button--secondary {
   max-width: none;
   position: relative;
   border-radius: var(--radius-card);
-  box-shadow: none !important;
+  border: var(--glass-border);
+  background: #1c1c1c;
+  box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   animation: card-in 320ms var(--ease) both;
+}
+html[data-theme="light"] .product-card {
+  background: #ffffff;
 }
 .product-grid .product-card:nth-child(1) { animation-delay: 0ms; }
 .product-grid .product-card:nth-child(2) { animation-delay: 40ms; }
@@ -3099,10 +3104,21 @@ html[data-theme="light"] .timeline li {
   min-height: 0;
   height: 100%;
 }
+/* Chat stays frameless — do not inherit banner glass rim. */
+.app-shell--chat .thread-list,
+.app-shell--chat .conversation,
+.app-shell--chat .messages-wrap,
 .app-shell--chat .composer {
-  padding: 10px 12px;
-  border-top: 1px solid var(--line);
-  background: var(--glass-regular-bg);
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.app-shell--chat .conversation__head,
+.app-shell--chat .composer {
+  background: var(--glass-regular-bg) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
 }
 .app-shell--chat .ai-actions {
   border-top-color: var(--line);

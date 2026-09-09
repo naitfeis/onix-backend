@@ -52,11 +52,12 @@ export class ClawbackService {
     const take = available < opts.payoutCents ? available : opts.payoutCents;
 
     if (take > 0n) {
-      await this.balance.debit(tx, opts.sellerId, take, 'ADMIN_ADJUSTMENT', {
+      await this.balance.debit(tx, opts.sellerId, take, 'CLAWBACK', {
         idempotencyKey: `order:${opts.orderId}:clawback`,
         orderId: opts.orderId,
         description: 'Clawback после COMPLETED (доступный баланс)',
         source: 'SYSTEM',
+        fundKind: 'SALE_PROCEEDS',
       });
     }
 
@@ -116,11 +117,12 @@ export class ClawbackService {
     }
 
     const nextRecovered = row.recoveredCents + take;
-    await this.balance.debit(tx, row.sellerId, take, 'ADMIN_ADJUSTMENT', {
+    await this.balance.debit(tx, row.sellerId, take, 'CLAWBACK', {
       idempotencyKey: `order:${row.orderId}:clawback:r${row.recoveredCents}`,
       orderId: row.orderId,
       description: 'Clawback recovery',
       source: 'WORKER',
+      fundKind: 'SALE_PROCEEDS',
     });
 
     const status = this.statusFor(row.amountCents, nextRecovered);
@@ -129,7 +131,7 @@ export class ClawbackService {
       data: { recoveredCents: nextRecovered, status },
     });
 
-    logMoneyEvent('admin_adjust', {
+    logMoneyEvent('refund', {
       status: 'success',
       operationId: `order:${row.orderId}:clawback:r${row.recoveredCents}`,
       dealId: row.orderId.toString(),

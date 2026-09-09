@@ -96,7 +96,7 @@ function resolveCreditBucket(row: LedgerRowForProvenance): keyof FundBuckets | n
   if (row.type === 'SALE_PAYOUT') {
     return isAccountSaleSubcategory(row.productSubcategory) ? 'accountSale' : 'otherSale';
   }
-  if (row.type === 'ADMIN_ADJUSTMENT') return 'owned';
+  if (row.type === 'ADMIN_ADJUSTMENT' || row.type === 'CLAWBACK') return 'owned';
   return null;
 }
 

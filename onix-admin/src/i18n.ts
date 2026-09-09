@@ -156,6 +156,7 @@ export function ruLedgerType(type: string) {
     REFUND: 'Возврат',
     SALE_PAYOUT: 'Выплата за продажу',
     ADMIN_ADJUSTMENT: 'Корректировка',
+    CLAWBACK: 'Clawback',
     WITHDRAWAL: 'Вывод',
     DEPOSIT_FUND: 'Залог',
     DEPOSIT_RETURN: 'Возврат залога',

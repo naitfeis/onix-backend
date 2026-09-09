@@ -192,12 +192,22 @@ export class EscrowService {
       await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
       const totalAmountCents = product.priceCents * BigInt(quantity);
       const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
-      // Optimistic lock: only one buyer can reserve an ACTIVE listing.
+      // Optimistic lock: decrement stock so multi-qty listings sell concurrently.
       const reserved = await tx.product.updateMany({
         where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
-        data: { status: 'RESERVED' },
+        data: { quantity: { decrement: quantity } },
       });
       if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
+      const stockAfter = await tx.product.findUniqueOrThrow({
+        where: { id: product.id },
+        select: { quantity: true },
+      });
+      if (stockAfter.quantity < 1) {
+        await tx.product.update({
+          where: { id: product.id },
+          data: { status: 'RESERVED' },
+        });
+      }
       if (totalAmountCents > 0n) {
         await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
           idempotencyKey: `order:${key}:hold`,
@@ -493,12 +503,30 @@ export class EscrowService {
         await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.totalAmountCents);
       }
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
-      await tx.product.update({
-        where: { id: order.productId },
-        data: product.quantity > order.quantity
-          ? { quantity: { decrement: order.quantity }, status: 'ACTIVE' }
-          : { quantity: 0, status: 'SOLD_OUT' },
-      });
+      // Legacy purchases set RESERVED without decrementing; new path decrements at buy-time.
+      const legacyUndecremented = product.status === 'RESERVED' && product.quantity >= order.quantity;
+      if (legacyUndecremented) {
+        await tx.product.update({
+          where: { id: order.productId },
+          data: product.quantity > order.quantity
+            ? { quantity: { decrement: order.quantity }, status: 'ACTIVE' }
+            : { quantity: 0, status: 'SOLD_OUT' },
+        });
+      } else {
+        const openSiblings = await tx.order.count({
+          where: {
+            productId: order.productId,
+            id: { not: id },
+            status: { in: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] },
+          },
+        });
+        await tx.product.update({
+          where: { id: order.productId },
+          data: product.quantity < 1 && openSiblings === 0
+            ? { status: 'SOLD_OUT' }
+            : { status: product.quantity < 1 ? 'RESERVED' : 'ACTIVE' },
+        });
+      }
       await tx.orderTransition.create({
         data: {
           orderId: id,
@@ -686,7 +714,18 @@ export class EscrowService {
       }
       // Deposit freeze stays until unlockAt / ops seize — do not auto-release on refund.
       if (order.status !== 'COMPLETED') {
-        await tx.product.update({ where: { id: order.productId }, data: { status: 'ACTIVE' } });
+        const product = await tx.product.findUniqueOrThrow({
+          where: { id: order.productId },
+          select: { status: true, quantity: true },
+        });
+        // Legacy: RESERVED without stock decrement — just reopen. New: restore units.
+        const legacyUndecremented = product.status === 'RESERVED' && product.quantity >= order.quantity;
+        await tx.product.update({
+          where: { id: order.productId },
+          data: legacyUndecremented
+            ? { status: 'ACTIVE' }
+            : { quantity: { increment: order.quantity }, status: 'ACTIVE' },
+        });
       }
       await tx.orderTransition.create({
         data: { orderId: id, from: order.status, to: target, actorId: actor.id, idempotencyKey: key, reason },

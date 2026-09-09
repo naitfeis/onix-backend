@@ -9,6 +9,7 @@ type LedgerIconKind =
   | 'DEPOSIT_RETURN'
   | 'SALE_PAYOUT'
   | 'ADMIN_ADJUSTMENT'
+  | 'CLAWBACK'
   | 'DEFAULT';
 
 function kindFor(type: string): LedgerIconKind {
@@ -21,6 +22,7 @@ function kindFor(type: string): LedgerIconKind {
     || type === 'DEPOSIT_RETURN'
     || type === 'SALE_PAYOUT'
     || type === 'ADMIN_ADJUSTMENT'
+    || type === 'CLAWBACK'
   ) {
     return type;
   }
@@ -28,7 +30,7 @@ function kindFor(type: string): LedgerIconKind {
 }
 
 function Glyph({ kind }: { kind: LedgerIconKind }) {
-  if (kind === 'REFUND') {
+  if (kind === 'REFUND' || kind === 'CLAWBACK') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path

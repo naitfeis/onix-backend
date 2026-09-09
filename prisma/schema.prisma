@@ -216,7 +216,7 @@ model OrderClawback {
   sellerId        BigInt
   /** Total payout that must be recovered from seller. */
   amountCents     BigInt
-  /** Already recovered via ledger ADMIN_ADJUSTMENT debits. */
+  /** Already recovered via ledger CLAWBACK debits. */
   recoveredCents  BigInt         @default(0)
   status          ClawbackStatus @default(OPEN)
   reason          String?        @db.VarChar(1000)
@@ -1294,6 +1294,8 @@ enum LedgerEntryType {
   REFUND
   SALE_PAYOUT
   ADMIN_ADJUSTMENT
+  /** Post-COMPLETED seller recovery (OrderClawback). */
+  CLAWBACK
   WITHDRAWAL
   /** Main balance → deposit wallet */
   DEPOSIT_FUND

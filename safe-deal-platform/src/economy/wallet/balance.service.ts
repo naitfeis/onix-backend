@@ -109,7 +109,7 @@ export class BalanceService {
     tx: Tx,
     userId: bigint,
     amountCents: bigint,
-    type: 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND',
+    type: 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND' | 'CLAWBACK',
     opts: LedgerWriteMeta & {
       /** When true, ADMIN_ADJUSTMENT may go negative only if explicit (never for purchase/withdraw). */
       allowNegative?: boolean;
@@ -179,7 +179,13 @@ export class BalanceService {
       });
       this.metrics?.recordMoneyOp(`debit:${type}`, true);
       logMoneyEvent(
-        type === 'PURCHASE_HOLD' ? 'purchase_hold' : type === 'WITHDRAWAL' ? 'withdrawal' : 'admin_adjust',
+        type === 'PURCHASE_HOLD'
+          ? 'purchase_hold'
+          : type === 'WITHDRAWAL'
+            ? 'withdrawal'
+            : type === 'CLAWBACK'
+              ? 'refund'
+              : 'admin_adjust',
         {
           status: 'success',
           operationId: opts.idempotencyKey,

@@ -9,6 +9,7 @@ export type LedgerType =
   | 'REFUND'
   | 'SALE_PAYOUT'
   | 'ADMIN_ADJUSTMENT'
+  | 'CLAWBACK'
   | 'WITHDRAWAL'
   | 'DEPOSIT_FUND'
   | 'DEPOSIT_RETURN';
@@ -127,7 +128,7 @@ export class LedgerModel {
   debit(
     userId: string,
     amountCents: bigint,
-    type: Extract<LedgerType, 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND'>,
+    type: Extract<LedgerType, 'PURCHASE_HOLD' | 'WITHDRAWAL' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_FUND' | 'CLAWBACK'>,
     idempotencyKey: string,
   ): LedgerRow {
     if (amountCents <= 0n) throw new MonetaryInvariantError('debit amount must be > 0');
@@ -290,7 +291,7 @@ export class LedgerModel {
     const seller = this.ensureUser(sellerId);
     const take = seller.balanceCents < payoutCents ? seller.balanceCents : payoutCents;
     if (take > 0n) {
-      this.debit(sellerId, take, 'ADMIN_ADJUSTMENT', `order:${orderId}:clawback`);
+      this.debit(sellerId, take, 'CLAWBACK', `order:${orderId}:clawback`);
     }
     const recovered = take;
     const status = recovered <= 0n
@@ -323,7 +324,7 @@ export class LedgerModel {
     const seller = this.ensureUser(row.sellerId);
     const take = seller.balanceCents < left ? seller.balanceCents : left;
     if (take <= 0n) return 0n;
-    this.debit(row.sellerId, take, 'ADMIN_ADJUSTMENT', `order:${orderId}:clawback:r${row.recoveredCents}`);
+    this.debit(row.sellerId, take, 'CLAWBACK', `order:${orderId}:clawback:r${row.recoveredCents}`);
     row.recoveredCents += take;
     row.status = row.recoveredCents >= row.amountCents ? 'RECOVERED' : 'PARTIAL';
     return take;

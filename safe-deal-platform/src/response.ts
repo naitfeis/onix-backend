@@ -61,7 +61,7 @@ export interface ProfileDto {
 
 export interface LedgerDto {
   id: string;
-  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
+  type: 'DEPOSIT' | 'PURCHASE_HOLD' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'CLAWBACK' | 'WITHDRAWAL' | 'DEPOSIT_FUND' | 'DEPOSIT_RETURN';
   amountCents: string;
   /** API contract: LedgerEntry has no DB status; posted entries are always COMPLETED. */
   status: 'COMPLETED';
