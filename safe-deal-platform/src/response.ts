@@ -251,11 +251,10 @@ export function dealDto(order: {
   const payoutKind = completed
     ? (completed.actorId === order.buyerId ? 'BUYER' as const : 'ADMIN' as const)
     : null;
-  const hasTicket = Boolean(order.supportTickets?.length);
-  const complaintOpen = hasTicket
-    || order.status === 'DISPUTE'
-    || order.status === 'REFUNDED'
-    || order.status === 'CANCELED';
+  const OPEN_TICKET_STATUSES = new Set(['OPEN', 'IN_REVIEW', 'WAITING_USER']);
+  const complaintOpen = Boolean(
+    order.supportTickets?.some((ticket) => OPEN_TICKET_STATUSES.has(ticket.status ?? 'OPEN')),
+  );
   return {
     id: order.id.toString(),
     product: {

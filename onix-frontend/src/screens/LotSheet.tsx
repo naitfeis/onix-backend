@@ -76,7 +76,7 @@ export function LotSheet({
   buying: boolean;
   backLabel: string;
   onBack: () => void;
-  onBuy: () => Promise<void> | void;
+  onBuy: (purchaseKey?: string) => Promise<void> | void;
   onOpenSeller: () => void;
   onWrite: () => void;
   onToast: (text: string) => void;
@@ -88,6 +88,7 @@ export function LotSheet({
   const [payIntentId, setPayIntentId] = useState<string | null>(null);
   const payLockRef = useRef(false);
   const intentKeyRef = useRef(crypto.randomUUID());
+  const purchaseKeyRef = useRef(crypto.randomUUID());
   const toppedUpRef = useRef(false);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
@@ -140,11 +141,16 @@ export function LotSheet({
           amountCents: activeQuote.externalCents,
           provider: activeMethod === 'CARD' ? 'CARD' : 'YOOKASSA',
           idempotencyKey: intentKeyRef.current,
+          checkout: {
+            productId: product.id,
+            quantity: 1,
+            purchaseIdempotencyKey: purchaseKeyRef.current,
+          },
         });
         setPayIntentId(intent.id);
         return;
       }
-      await onBuy();
+      await onBuy(purchaseKeyRef.current);
     } catch (error) {
       onToast(friendlyError(error));
     } finally {
@@ -278,7 +284,7 @@ export function LotSheet({
           toppedUpRef.current = true;
           setPayIntentId(null);
           await core.loadProfile();
-          await onBuy();
+          await onBuy(purchaseKeyRef.current);
         })();
       }}
     />

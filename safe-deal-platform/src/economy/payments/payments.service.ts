@@ -1,6 +1,6 @@
 import {
-  BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
-  UnauthorizedException,
+  BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException,
+  Optional, UnauthorizedException,
 } from '@nestjs/common';
 import { PaymentProviderCode, PaymentWallet, Prisma, type PaymentIntent } from '@prisma/client';
 import { AuthUser } from '../../common';
@@ -16,6 +16,8 @@ import { BalanceService } from '../wallet/balance.service';
 import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
 import { DepositService } from '../wallet/deposit.service';
 import { TrustService } from '../trust/trust.service';
+import { CHECKOUT_SETTLEMENT, type CheckoutSettlementPort } from '../../checkout-settlement';
+import { parsePaymentCheckoutMetadata } from '../../payments-checkout.types';
 
 export type ProviderEventInput = {
   eventId: string;
@@ -41,6 +43,7 @@ export class PaymentsService {
     private readonly deposit: DepositService,
     private readonly trust: TrustService,
     private readonly idempotency: IdempotencyService,
+    @Optional() @Inject(CHECKOUT_SETTLEMENT) private readonly checkout?: CheckoutSettlementPort,
     manual: ManualPaymentProvider,
     tinkoff: TinkoffAcquiringProvider,
   ) {
@@ -79,6 +82,11 @@ export class PaymentsService {
       amountCents: number;
       provider: PaymentProviderCode;
       idempotencyKey: string;
+      checkout?: {
+        productId: string;
+        quantity: number;
+        purchaseIdempotencyKey: string;
+      };
     },
   ) {
     if (dto.provider === 'MANUAL') {
@@ -108,17 +116,40 @@ export class PaymentsService {
       amountCents: number;
       provider: PaymentProviderCode;
       idempotencyKey: string;
+      checkout?: {
+        productId: string;
+        quantity: number;
+        purchaseIdempotencyKey: string;
+      };
     },
   ) {
     if (dto.amountCents < 100) throw new BadRequestException('Минимальная сумма пополнения — 1 ₽.');
+    if (dto.checkout) {
+      if (dto.wallet !== 'MAIN') {
+        throw new BadRequestException('Checkout-платёж возможен только на основной баланс.');
+      }
+      if (!dto.checkout.productId?.trim() || !dto.checkout.purchaseIdempotencyKey?.trim()) {
+        throw new BadRequestException('Некорректные параметры checkout.');
+      }
+    }
     const provider = this.provider(dto.provider);
     const amountCents = BigInt(dto.amountCents);
+    const checkoutMeta = dto.checkout
+      ? ({
+        checkout: {
+          productId: dto.checkout.productId.trim(),
+          quantity: dto.checkout.quantity,
+          purchaseIdempotencyKey: dto.checkout.purchaseIdempotencyKey,
+        },
+      } satisfies Prisma.InputJsonObject)
+      : undefined;
 
     const assertMatchingIntent = <T extends {
       userId: bigint;
       amountCents: bigint;
       wallet: PaymentWallet;
       provider: PaymentProviderCode;
+      metadata?: unknown;
     }>(existing: T): T => {
       if (
         existing.userId !== userId
@@ -126,6 +157,17 @@ export class PaymentsService {
         || existing.wallet !== dto.wallet
         || existing.provider !== dto.provider
       ) {
+        throw new ConflictException('Ключ идемпотентности уже использован.');
+      }
+      const existingCheckout = parsePaymentCheckoutMetadata(existing.metadata);
+      const wantCheckout = dto.checkout
+        ? {
+          productId: dto.checkout.productId.trim(),
+          quantity: dto.checkout.quantity,
+          purchaseIdempotencyKey: dto.checkout.purchaseIdempotencyKey,
+        }
+        : null;
+      if (JSON.stringify(existingCheckout) !== JSON.stringify(wantCheckout)) {
         throw new ConflictException('Ключ идемпотентности уже использован.');
       }
       return existing;
@@ -144,6 +186,7 @@ export class PaymentsService {
             currency: 'RUB',
             status: 'CREATED',
             idempotencyKey: dto.idempotencyKey,
+            ...(checkoutMeta ? { metadata: checkoutMeta } : {}),
           },
         }));
       ownsClaim = true;
@@ -184,7 +227,12 @@ export class PaymentsService {
       data: {
         status: created.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'PENDING',
         providerRef: created.providerRef,
-        metadata: (created.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+        metadata: {
+          ...(claim.metadata && typeof claim.metadata === 'object'
+            ? claim.metadata as Prisma.InputJsonObject
+            : {}),
+          payWay: dto.provider === 'CARD' ? 'card' : 'sbp',
+        } as Prisma.InputJsonValue,
         succeededAt: created.status === 'SUCCEEDED' ? new Date() : undefined,
       },
     });
@@ -386,6 +434,20 @@ export class PaymentsService {
           fundKind: 'USER_OWNED',
         };
         await this.balance.credit(tx, intent.userId, intent.amountCents, 'DEPOSIT', depositMeta);
+
+        const checkout = parsePaymentCheckoutMetadata(intent.metadata);
+        if (checkout) {
+          if (!this.checkout) {
+            throw new ConflictException('Checkout-покупка недоступна: модуль сделок не подключён.');
+          }
+          await this.checkout.purchaseInTx(
+            tx,
+            { id: intent.userId } as AuthUser,
+            checkout.productId,
+            checkout.purchaseIdempotencyKey,
+            checkout.quantity,
+          );
+        }
       } else {
         await this.deposit.creditAvailable(tx, intent.userId, intent.amountCents, 'TOPUP', {
           idempotencyKey: `payment:${intent.id}:deposit`,

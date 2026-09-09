@@ -1,6 +1,6 @@
 import {
   BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
-  Module, NotFoundException, Optional, Param, Post, Query,
+  Module, NotFoundException, Optional, Param, Post, Query, forwardRef,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -23,17 +23,20 @@ import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
+import { assertSpendableBalance } from './economy/wallet/sale-proceeds-hold';
+import { SupportModule, SupportService } from './support.module';
 import { saleKindFromSubcategory } from './economy/wallet/fund-provenance';
 import type { LedgerWriteMeta } from './economy/wallet/ledger-write.types';
 import { LockService } from './economy/wallet/lock.service';
 import { PrismaService } from './prisma.service';
 import { RealtimeBus } from './realtime/realtime-bus.service';
 import { RealtimeModule } from './realtime/realtime.module';
-import { buildLightDisputeCard, invalidateArbitrationContextCache } from './dispute-card';
+import { buildLightDisputeCard } from './dispute-card';
 import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect, dealWarrantySelect } from './query-selects';
 import { dealDto } from './response';
 import { hideReviewsForOrder } from './marketplace/review-aggregate';
+import { CHECKOUT_SETTLEMENT } from './checkout-settlement';
 
 class PurchaseDto {
   @IsString() @Length(16, 100) idempotencyKey!: string;
@@ -73,6 +76,7 @@ export class EscrowService {
     private readonly clawbacks: ClawbackService,
     private readonly locks: LockService,
     private readonly realtime: RealtimeBus,
+    private readonly support: SupportService,
     @Optional() private readonly risk?: RiskEngineService,
   ) {}
 
@@ -162,6 +166,178 @@ export class EscrowService {
    * Canonical purchase entry — Marketplace / Favorites / Public Profile product card
    * all call POST /orders/product/:productId → this method only.
    */
+  /**
+   * Core purchase mutation — callable inside an existing money transaction (e.g. payment settle).
+   */
+  async purchaseInTx(
+    tx: Prisma.TransactionClient,
+    user: AuthUser,
+    productId: string,
+    key: string,
+    quantity: number,
+  ) {
+    const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
+    if (existing) {
+      if (existing.buyerId !== user.id || existing.productId !== productId || existing.quantity !== quantity) {
+        throw new ConflictException('Ключ идемпотентности уже использован для другого запроса.');
+      }
+      return {
+        order: existing,
+        notifyIds: await this.pendingOrderNotifyIds(tx, existing.id, [existing.buyerId, existing.sellerId]),
+      };
+    }
+    await lockProductForUpdate(tx, productId);
+    const product = await tx.product.findUnique({ where: { id: productId } });
+    if (!product || product.status !== 'ACTIVE' || product.expiresAt <= new Date() || product.quantity < quantity) {
+      throw new ConflictException('Товар недоступен.');
+    }
+    if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
+    if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
+    await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
+    const totalAmountCents = product.priceCents * BigInt(quantity);
+    const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
+    const reserved = await tx.product.updateMany({
+      where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
+      data: { quantity: { decrement: quantity } },
+    });
+    if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
+    const stockAfter = await tx.product.findUniqueOrThrow({
+      where: { id: product.id },
+      select: { quantity: true },
+    });
+    if (stockAfter.quantity < 1) {
+      await tx.product.update({
+        where: { id: product.id },
+        data: { status: stockAfter.quantity === 0 ? 'SOLD_OUT' : 'RESERVED' },
+      });
+    }
+    if (totalAmountCents > 0n) {
+      await assertSpendableBalance(
+        tx,
+        this.balance,
+        user.id,
+        totalAmountCents,
+        'Недостаточно средств для покупки (часть баланса заблокирована гарантией или возвратом).',
+      );
+      await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
+        idempotencyKey: `order:${key}:hold`,
+        description: 'Покупки',
+        actorUserId: user.id,
+        source: 'SYSTEM',
+      });
+    }
+    const chat = await ensurePairChat(tx, user.id, product.sellerId);
+    const chatId = chat.id;
+    const created = await tx.order.create({
+      data: {
+        productId, buyerId: user.id, sellerId: product.sellerId,
+        totalAmountCents, feeCents, payoutCents, quantity,
+        status: 'PAYMENT_HOLD', idempotencyKey: key,
+        chatId,
+        transitions: { create: {
+          from: 'PENDING', to: 'PAYMENT_HOLD', actorId: user.id,
+          idempotencyKey: `order:${key}:create`,
+        } },
+      },
+      include: { chat: true },
+    });
+    await tx.ledgerEntry.updateMany({
+      where: { idempotencyKey: `order:${key}:hold` },
+      data: { orderId: created.id },
+    });
+    await tx.message.create({
+      data: {
+        chatId,
+        kind: 'SYSTEM',
+        senderId: null,
+        text: [
+          `Заказ #${created.id} создан.`,
+          `Товар: «${product.title}»`,
+          '',
+          'Не подтверждайте получение товара,',
+          'пока полностью его не проверите.',
+          '',
+          'При любых проблемах',
+          'нажмите «Обратиться в поддержку».',
+        ].join('\n'),
+      },
+    });
+    await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+
+    // Auto-delivery: one secret per listing — only when the last unit is sold (quantity was 1).
+    const isLastUnit = stockAfter.quantity === 0;
+    if (
+      isLastUnit
+      && product.autoDeliver
+      && product.deliveryCiphertext
+      && product.deliveryIv
+      && !product.deliveryConsumedAt
+    ) {
+      let payload: string;
+      try {
+        payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
+      } catch {
+        throw new BadRequestException(
+          'Автовыдача недоступна: ошибка расшифровки. Проверьте PRODUCT_DELIVERY_KEY на сервере.',
+        );
+      }
+      if (payload.length > 4200) {
+        throw new BadRequestException('Текст автовыдачи слишком длинный для выдачи в чат.');
+      }
+      await tx.message.create({
+        data: {
+          chatId,
+          kind: 'SYSTEM',
+          senderId: null,
+          text: 'Товар выдан автоматически (автовыдача).',
+        },
+      });
+      await tx.message.create({
+        data: {
+          chatId,
+          kind: 'SYSTEM',
+          senderId: null,
+          visibleToUserId: user.id,
+          text: `Автовыдача товара:\n\n${payload}`,
+        },
+      });
+      await tx.product.update({
+        where: { id: product.id },
+        data: {
+          deliveryCiphertext: null,
+          deliveryIv: null,
+          deliveryConsumedAt: new Date(),
+        },
+      });
+      await tx.order.update({
+        where: { id: created.id },
+        data: { status: 'DELIVERING' },
+      });
+      await tx.orderTransition.create({
+        data: {
+          orderId: created.id,
+          from: 'PAYMENT_HOLD',
+          to: 'DELIVERING',
+          actorId: null,
+          idempotencyKey: `order:${key}:auto-deliver`,
+          reason: 'AUTO_DELIVER',
+        },
+      });
+    }
+
+    const sellerNote = await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
+    const buyerNote = await this.notify(
+      tx,
+      user.id,
+      'ORDER_UPDATE',
+      'Заказ создан',
+      'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.',
+      created.id,
+    );
+    await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
+    return { order: created, notifyIds: [sellerNote.id, buyerNote.id] };
+  }
+
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
     const productPeek = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -170,168 +346,8 @@ export class EscrowService {
     if (productPeek && this.risk) {
       await this.risk.assertPurchaseAllowed(user.id, productPeek.priceCents * BigInt(quantity));
     }
-    const { order, notifyIds } = await withSerializableTransaction(this.prisma, async (tx) => {
-      const existing = await tx.order.findUnique({ where: { idempotencyKey: key } });
-      if (existing) {
-        if (existing.buyerId !== user.id || existing.productId !== productId || existing.quantity !== quantity) {
-          throw new ConflictException('Ключ идемпотентности уже использован для другого запроса.');
-        }
-        return {
-          order: existing,
-          notifyIds: await this.pendingOrderNotifyIds(tx, existing.id, [existing.buyerId, existing.sellerId]),
-        };
-      }
-      // Listing first, then both parties in id order — before debit or chat upserts.
-      await lockProductForUpdate(tx, productId);
-      const product = await tx.product.findUnique({ where: { id: productId } });
-      if (!product || product.status !== 'ACTIVE' || product.expiresAt <= new Date() || product.quantity < quantity) {
-        throw new ConflictException('Товар недоступен.');
-      }
-      if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
-      if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
-      await lockUsersInIdOrder(tx, [user.id, product.sellerId]);
-      const totalAmountCents = product.priceCents * BigInt(quantity);
-      const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
-      // Optimistic lock: decrement stock so multi-qty listings sell concurrently.
-      const reserved = await tx.product.updateMany({
-        where: { id: product.id, status: 'ACTIVE', quantity: { gte: quantity } },
-        data: { quantity: { decrement: quantity } },
-      });
-      if (!reserved.count) throw new ConflictException('Товар уже зарезервирован.');
-      const stockAfter = await tx.product.findUniqueOrThrow({
-        where: { id: product.id },
-        select: { quantity: true },
-      });
-      if (stockAfter.quantity < 1) {
-        await tx.product.update({
-          where: { id: product.id },
-          data: { status: 'RESERVED' },
-        });
-      }
-      if (totalAmountCents > 0n) {
-        await this.balance.debit(tx, user.id, totalAmountCents, 'PURCHASE_HOLD', {
-          idempotencyKey: `order:${key}:hold`,
-          description: 'Покупки',
-          actorUserId: user.id,
-          source: 'SYSTEM',
-        });
-      }
-      // One personal chat per buyer↔seller pair — never create a new chat per deal.
-      const chat = await ensurePairChat(tx, user.id, product.sellerId);
-      const chatId = chat.id;
-      const created = await tx.order.create({
-        data: {
-          productId, buyerId: user.id, sellerId: product.sellerId,
-          totalAmountCents, feeCents, payoutCents, quantity,
-          status: 'PAYMENT_HOLD', idempotencyKey: key,
-          chatId,
-          transitions: { create: {
-            from: 'PENDING', to: 'PAYMENT_HOLD', actorId: user.id,
-            idempotencyKey: `order:${key}:create`,
-          } },
-        },
-        include: { chat: true },
-      });
-      await tx.ledgerEntry.updateMany({
-        where: { idempotencyKey: `order:${key}:hold` },
-        data: { orderId: created.id },
-      });
-      // SYSTEM message in the existing pair chat — FE shows «Открыть заказ» for this order id.
-      await tx.message.create({
-        data: {
-          chatId,
-          kind: 'SYSTEM',
-          senderId: null,
-          text: [
-            `Заказ #${created.id} создан.`,
-            `Товар: «${product.title}»`,
-            '',
-            'Не подтверждайте получение товара,',
-            'пока полностью его не проверите.',
-            '',
-            'При любых проблемах',
-            'нажмите «Обратиться в поддержку».',
-          ].join('\n'),
-        },
-      });
-      await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
-
-      // Auto-delivery after payment hold — one-time, never via public product API.
-      // Single purchase path: EscrowService.purchase (POST /orders/product/:productId).
-      if (
-        product.autoDeliver
-        && product.deliveryCiphertext
-        && product.deliveryIv
-        && !product.deliveryConsumedAt
-      ) {
-        let payload: string;
-        try {
-          payload = decryptDeliverySecret(product.deliveryCiphertext, product.deliveryIv);
-        } catch {
-          throw new BadRequestException(
-            'Автовыдача недоступна: ошибка расшифровки. Проверьте PRODUCT_DELIVERY_KEY на сервере.',
-          );
-        }
-        if (payload.length > 4200) {
-          throw new BadRequestException('Текст автовыдачи слишком длинный для выдачи в чат.');
-        }
-        // Shared notice (no secret) — seller + buyer.
-        await tx.message.create({
-          data: {
-            chatId,
-            kind: 'SYSTEM',
-            senderId: null,
-            text: 'Товар выдан автоматически (автовыдача).',
-          },
-        });
-        // Secret only for buyer — never returned by product API; cannot re-fetch after consume.
-        await tx.message.create({
-          data: {
-            chatId,
-            kind: 'SYSTEM',
-            senderId: null,
-            visibleToUserId: user.id,
-            text: `Автовыдача товара:\n\n${payload}`,
-          },
-        });
-        await tx.product.update({
-          where: { id: product.id },
-          data: {
-            deliveryCiphertext: null,
-            deliveryIv: null,
-            deliveryConsumedAt: new Date(),
-            quantity: 0,
-            status: 'SOLD_OUT',
-          },
-        });
-        await tx.order.update({
-          where: { id: created.id },
-          data: { status: 'DELIVERING' },
-        });
-        await tx.orderTransition.create({
-          data: {
-            orderId: created.id,
-            from: 'PAYMENT_HOLD',
-            to: 'DELIVERING',
-            actorId: null,
-            idempotencyKey: `order:${key}:auto-deliver`,
-            reason: 'AUTO_DELIVER',
-          },
-        });
-      }
-
-      const sellerNote = await this.notify(tx, product.sellerId, 'ORDER_UPDATE', 'Новая покупка', `Куплен товар «${product.title}»`, created.id);
-      const buyerNote = await this.notify(
-        tx,
-        user.id,
-        'ORDER_UPDATE',
-        'Заказ создан',
-        'Оплата в сейфе ONIX. Проверьте товар перед подтверждением.',
-        created.id,
-      );
-      await this.audit(tx, user.id, 'ORDER_PURCHASE', created.id, { productId });
-      return { order: created, notifyIds: [sellerNote.id, buyerNote.id] };
-    });
+    const { order, notifyIds } = await withSerializableTransaction(this.prisma, async (tx) =>
+      this.purchaseInTx(tx, user, productId, key, quantity));
 
     deliverTelegramAfterCommit(this.prisma, notifyIds);
     const live = await this.prisma.order.findUnique({
@@ -566,67 +582,15 @@ export class EscrowService {
     return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
   }
 
-  async dispute(user: AuthUser, id: bigint, key: string, reason?: string) {
-    const openTicket = await this.prisma.supportTicket.findFirst({
-      where: { orderId: id, status: { in: ['OPEN', 'IN_REVIEW', 'WAITING_USER'] } },
-      select: { id: true, chatId: true },
-    });
-    if (openTicket) {
-      throw new BadRequestException('По этой сделке уже открыто обращение в поддержку.');
-    }
-    const notifyIds = await withSerializableTransaction(this.prisma, async (tx) => {
-      const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
-      if (replay) {
-        if (replay.orderId !== id || replay.to !== 'DISPUTE') {
-          throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
-        }
-        const existing = await tx.order.findUniqueOrThrow({ where: { id } });
-        const peerId = existing.buyerId === user.id ? existing.sellerId : existing.buyerId;
-        return this.pendingOrderNotifyIds(tx, id, [peerId]);
-      }
-      await lockOrderForUpdate(tx, id);
-      const order = await tx.order.findFirst({
-        where: { id, OR: [{ buyerId: user.id }, { sellerId: user.id }] },
-      });
-      if (!order) throw new NotFoundException('Сделка не найдена.');
-      if (order.status === 'DISPUTE') {
-        const peerId = order.buyerId === user.id ? order.sellerId : order.buyerId;
-        return this.pendingOrderNotifyIds(tx, id, [peerId]);
-      }
-      if (!['PAYMENT_HOLD', 'DELIVERING'].includes(order.status)) {
-        throw new ConflictException('Спор сейчас открыть нельзя.');
-      }
-      await lockUsersInIdOrder(tx, [order.buyerId, order.sellerId]);
-      const changed = await tx.order.updateMany({
-        where: { id, status: order.status },
-        data: { status: 'DISPUTE', disputeReason: reason },
-      });
-      if (!changed.count) throw new ConflictException('Состояние сделки уже изменилось.');
-      await tx.orderTransition.create({
-        data: { orderId: id, from: order.status, to: 'DISPUTE', actorId: user.id, idempotencyKey: key, reason },
-      });
-      await this.locks.holdForDispute(tx, id);
-      await this.audit(tx, user.id, 'ORDER_DISPUTE', id, reason ? { reason } : undefined);
-      const peerId = order.buyerId === user.id ? order.sellerId : order.buyerId;
-      const note = await this.notify(
-        tx,
-        peerId,
-        'ORDER_UPDATE',
-        'Открыт спор',
-        reason?.slice(0, 200) ?? 'По сделке открыт спор.',
-        id,
-      );
-      return [note.id];
-    });
-    invalidateArbitrationContextCache();
-    deliverTelegramAfterCommit(this.prisma, notifyIds);
-    const updated = await this.one(user, id);
+  /** @deprecated Use POST /orders/:id/support — kept as alias for older clients. */
+  async dispute(user: AuthUser, id: bigint, _key: string, reason?: string) {
+    await this.support.open(user, id, reason);
     const row = await this.prisma.order.findUnique({
       where: { id },
       select: { id: true, status: true, buyerId: true, sellerId: true, chatId: true },
     });
     if (row) this.emitOrderUpdated(row);
-    return updated;
+    return this.one(user, id);
   }
 
   refundByAdmin(actor: AuthUser, id: bigint, reason?: string) {
@@ -747,6 +711,13 @@ export class EscrowService {
         ...(sellerInitiated ? { sellerInitiated: true } : {}),
         ...(support ? { support: true } : {}),
         fromStatus: order.status,
+        ...(order.status === 'COMPLETED' && target === 'REFUNDED'
+          ? {
+            feeCents: order.feeCents.toString(),
+            payoutCents: order.payoutCents.toString(),
+            platformFeeAbsorbedCents: order.feeCents.toString(),
+          }
+          : {}),
       });
       if (target === 'REFUNDED' || target === 'CANCELED') {
         await hideReviewsForOrder(tx as never, id, 'REFUND');
@@ -926,9 +897,12 @@ export class EscrowController {
 }
 
 @Module({
-  imports: [EconomyModule, RealtimeModule, RiskModule],
+  imports: [forwardRef(() => EconomyModule), RealtimeModule, RiskModule, SupportModule],
   controllers: [EscrowController],
-  providers: [EscrowService],
-  exports: [EscrowService],
+  providers: [
+    EscrowService,
+    { provide: CHECKOUT_SETTLEMENT, useExisting: EscrowService },
+  ],
+  exports: [EscrowService, CHECKOUT_SETTLEMENT],
 })
 export class EscrowModule {}

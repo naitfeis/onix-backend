@@ -377,6 +377,9 @@ export class MarketplaceService {
     } catch (e) {
       throw fieldBadRequest('priceCents', (e as Error).message);
     }
+    if (dto.autoDeliver && dto.quantity > 1) {
+      throw fieldBadRequest('autoDeliver', 'Автовыдача доступна только для лотов с количеством 1.');
+    }
     const secret = deliveryFields(dto);
     const { deliveryText: _omit, autoDeliver: _a, acceptedRules: _rules, warrantyHours, ...rest } = dto;
     const product = await this.prisma.product.create({
@@ -439,6 +442,11 @@ export class MarketplaceService {
       throw fieldBadRequest('subcategory', (e as Error).message);
     }
     const { priceCents, deliveryText, autoDeliver, warrantyHours, ...data } = dto;
+    const nextQuantity = dto.quantity ?? item.quantity;
+    const wantAutoDeliver = autoDeliver ?? item.autoDeliver;
+    if (wantAutoDeliver && nextQuantity > 1) {
+      throw fieldBadRequest('autoDeliver', 'Автовыдача доступна только для лотов с количеством 1.');
+    }
     if (priceCents) {
       try {
         assertListingPrice(BigInt(priceCents), subcategory);

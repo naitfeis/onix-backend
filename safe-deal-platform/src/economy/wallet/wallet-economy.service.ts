@@ -7,6 +7,7 @@ import { withSerializableTransaction } from '../../database/transaction-retry';
 import { PrismaService } from '../../prisma.service';
 import { requireUserByOnixId } from '../../onix-id-lookup';
 import { BalanceService } from './balance.service';
+import { assertSpendableBalance } from './sale-proceeds-hold';
 import { DepositService } from './deposit.service';
 import type { LedgerWriteMeta } from './ledger-write.types';
 import { LockService } from './lock.service';
@@ -93,6 +94,13 @@ export class WalletEconomyService {
           amountCents: amount.toString(),
         };
       }
+      await assertSpendableBalance(
+        tx,
+        this.balance,
+        user.id,
+        amount,
+        'Недостаточно доступных средств для перевода в залог.',
+      );
       await this.balance.debit(tx, user.id, amount, 'DEPOSIT_FUND', {
         idempotencyKey: `bal:${idempotencyKey}`,
         description: 'Перевод в залог',

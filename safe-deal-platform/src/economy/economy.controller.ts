@@ -4,7 +4,7 @@ import {
 import type { Request, Response } from 'express';
 import { Type } from 'class-transformer';
 import {
-  IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min,
+  IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min, ValidateNested,
 } from 'class-validator';
 import type { PaymentProviderCode, PaymentWallet } from '@prisma/client';
 import { AuthUser, CurrentUser, Public } from '../common';
@@ -16,12 +16,19 @@ import { ProSubscriptionService } from './pro/pro.service';
 import { TrustService } from './trust/trust.service';
 import { WalletEconomyService } from './wallet/wallet-economy.service';
 
+class CheckoutBindDto {
+  @IsString() @Length(8, 64) productId!: string;
+  @Type(() => Number) @IsInt() @Min(1) @Max(10_000) quantity!: number;
+  @IsString() @Length(16, 100) purchaseIdempotencyKey!: string;
+}
+
 class CreatePaymentIntentDto {
   @IsIn(['MAIN', 'DEPOSIT']) wallet!: PaymentWallet;
   @Type(() => Number) @IsInt() @Min(100) @Max(50_000_000) amountCents!: number;
   @IsIn(['MANUAL', 'YOOKASSA', 'TELEGRAM_WALLET', 'CRYPTO', 'CARD', 'STRIPE'])
   provider!: PaymentProviderCode;
   @IsString() @Length(16, 100) idempotencyKey!: string;
+  @IsOptional() @ValidateNested() @Type(() => CheckoutBindDto) checkout?: CheckoutBindDto;
 }
 
 class WithdrawDepositDto {

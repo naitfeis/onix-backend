@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { EscrowModule } from '../escrow.module';
 import { EconomyController } from './economy.controller';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
@@ -15,6 +16,7 @@ import { WalletEconomyService } from './wallet/wallet-economy.service';
 import { WithdrawVelocityService } from './wallet/withdraw-velocity';
 
 @Module({
+  imports: [forwardRef(() => EscrowModule)],
   controllers: [EconomyController],
   providers: [
     ManualPaymentProvider,

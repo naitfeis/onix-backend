@@ -1003,7 +1003,7 @@ export function useOnixCore() {
     });
   }, [run]);
 
-  const purchase = useCallback(async (productId: string) => {
+  const purchase = useCallback(async (productId: string, idempotencyKey?: string) => {
     if (!productId || purchaseLockRef.current.has(productId) || actionBusyRef.current) return null;
     purchaseLockRef.current.add(productId);
     hideCatalogProduct(productId);
@@ -1012,9 +1012,11 @@ export function useOnixCore() {
       products: previous.products.filter((p) => p.id !== productId),
     }));
     try {
-      let key = purchaseKeyRef.current.get(productId);
+      let key = idempotencyKey ?? purchaseKeyRef.current.get(productId);
       if (!key) {
         key = crypto.randomUUID();
+        purchaseKeyRef.current.set(productId, key);
+      } else {
         purchaseKeyRef.current.set(productId, key);
       }
       const result = await run(`purchase-${productId}`, () =>
@@ -1035,29 +1037,6 @@ export function useOnixCore() {
     } finally {
       purchaseLockRef.current.delete(productId);
     }
-  }, [load, run]);
-
-  const dealIdempotencyRef = useRef(new Map<string, string>());
-
-  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
-    const path = action === 'deliver'
-      ? API_PATHS.dealDeliver(deal.id)
-      : action === 'complete'
-        ? API_PATHS.dealComplete(deal.id)
-        : action === 'cancel'
-          ? API_PATHS.dealCancel(deal.id)
-          : API_PATHS.dealDispute(deal.id);
-    const stamp = `${deal.id}:${action}`;
-    let key = dealIdempotencyRef.current.get(stamp);
-    if (!key) {
-      key = crypto.randomUUID();
-      dealIdempotencyRef.current.set(stamp, key);
-    }
-    return run(`deal-${deal.id}`, () => api.post(path, {
-      idempotencyKey: key,
-      ...(action === 'dispute' ? { reason: 'Открыто пользователем' } : {}),
-      ...(action === 'cancel' ? { reason: 'Отменено пользователем' } : {}),
-    }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
   }, [load, run]);
 
   const loadMessages = useCallback(async (threadId: string) => {
@@ -1151,6 +1130,29 @@ export function useOnixCore() {
       void load('chats', API_PATHS.chats);
       void load('deals', API_PATHS.orders);
     }), [load, run]);
+
+  const dealIdempotencyRef = useRef(new Map<string, string>());
+
+  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
+    if (action === 'dispute') {
+      return openSupport(deal.id, 'Открыто пользователем');
+    }
+    const path = action === 'deliver'
+      ? API_PATHS.dealDeliver(deal.id)
+      : action === 'complete'
+        ? API_PATHS.dealComplete(deal.id)
+        : API_PATHS.dealCancel(deal.id);
+    const stamp = `${deal.id}:${action}`;
+    let key = dealIdempotencyRef.current.get(stamp);
+    if (!key) {
+      key = crypto.randomUUID();
+      dealIdempotencyRef.current.set(stamp, key);
+    }
+    return run(`deal-${deal.id}`, () => api.post(path, {
+      idempotencyKey: key,
+      ...(action === 'cancel' ? { reason: 'Отменено пользователем' } : {}),
+    }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
+  }, [load, openSupport, run]);
 
   const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => run('withdraw', () =>
     api.post(API_PATHS.walletWithdraw, {

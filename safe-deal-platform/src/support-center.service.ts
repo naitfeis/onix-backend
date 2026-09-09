@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, SupportTicketCategory, SupportTicketPriority, SupportTicketStatus } from '@prisma/client';
 import { PrismaService } from './prisma.service';
+import { assertOrderResolvedForTicketClose } from './support-ticket-guard';
 import { formatTicketPublicId, SecurityLockService } from './risk/security-lock.service';
 import type { AdminActor } from './admin/admin-session.service';
 import { formatOnixId } from './onix-id';
@@ -260,7 +261,13 @@ export class SupportCenterService {
     if (!TICKET_STATUSES.includes(status)) throw new BadRequestException('Неизвестный статус.');
     const ticket = await this.prisma.supportTicket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Тикет не найден.');
+    if (status === 'CLOSED' || status === 'RESOLVED') {
+      await assertOrderResolvedForTicketClose(this.prisma, ticket.orderId);
+    }
     await this.prisma.$transaction(async (tx) => {
+      if (status === 'CLOSED' || status === 'RESOLVED') {
+        await assertOrderResolvedForTicketClose(tx, ticket.orderId);
+      }
       await tx.supportTicket.update({
         where: { id: ticketId },
         data: {

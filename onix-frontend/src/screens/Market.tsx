@@ -342,13 +342,13 @@ export function Market({
     requestAnimationFrame(() => writeCatalogScroll(catalogScrollRef.current));
   };
 
-  const buySelected = async (product: Product) => {
+  const buySelected = async (product: Product, purchaseKey?: string) => {
     hideCatalogProduct(product.id);
     setItems((prev) => prev.filter((p) => p.id !== product.id));
     setSelected(null);
     setSellerTrust(null);
     setDetailReady(false);
-    const deal = await core.purchase(product.id);
+    const deal = await core.purchase(product.id, purchaseKey);
     if (!deal) {
       // In-flight pay still owns the hide; a busy/double-click null must not restore the lot.
       if (!isCatalogHidden(product.id)) {
@@ -549,7 +549,7 @@ export function Market({
         buying={Boolean(core.actionBusy?.startsWith('purchase'))}
         backLabel={catalogBackLabel(category, subcategory)}
         onBack={closeLot}
-        onBuy={() => buySelected(selected)}
+        onBuy={(purchaseKey) => buySelected(selected, purchaseKey)}
         onToast={setToast}
         onRequestLogin={onRequestLogin}
         onOpenSeller={async () => {

@@ -17,6 +17,7 @@ import { PrismaService } from '../prisma.service';
 import type { AdminActor } from './admin-session.service';
 import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { recomputeSellerRating } from '../marketplace/review-aggregate';
+import { assertOrderResolvedForTicketClose } from '../support-ticket-guard';
 
 const WIPED_DISPLAY_NAME = 'Удалённый аккаунт';
 const OPEN_ORDER_STATUSES = ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] as const;
@@ -961,7 +962,9 @@ export class AdminSecurityService {
     const ticket = await this.prisma.supportTicket.findUnique({ where: { id: ticketId } });
     if (!ticket) throw new NotFoundException('Обращение не найдено.');
     if (ticket.status === 'CLOSED') return { ticketId, closed: true as const };
+    await assertOrderResolvedForTicketClose(this.prisma, ticket.orderId);
     await this.prisma.$transaction(async (tx) => {
+      await assertOrderResolvedForTicketClose(tx, ticket.orderId);
       await tx.supportTicket.update({
         where: { id: ticketId },
         data: { status: 'CLOSED', closedAt: new Date() },
