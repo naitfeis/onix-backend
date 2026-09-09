@@ -16,8 +16,8 @@ import { t } from '../i18n';
 const NEAR_BOTTOM_PX = 96;
 const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
-const CHAT_LIST_DEFAULT = 280;
-const CHAT_LIST_MIN = 200;
+const CHAT_LIST_DEFAULT = 320;
+const CHAT_LIST_MIN = 220;
 
 function readStoredChatSize(key: string, fallback: number, min: number): number {
   try {
@@ -465,7 +465,7 @@ export function Chats({
       </div>
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
         core.chats.map(chat => <button
-          className="thread"
+          className={`thread${threadId === chat.id ? ' active' : ''}`}
           key={chat.id}
           onClick={() => setThreadId(chat.id)}
           onContextMenu={(event) => {

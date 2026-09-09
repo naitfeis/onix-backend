@@ -5,7 +5,6 @@ import {
   formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { ReviewCard } from '../components/ReviewCard';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -186,8 +185,6 @@ export function PublicProfileModal({
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
             <span><b>{followersCount}</b> подписчиков</span>
-            {trustCard && <TrustLevelMeter level={trustCard.level} progress={trustCard.progress} className="trust-meter--inline" />}
-            {trustCard && <span><b>{money(trustCard.depositTotal)}</b> залог</span>}
           </div>
         </div>
         {!isSelf && core && <div className="card-actions">
@@ -222,10 +219,12 @@ export function PublicProfileModal({
             }}
           >Пожаловаться</Button>
         </div>}
-        <div className="balance">
-          <small>ЗАЛОГ</small>
-          <strong>{money(trustCard?.depositTotal ?? '0')}</strong>
-        </div>
+        {trustCard && (
+          <div className="balance">
+            <small>ЗАЛОГ</small>
+            <strong>{money(trustCard.depositTotal)}</strong>
+          </div>
+        )}
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}

@@ -112,7 +112,7 @@ html[data-theme="dark"] {
   --sidebar-left-w: 272px;
   --sidebar-right-w: 320px;
   /* Chat desktop layout — Chats.tsx may override while resizing */
-  --chat-list-w: 280px;
+  --chat-list-w: 320px;
   --chat-panel-w: 100%;
   --chat-panel-h: 70vh;
   /* Elevated surface behind avatar presence ring */

@@ -3,7 +3,6 @@ import {
 } from '../api/contracts';
 import { money } from '../api/client';
 import UserAvatar from '../components/UserAvatar';
-import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { Button, Card } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
@@ -66,12 +65,9 @@ export function SellerIdentityCard({
           <span><b>{seller.salesCount}</b> сделок</span>
           <span><b>{seller.reviewCount}</b> отзывов</span>
           <span><b>{seller.followersCount}</b> подписчиков</span>
-          {!checkout && trust && <TrustLevelMeter level={trust.level} progress={trust.progress} className="trust-meter--inline" />}
-          {!checkout && trust && <span><b>{money(trust.depositTotal)}</b> залог</span>}
         </div>
         {checkout && (
           <div className="seller-identity__trust">
-            {trust ? <TrustLevelMeter level={trust.level} progress={trust.progress} /> : <p>Уровень доверия: <b>—</b></p>}
             <p>Размер залога: <b>{trust ? money(trust.depositTotal) : '—'}</b></p>
           </div>
         )}

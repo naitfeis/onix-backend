@@ -2952,7 +2952,7 @@ html[data-theme="light"] .timeline li {
 
 .chat-layout {
   position: relative;
-  min-height: calc(100dvh - 120px);
+  min-height: calc(100dvh - 96px);
   display: grid;
   grid-template-columns: 1fr;
   gap: 0;
@@ -2962,9 +2962,9 @@ html[data-theme="light"] .timeline li {
 /* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
 .app-shell--chat .viewport {
   margin: 0;
-  height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 96px - env(safe-area-inset-bottom) - 72px);
-  min-height: 0;
-  max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 96px - env(safe-area-inset-bottom) - 72px);
+  height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
+  min-height: min(760px, calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom)));
+  max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
   overflow: hidden;
   display: flex;
   align-items: stretch;
@@ -2987,6 +2987,7 @@ html[data-theme="light"] .timeline li {
   min-height: 0;
   max-width: 100%;
   max-height: 100%;
+  grid-template-rows: minmax(0, 1fr);
   margin: 0;
   gap: 0;
   border: 0;
@@ -3106,7 +3107,7 @@ html[data-theme="light"] .timeline li {
   padding: 6px 4px;
 }
 .app-shell--chat .thread-list {
-  padding: 8px 10px 0;
+  padding: 8px 10px 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3210,6 +3211,7 @@ body.is-resizing-chat * {
 .thread {
   width: 100%;
   padding: 13px;
+  min-height: 116px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -3225,6 +3227,8 @@ body.is-resizing-chat * {
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 html[data-theme="light"] .thread {
   background: #fff;
@@ -3233,6 +3237,9 @@ html[data-theme="light"] .thread {
 .thread.active {
   border-color: color-mix(in srgb, var(--accent-violet) 55%, var(--line));
   background: color-mix(in srgb, var(--accent-violet) 16%, var(--glass-regular-bg));
+}
+.thread:active {
+  transform: none;
 }
 .thread-peer { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
 .thread-peer .user-avatar-wrap {
@@ -3374,7 +3381,7 @@ html[data-theme="light"] .thread {
 .conversation__head { padding: 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .conversation__head > div { display: grid; gap: 3px; font-size: 10px; }
 .messages-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-.messages { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.messages { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 14px 12px 16px; }
 .messages-wrap:has(.ai-actions) .messages {
   padding-bottom: 56px;
 }
@@ -3544,7 +3551,7 @@ html[data-theme="light"] .ai-actions {
 }
 .ai-quick-replies__btn:disabled { opacity: .55; cursor: default; }
 .composer {
-  padding: 10px;
+  padding: 12px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 8px;
@@ -3591,6 +3598,9 @@ html[data-theme="light"] .ai-actions {
 }
 html[data-theme="light"] .card.profile-card {
   background: #ffffff;
+}
+.public-profile > .profile-card {
+  padding: 22px 24px;
 }
 .profile-card > .wallet-strip,
 .profile-card > .profile-accounts {
@@ -3648,9 +3658,9 @@ html[data-theme="dark"] .stats span { color: rgba(255, 255, 255, 0.72); }
 html[data-theme="dark"] .stats b { color: #fff; }
 .public-profile { min-width: 0; max-width: 100%; }
 .public-profile > .profile-card {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  position: static;
+  top: auto;
+  z-index: auto;
   background: var(--glass-card-bg);
 }
 .public-profile__bio, .public-profile .muted { overflow-wrap: anywhere; word-break: break-word; }
@@ -3659,6 +3669,10 @@ html[data-theme="dark"] .stats b { color: #fff; }
 .public-profile .card-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .public-profile .card-actions .button { flex: 1 1 auto; min-width: 0; }
 .public-profile .profile-card > .card-actions { grid-column: 1 / -1; }
+.public-profile .profile-card > .balance {
+  padding-top: 0;
+  margin-top: 2px;
+}
 .modal__panel .product-grid .card { min-width: 0; }
 /* Profile lots — same card language as market */
 .public-profile .product-grid {
@@ -4090,6 +4104,10 @@ html[data-theme="dark"] .lot-sheet__detail {
   margin: 0;
   overflow: visible;
 }
+.seller-identity--checkout {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+}
 .seller-identity.profile-card > .card-actions { grid-column: 1 / -1; }
 .seller-identity .profile-main h1 { font-size: 18px; }
 .seller-identity__trust {
@@ -4114,7 +4132,7 @@ html[data-theme="dark"] .lot-sheet__detail {
 .seller-identity__actions {
   display: flex !important;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   width: 100%;
   margin-top: 14px;
   padding-bottom: 2px;
@@ -4135,6 +4153,8 @@ html[data-theme="light"] .seller-identity__actions .button {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.2;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .seller-identity__actions .button:hover:not(:disabled),
 html[data-theme="dark"] .seller-identity__actions .button:hover:not(:disabled),
@@ -4178,7 +4198,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   }
 }
 .modal__panel--wide {
-  width: min(100%, 640px);
+  width: min(100%, 920px);
   max-height: min(
     90dvh,
     calc(var(--tg-viewport-height, 100dvh) - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))
@@ -4333,6 +4353,13 @@ html[data-theme="light"] .seller-identity__actions .button {
   font: inherit;
   font-weight: 600;
   transition: color 220ms;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-nav button:active,
+.bottom-nav button:focus-visible {
+  background: transparent;
+  box-shadow: none;
 }
 .bottom-nav button > span {
   width: 22px;
@@ -4417,6 +4444,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
       calc(96px + env(safe-area-inset-bottom));
   }
   .app-shell--chat .viewport {
+    height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
+    max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
     min-height: 0;
     overflow: hidden;
   }
@@ -4446,6 +4475,12 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .app-shell--chat .chat-edge-resizer,
   .app-shell--chat .chat-col-resizer {
     display: none !important;
+  }
+  .thread {
+    min-height: 128px;
+  }
+  .public-profile > .profile-card {
+    padding: 16px;
   }
 }
 @media (min-width: 560px) {
@@ -4508,6 +4543,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .app-shell--chat .viewport {
     height: calc(var(--tg-viewport-height, 100dvh) - 48px);
+    min-height: calc(var(--tg-viewport-height, 100dvh) - 48px);
     max-height: calc(var(--tg-viewport-height, 100dvh) - 48px);
   }
   .app-shell--chat .chat-layout {
