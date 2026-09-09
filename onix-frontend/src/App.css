@@ -666,7 +666,7 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: var(--radius-hero);
   background: #1c1c1c;
   border: var(--glass-border);
-  box-shadow: none;
+  box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   overflow: clip;
@@ -1640,11 +1640,11 @@ html[data-theme="light"] .cat-card__ring {
 
 .wallet-strip {
   grid-column: 1 / -1;
-  border: 0;
+  border: var(--glass-border);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--text-primary) 5%, transparent);
   overflow: hidden;
-  box-shadow: none;
+  box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
@@ -2637,7 +2637,7 @@ html[data-theme="light"] .search-row .sort-picker__list {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
   overflow: visible;
   padding-bottom: 3px;
   margin-top: 2px;
@@ -2648,8 +2648,9 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips.profile-tabs {
   justify-content: flex-start;
-  gap: 10px;
-  margin: 0;
+  gap: 12px;
+  row-gap: 12px;
+  margin: 4px 0 8px;
   padding-bottom: 0;
 }
 .market-subchips {
@@ -3583,9 +3584,9 @@ html[data-theme="light"] .ai-actions {
 }
 .card.profile-card {
   overflow: visible;
-  border: var(--glass-border);
+  border: var(--glass-border) !important;
   background: #1c1c1c;
-  box-shadow: none;
+  box-shadow: var(--glass-highlight) !important;
   border-radius: var(--radius-hero, var(--radius-card));
 }
 html[data-theme="light"] .card.profile-card {

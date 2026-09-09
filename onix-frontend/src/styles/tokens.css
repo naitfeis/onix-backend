@@ -32,21 +32,21 @@ html[data-theme="dark"] {
   --glass-thick-bg: #151517;
   --glass-card-bg: #151517;
 
-  /* Glass rim only — do not recolor fills */
-  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
-  --glass-highlight: none;
+  /* Visible glass rim — keep fills as --glass-card-bg (no global #1c1c1c recolor) */
+  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --glass-inner-shadow: none;
   --glass-drop-shadow: none;
-  --glass-shadow: none;
+  --glass-shadow: var(--glass-highlight);
 
   --glass-subtle-bg: rgba(255, 255, 255, 0.04);
-  --glass-subtle-border: 1px solid #242426;
+  --glass-subtle-border: 1px solid rgba(255, 255, 255, 0.14);
   --glass-recessed-bg: rgba(0, 0, 0, 0.2);
-  --glass-recessed-border: 1px solid #242426;
+  --glass-recessed-border: 1px solid rgba(255, 255, 255, 0.12);
   --glass-recessed-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 
-  --line: #242426;
-  --line-strong: #2e2e32;
+  --line: rgba(255, 255, 255, 0.12);
+  --line-strong: rgba(255, 255, 255, 0.22);
   --border: var(--line);
   --surface: var(--glass-card-bg);
   --surface-2: var(--glass-subtle-bg);
@@ -67,7 +67,7 @@ html[data-theme="dark"] {
   --icon-color: rgba(255, 255, 255, 0.88);
   --icon-color-hover: #ffffff;
   --icon-glass-bg: rgba(255, 255, 255, 0.1);
-  --icon-glass-border: rgba(255, 255, 255, 0.2);
+  --icon-glass-border: rgba(255, 255, 255, 0.28);
   --icon-hover-bg: rgba(255, 255, 255, 0.16);
   --icon-active-bg: color-mix(in srgb, var(--accent-violet) 18%, rgba(255, 255, 255, 0.06));
 
@@ -184,8 +184,8 @@ html[data-theme="light"] {
   --glass-thick-bg: rgba(255, 255, 255, 0.96);
   --glass-card-bg: #ffffff;
 
-  --glass-border: 1px solid rgba(20, 25, 35, 0.12);
-  --glass-highlight: none;
+  --glass-border: 1px solid rgba(20, 25, 35, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.65);
   --glass-inner-shadow: none;
   --glass-drop-shadow: none;
   --glass-shadow: none;
@@ -497,14 +497,16 @@ html[data-theme="dark"] .product-card,
 html[data-theme="dark"] .desktop-hero,
 html[data-theme="dark"] .market-hero,
 html[data-theme="dark"] .wallet-hero,
+html[data-theme="dark"] .wallet-strip,
 html[data-theme="dark"] .section-head,
 html[data-theme="dark"] .search-bar,
+html[data-theme="dark"] .bottom-nav,
 html[data-theme="dark"] .auth-notice {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
-  box-shadow: none !important;
+  box-shadow: var(--glass-highlight) !important;
 }
 html[data-theme="light"] .card,
 html[data-theme="light"] .widget,
@@ -514,13 +516,15 @@ html[data-theme="light"] .section-head,
 html[data-theme="light"] .desktop-hero,
 html[data-theme="light"] .market-hero,
 html[data-theme="light"] .wallet-hero,
+html[data-theme="light"] .wallet-strip,
 html[data-theme="light"] .search-bar,
+html[data-theme="light"] .bottom-nav,
 html[data-theme="light"] .auth-notice {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
-  box-shadow: none !important;
+  box-shadow: var(--glass-highlight) !important;
 }
 .cat-card {
   overflow: visible;
@@ -651,8 +655,16 @@ html[data-glass="vision"] .topbar,
 html[data-glass="vision"] .section-head,
 html[data-glass="vision"] .desktop-hero:not(.market-hero),
 html[data-glass="vision"] .wallet-hero,
+html[data-glass="vision"] .wallet-strip,
 html[data-glass="vision"] .sidebar-left,
-html[data-glass="vision"] .sidebar-right,
+html[data-glass="vision"] .sidebar-right {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+  box-shadow: var(--glass-highlight) !important;
+  border: var(--glass-border) !important;
+}
+/* Chat stays frameless in Vision too */
 html[data-glass="vision"] .chat-layout,
 html[data-glass="vision"] .conversation,
 html[data-glass="vision"] .thread-list {
@@ -668,7 +680,8 @@ html[data-glass="vision"] .auth-notice {
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   background: var(--glass-card-bg) !important;
-  box-shadow: none !important;
+  border: var(--glass-border) !important;
+  box-shadow: var(--glass-highlight) !important;
 }
 html[data-glass="vision"] .settings-sheet {
   isolation: auto !important;
