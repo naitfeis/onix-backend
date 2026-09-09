@@ -680,6 +680,31 @@ export function Profile({
           author={review.author.onixId
             ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
             : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
+          ownerMenu={{
+            onReport: () => {
+              void (async () => {
+                const comment = window.prompt('Почему отзыв нужно снять?');
+                if (!comment?.trim()) return;
+                try {
+                  await api.post(API_PATHS.reviewAppeal(review.id), { comment: comment.trim() });
+                  setToast('Жалоба на отзыв отправлена в поддержку.');
+                } catch (error) {
+                  setToast(friendlyError(error));
+                }
+              })();
+            },
+            onReply: () => {
+              void (async () => {
+                const onixId = review.author.onixId;
+                if (!onixId) {
+                  setToast('Нельзя ответить: автор отзыва недоступен.');
+                  return;
+                }
+                const ok = await openDirectChat(onixId);
+                if (!ok) setToast('Не удалось открыть чат с автором отзыва.');
+              })();
+            },
+          }}
         />
       ))}</div>)}
     {section === 'analytics' && (

@@ -522,6 +522,9 @@ export function Market({
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Auto-advance only on phones; desktop stays on the chosen slide.
+    const mobile = window.matchMedia('(max-width: 699px)');
+    if (!mobile.matches) return;
     const timer = window.setInterval(() => {
       setHeroSlide((current) => {
         const next = (current + 1) % heroSlides.length;

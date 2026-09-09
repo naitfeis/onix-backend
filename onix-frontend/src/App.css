@@ -2143,6 +2143,59 @@ html[data-theme="dark"] .user-avatar__presence,
   justify-content: space-between;
   gap: 12px;
 }
+.review-card__top-right {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.review-card__menu {
+  position: relative;
+}
+.review-card__menu-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.review-card__menu-btn:hover,
+.review-card__menu-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text-secondary) 14%, transparent);
+  color: var(--text-primary);
+}
+.review-card__menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 8;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 12px;
+  border: var(--glass-border);
+  background: var(--glass-card-bg);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  display: grid;
+  gap: 2px;
+}
+.review-card__menu-panel button {
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.review-card__menu-panel button:hover {
+  background: color-mix(in srgb, var(--accent-violet) 18%, transparent);
+}
 .review-card__order {
   display: grid;
   gap: 2px;
@@ -2189,8 +2242,29 @@ html[data-theme="dark"] .user-avatar__presence,
   font-size: 13px;
   line-height: 1.4;
 }
-.review-card__actions {
-  margin-top: 10px;
+.deal-peer-name__btn,
+.seller-identity__name,
+.seller-identity__meta {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.seller-identity__name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.seller-identity__meta {
+  color: var(--text-secondary);
+}
+.deal-peer-name__btn:hover,
+.seller-identity__name:hover,
+.seller-identity__meta:hover {
+  text-decoration: underline;
 }
 
 .analytics-panel {

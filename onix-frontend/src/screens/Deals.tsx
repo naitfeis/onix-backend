@@ -117,7 +117,11 @@ export function Deals({
             <div>
               <h2 title={deal.product.title}>{deal.product.title}</h2>
               <p className="muted deal-peer-name">
-                {publicAt(deal.counterparty.username)} · {present ? 'Online' : formatLastSeen(core.presenceOf(deal.counterparty.onixId)?.lastOnline ?? deal.counterparty.lastOnline)}
+                <button type="button" className="linkish deal-peer-name__btn" onClick={() => { void openPeer(deal); }}>
+                  {publicAt(deal.counterparty.username)}
+                </button>
+                {' · '}
+                {present ? 'Online' : formatLastSeen(core.presenceOf(deal.counterparty.onixId)?.lastOnline ?? deal.counterparty.lastOnline)}
               </p>
               <div className="deal-lot-tags">
                 <span className="lot-sheet__badge">{categoryName}</span>

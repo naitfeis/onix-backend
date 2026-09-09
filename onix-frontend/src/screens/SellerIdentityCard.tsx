@@ -40,13 +40,26 @@ export function SellerIdentityCard({
         name={seller.username}
         size={compact ? 'small' : 'medium'}
         online={present}
+        onClick={onOpen}
       />
       <div className="profile-main">
         <h1>
-          {publicAt(seller.username)} <StaffBadge badge={seller.badge} />
+          {onOpen ? (
+            <button type="button" className="linkish seller-identity__name" onClick={onOpen}>
+              {publicAt(seller.username)} <StaffBadge badge={seller.badge} />
+            </button>
+          ) : (
+            <>{publicAt(seller.username)} <StaffBadge badge={seller.badge} /></>
+          )}
         </h1>
         <p>
-          {formatOnixId(seller.onixId)} · {present ? 'Online' : formatLastSeen(core.presenceOf(seller.onixId)?.lastOnline ?? seller.lastOnline)}
+          {onOpen ? (
+            <button type="button" className="linkish seller-identity__meta" onClick={onOpen}>
+              {formatOnixId(seller.onixId)} · {present ? 'Online' : formatLastSeen(core.presenceOf(seller.onixId)?.lastOnline ?? seller.lastOnline)}
+            </button>
+          ) : (
+            <>{formatOnixId(seller.onixId)} · {present ? 'Online' : formatLastSeen(core.presenceOf(seller.onixId)?.lastOnline ?? seller.lastOnline)}</>
+          )}
         </p>
         <div className="stats">
           <span><b>★ {seller.rating.toFixed(1)}</b> рейтинг</span>

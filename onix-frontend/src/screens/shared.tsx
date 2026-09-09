@@ -272,16 +272,6 @@ export function PublicProfileModal({
             author={review.author.onixId && onOpenOnix
               ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
               : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
-            onAppeal={isSelf && core && setToast ? async () => {
-              const comment = window.prompt('Почему отзыв нужно снять?');
-              if (!comment?.trim()) return;
-              try {
-                await api.post(API_PATHS.reviewAppeal(review.id), { comment: comment.trim() });
-                setToast('Обжалование отправлено в поддержку.');
-              } catch (error) {
-                setToast(friendlyError(error));
-              }
-            } : undefined}
           />
         ))}</div>)}
     </div>
