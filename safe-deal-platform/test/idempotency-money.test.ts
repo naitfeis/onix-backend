@@ -85,6 +85,6 @@ test('model: post-complete refund then retry keeps single clawback', () => {
   assert.equal(m.getUser('seller').balanceCents, 0n);
   const cb = m.getClawback('o4');
   assert.ok(cb);
-  assert.equal(cb!.amountCents, 2_000_00n);
+  assert.equal(cb!.amountCents, 1_900_00n);
   m.assertInvariants();
 });

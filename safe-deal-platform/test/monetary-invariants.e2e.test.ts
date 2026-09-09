@@ -18,7 +18,7 @@ test('e2e: purchase hold debits buyer exactly once (idempotent key)', () => {
   m.assertInvariants();
 });
 
-test('e2e: complete credits seller payout once and freezes deposit ≤ deal', () => {
+test('e2e: complete credits seller payout once and freezes deposit ≤ payout', () => {
   const m = new LedgerModel();
   m.ensureUser('buyer', { balanceCents: 10_000_00n });
   m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: 5_000_00n });
@@ -26,8 +26,8 @@ test('e2e: complete credits seller payout once and freezes deposit ≤ deal', ()
   m.complete('o2');
   m.complete('o2');
   assert.equal(m.getUser('seller').balanceCents, 3_800_00n);
-  assert.equal(m.getUser('seller').depositLockedCents, 4_000_00n);
-  assert.equal(m.getUser('seller').depositAvailableCents, 1_000_00n);
+  assert.equal(m.getUser('seller').depositLockedCents, 3_800_00n);
+  assert.equal(m.getUser('seller').depositAvailableCents, 1_200_00n);
   assert.equal(m.ledgerEntries().filter((e) => e.type === 'SALE_PAYOUT').length, 1);
   m.assertInvariants();
 });
@@ -181,14 +181,14 @@ test('e2e: post-complete refund with short seller balance → clawback debt', ()
   assert.equal(m.getUser('seller').balanceCents, 0n);
   const cb = m.getClawback('o-short');
   assert.ok(cb);
-  assert.equal(cb!.amountCents, 2_000_00n);
+  assert.equal(cb!.amountCents, 1_900_00n);
   assert.equal(cb!.recoveredCents, 400_00n);
   assert.equal(cb!.status, 'PARTIAL');
-  // Later top-up recovers remainder (full total including platform fee).
+  // Later top-up recovers remainder (seller proceeds only; platform fee not clawed).
   m.credit('seller', 2_000_00n, 'DEPOSIT', 'top-1');
-  assert.equal(m.recoverClawback('o-short'), 1_600_00n);
+  assert.equal(m.recoverClawback('o-short'), 1_500_00n);
   assert.equal(m.getClawback('o-short')!.status, 'RECOVERED');
-  assert.equal(m.getUser('seller').balanceCents, 400_00n);
+  assert.equal(m.getUser('seller').balanceCents, 500_00n);
   m.assertInvariants();
 });
 

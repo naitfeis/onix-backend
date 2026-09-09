@@ -23,9 +23,9 @@ export class ClawbackService {
   }
 
   /**
-   * During COMPLETED → REFUNDED: claw back seller funds without failing if short.
-   * amountCents should be the full buyer refund (totalAmount) so platform fee is recovered.
-   * Buyer refund is caller's responsibility.
+   * During COMPLETED → REFUNDED: claw back seller proceeds without failing if short.
+   * amountCents must be ≤ seller SALE_PAYOUT (payoutCents). Never claw back platform fee from seller.
+   * Buyer refund (full totalAmount) is caller's responsibility.
    */
   async clawbackOnRefund(
     tx: Tx,
@@ -33,7 +33,7 @@ export class ClawbackService {
       orderId: bigint;
       sellerId: bigint;
       amountCents: bigint;
-      /** @deprecated use amountCents */
+      /** @deprecated use amountCents — must equal seller proceeds, not order total */
       payoutCents?: bigint;
       reason?: string;
     },
@@ -53,6 +53,7 @@ export class ClawbackService {
     }
 
     const available = await this.balance.getAvailable(tx, opts.sellerId);
+    // Never debit more than available (no negative balance) and never more than target (seller proceeds).
     const take = available < target ? available : target;
 
     if (take > 0n) {

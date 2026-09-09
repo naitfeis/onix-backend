@@ -74,11 +74,12 @@ test('checkout external quote matches truncating fee math', () => {
   assert.equal(quote.externalCents, 10_400n);
 });
 
-test('post-complete clawback recovers full totalAmount', () => {
+test('post-complete clawback recovers seller proceeds only (≤ payout)', () => {
   const clawback = repoFile('safe-deal-platform/src/economy/wallet/clawback.service.ts');
   const escrow = repoFile('safe-deal-platform/src/escrow.module.ts');
-  assert.match(escrow, /amountCents:\s*order\.totalAmountCents/);
-  assert.match(clawback, /amountCents should be the full buyer refund/);
+  assert.match(escrow, /amountCents:\s*order\.payoutCents/);
+  assert.match(clawback, /≤ seller SALE_PAYOUT|seller proceeds/i);
+  assert.doesNotMatch(escrow, /amountCents:\s*order\.totalAmountCents/);
 });
 
 test('marketplace product update takes product row lock', () => {

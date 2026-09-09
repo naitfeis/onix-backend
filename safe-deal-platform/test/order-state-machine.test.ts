@@ -15,16 +15,12 @@ import {
 
 const repoFile = (path: string) => readFileSync(path, 'utf8');
 
-test('state machine forbids buyer/admin complete from PAYMENT_HOLD', () => {
+test('state machine: buyer cannot complete from PAYMENT_HOLD; admin can', () => {
   assert.deepEqual(BUYER_COMPLETE_FROM, ['DELIVERING']);
-  assert.deepEqual(ADMIN_COMPLETE_FROM, ['DELIVERING', 'DISPUTE']);
-  assert.equal(ADMIN_COMPLETE_FROM.includes('PAYMENT_HOLD'), false);
+  assert.deepEqual(ADMIN_COMPLETE_FROM, ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE']);
+  assert.equal(ADMIN_COMPLETE_FROM.includes('PAYMENT_HOLD'), true);
   const escrow = repoFile('safe-deal-platform/src/escrow.module.ts');
   assert.match(escrow, /ADMIN_COMPLETE_FROM/);
-  assert.doesNotMatch(
-    escrow,
-    /allowedFrom:\s*\[[^\]]*PAYMENT_HOLD[^\]]*DELIVERING[^\]]*DISPUTE/,
-  );
 });
 
 test('state machine: cancel only from PAYMENT_HOLD; deliver only from PAYMENT_HOLD', () => {
@@ -50,6 +46,7 @@ test('assert helpers reject terminal and illegal sources', () => {
   assert.throws(() => assertStatusIn('DELIVERING', BUYER_CANCEL_FROM, 'cancel'));
   assert.throws(() => assertStatusIn('COMPLETED', BUYER_CANCEL_FROM, 'cancel'));
   assert.throws(() => assertStatusIn('REFUNDED', ADMIN_COMPLETE_FROM, 'complete'));
+  assert.doesNotThrow(() => assertStatusIn('PAYMENT_HOLD', ADMIN_COMPLETE_FROM, 'complete'));
   assert.doesNotThrow(() => assertStatusIn('DELIVERING', BUYER_COMPLETE_FROM, 'complete'));
   assert.doesNotThrow(() => assertStatusIn('DISPUTE', ADMIN_COMPLETE_FROM, 'complete'));
 });

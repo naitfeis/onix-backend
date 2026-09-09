@@ -46,6 +46,7 @@ import {
   REFUND_FROM,
   SELLER_DELIVER_FROM,
   assertNotTerminalForMutation,
+  assertOrderMoneySplit,
   assertStatusIn,
 } from './order-state-machine';
 
@@ -212,6 +213,7 @@ export class EscrowService {
     }
     const totalAmountCents = unitPrice * BigInt(quantity);
     const { feeCents, payoutCents } = computeSaleAmounts(totalAmountCents);
+    assertOrderMoneySplit({ totalAmountCents, feeCents, payoutCents });
     let stockAfterQty: number;
     if (opts?.stockPreReserved) {
       // Stock already decremented at PaymentIntent create; product may be ACTIVE/RESERVED/SOLD_OUT.
@@ -417,7 +419,7 @@ export class EscrowService {
     return this.one(user, id);
   }
 
-  /** Support/admin: release escrow to seller after deliver or dispute resolution. */
+  /** Support/admin: release escrow to seller — full spectrum including PAYMENT_HOLD. */
   async completeByAdmin(actor: AuthUser, id: bigint, reason?: string) {
     if (!canActAsSupport(actor)) {
       throw new BadRequestException('Подтвердить сделку продавцу может только поддержка.');
@@ -496,6 +498,7 @@ export class EscrowService {
       }
       assertNotTerminalForMutation(order.status, 'complete');
       assertStatusIn(order.status, opts.allowedFrom, 'complete');
+      assertOrderMoneySplit(order);
       if (opts.requireBuyer) {
         const openTicket = await tx.supportTicket.findFirst({
           where: { orderId: id, status: { in: [...OPEN_SUPPORT_TICKET_STATUSES] } },
@@ -541,8 +544,8 @@ export class EscrowService {
           });
         }
       }
-      if (order.totalAmountCents > 0n) {
-        await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.totalAmountCents);
+      if (order.payoutCents > 0n) {
+        await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.payoutCents);
       }
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
       // Legacy purchases set RESERVED without decrementing; new path decrements at buy-time.
@@ -687,14 +690,13 @@ export class EscrowService {
         throw new ConflictException('Возврат невозможен в текущем статусе.');
       }
 
-      // After COMPLETED payout left escrow → clawback available balance; remainder → OrderClawback.
-      // Buyer always receives full refund; BalanceService never goes negative.
-      if (order.status === 'COMPLETED' && order.totalAmountCents > 0n) {
+      // After COMPLETED: claw back seller proceeds only (≤ payout). Platform fee stays with platform.
+      // Buyer still receives full totalAmount refund; BalanceService never goes negative.
+      if (order.status === 'COMPLETED' && order.payoutCents > 0n) {
         await this.clawbacks.clawbackOnRefund(tx, {
           orderId: id,
           sellerId: order.sellerId,
-          // Recover full buyer refund (payout + platform fee) from seller.
-          amountCents: order.totalAmountCents,
+          amountCents: order.payoutCents,
           reason,
         });
       }
@@ -739,7 +741,7 @@ export class EscrowService {
           ? {
             feeCents: order.feeCents.toString(),
             payoutCents: order.payoutCents.toString(),
-            clawbackAmountCents: order.totalAmountCents.toString(),
+            clawbackAmountCents: order.payoutCents.toString(),
           }
           : {}),
       });

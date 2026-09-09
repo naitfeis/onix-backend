@@ -23,9 +23,10 @@ export const OPEN_SUPPORT_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'
  * DISPUTE → COMPLETED             admin/support complete only
  * DISPUTE → REFUNDED              seller refund-request | admin refund
  * COMPLETED → REFUNDED            seller refund-request | admin refund (clawback)
+ * PAYMENT_HOLD → COMPLETED        admin/support only (seller forgot deliver)
  *
- * Forbidden (must stay impossible via API):
- *   PAYMENT_HOLD → COMPLETED (buyer or admin)
+ * Forbidden (must stay impossible via API for non-admin actors):
+ *   PAYMENT_HOLD → COMPLETED (buyer)
  *   DELIVERING → CANCELED
  *   COMPLETED → CANCELED
  *   REFUNDED → * (except idempotent replay)
@@ -33,12 +34,29 @@ export const OPEN_SUPPORT_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'
  *   COMPLETED → DELIVERING / DISPUTE / PAYMENT_HOLD
  */
 export const BUYER_COMPLETE_FROM: OrderStatus[] = ['DELIVERING'];
-/** Admin may resolve DISPUTE or finish after deliver — never skip delivery from PAYMENT_HOLD. */
-export const ADMIN_COMPLETE_FROM: OrderStatus[] = ['DELIVERING', 'DISPUTE'];
+/** Admin/support: full spectrum on open escrow — including PAYMENT_HOLD if seller never clicked deliver. */
+export const ADMIN_COMPLETE_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'];
 export const SELLER_DELIVER_FROM: OrderStatus = 'PAYMENT_HOLD';
 export const BUYER_CANCEL_FROM: OrderStatus[] = ['PAYMENT_HOLD'];
 export const REFUND_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'];
 export const DISPUTE_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING'];
+
+/** Money conservation: fee + seller proceeds must equal buyer total. */
+export function assertOrderMoneySplit(order: {
+  totalAmountCents: bigint;
+  feeCents: bigint;
+  payoutCents: bigint;
+}): void {
+  if (order.payoutCents < 0n || order.feeCents < 0n || order.totalAmountCents < 0n) {
+    throw new ConflictException('Некорректные суммы сделки.');
+  }
+  if (order.payoutCents > order.totalAmountCents) {
+    throw new ConflictException('Выплата продавцу превышает сумму заказа.');
+  }
+  if (order.feeCents + order.payoutCents !== order.totalAmountCents) {
+    throw new ConflictException('Комиссия и выплата не сходятся с суммой заказа.');
+  }
+}
 
 export function assertNotTerminalForMutation(status: OrderStatus, action: string): void {
   if (ORDER_TERMINAL.has(status)) {
