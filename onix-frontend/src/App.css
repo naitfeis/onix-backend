@@ -3537,11 +3537,13 @@ html[data-theme="light"] .ai-actions {
 }
 .card.profile-card {
   overflow: visible;
+  border: var(--glass-border);
+  background: #1c1c1c;
+  box-shadow: none;
+  border-radius: var(--radius-hero, var(--radius-card));
 }
-.card.profile-card--float {
-  border: 0;
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.32);
-  background: color-mix(in srgb, var(--glass-card-bg) 92%, transparent);
+html[data-theme="light"] .card.profile-card {
+  background: #ffffff;
 }
 .profile-card > .wallet-strip,
 .profile-card > .profile-accounts {

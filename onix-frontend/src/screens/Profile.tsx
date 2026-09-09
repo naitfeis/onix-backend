@@ -555,7 +555,7 @@ export function Profile({
         <Button type="button" onClick={() => setAppealOpen(true)}>Обжаловать решение</Button>
       </Card>
     )}
-    <Card className="profile-card profile-card--float"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <TrustLevelMeter level={ownerTrust.level} progress={ownerTrust.progress} className="trust-meter--inline" />}</div></div>
+    <Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <TrustLevelMeter level={ownerTrust.level} progress={ownerTrust.progress} className="trust-meter--inline" />}</div></div>
       {showWebsiteLogout && (
         <div className="profile-logout">
           <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
