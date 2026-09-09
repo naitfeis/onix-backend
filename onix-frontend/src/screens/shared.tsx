@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, friendlyError, money } from '../api/client';
+import { api, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
   formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
