@@ -1,7 +1,9 @@
 import { money } from '../api/client';
 import type { Review } from '../api/contracts';
 import { IconStar } from './NavIcons';
+import UserAvatar from './UserAvatar';
 import { Card } from '../design-system';
+import { publicAt } from '../utils/publicAt';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 function Stars({ rating }: { rating: number }) {
@@ -17,13 +19,27 @@ function Stars({ rating }: { rating: number }) {
   );
 }
 
+function formatReviewWhen(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '';
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function ReviewCard({
   review,
-  author,
+  authorBadge,
+  onOpenAuthor,
   ownerMenu,
 }: {
   review: Review;
-  author: ReactNode;
+  authorBadge?: ReactNode;
+  onOpenAuthor?: (onixId: string) => void;
   /** Own-profile only: ⋯ menu with report / reply actions. */
   ownerMenu?: {
     onReport: () => void;
@@ -32,9 +48,11 @@ export function ReviewCard({
 }) {
   const title = review.productTitle?.trim() || 'Заказ';
   const amount = review.totalAmountCents;
+  const when = formatReviewWhen(review.createdAt);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
+  const authorName = publicAt(review.author.username);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -51,6 +69,10 @@ export function ReviewCard({
       document.removeEventListener('keydown', onKey);
     };
   }, [menuOpen]);
+
+  const openAuthor = () => {
+    if (review.author.onixId && onOpenAuthor) onOpenAuthor(review.author.onixId);
+  };
 
   return (
     <Card className="review-card">
@@ -104,7 +126,27 @@ export function ReviewCard({
           )}
         </div>
       </div>
-      <div className="review-card__author">{author}</div>
+
+      <div className="review-card__author">
+        <UserAvatar
+          userId={review.author.id}
+          avatarUrl={review.author.avatarUrl}
+          name={review.author.username}
+          size="small"
+          onClick={review.author.onixId && onOpenAuthor ? openAuthor : undefined}
+        />
+        <div className="review-card__author-meta">
+          {review.author.onixId && onOpenAuthor ? (
+            <button type="button" className="linkish review-card__author-name" onClick={openAuthor}>
+              <b>{authorName}</b> {authorBadge}
+            </button>
+          ) : (
+            <span className="review-card__author-name"><b>{authorName}</b> {authorBadge}</span>
+          )}
+          {when ? <small className="review-card__when">{when}</small> : null}
+        </div>
+      </div>
+
       {review.text?.trim() ? <p className="review-card__text muted">{review.text}</p> : null}
     </Card>
   );

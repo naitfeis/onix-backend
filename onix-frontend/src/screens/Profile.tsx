@@ -677,9 +677,8 @@ export function Profile({
         <ReviewCard
           key={review.id}
           review={review}
-          author={review.author.onixId
-            ? <button type="button" className="linkish" onClick={() => void openAuthorProfile(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
-            : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
+          authorBadge={<StaffBadge badge={review.author.badge} />}
+          onOpenAuthor={(onixId) => { void openAuthorProfile(onixId); }}
           ownerMenu={{
             onReport: () => {
               void (async () => {

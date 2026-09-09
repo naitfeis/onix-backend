@@ -647,7 +647,13 @@ html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right,
 html[data-glass="vision"] .chat-layout,
 html[data-glass="vision"] .conversation,
-html[data-glass="vision"] .thread-list,
+html[data-glass="vision"] .thread-list {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
 html[data-glass="vision"] .modal__panel,
 html[data-glass="vision"] .bottom-nav,
 html[data-glass="vision"] .auth-notice {

@@ -269,9 +269,8 @@ export function PublicProfileModal({
           <ReviewCard
             key={review.id}
             review={review}
-            author={review.author.onixId && onOpenOnix
-              ? <button type="button" className="linkish" onClick={() => onOpenOnix(review.author.onixId!)}><b>{publicAt(review.author.username)}</b> <StaffBadge badge={review.author.badge} /></button>
-              : <b>{publicAt(review.author.username)} <StaffBadge badge={review.author.badge} /></b>}
+            authorBadge={<StaffBadge badge={review.author.badge} />}
+            onOpenAuthor={onOpenOnix}
           />
         ))}</div>)}
     </div>
