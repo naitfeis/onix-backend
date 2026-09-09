@@ -300,7 +300,10 @@ export function useOnixCore() {
     try {
       // `fresh` passes a dummy AbortSignal so this GET does not join an in-flight
       // pre-mutation request (client GET dedupe is keyed by path and skipped when signal is set).
-      const data = await api.get<Store[K]>(path, opts?.fresh ? new AbortController().signal : undefined);
+      const raw = await api.get<Store[K] | { items: Store[K] }>(path, opts?.fresh ? new AbortController().signal : undefined);
+      const data = (raw && typeof raw === 'object' && 'items' in (raw as object) && Array.isArray((raw as { items: unknown }).items)
+        ? (raw as { items: Store[K] }).items
+        : raw) as Store[K];
       const next = key === 'products' ? visibleProducts(data as Product[]) as Store[K] : data;
       setStore(previous => ({ ...previous, [key]: next }));
       setErrors(previous => ({ ...previous, [key]: undefined }));

@@ -3,6 +3,8 @@ import type { PaymentWallet, PlatformStatus, Prisma, SecurityEventStatus } from 
 import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
+import { lockUsersInIdOrder } from '../database/money-locks';
+import { withSerializableTransaction } from '../database/transaction-retry';
 import { createDomainNotification, deliverTelegramAfterCommit } from '../domain-notify';
 import { BalanceService } from '../economy/wallet/balance.service';
 import { PaymentsService } from '../economy/payments/payments.service';
@@ -773,10 +775,31 @@ export class AdminSecurityService {
     const target = await this.resolveTarget(targetId);
     const amount = BigInt(input.amountCents);
     if (amount === 0n) throw new BadRequestException('Сумма не может быть нулевой.');
-    const entry = await this.prisma.$transaction(async (tx) => {
-      const meta = { idempotencyKey: input.idempotencyKey, description: input.reason?.trim().slice(0, 500), actorUserId: target.id, source: 'ADMIN' as const, fundKind: 'USER_OWNED' as const };
-      const ledger = amount > 0n ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', meta) : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', { ...meta, allowNegative: true });
-      await tx.adminActionLog.create({ data: { adminUserId: actor.id, action: 'ADMIN_BALANCE_ADJUST', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), amountCents: input.amountCents, reason: input.reason?.trim().slice(0, 500) } } });
+    const reason = input.reason?.trim().slice(0, 500);
+    if (!reason) throw new BadRequestException('Укажите причину корректировки.');
+    const entry = await withSerializableTransaction(this.prisma, async (tx) => {
+      await lockUsersInIdOrder(tx, [target.id]);
+      // AdminUser.id ≠ User.id — do not put admin PK into LedgerEntry.actorUserId (FK → User).
+      // Attribution for finance ops lives in AdminActionLog (+ source: ADMIN).
+      const meta = {
+        idempotencyKey: input.idempotencyKey,
+        description: reason,
+        actorUserId: null as bigint | null,
+        source: 'ADMIN' as const,
+        fundKind: 'USER_OWNED' as const,
+      };
+      const ledger = amount > 0n
+        ? await this.balance.credit(tx, target.id, amount, 'ADMIN_ADJUSTMENT', meta)
+        : await this.balance.debit(tx, target.id, -amount, 'ADMIN_ADJUSTMENT', { ...meta, allowNegative: false });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_BALANCE_ADJUST',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: { onixId: formatOnixId(target.onixId), amountCents: input.amountCents, reason },
+        },
+      });
       return ledger;
     });
     return { ledgerId: entry.id.toString(), amountCents: entry.amountCents.toString() };

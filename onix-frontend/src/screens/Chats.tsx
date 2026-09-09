@@ -745,6 +745,19 @@ export function Chats({
           setText(payload);
         }
       }}>
+        {thread.kind !== 'AI' ? (
+          <button
+            type="button"
+            className="composer__attach"
+            aria-label="Вложение"
+            title="Вложения временно отключены"
+            onClick={() => {
+              setToast('Вложения в чате временно отключены. Отправьте текстовое сообщение.');
+            }}
+          >
+            +
+          </button>
+        ) : null}
         <Input
           value={text}
           onChange={(event) => {

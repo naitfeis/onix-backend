@@ -2939,9 +2939,9 @@ html[data-theme="light"] .timeline li {
   min-height: calc(100dvh - 120px);
   display: grid;
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 0;
 }
-.thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 0; }
 
 /* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
 .app-shell--chat .viewport {
@@ -2972,7 +2972,7 @@ html[data-theme="light"] .timeline li {
   max-width: 100%;
   max-height: 100%;
   margin: 0;
-  gap: 10px;
+  gap: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3519,11 +3519,31 @@ html[data-theme="light"] .ai-actions {
 .composer {
   padding: 10px;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 8px;
+  align-items: center;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
   background: color-mix(in srgb, var(--glass-thick-bg) 90%, transparent);
+}
+.composer:not(:has(.composer__attach)) {
+  grid-template-columns: 1fr auto;
+}
+.composer__attach {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.72;
+}
+.composer__attach:hover {
+  opacity: 1;
+  color: var(--text-primary);
 }
 .conversation .ai-actions + .composer { border-top: 1px solid var(--line); }
 
@@ -5162,7 +5182,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
       minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     align-items: stretch;
-    gap: 10px;
+    gap: 0;
   }
   .app-shell--chat .chat-col-resizer { display: block; }
   .app-shell--chat .chat-edge-resizer { display: none !important; }

@@ -101,6 +101,7 @@ model User {
   mfaChallenges         MfaChallenge[]
 
   @@index([platformStatus])
+  @@index([displayName])
 }
 
 model Product {
@@ -306,6 +307,8 @@ model ChatMember {
 
   @@id([chatId, userId])
   @@index([userId])
+  /** Chat list: memberships by user ordered via Chat.updatedAt join. */
+  @@index([userId, createdAt])
 }
 
 model Message {

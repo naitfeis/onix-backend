@@ -42,14 +42,38 @@ class AppealReviewDto {
 }
 class CreateGroupDto {
   @IsString() @Length(1, 80) title!: string;
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(200)
+  /** Excluding creator — soft cap keeps groups manageable for notify fan-out. */
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(31)
   @IsString({ each: true }) @Length(1, 64, { each: true })
   memberOnixIds!: string[];
 }
 class AddMembersDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(200)
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(31)
   @IsString({ each: true }) @Length(1, 64, { each: true })
   memberOnixIds!: string[];
+}
+class ChatsQuery {
+  @IsOptional() @IsString() @Length(1, 64) q?: string;
+  /** Cursor from previous page (`updatedAt|id`). */
+  @IsOptional() @IsString() @Length(1, 120) cursor?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 50;
+}
+
+/** Soft cap including the creator. */
+export const MAX_GROUP_MEMBERS = 32;
+
+function encodeChatListCursor(updatedAt: Date, id: string): string {
+  return `${updatedAt.toISOString()}|${id}`;
+}
+
+function decodeChatListCursor(raw: string | undefined): { updatedAt: Date; id: string } | null {
+  if (!raw?.trim()) return null;
+  const sep = raw.indexOf('|');
+  if (sep <= 0) return null;
+  const updatedAt = new Date(raw.slice(0, sep));
+  const id = raw.slice(sep + 1).trim();
+  if (!id || !Number.isFinite(updatedAt.getTime())) return null;
+  return { updatedAt, id };
 }
 class UserSearchQuery {
   @IsString() @Length(1, 64) q!: string;
@@ -77,30 +101,40 @@ export class ChatService {
     @Optional() private readonly risk?: RiskEngineService,
   ) {}
 
-  async list(user: AuthUser, search?: string) {
+  async list(user: AuthUser, search?: string, cursorRaw?: string, limit = 50) {
     // Presence heartbeat owns lastSeenAt — avoid write on every chat poll.
     const q = search?.trim();
+    const take = Math.min(Math.max(limit, 1), 50);
+    const cursor = decodeChatListCursor(cursorRaw);
     const chats = await this.prisma.chat.findMany({
       where: {
         members: { some: { userId: user.id } },
-        ...(q ? {
-          OR: [
-            { title: { contains: q, mode: 'insensitive' } },
-            {
-              members: {
-                some: {
-                  userId: { not: user.id },
-                  user: {
-                    OR: [
-                      { displayName: { contains: q, mode: 'insensitive' } },
-                      { onixId: { in: onixIdLookupCandidates(q) } },
-                    ],
+        AND: [
+          ...(cursor ? [{
+            OR: [
+              { updatedAt: { lt: cursor.updatedAt } },
+              { AND: [{ updatedAt: cursor.updatedAt }, { id: { lt: cursor.id } }] },
+            ],
+          }] : []),
+          ...(q ? [{
+            OR: [
+              { title: { contains: q, mode: 'insensitive' as const } },
+              {
+                members: {
+                  some: {
+                    userId: { not: user.id },
+                    user: {
+                      OR: [
+                        { displayName: { contains: q, mode: 'insensitive' as const } },
+                        { onixId: { in: onixIdLookupCandidates(q) } },
+                      ],
+                    },
                   },
                 },
               },
-            },
-          ],
-        } : {}),
+            ],
+          }] : []),
+        ],
       },
       include: {
         members: {
@@ -129,12 +163,13 @@ export class ChatService {
           select: { id: true, status: true, totalAmountCents: true, product: { select: { title: true } } },
         },
       },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
     });
-    if (chats.length === 0) return [];
+    if (chats.length === 0) return { items: [], nextCursor: null as string | null };
 
-    const chatIds = chats.map((chat) => chat.id);
+    const page = chats.slice(0, take);
+    const chatIds = page.map((chat) => chat.id);
     const unreadRows = await this.prisma.$queryRaw<Array<{ chatId: string; cnt: bigint }>>`
       SELECT m."chatId" AS "chatId", COUNT(*)::bigint AS cnt
       FROM "Message" m
@@ -154,7 +189,7 @@ export class ChatService {
     `;
     const unreadByChat = new Map(unreadRows.map((row) => [row.chatId, Number(row.cnt)]));
 
-    const mapped = chats.map((chat) => {
+    const mapped = page.map((chat) => {
       const isGroup = chat.kind === 'GROUP';
       const other = chat.members.find((member) => (
         member.userId !== user.id
@@ -205,14 +240,25 @@ export class ChatService {
             escrow: true,
           },
         } : {}),
+        _updatedAt: chat.updatedAt,
       };
     });
 
-    return mapped.sort((a, b) => {
-      if (a.kind === 'AI' && b.kind !== 'AI') return -1;
-      if (b.kind === 'AI' && a.kind !== 'AI') return 1;
-      return 0;
-    });
+    // Keep AI helper pinned on the first page only.
+    const items = (!cursor
+      ? mapped.sort((a, b) => {
+        if (a.kind === 'AI' && b.kind !== 'AI') return -1;
+        if (b.kind === 'AI' && a.kind !== 'AI') return 1;
+        return 0;
+      })
+      : mapped
+    ).map(({ _updatedAt: _ignored, ...row }) => row);
+
+    const last = page[page.length - 1];
+    const nextCursor = chats.length > take && last
+      ? encodeChatListCursor(last.updatedAt, last.id)
+      : null;
+    return { items, nextCursor };
   }
 
   async searchUsers(user: AuthUser, q: string, limit: number) {
@@ -253,6 +299,9 @@ export class ChatService {
     if (!name) throw new BadRequestException('Укажите название группы.');
     const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
     if (unique.length < 1) throw new BadRequestException('Добавьте хотя бы одного участника.');
+    if (unique.length > MAX_GROUP_MEMBERS - 1) {
+      throw new BadRequestException(`В группе максимум ${MAX_GROUP_MEMBERS} участников (включая вас).`);
+    }
     const members: Array<{ id: bigint; onixId: string; deletedAt: Date | null }> = [];
     const missing: string[] = [];
     for (const raw of unique) {
@@ -272,6 +321,9 @@ export class ChatService {
       throw new BadRequestException(
         missing.length ? `${missing.join(', ')} не найден` : 'Добавьте хотя бы одного участника.',
       );
+    }
+    if (members.length + 1 > MAX_GROUP_MEMBERS) {
+      throw new BadRequestException(`В группе максимум ${MAX_GROUP_MEMBERS} участников (включая вас).`);
     }
 
     const chat = await withSerializableTransaction(this.prisma, async (tx) => {
@@ -402,7 +454,7 @@ export class ChatService {
     const chat = await this.prisma.chat.findUnique({ where: { id: chatId }, select: { kind: true } });
     if (!chat) throw new NotFoundException('Чат не найден.');
     if (chat.kind === 'AI') {
-      throw new BadRequestException('Пишите в ONIX AI через /api/ai/messages.');
+      throw new BadRequestException('Это чат с ONIX AI — напишите сообщение в диалоге Onix AI.');
     }
 
     assertRateLimit(`chat-send:${user.id}`, 60, 60_000);
@@ -430,15 +482,20 @@ export class ChatService {
       lastReadAt: m.lastReadAt,
     }));
 
-    const { message, notifyIds } = await this.prisma.$transaction(async (tx) => {
+    // Keep the message write short — fan-out notifications after commit.
+    const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: { chatId, senderId: user.id, kind: 'USER', text: body },
         include: { sender: { select: SENDER_SELECT } },
       });
       await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
-      const notifyIds: bigint[] = [];
+      return created;
+    });
+
+    const notifyIds: bigint[] = [];
+    try {
       for (const other of others) {
-        const note = await createDomainNotification(tx, {
+        const note = await createDomainNotification(this.prisma, {
           userId: other.userId,
           type: 'NEW_MESSAGE',
           title: 'Новое сообщение',
@@ -447,9 +504,9 @@ export class ChatService {
         });
         notifyIds.push(note.id);
       }
-      return { message: created, notifyIds };
-    });
-
+    } catch {
+      // Message already committed — worker/outbox can still recover missing rows later if needed.
+    }
     deliverTelegramAfterCommit(this.prisma, notifyIds);
 
     this.fanoutChatMessage(
@@ -587,11 +644,18 @@ export class ChatService {
     const unique = [...new Set(memberOnixIds.map((id) => id.trim()).filter(Boolean))];
     if (unique.length < 1) throw new BadRequestException('Укажите участников.');
 
+    const currentCount = await this.prisma.chatMember.count({ where: { chatId } });
+    if (currentCount >= MAX_GROUP_MEMBERS) {
+      throw new BadRequestException(`В группе максимум ${MAX_GROUP_MEMBERS} участников.`);
+    }
+
     const added: string[] = [];
     const missing: string[] = [];
     const already: string[] = [];
+    let liveCount = currentCount;
 
     for (const raw of unique) {
+      if (liveCount >= MAX_GROUP_MEMBERS) break;
       try {
         const target = await requireUserByOnixId(this.prisma, raw);
         if (target.id === user.id || target.deletedAt) {
@@ -607,9 +671,14 @@ export class ChatService {
         }
         await this.prisma.chatMember.create({ data: { chatId, userId: target.id } });
         added.push(formatOnixId(target.onixId));
+        liveCount += 1;
       } catch {
         missing.push(formatOnixId(raw) || raw);
       }
+    }
+
+    if (added.length < unique.length && liveCount >= MAX_GROUP_MEMBERS && missing.length === 0) {
+      // Soft cap hit mid-batch — still return partial adds below.
     }
 
     if (added.length > 0) {
@@ -866,8 +935,8 @@ export class EngagementController {
 
   @Get('chats')
   @Header('Cache-Control', 'private, no-store')
-  listChats(@CurrentUser() user: AuthUser, @Query('q') q?: string) {
-    return this.chats.list(user, q);
+  listChats(@CurrentUser() user: AuthUser, @Query() query: ChatsQuery) {
+    return this.chats.list(user, query.q, query.cursor, query.limit);
   }
 
   @Get('chats/users/search')
