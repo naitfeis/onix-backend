@@ -26,7 +26,7 @@ import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from 
 import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { ReviewCard } from '../components/ReviewCard';
 import { LedgerOpIcon } from '../components/LedgerOpIcon';
-import { IconArrowRight, IconInfo, IconLogout, IconSend, IconShield, IconWallet } from '../components/NavIcons';
+import { IconInfo, IconLogout, IconShield, IconWallet } from '../components/NavIcons';
 import { t } from '../i18n';
 
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
@@ -587,40 +587,40 @@ export function Profile({
     </Card>
 
     <div className="money-tiles" aria-label="Кошелёк и залог">
-      <button type="button" className="money-tile money-tile--wallet" onClick={() => openMoney('MAIN_TOPUP')}>
+      <div className="money-tile money-tile--wallet">
         <span className="money-tile__icon" aria-hidden="true"><IconWallet size={22} /></span>
-        <span className="money-tile__body">
+        <div className="money-tile__body">
           <small>Баланс</small>
           <strong>{money(profile.balanceCents)}</strong>
           <em>Доступно для операций и покупок</em>
-        </span>
-        <span className="money-tile__go" aria-hidden="true"><IconArrowRight size={16} /></span>
-      </button>
-      <button type="button" className="money-tile money-tile--deposit" onClick={() => openMoney('DEPOSIT_FUND')}>
+          <div className="money-tile__actions">
+            <button type="button" className="deal-chip" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</button>
+            <button type="button" className="deal-chip" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</button>
+          </div>
+        </div>
+      </div>
+      <div className="money-tile money-tile--deposit">
         <span className="money-tile__icon" aria-hidden="true"><IconShield size={22} /></span>
-        <span className="money-tile__body">
+        <div className="money-tile__body">
           <small>Залог (находится на платформе) <IconInfo size={12} /></small>
           <strong>{money(deposit?.totalCents ?? '0')}</strong>
           <em>Сумма заморожена на время сделок</em>
-        </span>
-        <span className="money-tile__go" aria-hidden="true"><IconArrowRight size={16} /></span>
-      </button>
-    </div>
-    {deposit && (
-      <div className="stats money-tiles__meta">
-        <span><b>{money(deposit.totalCents)}</b> всего</span>
-        <span><b>{money(deposit.availableCents)}</b> доступно</span>
-        <span><b>{money(deposit.lockedCents)}</b> заморожено</span>
+          {deposit && (
+            <div className="money-tile__stats" aria-label="Детализация залога">
+              <span><b>{money(deposit.totalCents)}</b><small>всего</small></span>
+              <span><b>{money(deposit.availableCents)}</b><small>доступно</small></span>
+              <span><b>{money(deposit.lockedCents)}</b><small>заморожено</small></span>
+            </div>
+          )}
+          <div className="money-tile__actions">
+            <button type="button" className="deal-chip" onClick={() => openMoney('DEPOSIT_FUND')}>Пополнить</button>
+            <button type="button" className="deal-chip" onClick={() => openMoney('DEPOSIT_WITHDRAW')}>Вывести</button>
+          </div>
+        </div>
       </div>
-    )}
+    </div>
 
-    <div className="chips profile-tabs profile-tabs--actions">
-      <button type="button" className="profile-action profile-action--primary" onClick={() => openMoney('MAIN_TOPUP')}>
-        <IconSend size={15} /> Пополнить
-      </button>
-      <button type="button" className="profile-action" onClick={() => openMoney('MAIN_WITHDRAW')}>
-        <IconLogout size={15} /> Вывести
-      </button>
+    <div className="chips profile-tabs">
       {profileSections.map(item =>
         <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({
           overview: t('profile.history'),

@@ -99,11 +99,11 @@
   padding: 20px 18px 24px;
   isolation: auto;
   border-left: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(16, 16, 22, 0.18) !important;
+  background: #15151a !important;
   color: #fff;
   box-shadow: none;
-  -webkit-backdrop-filter: blur(48px) saturate(190%) !important;
-  backdrop-filter: blur(48px) saturate(190%) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
 }
@@ -2949,6 +2949,52 @@ html[data-theme="light"] .deal-card.deal-card--order {
   gap: 8px;
   margin-top: 12px;
 }
+.deal-order__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 0;
+}
+.deal-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.deal-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.deal-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+html[data-theme="light"] .deal-chip {
+  border-color: rgba(20, 24, 32, 0.12);
+  background: rgba(20, 24, 32, 0.04);
+  color: rgba(20, 24, 32, 0.78);
+}
+.deal-chip svg {
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .deal-order__write.button {
   min-height: 36px;
   padding: 8px 14px;
@@ -2966,17 +3012,12 @@ html[data-theme="light"] .deal-card.deal-card--order {
 .deal-order__sum-status svg,
 .timeline__dot svg,
 .money-tile svg,
-.profile-action svg,
 .profile-logout__btn svg {
   stroke: currentColor;
   fill: none;
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-.deal-order__more svg {
-  fill: currentColor;
-  stroke: none;
 }
 .deal-status-banner {
   display: grid;
@@ -3053,43 +3094,6 @@ html[data-theme="light"] .deal-card.deal-card--order {
   gap: 10px;
   position: relative;
 }
-.deal-order__more {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-.deal-order__menu-panel {
-  position: absolute;
-  top: 40px;
-  right: 0;
-  z-index: 5;
-  min-width: 200px;
-  display: grid;
-  gap: 2px;
-  padding: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #1a1a20;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-}
-.deal-order__menu-panel button {
-  text-align: left;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  padding: 10px 12px;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.deal-order__menu-panel button:hover { background: rgba(255, 255, 255, 0.06); }
 .deal-order__sum {
   display: grid;
   gap: 4px;
@@ -3114,7 +3118,6 @@ html[data-theme="light"] .deal-card.deal-card--order {
 .deal-order__sum-status--danger { color: var(--danger); }
 .deal-order__sum-status--warning { color: var(--warning); }
 .deal-order__sum-status--accent { color: var(--accent-violet); }
-.deal-order__actions { padding: 0 16px 12px; margin-top: 0; }
 .deal-order__footer {
   width: 100%;
   display: flex;
@@ -3242,7 +3245,6 @@ html[data-theme="light"] .timeline li {
     width: 100%;
   }
   .deal-order__sum { justify-items: start; text-align: left; order: -1; }
-  .deal-order__menu { justify-self: end; }
 }
 
 .money-tiles {
@@ -3253,10 +3255,10 @@ html[data-theme="light"] .timeline li {
 .money-tiles__meta { margin-top: -4px; }
 .money-tile {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 12px;
-  align-items: center;
-  min-height: 108px;
+  align-items: start;
+  min-height: 0;
   padding: 16px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3264,21 +3266,20 @@ html[data-theme="light"] .timeline li {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   position: relative;
   overflow: hidden;
 }
 .money-tile--wallet {
   background:
-    radial-gradient(120% 90% at 0% 50%, rgba(63, 191, 143, 0.22), transparent 55%),
+    radial-gradient(120% 90% at 0% 50%, rgba(63, 191, 143, 0.08), transparent 55%),
     #14181a;
-  border-color: rgba(63, 191, 143, 0.22);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 .money-tile--deposit {
   background:
-    radial-gradient(120% 90% at 0% 50%, rgba(124, 108, 240, 0.24), transparent 55%),
+    radial-gradient(120% 90% at 0% 50%, rgba(124, 108, 240, 0.08), transparent 55%),
     #16141f;
-  border-color: rgba(124, 108, 240, 0.24);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 .money-tile__icon {
   width: 44px;
@@ -3288,14 +3289,14 @@ html[data-theme="light"] .timeline li {
   place-items: center;
 }
 .money-tile--wallet .money-tile__icon {
-  color: #3FBF8F;
-  background: rgba(63, 191, 143, 0.16);
-  border: 1px solid rgba(63, 191, 143, 0.35);
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .money-tile--deposit .money-tile__icon {
-  color: #8B7FF5;
-  background: rgba(139, 127, 245, 0.16);
-  border: 1px solid rgba(139, 127, 245, 0.35);
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .money-tile__body { display: grid; gap: 4px; min-width: 0; }
 .money-tile__body small {
@@ -3312,23 +3313,42 @@ html[data-theme="light"] .timeline li {
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
-.money-tile--wallet .money-tile__body strong { color: #3FBF8F; }
-.money-tile--deposit .money-tile__body strong { color: #8B7FF5; }
+.money-tile--wallet .money-tile__body strong { color: var(--text-primary); }
+.money-tile--deposit .money-tile__body strong { color: var(--text-primary); }
 .money-tile__body em {
   font-style: normal;
   font-size: 11px;
   color: var(--text-caption);
 }
-.money-tile__go {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+.money-tile__stats {
   display: grid;
-  place-items: center;
-  opacity: 0.85;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
-.money-tile--wallet .money-tile__go { color: #3FBF8F; background: rgba(63, 191, 143, 0.12); }
-.money-tile--deposit .money-tile__go { color: #8B7FF5; background: rgba(139, 127, 245, 0.12); }
+.money-tile__stats span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.money-tile__stats b {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.money-tile__stats small {
+  font-size: 11px;
+  color: var(--text-caption);
+}
+.money-tile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.money-tiles__meta { display: none; }
 .profile-card--dash .profile-main__meta {
   margin-top: 4px;
   color: color-mix(in srgb, var(--accent-mint) 55%, var(--text-secondary));
@@ -3350,18 +3370,6 @@ html[data-theme="light"] .timeline li {
 .profile-card--dash .trust-meter--inline {
   margin-top: 12px;
   max-width: 200px;
-}
-.chips.profile-tabs--actions { align-items: center; }
-.profile-action {
-  display: inline-flex !important;
-  align-items: center;
-  gap: 7px;
-  min-height: 38px;
-}
-.profile-action--primary {
-  background: var(--accent-violet) !important;
-  color: #fff !important;
-  border-color: transparent !important;
 }
 @media (max-width: 699px) {
   .money-tiles { grid-template-columns: 1fr; }

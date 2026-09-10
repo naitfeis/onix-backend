@@ -88,7 +88,6 @@ function decodeOrderListCursor(
 import { CHECKOUT_SETTLEMENT, type PurchaseInTxOptions } from './checkout-settlement';
 import {
   ADMIN_COMPLETE_FROM,
-  BUYER_CANCEL_FROM,
   BUYER_COMPLETE_FROM,
   OPEN_SUPPORT_TICKET_STATUSES,
   REFUND_FROM,
@@ -123,7 +122,7 @@ class OrderQuery {
 /**
  * Escrow state machine — see order-state-machine.ts (single source of truth).
  * Money: buyer debit on purchase (PURCHASE_HOLD); seller credit only on COMPLETED (SALE_PAYOUT).
- * PAYMENT_HOLD → CANCELED: buyer or support only (seller cannot cancel).
+ * PAYMENT_HOLD → CANCELED: support/admin only (buyer opens support instead of cancel).
  * COMPLETED → REFUNDED: clawback totalAmount from seller (never negative ledger).
  * Admin MUST NOT complete from PAYMENT_HOLD (no payout without deliver/dispute).
  */
@@ -654,11 +653,11 @@ export class EscrowService {
   async cancel(user: AuthUser, id: bigint, key: string, reason?: string) {
     const order = await this.prisma.order.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Сделка не найдена.');
-    // Customer API: only the buyer. Support cancel/refund goes through admin plane (adminEscrow).
-    if (order.buyerId !== user.id && !canActAsSupport(user)) {
-      throw new BadRequestException('Отменить заказ на этапе оплаты может только покупатель.');
+    // Buyer cannot cancel — only support/admin. Parties open support on the order instead.
+    if (!canActAsSupport(user)) {
+      throw new BadRequestException('Отмена заказа доступна только через поддержку. Напишите в поддержку по сделке.');
     }
-    return this.refund(user, id, [...BUYER_CANCEL_FROM], 'CANCELED', key, reason);
+    return this.refund(user, id, ['PAYMENT_HOLD'], 'CANCELED', key, reason);
   }
 
   /** @deprecated Use POST /orders/:id/support — kept as alias for older clients. */

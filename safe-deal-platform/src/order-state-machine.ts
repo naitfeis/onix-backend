@@ -14,7 +14,7 @@ export const OPEN_SUPPORT_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'
  *
  * PENDING → PAYMENT_HOLD          purchase (system)
  * PAYMENT_HOLD → DELIVERING       seller deliver | auto-deliver
- * PAYMENT_HOLD → CANCELED         buyer cancel (or support via cancel)
+ * PAYMENT_HOLD → CANCELED         support only (buyer cancel removed — use support)
  * PAYMENT_HOLD → DISPUTE          party support/dispute
  * PAYMENT_HOLD → REFUNDED         seller refund-request | admin refund
  * DELIVERING → COMPLETED          buyer complete
@@ -27,6 +27,7 @@ export const OPEN_SUPPORT_TICKET_STATUSES = ['OPEN', 'IN_REVIEW', 'WAITING_USER'
  *
  * Forbidden (must stay impossible via API for non-admin actors):
  *   PAYMENT_HOLD → COMPLETED (buyer)
+ *   PAYMENT_HOLD → CANCELED (buyer) — buyer must open support instead
  *   DELIVERING → CANCELED
  *   COMPLETED → CANCELED
  *   REFUNDED → * (except idempotent replay)
@@ -37,9 +38,12 @@ export const BUYER_COMPLETE_FROM: OrderStatus[] = ['DELIVERING'];
 /** Admin/support: full spectrum on open escrow — including PAYMENT_HOLD if seller never clicked deliver. */
 export const ADMIN_COMPLETE_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'];
 export const SELLER_DELIVER_FROM: OrderStatus = 'PAYMENT_HOLD';
-export const BUYER_CANCEL_FROM: OrderStatus[] = ['PAYMENT_HOLD'];
+/** @deprecated Buyer cancel removed — support cancels via admin/support plane. Kept empty for callers. */
+export const BUYER_CANCEL_FROM: OrderStatus[] = [];
 export const REFUND_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE', 'COMPLETED'];
 export const DISPUTE_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING'];
+/** Seller may refund while money is still held (before or during transfer confirmation). */
+export const SELLER_REFUND_LIVE_FROM: OrderStatus[] = ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'];
 
 /** Money conservation: fee + seller proceeds must equal buyer total. */
 export function assertOrderMoneySplit(order: {

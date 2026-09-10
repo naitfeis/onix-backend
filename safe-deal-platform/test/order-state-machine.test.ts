@@ -23,8 +23,8 @@ test('state machine: buyer cannot complete from PAYMENT_HOLD; admin can', () => 
   assert.match(escrow, /ADMIN_COMPLETE_FROM/);
 });
 
-test('state machine: cancel only from PAYMENT_HOLD; deliver only from PAYMENT_HOLD', () => {
-  assert.deepEqual(BUYER_CANCEL_FROM, ['PAYMENT_HOLD']);
+test('state machine: buyer cancel removed; deliver only from PAYMENT_HOLD', () => {
+  assert.deepEqual(BUYER_CANCEL_FROM, []);
   assert.equal(SELLER_DELIVER_FROM, 'PAYMENT_HOLD');
 });
 

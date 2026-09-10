@@ -1127,15 +1127,13 @@ export function useOnixCore() {
       });
   }, [load, run]);
 
-  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'cancel' | 'dispute') => {
+  const dealAction = useCallback((deal: Deal, action: 'deliver' | 'complete' | 'dispute') => {
     if (action === 'dispute') {
       return openSupport(deal.id, 'Открыто пользователем');
     }
     const path = action === 'deliver'
       ? API_PATHS.dealDeliver(deal.id)
-      : action === 'complete'
-        ? API_PATHS.dealComplete(deal.id)
-        : API_PATHS.dealCancel(deal.id);
+      : API_PATHS.dealComplete(deal.id);
     const stamp = `${deal.id}:${action}`;
     let key = dealIdempotencyRef.current.get(stamp);
     if (!key) {
@@ -1144,7 +1142,6 @@ export function useOnixCore() {
     }
     return run(`deal-${deal.id}`, () => api.post(path, {
       idempotencyKey: key,
-      ...(action === 'cancel' ? { reason: 'Отменено пользователем' } : {}),
     }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
   }, [load, openSupport, run]);
 

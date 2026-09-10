@@ -30,7 +30,13 @@ class OpenSupportDto {
   @IsOptional() @IsString() @Length(16, 100) idempotencyKey?: string;
 }
 
-const SUPPORT_ELIGIBLE_ORDER = new Set<string>([...DISPUTE_FROM, 'DISPUTE']);
+const SUPPORT_ELIGIBLE_ORDER = new Set<string>([
+  ...DISPUTE_FROM,
+  'DISPUTE',
+  'COMPLETED',
+  'CANCELED',
+  'REFUNDED',
+]);
 
 @Injectable()
 export class SupportService {
