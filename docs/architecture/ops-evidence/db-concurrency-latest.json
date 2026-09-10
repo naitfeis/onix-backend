@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "mode": "db-concurrency-drill",
+  "stampedAt": "2026-09-10T12:55:25.723Z",
+  "error": "Connection terminated unexpectedly",
+  "note": "Drill did not complete — GAP #2 (DB race) remains open until ok:true is archived."
+}

@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "moneyLaunchGate": "PASS_WITH_ORIGIN_GREY_CLOUD_ACK",
+  "verdict": "OPEN_GREY_CLOUD_DNS_EQUIVALENT",
+  "stampedAt": "2026-09-10T12:54:16.510Z",
+  "probes": [
+    {
+      "name": "literal-ip-host-health",
+      "url": "https://158.160.116.199/api/health/live",
+      "hostHeader": "158.160.116.199",
+      "status": 404
+    },
+    {
+      "name": "literal-ip-host-api",
+      "url": "https://158.160.116.199/api/v2/auth/me",
+      "hostHeader": "158.160.116.199",
+      "status": 404
+    },
+    {
+      "name": "spoof-host-health",
+      "url": "https://158.160.116.199/api/health/live",
+      "hostHeader": "www.onixtg.shop",
+      "status": 200
+    },
+    {
+      "name": "spoof-host-api",
+      "url": "https://158.160.116.199/api/v2/auth/me",
+      "hostHeader": "www.onixtg.shop",
+      "status": 401
+    },
+    {
+      "name": "canonical-domain-health",
+      "url": "https://www.onixtg.shop/api/health/live",
+      "hostHeader": "www.onixtg.shop",
+      "status": 200
+    }
+  ],
+  "interpretation": {
+    "literalIpHost": "CLOSED — Host:<ip> does not serve the app",
+    "spoofHostViaIp": "DNS-equivalent on grey-cloud (A→IP). Not CF WAF bypass — CF is DNS-only. Close with ORIGIN_EDGE_SECRET + Amvera allowlist, or set ORIGIN_GREY_CLOUD_ACK.",
+    "canonicalDomain": "OK"
+  },
+  "requiredEnvForMoneyLaunch": [
+    "ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted",
+    "AMVERA=1",
+    "ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop"
+  ]
+}

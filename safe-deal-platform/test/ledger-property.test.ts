@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as fc from 'fast-check';
 import { LedgerModel, MonetaryInvariantError } from '../src/economy/wallet/ledger-model';
+import { computeSaleAmounts } from '../src/pricing';
 
 /** Deterministic bigint cents in [1, 50_000_00]. */
 const centsArb = fc.integer({ min: 1, max: 50_000_00 }).map((n) => BigInt(n));
@@ -91,6 +92,49 @@ test('property: escrow purchase→complete→refund conserves buyer+seller+fee',
       },
     ),
     { numRuns: 80 },
+  );
+});
+
+test('property: computeSaleAmounts + partial clawback + recover never drifts', () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 1, max: 5_000_000 }),
+      fc.integer({ min: 0, max: 100 }),
+      (totalNum, spendPct) => {
+        const total = BigInt(totalNum);
+        const { feeCents, payoutCents } = computeSaleAmounts(total);
+        assert.equal(feeCents + payoutCents, total);
+
+        const m = new LedgerModel();
+        const buyerOpen = total + 10_000_00n;
+        m.ensureUser('buyer', { balanceCents: buyerOpen });
+        m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: total + 1n });
+        m.purchase('cb', 'buyer', 'seller', total, payoutCents, 'cb-idem');
+        m.complete('cb');
+
+        const spend = (payoutCents * BigInt(spendPct)) / 100n;
+        if (spend > 0n) m.debit('seller', spend, 'WITHDRAWAL', 'cb-spend');
+        const available = m.getUser('seller').balanceCents;
+        m.refund('cb');
+
+        const cb = m.getClawback('cb');
+        assert.ok(cb);
+        assert.equal(cb!.amountCents, payoutCents);
+        assert.equal(cb!.recoveredCents, available);
+        if (feeCents > 0n) assert.ok(cb!.amountCents < total);
+
+        const left = payoutCents - available;
+        if (left > 0n) {
+          m.credit('seller', left, 'DEPOSIT', 'cb-top');
+          assert.equal(m.recoverClawback('cb'), left);
+        }
+        assert.equal(m.getClawback('cb')!.status, 'RECOVERED');
+        assert.equal(m.getClawback('cb')!.recoveredCents, payoutCents);
+        assert.equal(m.getUser('buyer').balanceCents, buyerOpen);
+        m.assertInvariants();
+      },
+    ),
+    { numRuns: 200 },
   );
 });
 

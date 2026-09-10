@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { MetricsService } from '../../observability/metrics.service';
+import { AlertingService } from '../../observability/alerting.service';
 import { structuredLog } from '../../observability/structured-logger';
 
 /** Alert when open clawback debt is large or stale (platform float risk). */
@@ -16,6 +17,7 @@ export class LedgerReconciliationJob {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly alerts: AlertingService,
   ) {}
 
   async run(sampleSize = 200): Promise<number> {
@@ -154,10 +156,31 @@ export class LedgerReconciliationJob {
     }
     this.metrics.gauge('onix_clawback_open_debt_cents', Number(openDebtCents > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : openDebtCents));
     this.metrics.gauge('onix_clawback_open_alerts', alerted);
+    // Platform float proxy: unrecovered clawback (buyer refunded, seller short).
+    this.metrics.gauge('onix_platform_float_clawback_cents', Number(openDebtCents > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : openDebtCents));
+
+    if (alerted > 0 || openDebtCents >= CLAWBACK_ALERT_MIN_CENTS) {
+      await this.alerts.page({
+        id: 'clawback-platform-float',
+        severity: 'critical',
+        description: 'Open clawback debt / platform float risk',
+        detail: {
+          alertedRows: alerted,
+          openDebtCents: openDebtCents.toString(),
+          thresholdCents: CLAWBACK_ALERT_MIN_CENTS.toString(),
+        },
+      });
+    }
 
     this.metrics.gauge('onix_reconciliation_mismatches', mismatches);
     if (mismatches > 0) {
       this.metrics.inc('onix_reconciliation_mismatch_events_total', {}, mismatches);
+      await this.alerts.page({
+        id: 'ledger-reconciliation-mismatch',
+        severity: 'critical',
+        description: 'Ledger reconciliation mismatches detected',
+        detail: { mismatches },
+      });
     }
     return mismatches;
   }

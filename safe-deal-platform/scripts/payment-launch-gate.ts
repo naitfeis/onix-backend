@@ -131,6 +131,22 @@ function runNodeTest(globs: string[]): boolean {
   }
 }
 
+// --- 6b. Telegram webhook durable update_id (gate before Telegram Wallet) ---
+{
+  const webhook = read('safe-deal-platform/src/login-challenge/bot-webhook.handler.ts');
+  const provider = read('safe-deal-platform/src/economy/payments/payment-provider.ts');
+  const hasUpdateIdem =
+    webhook.includes("telegram:webhook")
+    && webhook.includes('update_id')
+    && webhook.includes('idempotency');
+  const walletGate = provider.includes('HARD GATE') && provider.includes('Telegram Wallet');
+  if (hasUpdateIdem && walletGate) {
+    pass('telegram webhook update_id idempotency + Wallet hard gate');
+  } else {
+    fail('telegram webhook update_id idempotency + Wallet hard gate');
+  }
+}
+
 // --- 7. Payment reconciliation job ---
 {
   if (existsSync(resolve(root, 'safe-deal-platform/src/workers/jobs/payment-reconciliation.job.ts'))) {

@@ -23,33 +23,31 @@ Refresh tokens are **opaque** (hashed in DB). Ed25519 rotation does **not** inva
 ## 2. Ed25519 access JWT rotation
 
 Code: [`SigningKeyService`](../../safe-deal-platform/src/auth-v2/signing-key.service.ts) — CURRENT (sign+verify), PREVIOUS (verify-only).  
-Generate: `npm run auth:generate-ed25519 -- --render`
+**Rotate (required):** `npm run auth:rotate-ed25519 -- --render` — promotes live CURRENT → PREVIOUS and mints a new CURRENT in one printed block.  
+First-time only: `npm run auth:generate-ed25519 -- --render` (does **not** set PREVIOUS).
 
-### Steps (Render / production)
+Guard: [`ed25519-rotation-guard.ts`](../../safe-deal-platform/src/auth-v2/ed25519-rotation-guard.ts) — `--retire-previous` refuses unless `--confirm-ttl-elapsed-minutes` ≥ `ceil(AUTH_ACCESS_TTL_SECONDS/60)` (default 15).
 
-1. Note current CURRENT kid + public PEM (you will promote them to PREVIOUS).
-2. Generate a new key pair; keep private material only in the secrets store.
-3. Set env **in one deploy**:
+### Steps (Amvera / Render / production)
 
-```text
-AUTH_ED25519_PREVIOUS_KID=<old CURRENT kid>
-AUTH_ED25519_PREVIOUS_PUBLIC_PEM=<old CURRENT public>
-AUTH_ED25519_CURRENT_KID=<new kid>
-AUTH_ED25519_CURRENT_PRIVATE_PEM=<new private one-line \n>
-AUTH_ED25519_CURRENT_PUBLIC_PEM=<new public one-line \n>
-```
-
-4. **Redeploy** the API (keys load from env at process start; in-memory cache is per process).
-5. Verify:
+1. Export live `AUTH_ED25519_CURRENT_*` into the shell that runs the script (so PREVIOUS promotion is correct).
+2. Run `npm run auth:rotate-ed25519 -- --render` and paste **all** printed vars in **one** deploy (PREVIOUS + new CURRENT).
+3. **Redeploy** the API (keys load from env at process start; in-memory cache is per process).
+4. Verify:
    - Bot login / Website complete → 200, new access `kid` = CURRENT
    - `GET /api/v2/auth/me` with a still-valid pre-rotate access → OK while PREVIOUS is set and token TTL remains
-6. After grace (≥ access TTL, recommend ≥ 30–60 min): remove `AUTH_ED25519_PREVIOUS_*` and redeploy.
+5. After grace ≥ access TTL (script prints the minimum minutes), retire PREVIOUS only via:
+   `npm run auth:rotate-ed25519 -- --retire-previous --confirm-ttl-elapsed-minutes=<N>`
+   then remove `AUTH_ED25519_PREVIOUS_*` and redeploy.
 
 ### Do not
 
+- Use `auth:generate-ed25519` for rotation (it skips PREVIOUS promotion)
+- Clear PREVIOUS in the same deploy that swaps CURRENT
 - Put private PEM in PREVIOUS (code only reads PREVIOUS public)
 - Dump PEM into `AuthAuditLog` / `SecurityEvent` metadata
-- Expect hot-reload without process restart on Render
+- Expect hot-reload without process restart on Amvera/Render
+- Bypass the retire guard by hand-editing env “because it looks done”
 
 ---
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { LedgerModel } from '../src/economy/wallet/ledger-model';
+import { computeSaleAmounts } from '../src/pricing';
 
 /**
  * Integration-style e2e over the pure monetary model (no DB).
@@ -190,6 +191,50 @@ test('e2e: post-complete refund with short seller balance → clawback debt', ()
   assert.equal(m.getClawback('o-short')!.status, 'RECOVERED');
   assert.equal(m.getUser('seller').balanceCents, 500_00n);
   m.assertInvariants();
+});
+
+test('e2e: fee+partial clawback+recover conserves payout identities', () => {
+  // Real risk surface: computeSaleAmounts → clawback(min(available,payout)) → OPEN → recover.
+  // Fee must never be clawed from seller; payout target must survive partial recoveries.
+  const totals = [1n, 19n, 100n, 333n, 1999n, 10_000_00n, 4_000_00n];
+  for (const total of totals) {
+    const { feeCents, payoutCents } = computeSaleAmounts(total);
+    assert.equal(feeCents + payoutCents, total);
+
+    const m = new LedgerModel();
+    const buyerOpen = total + 50_000_00n;
+    m.ensureUser('buyer', { balanceCents: buyerOpen });
+    m.ensureUser('seller', { balanceCents: 0n, depositAvailableCents: total + 1n });
+    m.purchase(`o-${total}`, 'buyer', 'seller', total, payoutCents, `idem-${total}`);
+    m.complete(`o-${total}`);
+    assert.equal(m.getUser('seller').balanceCents, payoutCents);
+
+    // Seller spends part of payout before refund → partial clawback.
+    const spend = payoutCents > 1n ? payoutCents / 2n : 0n;
+    if (spend > 0n) {
+      m.debit('seller', spend, 'WITHDRAWAL', `spend-${total}`);
+    }
+    const availableBeforeRefund = m.getUser('seller').balanceCents;
+    m.refund(`o-${total}`);
+
+    assert.equal(m.getUser('buyer').balanceCents, buyerOpen);
+    const cb = m.getClawback(`o-${total}`);
+    assert.ok(cb);
+    assert.equal(cb!.amountCents, payoutCents, 'clawback target is seller proceeds, not order total');
+    assert.equal(cb!.recoveredCents, availableBeforeRefund);
+    assert.equal(cb!.amountCents - cb!.recoveredCents, payoutCents - availableBeforeRefund);
+
+    const topUp = payoutCents - availableBeforeRefund + 77n;
+    m.credit('seller', topUp, 'DEPOSIT', `top-${total}`);
+    const recovered = m.recoverClawback(`o-${total}`);
+    assert.equal(recovered, payoutCents - availableBeforeRefund);
+    assert.equal(m.getClawback(`o-${total}`)!.status, 'RECOVERED');
+    assert.equal(m.getClawback(`o-${total}`)!.recoveredCents, payoutCents);
+    assert.equal(m.getUser('seller').balanceCents, 77n);
+    // Platform kept fee off user balances by design on sale; on post-complete refund
+    // buyer is restored in full (platform absorbs fee). Users + unrecovered debt = 0 debt.
+    m.assertInvariants();
+  }
 });
 
 test('e2e: full deposit→lock→purchase→complete→payout conserves money+fees', () => {

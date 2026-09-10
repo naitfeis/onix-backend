@@ -30,6 +30,11 @@ export type ProviderWebhookVerification = {
 /**
  * PSP adapter contract. Domain code depends only on this interface.
  * New providers (YooKassa, Telegram Wallet, …) implement this — no domain rewrites.
+ *
+ * HARD GATE: Telegram Wallet (or any money callback) must NOT share
+ * `POST /api/telegram/webhook` until payment apply uses transactional
+ * claim+ledger idempotency (see payment-webhook-model). Bot webhook durable
+ * `update_id` dedupe is necessary but not sufficient for money.
  */
 export interface PaymentProvider {
   readonly code: PaymentProviderCode;

@@ -8,6 +8,10 @@
  *
  * Does NOT change TokenService / SigningKeyService crypto — Node crypto ed25519 only.
  *
+ * This is FIRST-TIME provisioning only. For rotating a live CURRENT key, use
+ * `npm run auth:rotate-ed25519` — it promotes old CURRENT → PREVIOUS in one block
+ * and refuses to retire PREVIOUS before access TTL.
+ *
  * Usage:
  *   npm run auth:generate-ed25519
  *   npm run auth:generate-ed25519 -- --kid=onix-ed25519-1

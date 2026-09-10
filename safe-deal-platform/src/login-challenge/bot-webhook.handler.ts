@@ -1,7 +1,8 @@
-import { Body, Controller, Headers, Logger, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Logger, Optional, Post } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { Public } from '../common';
 import { AuthPlatformError } from '../auth-v2/auth-errors';
+import { IdempotencyService } from '../idempotency/idempotency.service';
 import { MfaStepUpService } from '../mfa/mfa-step-up.service';
 import {
   answerTelegramCallback,
@@ -79,9 +80,19 @@ export function summarizeTelegramWebhookForLog(
   };
 }
 
-/** Skip a second confirm keyboard to the same chat for the same challenge (Telegram Desktop double-sends /start). */
+/**
+ * Skip a second confirm keyboard to the same chat for the same challenge
+ * (Telegram Desktop double-sends /start). UX-only — NOT durable update_id
+ * protection. Telegram retries on timeout for minutes/hours; 8s was weaker
+ * than that window. Keep this ≥ typical Bot API send latency under load.
+ */
 const recentPromptAt = new Map<string, number>();
-const PROMPT_DEDUPE_MS = 8_000;
+const PROMPT_DEDUPE_MS = 60_000;
+
+/** Durable webhook update replay window (IdempotencyRecord). Must outlast Telegram retries. */
+const TELEGRAM_UPDATE_IDEM_TTL_MS = Number(
+  process.env.TELEGRAM_UPDATE_IDEM_TTL_MS ?? 7 * 24 * 60 * 60 * 1000,
+);
 
 export function resetBotPromptDedupeForTests(): void {
   recentPromptAt.clear();
@@ -114,6 +125,11 @@ type BotStartLoginResult = {
 
 /**
  * Telegram Bot webhook — LoginChallenge UX + MFA step-up (Slice 3).
+ *
+ * Side effects today are state-machine idempotent (login/MFA). Durable
+ * `update_id` idempotency is still required so retries after timeout do not
+ * re-enter handlers, and is a hard gate before any payment provider shares
+ * this webhook (Telegram Wallet, etc.).
  */
 @Public()
 @Controller('telegram')
@@ -123,6 +139,7 @@ export class BotWebhookHandler {
   constructor(
     private readonly challenges: LoginChallengeService,
     private readonly mfa: MfaStepUpService,
+    @Optional() private readonly idempotency?: IdempotencyService,
   ) {}
 
   @Post('webhook')
@@ -136,7 +153,7 @@ export class BotWebhookHandler {
     this.logger.log('[Bot] webhook secret check passed');
 
     try {
-      return await this.dispatch(update);
+      return await this.dispatchOnce(update);
     } catch (error) {
       if (error instanceof AuthPlatformError && error.code === 'AUTH_PROVIDER_REJECTED') {
         throw error;
@@ -147,6 +164,48 @@ export class BotWebhookHandler {
       }));
       return { ok: true, error: true };
     }
+  }
+
+  /**
+   * Claim Telegram `update_id` via IdempotencyRecord before dispatch.
+   * Missing IdempotencyService (unit tests) falls back to bare dispatch.
+   */
+  private async dispatchOnce(update: TelegramUpdate) {
+    const updateId = update?.update_id;
+    if (updateId == null) {
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] webhook missing update_id — processing without durable dedupe',
+      }));
+      return this.dispatch(update);
+    }
+    if (!this.idempotency) {
+      return this.dispatch(update);
+    }
+
+    const ttlMs = Number.isFinite(TELEGRAM_UPDATE_IDEM_TTL_MS) && TELEGRAM_UPDATE_IDEM_TTL_MS > 0
+      ? TELEGRAM_UPDATE_IDEM_TTL_MS
+      : 7 * 24 * 60 * 60 * 1000;
+
+    const result = await this.idempotency.run(
+      'telegram:webhook',
+      String(updateId),
+      { update_id: updateId },
+      async () => this.dispatch(update),
+      {
+        ttlMs,
+        // Stuck IN_PROGRESS after a crash: re-dispatch is safe — login/MFA are state-idempotent.
+        // Payment providers MUST NOT share this webhook until they use transactional claim+apply.
+        recover: async () => this.dispatch(update),
+      },
+    );
+
+    if (result.kind === 'replay') {
+      this.logger.log(JSON.stringify({
+        msg: '[Bot] webhook update_id replay suppressed',
+        updateId,
+      }));
+    }
+    return result.value;
   }
 
   private async dispatch(update: TelegramUpdate) {

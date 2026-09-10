@@ -18,7 +18,7 @@ import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
 import { createSecurityMiddleware, resolveCorsOrigins, canonicalWwwHostMiddleware } from './security-headers';
-import { originAccessMiddleware } from './http/origin-access.middleware';
+import { originAccessMiddleware, assertOriginLaunchGate } from './http/origin-access.middleware';
 import { RealtimeHubService } from './realtime/realtime-hub.service';
 import { spaAuthGoogleCallbackMiddleware, spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
@@ -34,6 +34,8 @@ async function bootstrap(): Promise<void> {
 
   loadEnvFiles();
   process.env.OTEL_SERVICE_NAME = process.env.OTEL_SERVICE_NAME ?? 'onix-api';
+
+  assertOriginLaunchGate();
 
   logProductDeliveryKeyStatus({
     log: (m) => structuredLog.info(m),

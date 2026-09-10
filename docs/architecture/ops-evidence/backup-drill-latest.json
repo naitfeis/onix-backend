@@ -1,0 +1,76 @@
+{
+  "ok": false,
+  "mode": "diagnose-restore",
+  "restorePerformed": false,
+  "dump": {
+    "path": "C:\\Users\\hiroa\\safe-deal-platform\\ops-drills\\onix-drill-2026-07-18T15-12-04-118Z.dump",
+    "dumpOk": true,
+    "requiredTablesPresent": {
+      "User": true,
+      "Order": true,
+      "Product": true,
+      "_prisma_migrations": true
+    },
+    "tableCount": 45,
+    "listError": null
+  },
+  "target": {
+    "variable": "RESTORE_DATABASE_URL",
+    "configured": true,
+    "host": "ep-lively-frost-as5ud0r4-pooler.c-4.eu-central-1.aws.neon.tech",
+    "database": "neondb",
+    "user": "[redacted]",
+    "hasPassword": true,
+    "protocol": "postgresql",
+    "isPlaceholder": false,
+    "isPooler": true,
+    "sameTarget": false,
+    "hostDns": {
+      "ok": true,
+      "address": "51.102.93.217"
+    },
+    "connectivity": {
+      "ok": false,
+      "error": "Connection terminated unexpectedly"
+    },
+    "looksLikeProduction": false
+  },
+  "source": {
+    "variable": "DATABASE_URL",
+    "host": "ep-tiny-band-as4ukteg.c-4.eu-central-1.aws.neon.tech",
+    "database": "neondb",
+    "user": "neondb_owner",
+    "isPooler": false,
+    "note": "Used only as pg_dump source — never as pg_restore target"
+  },
+  "blockReasons": [
+    "RESTORE_DATABASE_URL host is a Neon pooler — pg_restore requires a direct endpoint"
+  ],
+  "instruction": {
+    "problem": "Restore target is a Neon pooler host",
+    "poolerHost": "ep-lively-frost-as5ud0r4-pooler.c-4.eu-central-1.aws.neon.tech",
+    "dumpOk": true,
+    "restoreBlocked": true,
+    "doNot": [
+      "Do not set ALLOW_POOLER_RESTORE=true as the fix",
+      "Do not strip \"-pooler\" from the hostname and assume it works",
+      "Do not point RESTORE_DATABASE_URL at DATABASE_URL / production"
+    ],
+    "do": [
+      "In Neon console open (or create) a separate scratch branch/database",
+      "Copy the Direct connection string (host must NOT contain \"-pooler\")",
+      "Set RESTORE_DATABASE_URL to that direct URL (sslmode=require)",
+      "Re-run: npm run ops:backup-drill -- diagnose-restore",
+      "Then: npm run ops:backup-drill -- verify"
+    ],
+    "candidateDirectHostDnsProbeOnly": {
+      "host": "ep-lively-frost-as5ud0r4.c-4.eu-central-1.aws.neon.tech",
+      "dns": {
+        "ok": true,
+        "address": "51.102.93.217"
+      },
+      "note": "DNS probe only — this host was NOT used as a connection string and may not be a valid Neon endpoint for this project."
+    }
+  },
+  "sslNote": "Keep sslmode=require for Neon. verify-full is not auto-applied."
+}

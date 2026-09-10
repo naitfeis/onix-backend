@@ -1,19 +1,30 @@
 import type { NextFunction, Request, Response } from 'express';
+import {
+  isHealthPath,
+  originHostAllowed,
+  originLaunchPosture,
+  originSniAllowed,
+  parseAllowedHosts,
+  tlsServerName,
+} from './origin-access.policy';
 
 /**
  * Origin access hardening for DNS-only (grey-cloud) Amvera.
  *
- * Network firewall (allow only edge / Amvera peers) is still required for L3/L4.
- * This layer blocks casual direct-IP Host abuse and optional shared-secret edges.
+ * IMPORTANT (senior truth):
+ *   Host allowlist does NOT stop `https://<ingress-ip>` with `Host: www.onixtg.shop`.
+ *   On grey-cloud that path is DNS-equivalent (A record → same IP). Cloudflare WAF is
+ *   not in the request path. Closing "bypass CF" requires either:
+ *     (a) ORIGIN_EDGE_SECRET + edge that injects X-ONIX-Edge-Secret + Amvera allowlist, or
+ *     (b) explicit ORIGIN_GREY_CLOUD_ACK after accepting app rate-limits as the perimeter.
  *
  * Env:
- *   ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop   (required in production when set;
- *     default falls back to PUBLIC_WEB_HOST / www.onixtg.shop)
- *   ORIGIN_EDGE_SECRET=...   if set, require header X-ONIX-Edge-Secret (or CF-style)
- *   ORIGIN_GUARD=off         disable entirely (local only)
+ *   ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop
+ *   ORIGIN_EDGE_SECRET=...          require X-ONIX-Edge-Secret / X-Origin-Verify
+ *   ORIGIN_GREY_CLOUD_ACK=...       conscious accept of public-IP entry
+ *   ORIGIN_ALLOW_HEALTH_BYPASS      default false for literal-IP Host (was true — loophole)
+ *   ORIGIN_GUARD=off                disable (local only)
  */
-
-const IP_HOST = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[?[0-9a-f:]+\]?$/i;
 
 function headerValue(
   headers: Request['headers'],
@@ -24,34 +35,15 @@ function headerValue(
   return typeof raw === 'string' ? raw : undefined;
 }
 
-export function parseAllowedHosts(env: NodeJS.ProcessEnv = process.env): string[] {
-  const raw = env.ALLOWED_HOSTS?.trim()
-    || env.PUBLIC_WEB_HOST?.trim()
-    || 'www.onixtg.shop,onixtg.shop';
-  return raw
-    .split(',')
-    .map((h) => h.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0]!.split(':')[0]!)
-    .filter(Boolean);
-}
-
-export function isLiteralIpHost(host: string): boolean {
-  const h = host.trim().toLowerCase();
-  if (!h) return false;
-  return IP_HOST.test(h);
-}
-
-export function originHostAllowed(
-  hostHeader: string | undefined,
-  allowed: string[],
-): boolean {
-  const host = String(hostHeader ?? '').split(':')[0]?.toLowerCase() ?? '';
-  if (!host) return false;
-  if (isLiteralIpHost(host)) return false;
-  if (host === 'localhost' || host.endsWith('.localhost')) return true;
-  if (allowed.includes(host)) return true;
-  // Amvera preview / internal health sometimes uses *.amvera.ru — allow only if listed.
-  return false;
-}
+export {
+  isLiteralIpHost,
+  isHealthPath,
+  originHostAllowed,
+  originLaunchPosture,
+  originSniAllowed,
+  parseAllowedHosts,
+  tlsServerName,
+} from './origin-access.policy';
 
 export function originEdgeSecretOk(
   req: Pick<Request, 'headers'>,
@@ -64,17 +56,6 @@ export function originEdgeSecretOk(
   return Boolean(given && given === secret);
 }
 
-function isHealthPath(path: string): boolean {
-  return path === '/api/health/live'
-    || path === '/api/health/ready'
-    || path === '/health/live'
-    || path === '/health/ready';
-}
-
-/**
- * Express middleware — apply early (after Helmet, before SPA/API).
- * Skips ACME challenges. In production rejects IP Host and unknown hosts.
- */
 export function originAccessMiddleware(
   req: Request,
   res: Response,
@@ -96,22 +77,31 @@ export function originAccessMiddleware(
     || process.env.AMVERA === '1'
     || (process.env.AMVERA ?? '').toLowerCase() === 'true';
 
-  // Local/dev: do not break Vite proxy / curl to localhost.
   if (!production) {
     next();
     return;
   }
 
   const allowed = parseAllowedHosts();
-  const hostOk = originHostAllowed(req.headers.host, allowed);
+  const hostHeader = req.headers.host;
+  const hostOk = originHostAllowed(hostHeader, allowed);
+  const hostOnly = String(hostHeader ?? '').split(':')[0]?.toLowerCase() ?? '';
+
+  // Literal-IP Host: never serve the app (including health). Amvera probes must use a
+  // hostname in ALLOWED_HOSTS or an internal mesh name listed there — not the public IP.
   if (!hostOk) {
-    // Keep health reachable for Amvera probes that may use internal hostnames
-    // only when ORIGIN_ALLOW_HEALTH_BYPASS=true (default on).
-    const bypass = (process.env.ORIGIN_ALLOW_HEALTH_BYPASS ?? 'true').toLowerCase() !== 'false';
-    if (bypass && isHealthPath(path)) {
+    const bypass = (process.env.ORIGIN_ALLOW_HEALTH_BYPASS ?? 'false').toLowerCase() === 'true';
+    const literalIp = /^(?:\d{1,3}\.){3}\d{1,3}$|^\[?[0-9a-f:]+\]?$/i.test(hostOnly);
+    if (bypass && isHealthPath(path) && !literalIp) {
       next();
       return;
     }
+    res.status(421).type('text/plain').send('Misdirected Request');
+    return;
+  }
+
+  const sni = tlsServerName(req.socket as { servername?: string });
+  if (!originSniAllowed(sni, allowed)) {
     res.status(421).type('text/plain').send('Misdirected Request');
     return;
   }
@@ -122,4 +112,17 @@ export function originAccessMiddleware(
   }
 
   next();
+}
+
+/** Call once at bootstrap in production — fail closed without edge secret or grey-cloud ACK. */
+export function assertOriginLaunchGate(env: NodeJS.ProcessEnv = process.env): void {
+  const production = (env.NODE_ENV ?? '').toLowerCase() === 'production'
+    || env.AMVERA === '1'
+    || (env.AMVERA ?? '').toLowerCase() === 'true';
+  if (!production) return;
+  if ((env.ORIGIN_GUARD ?? 'on').trim().toLowerCase() === 'off') return;
+  const posture = originLaunchPosture(env);
+  if (!posture.ok) {
+    throw new Error(`[FATAL] Origin launch gate: ${posture.detail}`);
+  }
 }

@@ -448,6 +448,30 @@ async function diagnoseTarget(opts: { modeName: 'diagnose-target' | 'diagnose-re
   };
 
   console.log(JSON.stringify(report, null, 2));
+  try {
+    mkdirSync(outDir, { recursive: true });
+    const evidencePath = resolve(outDir, `backup-${opts.modeName}-${stamp}.json`);
+    writeFileSync(evidencePath, `${JSON.stringify(report, null, 2)}\n`);
+    const publicEvidence = resolve(process.cwd(), 'docs/architecture/ops-evidence');
+    mkdirSync(publicEvidence, { recursive: true });
+    const redacted = {
+      ...report,
+      target: report.target
+        ? {
+          ...report.target,
+          user: report.target.user ? '[redacted]' : null,
+          hasPassword: report.target.hasPassword,
+        }
+        : null,
+    };
+    writeFileSync(
+      resolve(publicEvidence, 'backup-drill-latest.json'),
+      `${JSON.stringify(redacted, null, 2)}\n`,
+    );
+    console.log(JSON.stringify({ msg: 'backup drill evidence archived', evidencePath }, null, 2));
+  } catch (err) {
+    console.error('failed to archive backup evidence', err instanceof Error ? err.message : err);
+  }
   if (!readyForRestore) process.exitCode = 1;
 }
 

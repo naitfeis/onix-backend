@@ -13,6 +13,7 @@ import { ClawbackRecoverJob } from './jobs/clawback-recover.job';
 import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { ShadowListingJob } from './jobs/shadow-listing.job';
 import { TelegramOutboxJob } from './jobs/telegram-outbox.job';
+import { DisputeSlaJob } from './jobs/dispute-sla.job';
 import { WorkerLockService } from './worker-lock.service';
 import { WorkerRunnerService } from './worker-runner.service';
 
@@ -34,6 +35,7 @@ import { WorkerRunnerService } from './worker-runner.service';
     SecurityIpRetentionJob,
     ShadowListingJob,
     TelegramOutboxJob,
+    DisputeSlaJob,
     WorkerRunnerService,
   ],
 })

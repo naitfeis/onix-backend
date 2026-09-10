@@ -115,8 +115,9 @@ Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (
 - `TELEGRAM_WEBHOOK_SECRET` is required in production. Rotate anything pasted in chats.
 - Render Valkey `0.0.0.0/0` is a standing risk if `REDIS_URL` leaks.
 - Remaining list: `docs/Documentation/Onix-Notes.md` §0.2.
-- **Origin guard (v2.0.4+):** production rejects literal-IP `Host` and hosts outside `ALLOWED_HOSTS`. Set `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`. This does **not** replace an Amvera network allowlist — see `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` §1.
+- **Origin guard (v2.0.4+):** production rejects literal-IP `Host` and hosts outside `ALLOWED_HOSTS`. Set `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`. Bootstrap requires **either** `ORIGIN_EDGE_SECRET` **or** `ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted` (grey-cloud = public IP is DNS-equivalent; CF WAF not on-path). Re-probe: `npm run ops:origin-probe`. This does **not** replace an Amvera network allowlist for L3/L4 — see `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` §1.
 - Optional `ORIGIN_EDGE_SECRET` + header `X-ONIX-Edge-Secret` when a non-CF edge sits in front.
+- Set `ALERT_WEBHOOK_URL` on API + worker for clawback/float/dispute SLA paging.
 
 ---
 

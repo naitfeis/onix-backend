@@ -762,6 +762,7 @@ enum SecurityEventType {
   SECURITY_LOCK
   HIGH_RISK_THRESHOLD
   CLAWBACK_DEBT
+  DISPUTE_SLA_BREACH
 }
 
 enum AbuseMarkerKind {

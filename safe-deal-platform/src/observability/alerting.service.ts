@@ -12,6 +12,8 @@ export type AlertRule = {
   windowSec: number;
   severity: 'warning' | 'critical';
   description: string;
+  /** When set, evaluate absolute gauge value instead of counter delta. */
+  gauge?: boolean;
 };
 
 const DEFAULT_RULES: AlertRule[] = [
@@ -66,10 +68,45 @@ const DEFAULT_RULES: AlertRule[] = [
   {
     id: 'idempotency-conflicts',
     metric: 'onix_idempotency_total',
-    threshold: 50,
+    threshold: 10,
     windowSec: 60,
     severity: 'warning',
     description: 'Idempotency conflicts / failures',
+  },
+  {
+    id: 'clawback-open-alerts',
+    metric: 'onix_clawback_open_alerts',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Open/stale clawback debt (platform float risk)',
+    gauge: true,
+  },
+  {
+    id: 'clawback-open-debt',
+    metric: 'onix_clawback_open_debt_cents',
+    threshold: Number(process.env.CLAWBACK_ALERT_MIN_CENTS ?? 50_000),
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Aggregate open clawback debt cents exceeds threshold',
+    gauge: true,
+  },
+  {
+    id: 'dispute-sla-stale',
+    metric: 'onix_dispute_stale_count',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Stale DISPUTE orders past SLA',
+    gauge: true,
+  },
+  {
+    id: 'dispute-sla-breaches',
+    metric: 'onix_dispute_sla_breach_events_total',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Dispute SLA breach events',
   },
 ];
 
@@ -107,7 +144,13 @@ export class AlertingService implements OnModuleInit, OnModuleDestroy {
     const everyMs = Number(process.env.ALERT_EVAL_INTERVAL_MS ?? 15_000);
     this.timer = setInterval(() => this.evaluate(), Number.isFinite(everyMs) ? everyMs : 15_000);
     this.timer.unref?.();
-    structuredLog.info('alerting started', { rules: this.rules.length });
+    structuredLog.info('alerting started', {
+      rules: this.rules.length,
+      webhookConfigured: Boolean(this.webhookUrl),
+    });
+    if (!this.webhookUrl) {
+      structuredLog.warn('ALERT_WEBHOOK_URL unset — alerts log only (no paging)');
+    }
   }
 
   onModuleDestroy(): void {
@@ -115,14 +158,51 @@ export class AlertingService implements OnModuleInit, OnModuleDestroy {
     this.timer = null;
   }
 
+  /** Immediate page (workers) — respects cooldown + webhook. */
+  async page(input: {
+    id: string;
+    severity: 'warning' | 'critical';
+    description: string;
+    detail?: Record<string, unknown>;
+  }): Promise<void> {
+    const rule: AlertRule = {
+      id: input.id,
+      metric: `page:${input.id}`,
+      threshold: 1,
+      windowSec: 300,
+      severity: input.severity,
+      description: input.description,
+    };
+    const cooldownMs = Number(process.env.ALERT_COOLDOWN_MS ?? 300_000);
+    const firedAt = this.lastFired.get(rule.id) ?? 0;
+    if (Date.now() - firedAt < cooldownMs) return;
+    this.lastFired.set(rule.id, Date.now());
+    await this.fire(rule, 1, input.detail);
+  }
+
   evaluate(): void {
     const snap = this.metrics.snapshot();
     const now = Date.now();
     for (const rule of this.rules) {
+      if (rule.gauge) {
+        let value = 0;
+        for (const [key, v] of Object.entries(snap.gauges)) {
+          if (key.startsWith(`${rule.metric}|`) || key === `${rule.metric}|`) {
+            value = Math.max(value, v);
+          }
+        }
+        if (value < rule.threshold) continue;
+        const cooldownMs = Number(process.env.ALERT_COOLDOWN_MS ?? 300_000);
+        const firedAt = this.lastFired.get(rule.id) ?? 0;
+        if (now - firedAt < cooldownMs) continue;
+        this.lastFired.set(rule.id, now);
+        void this.fire(rule, value);
+        continue;
+      }
+
       let total = 0;
       for (const [key, value] of Object.entries(snap.counters)) {
         if (key.startsWith(`${rule.metric}|`) || key === `${rule.metric}|`) {
-          // For labeled result metrics, only count failure-ish series.
           if (rule.metric === 'onix_money_ops_total' || rule.metric === 'onix_worker_jobs_total') {
             if (!key.includes('result=error')) continue;
           }
@@ -139,7 +219,6 @@ export class AlertingService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       const delta = total - prev;
-      // Sliding baseline every window: reset after evaluation window elapsed.
       const last = this.lastFired.get(`${baselineKey}:window`) ?? now;
       if (now - last >= rule.windowSec * 1000) {
         this.baselines.set(baselineKey, total);
@@ -154,10 +233,14 @@ export class AlertingService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async fire(rule: AlertRule, delta: number): Promise<void> {
+  private async fire(
+    rule: AlertRule,
+    delta: number,
+    detail?: Record<string, unknown>,
+  ): Promise<void> {
     this.metrics.inc('onix_alerts_fired_total', { rule: rule.id, severity: rule.severity });
     const message = `ALERT ${rule.severity}: ${rule.description} (${rule.id}) delta=${delta} threshold=${rule.threshold}`;
-    structuredLog.error(message, { alertId: rule.id, severity: rule.severity, delta });
+    structuredLog.error(message, { alertId: rule.id, severity: rule.severity, delta, ...detail });
     this.errors.capture(new Error(message), {
       tags: { alertId: rule.id, severity: rule.severity },
       level: rule.severity === 'critical' ? 'fatal' : 'warning',
@@ -172,6 +255,7 @@ export class AlertingService implements OnModuleInit, OnModuleDestroy {
           severity: rule.severity,
           rule,
           delta,
+          detail: detail ?? null,
           service: process.env.OTEL_SERVICE_NAME ?? 'onix-api',
         }),
         signal: AbortSignal.timeout(3_000),
