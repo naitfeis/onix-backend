@@ -1,7 +1,19 @@
 # Launch blockers — ops checklist (must execute)
 
+| | |
+| --- | --- |
+| **Updated** | **2026-09-10** |
+| **Full decisions** | `ONIX-CURRENT-STATE-v2.0.4.md` |
+
 Code hardens what can be hardened in-app. Items below need **evidence files** under
 `ops-drills/` (gitignored) and/or `docs/architecture/ops-evidence/` (committable redacted).
+
+## 0. Amvera ship (do first)
+
+1. Env: `AMVERA=1`, `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`, `ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted`
+2. Env: `ALERT_WEBHOOK_URL` (Slack Incoming Webhook — Blank app, not CLI)
+3. Git branch in Amvera panel = **`v2.0.4-amvera`** → redeploy
+4. Logs: no `Origin launch gate`; migrate OK; health 200 on www
 
 ## 1. Origin / firewall
 
@@ -18,12 +30,7 @@ That is **not** a Host-guard bug; closing it requires an edge + `ORIGIN_EDGE_SEC
 
 ### App gates (v2.0.4+)
 
-1. Amvera env:
-   - `AMVERA=1`
-   - `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`
-   - **Either** `ORIGIN_EDGE_SECRET=<random>` (edge injects `X-ONIX-Edge-Secret`)
-     **or** `ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted` (conscious accept of public IP entry)
-   - `ORIGIN_ALLOW_HEALTH_BYPASS` defaults **false** (literal-IP Host never gets health bypass)
+1. Amvera env as in §0.
 2. Bootstrap **fails** in production without edge secret or grey-cloud ACK.
 3. Re-probe and archive:
 
@@ -51,6 +58,8 @@ npm run ops:backup-drill -- verify
 ```
 
 Current blocker if restore host contains `-pooler`: set a Direct connection string from Neon console.
+Laptop **P1001** = cannot reach Neon from your network — resume Neon / fix VPN / try another network; Amvera may still migrate fine.
+
 Save JSON under `ops-drills/` and copy a redacted summary to `docs/architecture/ops-evidence/backup-drill-latest.json`.
 
 ## 3. DB-backed concurrency (explicit answer)
@@ -89,11 +98,14 @@ Does **not** auto-refund — human policy.
 
 Set on Amvera **and** worker:
 
-- `ALERT_WEBHOOK_URL` (Slack/Discord/PagerDuty JSON)
+- `ALERT_WEBHOOK_URL` (Slack/Discord/PagerDuty JSON) — **free** Slack Incoming Webhook
 - Optional: `ERROR_WEBHOOK_URL`, `CLAWBACK_ALERT_MIN_CENTS`, `CLAWBACK_ALERT_AGE_HOURS`
 
 Wired rules: clawback open debt gauges, platform float proxy, dispute SLA, reconciliation mismatch,
 idempotency conflicts (threshold 10/min). Without webhook URL, alerts only structured-log (startup warns).
+
+Slack setup: Blank app → Incoming Webhooks → Add → copy URL. Not Slack CLI / Bolt / AI agent.
+Test: PowerShell `ConvertTo-Json` + `Invoke-RestMethod` (curl JSON escaping often breaks on Windows).
 
 ## 7. Clawback collector (code + ops)
 

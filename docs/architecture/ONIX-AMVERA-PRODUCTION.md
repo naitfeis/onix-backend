@@ -2,16 +2,19 @@
 
 | Field | Value |
 | --- | --- |
-| **As of** | 2026-09-01 |
+| **Updated** | **2026-09-10** |
 | **Canonical site** | `https://www.onixtg.shop` (SPA + API, same origin) |
 | **Public compute** | Amvera Cloud **msk0**, project `api-onix`, user `naitfeis222112` |
 | **Ingress A** | `158.160.116.199` |
 | **Staging** | Render `https://onix-api-47tj.onrender.com` (do not point `www` here) |
 | **DB** | Neon `eu-central-1` (Frankfurt) — no RU region |
-| **Redis** | Render Key Value (Valkey) **external** `rediss://` URL — internal hostname does not resolve from Amvera |
-| **Git deploy branch** | `v1.3-amvera` (Amvera GitHub). Daily work: `v1.3`. Ship Moscow: merge `v1.3` → `v1.3-amvera` → push |
+| **Redis** | Render Key Value (Valkey) **external** `rediss://` — internal hostname does not resolve from Amvera |
+| **Git daily** | `v2.0.4` |
+| **Git Amvera ship** | **`v2.0.4-amvera`** (Amvera panel must track this; old `v1.3-amvera` / `v2.0.3-amvera` will not get v2.0.4 code) |
 
-AI context: `docs/Documentation/Onix-Notes.md` §0.1 and this file. Code wins if they disagree.
+**Decisions & money-launch gates:** `docs/architecture/ONIX-CURRENT-STATE-v2.0.4.md`  
+**AI context:** `docs/Documentation/Onix-Notes.md` §0.1  
+Code wins if docs disagree.
 
 ---
 
@@ -61,11 +64,32 @@ SSL: Let's Encrypt per hostname after attach. Until `www` is attached, Kubernete
 
 | Item | Notes |
 | --- | --- |
+| Ship branch | **`v2.0.4-amvera`** — see `AMVERA-SHIP-v2.0.4.md` |
 | `amvera.yaml` / `amvera.yml` | Node 22; build `npm ci --include=dev && npm run build && npm run build:spa`; **no migrate at build** |
 | `scripts/start-amvera.mjs` | dotenv → require `DATABASE_URL` → `prisma migrate deploy` → `node dist/main.js` |
 | Listen | `0.0.0.0:3000` |
 | Empty Amvera Configuration form | Do not Apply empty dropdowns — overwrites yaml |
 | Replicas | Keep **1** while `www` points at this project |
+
+If Amvera «не подхватывает» обновления — проверьте, что Git branch в панели = `v2.0.4-amvera`, не старая `*-amvera`.
+
+---
+
+## Required env for v2.0.4+ boot
+
+| Name | Required | Notes |
+| --- | --- | --- |
+| `AMVERA` | yes | `1` |
+| `ALLOWED_HOSTS` | yes | `www.onixtg.shop,onixtg.shop` |
+| `ORIGIN_GREY_CLOUD_ACK` | yes* | `grey-cloud-accepted` — *or* set `ORIGIN_EDGE_SECRET` |
+| `ALERT_WEBHOOK_URL` | recommended | Slack Incoming Webhook; free; paging for clawback/dispute/recon |
+| `DATABASE_URL` | yes | Neon |
+| `TELEGRAM_WEBHOOK_SECRET` | yes | must match setWebhook |
+| `BOT_TOKEN` | yes | not `TELEGRAM_BOT_TOKEN` |
+| `GOOGLE_CLIENT_ID` | yes for Google login | no Client Secret |
+| `REDIS_URL` | yes for multi/realtime | external Valkey |
+
+Missing ACK/edge secret → log `[FATAL] Origin launch gate` and crash loop (seen 2026-09-10).
 
 ---
 
@@ -75,11 +99,13 @@ SSL: Let's Encrypt per hostname after attach. Until `www` is attached, Kubernete
 | --- | --- |
 | Website login | Telegram bot LoginChallenge (not Widget) |
 | Webhook | `POST /api/telegram/webhook` only. GET in a browser is 404 and is not a test |
+| Replay | Durable `update_id` via `IdempotencyRecord` scope `telegram:webhook` (7d TTL) |
 | Secret | `TELEGRAM_WEBHOOK_SECRET` on Amvera must match `secret_token` in `setWebhook` |
 | Bot token | `BOT_TOKEN` (not `TELEGRAM_BOT_TOKEN`) |
 | Google | Runtime `GOOGLE_CLIENT_ID` only. SPA: `GET /api/v2/auth/public-config`. **No Client Secret.** JS origins: `https://www.onixtg.shop`, `https://onixtg.shop`. Redirect URI: `https://www.onixtg.shop/api/v2/auth/google/callback` (и apex, если ещё не 301). |
 | Google sell | Google users cannot sell until Telegram is linked |
 | Cookies | `__Host-onix_rt`, `__Host-onix_ls` — Secure, Path=/, no Domain |
+| Ed25519 rotate | `npm run auth:rotate-ed25519` — see `ONIX-KEY-ROTATION-RUNBOOK.md` |
 
 Set webhook (PowerShell, not cmd `%BOT%`):
 
@@ -90,6 +116,22 @@ curl.exe "https://api.telegram.org/bot${bot}/setWebhook" `
 ```
 
 `getWebhookInfo.url` must be that URL; `ip_address` should be `158.160.116.199`.
+
+---
+
+## Slack alerts (2026-09-10)
+
+1. api.slack.com → Create App → **Blank app** (not AI / Starter / CLI).
+2. Incoming Webhooks → On → Add to workspace → channel or your DM.
+3. Copy Webhook URL → Amvera `ALERT_WEBHOOK_URL` (secret).
+4. Test (PowerShell):
+
+```powershell
+$body = @{ text = "ONIX alert test" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri $env:ALERT_WEBHOOK_URL
+```
+
+Expect `ok`. Rotate URL if it was pasted into chats.
 
 ---
 
@@ -109,15 +151,19 @@ Browser **PUT** goes to `*.r2.cloudflarestorage.com` (Cloudflare). From Russia t
 
 Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (+20–50 ms per hop). Amvera 0.5 CPU / 1 GB can hitch under burst. Google GIS (`accounts.google.com`) may be slow or blocked in RU independently of Amvera.
 
+Local `npx prisma migrate status` may show **P1001** if the laptop cannot reach Neon (VPN/ISP/paused project). Amvera↔Neon often still works; fix laptop network or use Neon Direct from a reachable network for drills.
+
+---
+
 ## Security (Amvera)
 
 - Do **not** set `TRUST_CDN_HEADERS=true` unless Cloudflare orange is on (it should not be). Spoofed `CF-Connecting-IP` would skip rate limits.
 - `TELEGRAM_WEBHOOK_SECRET` is required in production. Rotate anything pasted in chats.
 - Render Valkey `0.0.0.0/0` is a standing risk if `REDIS_URL` leaks.
 - Remaining list: `docs/Documentation/Onix-Notes.md` §0.2.
-- **Origin guard (v2.0.4+):** production rejects literal-IP `Host` and hosts outside `ALLOWED_HOSTS`. Set `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`. Bootstrap requires **either** `ORIGIN_EDGE_SECRET` **or** `ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted` (grey-cloud = public IP is DNS-equivalent; CF WAF not on-path). Re-probe: `npm run ops:origin-probe`. This does **not** replace an Amvera network allowlist for L3/L4 — see `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` §1.
-- Optional `ORIGIN_EDGE_SECRET` + header `X-ONIX-Edge-Secret` when a non-CF edge sits in front.
-- Set `ALERT_WEBHOOK_URL` on API + worker for clawback/float/dispute SLA paging.
+- **Origin guard (v2.0.4+):** rejects literal-IP `Host` / unknown hosts; bootstrap requires `ORIGIN_GREY_CLOUD_ACK` or `ORIGIN_EDGE_SECRET`. Probe: `npm run ops:origin-probe`.
+- **Dispute SLA worker** + clawback/float paging need worker process + `ALERT_WEBHOOK_URL`.
+- Ops checklist: `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md`.
 
 ---
 
@@ -125,24 +171,28 @@ Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (
 
 **Не включайте оранжевое облако (Proxied) на `@` и `www`.** Российские сети рвут TLS до Cloudflare; сайт и вход перестанут открываться. DNS-only (серое облако) оставляем.
 
-Что реально защищает канал:
-
 | Слой | Как |
 | --- | --- |
-| Код | Host allowlist + optional edge secret; глобальный лимит ~240 req/мин на IP для `/api`, витрина 40/мин для гостей, JSON ≤ 128kb, WebSocket: Origin обязателен в production |
-| Amvera | Одна реплика; **обязательно** закрыть прямой IP насколько позволяет панель; при L3/L4 флуде — тикет Amvera / смена IP |
-| Cloudflare | Только DNS-only на www. WAF на orange **нельзя** для RU |
-| Redis | Не открывать `0.0.0.0/0`. Если URL утечёт — ротация |
-| Ops | `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` — firewall verify + backup-drill + WS restart drill |
+| Код | Host allowlist + grey-cloud ACK / edge secret; ~240 req/мин `/api`; JSON ≤ 128kb; WS Origin в production |
+| Amvera | Одна реплика; L3/L4 — тикет Amvera |
+| Cloudflare | Только DNS-only. WAF на orange **нельзя** для RU |
+| Redis | Не `0.0.0.0/0` |
+| Alerts | Slack Incoming Webhook → `ALERT_WEBHOOK_URL` |
 
-**Allowlist админки:** в админке → Сотрудники скопируйте «ваш IP» → Amvera env `ADMIN_IP_ALLOWLIST=1.2.3.4` (домашний/офисный публичный IP, не 127.0.0.1). Несколько через запятую. Перезапуск.
+**Allowlist админки:** админка → Сотрудники → «ваш IP» → `ADMIN_IP_ALLOWLIST=…` → рестарт.
 
-**Выдача модераторам:** Сотрудники → email + роль «Модератор / саппорт» (`SUPPORT_ADMIN`). Пароль сгенерируется. Это логин `/admin/`, не аккаунт маркета.
+**Модераторы:** роль `SUPPORT_ADMIN` в `/admin/` (не аккаунт маркета).
 
-`ADMIN_IP_RESUME` по умолчанию выключен. Не включайте.
+`ADMIN_IP_RESUME` по умолчанию выключен.
 
 ---
 
-- Historical (webhook/Vercel **wrong** as of 2026-09): `ONIX-SINGLE-ORIGIN-MIGRATION.md`
+## Related
+
+- Current decisions: `ONIX-CURRENT-STATE-v2.0.4.md`
+- Ship: `AMVERA-SHIP-v2.0.4.md`
+- Launch blockers: `ONIX-LAUNCH-BLOCKERS-OPS.md`
+- Key rotation: `ONIX-KEY-ROTATION-RUNBOOK.md`
 - Bot login diagnostics: `ONIX-TELEGRAM-BOT-CHAIN-BREAK.md`
-- Attachments code: `ONIX-CHAT-ATTACHMENTS-V1.md`
+- Attachments: `ONIX-CHAT-ATTACHMENTS-V1.md`
+- Historical cutover (wrong as of 2026-09): `ONIX-SINGLE-ORIGIN-MIGRATION.md`

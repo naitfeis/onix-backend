@@ -1,9 +1,13 @@
 # ONIX Key Rotation Runbook (Slice 5)
 
+| | |
+| --- | --- |
+| **Updated** | **2026-09-10** |
+
 Ops procedures for rotating signing and HMAC secrets.  
 Backend remains **ENV via `SecretsProvider`** — Vault/KMS adapter is a later slice.
 
-**Never** paste private PEM, HMAC, JWT, or delivery key values into tickets, chat, or audit metadata.
+**Never** paste private PEM, HMAC, JWT, delivery key, or Slack webhook values into tickets, chat, or audit metadata.
 
 ---
 

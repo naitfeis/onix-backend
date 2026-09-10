@@ -5,6 +5,9 @@
 > Не перестраивай архитектуру без явного запроса.
 > Не заменяй существующие решения на более простые только потому, что они проще.
 > ONIX — production-oriented P2P marketplace, а не учебный CRUD-проект.
+>
+> **Актуальные решения / статус gates (обновлено 2026-09-10):**  
+> `docs/architecture/ONIX-CURRENT-STATE-v2.0.4.md`
 
 ---
 
@@ -136,9 +139,12 @@ flow до изменения UI.
 
 ---
 
-# 0.1 PRODUCTION OPS (2026-09) — READ THIS FIRST
+# 0.1 PRODUCTION OPS (2026-09-10) — READ THIS FIRST
 
-Подробный runbook: `docs/architecture/ONIX-AMVERA-PRODUCTION.md`.
+**Актуальная сводка решений:** `docs/architecture/ONIX-CURRENT-STATE-v2.0.4.md`  
+**Amvera runbook:** `docs/architecture/ONIX-AMVERA-PRODUCTION.md`  
+**Ship branch:** `docs/architecture/AMVERA-SHIP-v2.0.4.md`  
+**До денег (gates):** `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md`
 
 Исторические docs (`ONIX-SINGLE-ORIGIN-MIGRATION.md`, cutover с Vercel→Render
 webhook) описывают **июль 2026**. С сентября публичный origin — **Amvera Moscow**,
@@ -151,8 +157,8 @@ Staging:    https://onix-api-47tj.onrender.com   (Render; no www DNS)
 DB:         Neon eu-central-1
 Redis:      Render Valkey EXTERNAL rediss://  (internal hostname fails from Amvera)
 Webhook:    POST https://www.onixtg.shop/api/telegram/webhook
-Git daily:  v1.3
-Git Amvera: v1.3-amvera   (merge v1.3 → v1.3-amvera → push to deploy Moscow)
+Git daily:  v2.0.4
+Git Amvera: v2.0.4-amvera   (панель Amvera должна смотреть сюда)
 ```
 
 Жёсткие правила:
@@ -161,6 +167,9 @@ Git Amvera: v1.3-amvera   (merge v1.3 → v1.3-amvera → push to deploy Moscow)
   `VITE_API_URL` на Render. Только same-origin `/api`.
 - Cloudflare DNS **grey cloud** (DNS only) на `@` и `www`. Оранжевое облако =
   RST в РФ + Amvera не выпустит Let's Encrypt.
+- Без `ORIGIN_GREY_CLOUD_ACK=grey-cloud-accepted` (или `ORIGIN_EDGE_SECRET`) API
+  **не стартует** (FATAL Origin launch gate).
+- `ALERT_WEBHOOK_URL` — Slack Incoming Webhook (бесплатно) для clawback/dispute/recon.
 - Нет AAAA на `@` / `www`. Два A на один hostname нельзя.
 - `__Host-` cookies привязаны к хосту: логин на `onixtg.shop` ≠ сессия на `www`.
   Канон — **www**.
@@ -168,12 +177,14 @@ Git Amvera: v1.3-amvera   (merge v1.3 → v1.3-amvera → push to deploy Moscow)
   Google Client ID: runtime `GOOGLE_CLIENT_ID` + `GET /api/v2/auth/public-config`.
   **GOOGLE_CLIENT_SECRET не используется.**
 - Telegram: не слать голое `/start`. Нужен deep link `?start=login_<id>` с сайта.
-  GET `/api/telegram/webhook` в браузере → 404 (это POST-only).
+  GET `/api/telegram/webhook` в браузере → 404 (это POST-only). Durable `update_id`
+  idempotency на webhook (v2.0.4+).
 - `TELEGRAM_WEBHOOK_SECRET` в Amvera = `secret_token` в `setWebhook`.
 - R2 — вложения чата, не сайт. Без `R2_*` upload недоступен. Browser PUT идёт на
   Cloudflare R2 — из РФ может не открыться.
 - Не Apply пустую форму Configuration в Amvera (затирает `amvera.yaml`).
 - Реплики Amvera = 1, пока `www` смотрит сюда.
+- CI money tests = mostly in-memory `LedgerModel`; Postgres race = `ops:db-concurrency-drill`.
 
 DNS сайт (плюс почта reg.ru не трогать):
 
@@ -187,8 +198,9 @@ DNS сайт (плюс почта reg.ru не трогать):
 # 0.2 KNOWN RISKS (do not paper over)
 
 Что реально слабо / атакуемо после cutover. Код чинит часть; остальное — ops.
+Полный статус gates на **2026-09-10**: `ONIX-CURRENT-STATE-v2.0.4.md` §5.
 
-**Сделано в коде (2026-09):**
+**Сделано в коде (2026-09, включая v2.0.4):**
 - Amvera больше не доверяет `CF-Connecting-IP` / `X-Real-IP` / leftmost `X-Forwarded-For`
   (спуф IP → обход rate-limit / admin allowlist / risk). `req.ip` после `trust proxy 1`.
   Вернуть CDN-заголовки только если снова включите оранжевое Cloudflare:
@@ -197,6 +209,11 @@ DNS сайт (плюс почта reg.ru не трогать):
   `iss`, `exp`, `aud`, unverified email отклоняется.
 - Webhook secret сравнивается timing-safe. Inventory требует
   `TELEGRAM_WEBHOOK_SECRET` в production.
+- Origin launch gate: `ORIGIN_GREY_CLOUD_ACK` или `ORIGIN_EDGE_SECRET`; literal-IP Host
+  не получает health bypass по умолчанию.
+- Telegram webhook: durable `update_id` idempotency; Wallet hard-gate на shared webhook.
+- Dispute SLA worker + clawback/float alert paging (`ALERT_WEBHOOK_URL`).
+- Ed25519 rotate script с TTL-guard на retire PREVIOUS.
 - Все SERIALIZABLE money-пути (escrow, wallet fund/withdraw, payments settle,
   admin adjust, deposit unlock, clawback recover) идут через
   `withSerializableTransaction`: retry P2034 / `40001` / deadlock `40P01` целиком,
