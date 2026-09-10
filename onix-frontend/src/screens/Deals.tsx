@@ -293,6 +293,11 @@ export function Deals({
   const onRefund = useCallback((d: Deal) => { setRefundDeal(d); setRefundReason(''); }, []);
   const onReview = useCallback((d: Deal) => setReviewDeal(d), []);
 
+  // Sleep while off-screen so presence ticks don't re-render heavy order cards.
+  if (!active) {
+    return <div className="stack" aria-hidden="true" />;
+  }
+
   return <div className="stack">
     <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
       <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>

@@ -760,6 +760,7 @@ export function useOnixCore() {
         const key = normOnixId(msg.onixId);
         // Presence map is the source of truth for online dots / last-seen.
         // Do not remap products/chats/deals — that re-renders the whole app on every beat.
+        // Coalesce presence beats so scroll/input stay responsive.
         startTransition(() => {
           setPresenceByOnixId((previous) => {
             const cur = previous[key];

@@ -635,20 +635,21 @@ html[data-glass="vision"] {
   --glass-blur-thick: 64px;
   --glass-saturate: 190%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-bg: rgba(14, 14, 18, 0.18);
-  --glass-thin-bg: rgba(14, 14, 18, 0.12);
-  --glass-regular-bg: rgba(16, 16, 22, 0.22);
-  --glass-thick-bg: rgba(18, 18, 26, 0.28);
-  --glass-card-bg: rgba(16, 16, 22, 0.2);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  /* Keep solid card fills — translucent Vision tokens washed the whole UI grey. */
+  --glass-bg: #111113;
+  --glass-thin-bg: #111113;
+  --glass-regular-bg: #111113;
+  --glass-thick-bg: #151517;
+  --glass-card-bg: #151517;
+  --glass-border: 1px solid rgba(255, 255, 255, 0.12);
 }
 html[data-theme="light"][data-glass="vision"] {
-  --glass-bg: rgba(255, 255, 255, 0.22);
-  --glass-thin-bg: rgba(255, 255, 255, 0.14);
-  --glass-regular-bg: rgba(255, 255, 255, 0.26);
-  --glass-thick-bg: rgba(255, 255, 255, 0.34);
-  --glass-card-bg: rgba(255, 255, 255, 0.24);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.42);
+  --glass-bg: #ffffff;
+  --glass-thin-bg: #ffffff;
+  --glass-regular-bg: #ffffff;
+  --glass-thick-bg: #ffffff;
+  --glass-card-bg: #ffffff;
+  --glass-border: 1px solid rgba(20, 25, 35, 0.12);
 }
 
 html[data-glass="vision"] .card,
@@ -662,7 +663,7 @@ html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: #111113 !important;
+  background: var(--glass-card-bg) !important;
   box-shadow: var(--glass-highlight) !important;
   border: var(--glass-border) !important;
 }
@@ -673,7 +674,7 @@ html[data-glass="vision"] .modal__panel,
 html[data-glass="vision"] .auth-notice {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: #111113 !important;
+  background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
   box-shadow: var(--glass-highlight) !important;
 }

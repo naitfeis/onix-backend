@@ -1,4 +1,4 @@
-import { Suspense, startTransition, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import SiteFooter from './components/SiteFooter';
 import { api, money, moneyAmount } from './api/client';
 import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
@@ -412,8 +412,8 @@ export default function App() {
       setLoginPrompt(false);
     }
     setMountedScreens((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
-    // Keep nav highlight snappy; heavy screen mount stays low-priority.
-    startTransition(() => setScreen(next));
+    // Sync highlight immediately — startTransition made taps feel frozen.
+    setScreen(next);
     telegramImpact('light');
   };
 

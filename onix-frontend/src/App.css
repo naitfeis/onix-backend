@@ -2019,10 +2019,7 @@ html[data-theme="dark"] .user-avatar__presence,
 :root:not([data-theme="light"]) .user-avatar__presence {
   border-color: rgba(22, 22, 28, 0.95);
 }
-.user-avatar-wrap.is-online .user-avatar__presence {
-  background: #1a1a1e;
-  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.72);
-}
+.user-avatar-wrap.is-online .user-avatar__presence { background: var(--success-green); }
 .user-avatar-wrap.is-offline .user-avatar__presence { background: #5a5a62; }
 .conversation__peer {
   display: flex;
@@ -2139,9 +2136,7 @@ html[data-theme="dark"] .user-avatar__presence,
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-sizing: border-box;
+  background: #7c6cf0;
 }
 .trust-meter__meta {
   display: flex;
@@ -2750,15 +2745,9 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips button.active, .segmented button.active {
   color: #fff;
-  background: #1a1a1e;
-  border-color: rgba(255, 255, 255, 0.28);
+  background: var(--accent-violet-deep);
+  border-color: var(--accent-violet-deep);
   box-shadow: none !important;
-}
-html[data-theme="light"] .chips button.active,
-html[data-theme="light"] .segmented button.active {
-  color: #111;
-  background: #f2f2f4;
-  border-color: rgba(20, 24, 32, 0.28);
 }
 
 /* Lot form — category expand/collapse under the current value */
@@ -2921,11 +2910,8 @@ html[data-theme="dark"] .muted { color: rgba(255, 255, 255, 0.68); }
   padding: 0;
   overflow: visible;
   border-radius: 18px;
-  background: #141418;
+  background: var(--glass-card-bg);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 220px;
-  contain: layout style;
 }
 html[data-theme="light"] .deal-card.deal-card--order {
   background: #fff;
@@ -3276,17 +3262,24 @@ html[data-theme="light"] .timeline li {
   padding: 16px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #15151a;
+  background: var(--glass-card-bg);
   color: inherit;
   font: inherit;
   text-align: left;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
-.money-tile--wallet,
+.money-tile--wallet {
+  background:
+    radial-gradient(120% 90% at 0% 50%, rgba(63, 191, 143, 0.18), transparent 55%),
+    var(--glass-card-bg);
+  border-color: rgba(63, 191, 143, 0.22);
+}
 .money-tile--deposit {
-  background: #141418;
-  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    radial-gradient(120% 90% at 0% 50%, rgba(124, 108, 240, 0.2), transparent 55%),
+    var(--glass-card-bg);
+  border-color: rgba(124, 108, 240, 0.22);
 }
 .money-tile__icon {
   width: 44px;
@@ -3294,34 +3287,38 @@ html[data-theme="light"] .timeline li {
   border-radius: 50%;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
+  margin-top: 2px;
 }
 .money-tile--wallet .money-tile__icon {
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #3FBF8F;
+  background: rgba(63, 191, 143, 0.14);
+  border: 1px solid rgba(63, 191, 143, 0.32);
 }
 .money-tile--deposit .money-tile__icon {
-  color: rgba(255, 255, 255, 0.78);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #8B7FF5;
+  background: rgba(139, 127, 245, 0.14);
+  border: 1px solid rgba(139, 127, 245, 0.32);
 }
-.money-tile__body { display: grid; gap: 4px; min-width: 0; }
+.money-tile__body { display: grid; gap: 6px; min-width: 0; align-content: start; }
 .money-tile__body small {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.35;
+  overflow: visible;
 }
 .money-tile__body strong {
   font-size: 22px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
-  line-height: 1.15;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
-.money-tile--wallet .money-tile__body strong { color: var(--text-primary); }
-.money-tile--deposit .money-tile__body strong { color: var(--text-primary); }
+.money-tile--wallet .money-tile__body strong { color: #3FBF8F; }
+.money-tile--deposit .money-tile__body strong { color: #8B7FF5; }
 .money-tile__body em {
   font-style: normal;
   font-size: 11px;
@@ -3455,24 +3452,25 @@ html[data-theme="light"] .timeline li {
 .app-shell--chat .conversation__head {
   padding: 10px 12px;
   margin: 0 0 8px;
-  border: var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: #111113;
-  box-shadow: var(--glass-highlight);
+  background: var(--glass-card-bg);
+  box-shadow: none;
 }
 .app-shell--chat .chat-list-head {
   position: sticky;
   top: 0;
   z-index: 3;
   margin: 0 0 10px;
-  padding: 10px 12px;
-  border: var(--glass-border);
-  border-radius: var(--radius-md);
-  background: #111113;
-  box-shadow: var(--glass-highlight);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .app-shell--chat .chat-list-head .chat-toolbar {
   margin: 0;
+  align-items: center;
 }
 .app-shell--chat .order-card-inline {
   margin: 8px 12px;
@@ -3586,12 +3584,18 @@ html[data-theme="light"] .timeline li {
   box-shadow: none !important;
   background: transparent !important;
 }
-.app-shell--chat .conversation__head,
-.app-shell--chat .chat-list-head {
-  background: #111113 !important;
-  border: var(--glass-border) !important;
-  box-shadow: var(--glass-highlight) !important;
+.app-shell--chat .conversation__head {
+  background: var(--glass-card-bg) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
   border-radius: var(--radius-md) !important;
+}
+.app-shell--chat .chat-list-head {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
 }
 .app-shell--chat .composer {
   background: var(--glass-regular-bg) !important;
@@ -3675,6 +3679,12 @@ body.is-resizing-chat * {
   cursor: inherit !important;
 }
 .chat-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.chat-toolbar .control,
+.chat-toolbar .button--secondary {
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+}
 .thread {
   width: 100%;
   padding: 12px 12px 14px;
@@ -3686,7 +3696,7 @@ body.is-resizing-chat * {
   text-align: left;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-card-bg);
   color: var(--text);
   font-size: 12px;
   font-family: inherit;
@@ -3703,8 +3713,8 @@ html[data-theme="light"] .thread {
   border-color: rgba(20, 24, 32, 0.1);
 }
 .thread.active {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: #1a1a1e;
+  border-color: color-mix(in srgb, var(--accent-violet) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-violet) 16%, var(--glass-card-bg));
 }
 .thread:active {
   transform: none;
@@ -4000,22 +4010,21 @@ html[data-theme="light"] .ai-actions {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border: 0 !important;
   border-radius: 999px;
   padding: 7px 11px;
   font: inherit;
   font-size: 12px;
   color: var(--text);
-  background: rgba(255, 255, 255, 0.1) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
+  background: var(--glass-card-bg) !important;
+  box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: background 160ms ease;
 }
 .ai-quick-replies__btn:hover {
-  border-color: rgba(255, 255, 255, 0.32) !important;
-  background: rgba(255, 255, 255, 0.16) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 .ai-quick-replies__btn:disabled { opacity: .55; cursor: default; }
 .composer {
@@ -4969,9 +4978,9 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   html[data-glass="vision"] .bottom-nav {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
-    background: #111113 !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+    background: var(--glass-card-bg) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
   }
   html[data-theme="light"] .topbar,
   html[data-theme="light"] .bottom-nav {
@@ -5842,30 +5851,30 @@ html[data-theme="dark"] .thread-list .thread:focus-visible {
 }
 
 html[data-theme="light"] .thread-list .chat-toolbar .control {
-  background: transparent !important;
-  border-color: rgba(20, 25, 35, 0.14) !important;
+  background: #fff !important;
+  border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 html[data-theme="dark"] .thread-list .chat-toolbar .control {
-  background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: var(--glass-card-bg) !important;
+  border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
 html[data-theme="light"] .thread-list .chat-toolbar .button--secondary {
-  background: transparent !important;
-  border-color: rgba(20, 25, 35, 0.14) !important;
+  background: #fff !important;
+  border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
-  background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: var(--glass-card-bg) !important;
+  border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
