@@ -602,7 +602,7 @@ export function Profile({
       <div className="money-tile money-tile--deposit">
         <span className="money-tile__icon" aria-hidden="true"><IconShield size={22} /></span>
         <div className="money-tile__body">
-          <small>Залог (находится на платформе) <IconInfo size={12} /></small>
+          <small>Залог <IconInfo size={12} /></small>
           <strong>{money(deposit?.totalCents ?? '0')}</strong>
           <em>Сумма заморожена на время сделок</em>
           {deposit && (

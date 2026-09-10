@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
   consumeGoogleOAuthIntent,
@@ -760,10 +760,12 @@ export function useOnixCore() {
         const key = normOnixId(msg.onixId);
         // Presence map is the source of truth for online dots / last-seen.
         // Do not remap products/chats/deals — that re-renders the whole app on every beat.
-        setPresenceByOnixId((previous) => {
-          const cur = previous[key];
-          if (cur && cur.online === msg.online && cur.lastOnline === msg.lastOnline) return previous;
-          return { ...previous, [key]: { online: msg.online, lastOnline: msg.lastOnline } };
+        startTransition(() => {
+          setPresenceByOnixId((previous) => {
+            const cur = previous[key];
+            if (cur && cur.online === msg.online && cur.lastOnline === msg.lastOnline) return previous;
+            return { ...previous, [key]: { online: msg.online, lastOnline: msg.lastOnline } };
+          });
         });
         return;
       }

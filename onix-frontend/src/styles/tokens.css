@@ -654,7 +654,6 @@ html[data-theme="light"][data-glass="vision"] {
 html[data-glass="vision"] .card,
 html[data-glass="vision"] .widget,
 html[data-glass="vision"] .product-card,
-html[data-glass="vision"] .topbar,
 html[data-glass="vision"] .section-head,
 html[data-glass="vision"] .desktop-hero:not(.market-hero),
 html[data-glass="vision"] .wallet-hero,
@@ -663,9 +662,30 @@ html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: transparent !important;
+  background: #111113 !important;
   box-shadow: var(--glass-highlight) !important;
   border: var(--glass-border) !important;
+}
+/* Sticky chrome must stay opaque — transparent Vision glass bleeds content through. */
+html[data-glass="vision"] .topbar,
+html[data-glass="vision"] .bottom-nav,
+html[data-glass="vision"] .modal__panel,
+html[data-glass="vision"] .auth-notice {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #111113 !important;
+  border: var(--glass-border) !important;
+  box-shadow: var(--glass-highlight) !important;
+}
+html[data-theme="light"][data-glass="vision"] .card,
+html[data-theme="light"][data-glass="vision"] .widget,
+html[data-theme="light"][data-glass="vision"] .product-card,
+html[data-theme="light"][data-glass="vision"] .section-head,
+html[data-theme="light"][data-glass="vision"] .topbar,
+html[data-theme="light"][data-glass="vision"] .bottom-nav,
+html[data-theme="light"][data-glass="vision"] .modal__panel,
+html[data-theme="light"][data-glass="vision"] .auth-notice {
+  background: #ffffff !important;
 }
 /* Chat stays frameless in Vision too */
 html[data-glass="vision"] .chat-layout,
@@ -677,21 +697,11 @@ html[data-glass="vision"] .thread-list {
   box-shadow: none !important;
   border: 0 !important;
 }
-html[data-glass="vision"] .modal__panel,
-html[data-glass="vision"] .bottom-nav,
-html[data-glass="vision"] .auth-notice {
-  /* Vision tint without live acrylic — blur tanks scroll FPS */
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: var(--glass-card-bg) !important;
-  border: var(--glass-border) !important;
-  box-shadow: var(--glass-highlight) !important;
-}
 html[data-glass="vision"] .settings-sheet {
   isolation: auto !important;
-  -webkit-backdrop-filter: blur(48px) saturate(190%) !important;
-  backdrop-filter: blur(48px) saturate(190%) !important;
-  background: rgba(16, 16, 22, 0.18) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #15151a !important;
   box-shadow: none !important;
 }
 html[data-theme="light"][data-glass="vision"] .settings-sheet {

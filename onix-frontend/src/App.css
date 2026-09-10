@@ -2019,7 +2019,10 @@ html[data-theme="dark"] .user-avatar__presence,
 :root:not([data-theme="light"]) .user-avatar__presence {
   border-color: rgba(22, 22, 28, 0.95);
 }
-.user-avatar-wrap.is-online .user-avatar__presence { background: var(--success-green); }
+.user-avatar-wrap.is-online .user-avatar__presence {
+  background: #1a1a1e;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.72);
+}
 .user-avatar-wrap.is-offline .user-avatar__presence { background: #5a5a62; }
 .conversation__peer {
   display: flex;
@@ -2136,7 +2139,9 @@ html[data-theme="dark"] .user-avatar__presence,
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #7c6cf0;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-sizing: border-box;
 }
 .trust-meter__meta {
   display: flex;
@@ -2745,9 +2750,15 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips button.active, .segmented button.active {
   color: #fff;
-  background: var(--accent-violet-deep);
-  border-color: var(--accent-violet-deep);
+  background: #1a1a1e;
+  border-color: rgba(255, 255, 255, 0.28);
   box-shadow: none !important;
+}
+html[data-theme="light"] .chips button.active,
+html[data-theme="light"] .segmented button.active {
+  color: #111;
+  background: #f2f2f4;
+  border-color: rgba(20, 24, 32, 0.28);
 }
 
 /* Lot form — category expand/collapse under the current value */
@@ -2912,6 +2923,9 @@ html[data-theme="dark"] .muted { color: rgba(255, 255, 255, 0.68); }
   border-radius: 18px;
   background: #141418;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+  contain: layout style;
 }
 html[data-theme="light"] .deal-card.deal-card--order {
   background: #fff;
@@ -3269,17 +3283,10 @@ html[data-theme="light"] .timeline li {
   position: relative;
   overflow: hidden;
 }
-.money-tile--wallet {
-  background:
-    radial-gradient(120% 90% at 0% 50%, rgba(63, 191, 143, 0.08), transparent 55%),
-    #14181a;
-  border-color: rgba(255, 255, 255, 0.1);
-}
+.money-tile--wallet,
 .money-tile--deposit {
-  background:
-    radial-gradient(120% 90% at 0% 50%, rgba(124, 108, 240, 0.08), transparent 55%),
-    #16141f;
-  border-color: rgba(255, 255, 255, 0.1);
+  background: #141418;
+  border-color: rgba(255, 255, 255, 0.14);
 }
 .money-tile__icon {
   width: 44px;
@@ -3351,7 +3358,7 @@ html[data-theme="light"] .timeline li {
 .money-tiles__meta { display: none; }
 .profile-card--dash .profile-main__meta {
   margin-top: 4px;
-  color: color-mix(in srgb, var(--accent-mint) 55%, var(--text-secondary));
+  color: var(--text-secondary);
 }
 .profile-card--dash .stats--inline {
   margin-top: 10px;
@@ -3447,8 +3454,25 @@ html[data-theme="light"] .timeline li {
 }
 .app-shell--chat .conversation__head {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-  background: var(--glass-regular-bg);
+  margin: 0 0 8px;
+  border: var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #111113;
+  box-shadow: var(--glass-highlight);
+}
+.app-shell--chat .chat-list-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: var(--glass-border);
+  border-radius: var(--radius-md);
+  background: #111113;
+  box-shadow: var(--glass-highlight);
+}
+.app-shell--chat .chat-list-head .chat-toolbar {
+  margin: 0;
 }
 .app-shell--chat .order-card-inline {
   margin: 8px 12px;
@@ -3492,14 +3516,15 @@ html[data-theme="light"] .timeline li {
 }
 .messages__virtual-list {
   width: 100%;
-  min-height: 100%;
+  /* Do not force full viewport height — short threads stay at the top. */
+  min-height: 0;
 }
 .messages__virtual-row {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  padding: 0 12px 8px;
+  padding: 0 12px 10px;
   box-sizing: border-box;
 }
 .messages__virtual-row > .message-row.mine {
@@ -3525,7 +3550,7 @@ html[data-theme="light"] .timeline li {
 }
 .app-shell--chat .message {
   border: var(--glass-border);
-  padding: 10px 12px;
+  padding: 12px 14px 14px;
   box-shadow: none;
   border-radius: var(--radius-md);
   background: var(--glass-regular-bg);
@@ -3562,6 +3587,12 @@ html[data-theme="light"] .timeline li {
   background: transparent !important;
 }
 .app-shell--chat .conversation__head,
+.app-shell--chat .chat-list-head {
+  background: #111113 !important;
+  border: var(--glass-border) !important;
+  box-shadow: var(--glass-highlight) !important;
+  border-radius: var(--radius-md) !important;
+}
 .app-shell--chat .composer {
   background: var(--glass-regular-bg) !important;
   border-color: var(--line) !important;
@@ -3646,7 +3677,7 @@ body.is-resizing-chat * {
 .chat-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .thread {
   width: 100%;
-  padding: 12px;
+  padding: 12px 12px 14px;
   min-height: 0;
   display: flex;
   align-items: flex-start;
@@ -3672,8 +3703,8 @@ html[data-theme="light"] .thread {
   border-color: rgba(20, 24, 32, 0.1);
 }
 .thread.active {
-  border-color: color-mix(in srgb, var(--accent-violet) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent-violet) 16%, var(--glass-regular-bg));
+  border-color: rgba(255, 255, 255, 0.28);
+  background: #1a1a1e;
 }
 .thread:active {
   transform: none;
@@ -3834,7 +3865,7 @@ html[data-theme="light"] .thread {
   position: relative;
   align-self: flex-start;
   max-width: 84%;
-  padding: 10px 12px;
+  padding: 12px 14px 14px;
   border: var(--glass-border);
   border-radius: 4px 16px 16px;
   background: var(--glass-regular-bg);
@@ -4933,6 +4964,19 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     transform: none;
   }
   html[data-theme="dark"] .topbar,
+  html[data-theme="dark"] .bottom-nav,
+  html[data-glass="vision"] .topbar,
+  html[data-glass="vision"] .bottom-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: #111113 !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+  html[data-theme="light"] .topbar,
+  html[data-theme="light"] .bottom-nav {
+    background: #ffffff !important;
+  }
   html[data-theme="dark"] .control,
   html[data-theme="dark"] .modal__panel,
   html[data-theme="dark"] .select-menu__trigger,

@@ -461,14 +461,16 @@ export function Chats({
     style={{ '--chat-list-w': `${listW}px` } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
-      <div className="chat-toolbar">
-        <Input
-          value={chatQuery}
-          onChange={(event) => setChatQuery(event.target.value)}
-          placeholder={t('chat.search')}
-          aria-label={t('chat.searchAria')}
-        />
-        <Button type="button" variant="secondary" aria-label="Создать группу" onClick={() => { resetMemberPicker(); setGroupOpen(true); }}>+</Button>
+      <div className="chat-list-head">
+        <div className="chat-toolbar">
+          <Input
+            value={chatQuery}
+            onChange={(event) => setChatQuery(event.target.value)}
+            placeholder={t('chat.search')}
+            aria-label={t('chat.searchAria')}
+          />
+          <Button type="button" variant="secondary" aria-label="Создать группу" onClick={() => { resetMemberPicker(); setGroupOpen(true); }}>+</Button>
+        </div>
       </div>
       {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
         core.chats.map(chat => <button
