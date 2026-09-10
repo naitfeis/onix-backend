@@ -28,6 +28,81 @@ export function IconWallet({ size = 22 }: { size?: number }) {
   );
 }
 
+export function IconShield({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3l7 3v5.5c0 4.4-2.9 7.5-7 9-4.1-1.5-7-4.6-7-9V6l7-3z" />
+      <path d="M9.5 12.2l1.8 1.8 3.4-3.8" />
+    </svg>
+  );
+}
+
+export function IconArrowRight({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 12h12" />
+      <path d="M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function IconSend({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 11.5L20 4l-5.5 16-3.2-6.3L4 11.5z" />
+    </svg>
+  );
+}
+
+export function IconLogout({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M10 7V5.5A1.5 1.5 0 0 1 11.5 4H18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6.5A1.5 1.5 0 0 1 10 18.5V17" />
+      <path d="M4 12h10" />
+      <path d="M11 8l4 4-4 4" />
+    </svg>
+  );
+}
+
+export function IconMore({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="6" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+export function IconRefund({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 7H4v3" />
+      <path d="M4.5 10a8 8 0 1 0 1.2-4.5" />
+      <path d="M12 8v4l2.5 1.5" />
+    </svg>
+  );
+}
+
+export function IconFail({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M9 9l6 6M15 9l-6 6" />
+    </svg>
+  );
+}
+
+export function IconInfo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 10.5V17" />
+      <path d="M12 7.5h.01" />
+    </svg>
+  );
+}
+
 export function IconPlus({ size = 22 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">

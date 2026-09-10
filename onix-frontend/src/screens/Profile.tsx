@@ -26,6 +26,7 @@ import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from 
 import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { ReviewCard } from '../components/ReviewCard';
 import { LedgerOpIcon } from '../components/LedgerOpIcon';
+import { IconArrowRight, IconInfo, IconLogout, IconSend, IconShield, IconWallet } from '../components/NavIcons';
 import { t } from '../i18n';
 
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
@@ -272,7 +273,6 @@ export function Profile({
   onTopupConsumed?: () => void;
 }) {
   const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support'>('overview');
-  const [moneyOpen, setMoneyOpen] = useState(false);
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyBusy, setMoneyBusy] = useState(false);
   const moneyLockRef = useRef(false);
@@ -390,7 +390,6 @@ export function Profile({
   const openMoney = (kind: Exclude<MoneyModal, null>) => {
     setAmount('');
     setPayMethod('SBP');
-    setMoneyOpen(true);
     moneyKeyRef.current = crypto.randomUUID();
     setMoneyModal(kind);
   };
@@ -563,30 +562,77 @@ export function Profile({
         <Button type="button" onClick={() => setAppealOpen(true)}>Обжаловать решение</Button>
       </Card>
     )}
-    <Card className="profile-card"><UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online /><div className="profile-main"><h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1><p>{formatOnixId(profile.onixId)} · Online</p><div className="stats"><span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span><span><b>{profile.salesCount}</b> сделок</span><span><b>{profile.followersCount}</b> подписчиков</span>{ownerTrust && <TrustLevelMeter level={ownerTrust.level} progress={ownerTrust.progress} className="trust-meter--inline" />}</div></div>
+    <Card className="profile-card profile-card--dash">
+      <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online />
+      <div className="profile-main">
+        <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1>
+        <p className="profile-main__meta">{formatOnixId(profile.onixId)} · Online</p>
+        <div className="stats stats--inline">
+          <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
+          <span><b>{profile.salesCount}</b> сделок</span>
+          <span><b>{profile.followersCount}</b> подписчиков</span>
+        </div>
+        {ownerTrust && (
+          <TrustLevelMeter level={ownerTrust.level} progress={ownerTrust.progress} className="trust-meter--inline" />
+        )}
+      </div>
       {showWebsiteLogout && (
         <div className="profile-logout">
           <Button type="button" variant="ghost" className="profile-logout__btn" onClick={() => setLogoutOpen(true)}>
-            Выйти из аккаунта
+            <IconLogout size={16} /> Выйти из аккаунта
           </Button>
         </div>
       )}
-      <div className="wallet-strip">
-        <button type="button" className="wallet-strip__row" onClick={() => setMoneyOpen((v) => !v)} aria-expanded={moneyOpen}>
-          <span><small>Баланс</small><strong>{money(profile.balanceCents)}</strong></span>
-          <span><small>Залог</small><strong>{money(deposit?.totalCents ?? '0')}</strong></span>
-          <em className={`wallet-strip__chevron${moneyOpen ? ' open' : ''}`} aria-hidden="true">▾</em>
-        </button>
-        {moneyOpen && (
-          <div className="wallet-strip__panel">
-            <div className="balance"><small>БАЛАНС</small><strong>{money(profile.balanceCents)}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</Button></div></div>
-            <div className="balance"><small>ЗАЛОГ</small><strong>{money(deposit?.totalCents ?? '0')}</strong><div className="balance-actions"><Button variant="secondary" onClick={() => openMoney('DEPOSIT_WITHDRAW')}>Вывести</Button><Button variant="secondary" onClick={() => openMoney('DEPOSIT_FUND')}>Пополнить</Button></div></div>
-            {deposit && <div className="stats"><span><b>{money(deposit.totalCents)}</b> всего</span><span><b>{money(deposit.availableCents)}</b> доступно</span><span><b>{money(deposit.lockedCents)}</b> заморожено</span></div>}
-          </div>
-        )}
-      </div>
       <AccountLinkPanel profile={profile} onLinked={() => core.loadProfile()} setToast={setToast} />
     </Card>
+
+    <div className="money-tiles" aria-label="Кошелёк и залог">
+      <button type="button" className="money-tile money-tile--wallet" onClick={() => openMoney('MAIN_TOPUP')}>
+        <span className="money-tile__icon" aria-hidden="true"><IconWallet size={22} /></span>
+        <span className="money-tile__body">
+          <small>Баланс</small>
+          <strong>{money(profile.balanceCents)}</strong>
+          <em>Доступно для операций и покупок</em>
+        </span>
+        <span className="money-tile__go" aria-hidden="true"><IconArrowRight size={16} /></span>
+      </button>
+      <button type="button" className="money-tile money-tile--deposit" onClick={() => openMoney('DEPOSIT_FUND')}>
+        <span className="money-tile__icon" aria-hidden="true"><IconShield size={22} /></span>
+        <span className="money-tile__body">
+          <small>Залог (находится на платформе) <IconInfo size={12} /></small>
+          <strong>{money(deposit?.totalCents ?? '0')}</strong>
+          <em>Сумма заморожена на время сделок</em>
+        </span>
+        <span className="money-tile__go" aria-hidden="true"><IconArrowRight size={16} /></span>
+      </button>
+    </div>
+    {deposit && (
+      <div className="stats money-tiles__meta">
+        <span><b>{money(deposit.totalCents)}</b> всего</span>
+        <span><b>{money(deposit.availableCents)}</b> доступно</span>
+        <span><b>{money(deposit.lockedCents)}</b> заморожено</span>
+      </div>
+    )}
+
+    <div className="chips profile-tabs profile-tabs--actions">
+      <button type="button" className="profile-action profile-action--primary" onClick={() => openMoney('MAIN_TOPUP')}>
+        <IconSend size={15} /> Пополнить
+      </button>
+      <button type="button" className="profile-action" onClick={() => openMoney('MAIN_WITHDRAW')}>
+        <IconLogout size={15} /> Вывести
+      </button>
+      {profileSections.map(item =>
+        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({
+          overview: t('profile.history'),
+          listings: t('profile.listings'),
+          favorites: t('profile.favorites'),
+          reviews: t('profile.reviews'),
+          analytics: t('profile.analytics'),
+        })[item]}</button>)}
+      {isAdmin && (
+        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>{t('profile.admin')}</button>
+      )}
+    </div>
     {showWebsiteLogout && (
       <Confirm
         open={logoutOpen}
@@ -611,19 +657,6 @@ export function Profile({
         }}
       />
     )}
-    <div className="chips profile-tabs">
-      {profileSections.map(item =>
-        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({
-          overview: t('profile.history'),
-          listings: t('profile.listings'),
-          favorites: t('profile.favorites'),
-          reviews: t('profile.reviews'),
-          analytics: t('profile.analytics'),
-        })[item]}</button>)}
-      {isAdmin && (
-        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>{t('profile.admin')}</button>
-      )}
-    </div>
     {section === 'overview' && <Card><h2>История баланса</h2>{walletHistory.length === 0 ? <p className="empty-inline">Операций пока нет.</p> : <>
       <div className="operations">{walletHistory.map(item => (
         <div key={item.id} className="operations__row">

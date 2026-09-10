@@ -23,6 +23,75 @@ export const dealLabels: Record<Deal['status'], string> = {
   COMPLETED: 'Завершено', CANCELED: 'Отменено', DISPUTE: 'Открыт спор', REFUNDED: 'Возвращено',
 };
 
+/** Rich status banner copy for the order card UI (tones match existing badge colors). */
+export function dealStatusView(status: Deal['status']): {
+  tone: 'success' | 'danger' | 'warning' | 'neutral' | 'accent';
+  title: string;
+  detail: string;
+  badge: string;
+  icon: 'refund' | 'fail' | 'hold' | 'deliver' | 'done' | 'dispute' | 'pending';
+} {
+  switch (status) {
+    case 'REFUNDED':
+      return {
+        tone: 'success',
+        title: 'Возврат оформлен',
+        detail: 'Средства возвращены покупателю',
+        badge: 'ВОЗВРАЩЕНО',
+        icon: 'refund',
+      };
+    case 'CANCELED':
+      return {
+        tone: 'danger',
+        title: 'Сделка не удалась',
+        detail: 'Заказ отменён до завершения',
+        badge: 'ОТМЕНЕНО',
+        icon: 'fail',
+      };
+    case 'COMPLETED':
+      return {
+        tone: 'success',
+        title: 'Сделка завершена',
+        detail: 'Деньги выплачены продавцу',
+        badge: 'ЗАВЕРШЕНО',
+        icon: 'done',
+      };
+    case 'DISPUTE':
+      return {
+        tone: 'danger',
+        title: 'Открыт спор',
+        detail: 'Сделка передана в поддержку',
+        badge: 'СПОР',
+        icon: 'dispute',
+      };
+    case 'DELIVERING':
+      return {
+        tone: 'accent',
+        title: 'Передача товара',
+        detail: 'Ожидается подтверждение покупателя',
+        badge: 'ПЕРЕДАЧА',
+        icon: 'deliver',
+      };
+    case 'PAYMENT_HOLD':
+      return {
+        tone: 'warning',
+        title: 'Деньги в сейфе',
+        detail: 'Ожидается передача товара',
+        badge: 'СЕЙФ',
+        icon: 'hold',
+      };
+    case 'PENDING':
+    default:
+      return {
+        tone: 'neutral',
+        title: 'Ожидает оплаты',
+        detail: 'Оплата ещё не поступила',
+        badge: 'ОЖИДАНИЕ',
+        icon: 'pending',
+      };
+  }
+}
+
 export const DEAL_FILTERS: Array<{ id: string; label: string; status?: OrderListStatus }> = [
   { id: 'all', label: 'Все' },
   { id: 'open', label: 'Незавершённые', status: 'open' },
