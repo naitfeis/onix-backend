@@ -30,7 +30,7 @@ function readStoredChatSize(key: string, fallback: number, min: number): number 
 }
 
 export function Chats({
-  core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast,
+  core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast, active = true,
 }: {
   core: Core;
   focusChatId: string | null;
@@ -39,6 +39,8 @@ export function Chats({
   openProductCard: (productId: string) => void;
   openDeal: (dealId: string) => void;
   setToast: (text: string) => void;
+  /** False while another tab is shown (keep-alive). */
+  active?: boolean;
 }) {
   const [threadId, setThreadId] = useState('');
   const [text, setText] = useState('');
@@ -174,33 +176,38 @@ export function Chats({
   }, [loadMessages, threadId]);
 
   useEffect(() => {
+    if (!active) {
+      core.setActiveChatId(null);
+      return;
+    }
     core.setActiveChatId(threadId || null);
     return () => core.setActiveChatId(null);
-  }, [threadId, core.setActiveChatId]);
+  }, [active, threadId, core.setActiveChatId]);
 
   useEffect(() => {
-    if (threadId) core.setActiveChatId(threadId);
-  }, [threadId, core.notifications, core.setActiveChatId]);
+    if (!active || !threadId) return;
+    core.setActiveChatId(threadId);
+  }, [active, threadId, core.notifications, core.setActiveChatId]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!active || !threadId) return;
     core.subscribeRealtimeChat(threadId);
     return () => core.unsubscribeRealtimeChat(threadId);
-  }, [threadId, core.subscribeRealtimeChat, core.unsubscribeRealtimeChat]);
+  }, [active, threadId, core.subscribeRealtimeChat, core.unsubscribeRealtimeChat]);
 
   // HTTP fallback only when the socket is down — WS is the live path.
   useEffect(() => {
-    if (!threadId) return;
+    if (!active || !threadId) return;
     const tick = () => {
       if (getRealtimeClient().isReady()) return;
       void loadMessages(threadId);
     };
     const id = window.setInterval(tick, 15_000);
     return () => window.clearInterval(id);
-  }, [threadId, loadMessages]);
+  }, [active, threadId, loadMessages]);
 
   useEffect(() => {
-    if (!threadId) return;
+    if (!active || !threadId) return;
     const off = getRealtimeClient().onMessage((msg) => {
       if (msg.type !== 'chat.typing' || msg.chatId !== threadId) return;
       setTypingLabel(`${msg.username} печатает…`);
@@ -211,7 +218,7 @@ export function Chats({
       off();
       if (typingClearRef.current != null) window.clearTimeout(typingClearRef.current);
     };
-  }, [threadId]);
+  }, [active, threadId]);
 
   useEffect(() => {
     if (!focusChatId) return;

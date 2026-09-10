@@ -1,12 +1,11 @@
-import { type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { money } from '../api/client';
-import { sellerIsPresent, type Product } from '../api/contracts';
+import type { Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { IconStar } from '../components/NavIcons';
 import { Card } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import { categoryLabel, t } from '../i18n';
-import type { Core } from './types';
 
 function reviewCountLabel(n: number): string {
   const abs = Math.abs(n) % 100;
@@ -21,16 +20,16 @@ function lotLabel(product: Product) {
   return product.lotNumber != null ? `ONIXLOT-${product.lotNumber}` : null;
 }
 
-export function ProductLotCard({
+export const ProductLotCard = memo(function ProductLotCard({
   product,
-  core,
+  online,
   onOpen,
   onFavorite,
   hidePrice,
   footer,
 }: {
   product: Product;
-  core: Core;
+  online?: boolean;
   onOpen: () => void;
   onFavorite?: () => void;
   hidePrice?: boolean;
@@ -69,7 +68,7 @@ export function ProductLotCard({
               avatarUrl={product.seller.avatarUrl}
               name={product.seller.username}
               size="medium"
-              online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
+              online={online}
             />
           </div>
           <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
@@ -100,4 +99,6 @@ export function ProductLotCard({
       )}
     </Card>
   );
-}
+});
+
+export default ProductLotCard;

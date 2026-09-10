@@ -32,7 +32,7 @@ export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | nul
 }
 
 export function Deals({
-  core, switchTo, setToast, focusDealId, onFocusDealHandled, openDealChat, openDirectChat,
+  core, switchTo, setToast, focusDealId, onFocusDealHandled, openDealChat, openDirectChat, active = true,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -41,6 +41,7 @@ export function Deals({
   onFocusDealHandled: () => void;
   openDealChat: (chatId: string) => void;
   openDirectChat: (onixId: string) => Promise<boolean>;
+  active?: boolean;
 }) {
   const [role, setRole] = useState<'buyer' | 'seller'>('buyer');
   const [dealFilter, setDealFilter] = useState('all');
@@ -115,7 +116,7 @@ export function Deals({
     ))}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      <DealClockProvider active={needsClock}>{deals.map(deal => {
+      <DealClockProvider active={active && needsClock}>{deals.map(deal => {
         const categoryName = displayCategory(deal.product.category);
         const subLabel = deal.product.subcategory
           ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)

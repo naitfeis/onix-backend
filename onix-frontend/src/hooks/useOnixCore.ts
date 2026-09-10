@@ -1271,7 +1271,7 @@ export function useOnixCore() {
   // Badge: chat unread only (in-app notifications stay for API/history; UI tab removed).
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
-  return {
+  return useMemo(() => ({
     profile, catalogSubcategories, categoryLotCounts, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
     sessionRestore,
     presenceByOnixId, presenceOf,
@@ -1279,5 +1279,12 @@ export function useOnixCore() {
     toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
     markNotificationRead, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
-  };
+  }), [
+    profile, catalogSubcategories, categoryLotCounts, store, states, errors, messages, actionBusy, unread, banFromAuth,
+    sessionRestore, presenceByOnixId, presenceOf,
+    refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
+    markNotificationRead, reportUser, signOut,
+    subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
+  ]);
 }

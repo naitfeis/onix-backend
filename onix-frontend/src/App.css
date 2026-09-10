@@ -213,19 +213,16 @@ html[data-theme="light"] .settings-sheet {
 }
 .skip-link:focus { top: calc(12px + env(safe-area-inset-top)); }
 
-/* Boot reveal — opacity only (transform breaks backdrop-filter vs fixed scene) */
+/* Boot reveal — disabled (was causing first-paint jank on mobile WebViews) */
 .app-shell .topbar,
 .app-shell .viewport,
-.app-shell .auth-notice {
-  animation: shell-rise 640ms var(--ease-out) both;
-}
+.app-shell .auth-notice,
 .app-shell .bottom-nav {
-  animation: shell-fade 640ms var(--ease-out) both;
-  animation-delay: 140ms;
+  animation: none;
 }
-.app-shell .viewport { animation-delay: 80ms; }
+.app-shell .viewport { animation-delay: 0ms; }
 .app-shell.is-booting .viewport { opacity: 1; }
-.app-shell.is-ready .viewport { transition: opacity 420ms var(--ease); opacity: 1; }
+.app-shell.is-ready .viewport { transition: none; opacity: 1; }
 @keyframes shell-rise {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -245,8 +242,8 @@ html[data-theme="light"] .settings-sheet {
   gap: 12px;
   margin: 0 -4px 16px;
   padding: 10px 12px;
-  /* glass: tokens.css (.topbar) — полноценный large glass */
-  transition: background 180ms, border-color 180ms, box-shadow 180ms, backdrop-filter 180ms;
+  /* glass: tokens.css (.topbar) — solid fill, no blur transition jank */
+  transition: none;
 }
 .brand {
   display: inline-flex;
@@ -286,8 +283,8 @@ html[data-theme="light"] .settings-sheet {
   background: var(--glass-thick-bg);
   border: var(--glass-border, 1px solid rgba(255, 255, 255, 0.14));
   box-shadow: var(--glass-drop-shadow, 0 12px 36px rgba(0, 0, 0, 0.32));
-  backdrop-filter: blur(18px) saturate(130%);
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .pwa-install__mark {
   width: 40px;
@@ -599,13 +596,25 @@ html[data-theme="light"] .auth-notice__command {
   /* No perspective / transform here — they break backdrop-filter vs fixed scene */
 }
 .screen-transition {
-  animation: page-turn 320ms var(--ease-out) both;
+  animation: none;
   min-height: 0;
   min-width: 0;
   max-width: 100%;
   width: 100%;
   /* Do not clip — select-menu dropdown must paint below the trigger */
   overflow: visible;
+}
+.screen-panel {
+  display: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.screen-panel.is-active {
+  display: block;
+}
+.screen-panel[hidden] {
+  display: none !important;
 }
 @keyframes page-turn {
   from { opacity: 0; }
@@ -765,11 +774,11 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button.active {
 }
 html[data-theme="light"] .button--secondary {
   color: #141820;
-  background: rgba(255, 255, 255, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(20, 24, 32, 0.12);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 html[data-theme="dark"] .button--secondary {
   color: rgba(255, 255, 255, 0.94);
@@ -881,7 +890,10 @@ html[data-theme="dark"] .button--secondary {
   box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  animation: card-in 320ms var(--ease) both;
+  animation: none;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 260px;
+  contain: layout paint style;
 }
 html[data-theme="light"] .product-card {
   background: var(--glass-card-bg);
@@ -2095,8 +2107,8 @@ html[data-theme="dark"] .user-avatar__presence,
   border-radius: var(--radius-md);
   background: var(--glass-thin-bg);
   box-shadow: var(--glass-highlight);
-  -webkit-backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-thin)) saturate(120%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   font-size: 12px;
   color: var(--muted);
 }
@@ -2984,6 +2996,14 @@ html[data-theme="light"] .timeline li {
   align-items: flex-start;
   overflow: hidden;
 }
+.app-shell--chat .screen-panel.is-active {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+}
 .app-shell--chat .chat-layout {
   width: 100%;
   height: 100%;
@@ -3364,10 +3384,10 @@ html[data-theme="light"] .thread {
   max-height: calc(100dvh - 120px);
   border: var(--glass-border);
   border-radius: var(--radius-xl);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-regular-bg);
   box-shadow: var(--glass-highlight), var(--glass-inner-shadow), var(--glass-drop-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-thick)) saturate(120%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3488,10 +3508,10 @@ html[data-theme="light"] .message__meta .receipt-admin {
   margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 18px;
-  background: rgba(22, 22, 28, 0.42);
+  background: rgba(22, 22, 28, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 24px rgba(0, 0, 0, 0.18);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 html[data-theme="light"] .ai-actions {
   background: rgba(255, 255, 255, 0.48);
@@ -3544,8 +3564,8 @@ html[data-theme="light"] .ai-actions {
   color: var(--text);
   background: rgba(255, 255, 255, 0.1) !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
-  backdrop-filter: blur(16px) saturate(150%) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   cursor: pointer;
   transition: border-color 160ms ease, background 160ms ease;
 }
@@ -4275,8 +4295,8 @@ html[data-theme="light"] .seller-identity__actions .button {
   border-radius: var(--radius-sm);
   background: var(--glass-thick-bg);
   box-shadow: var(--glass-highlight), var(--glass-drop-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-thick)) saturate(120%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .message-menu button {
   text-align: left;
@@ -4302,8 +4322,8 @@ html[data-theme="light"] .seller-identity__actions .button {
   padding: 8px 14px;
   font-size: 12px;
   box-shadow: var(--glass-highlight), var(--glass-drop-shadow);
-  -webkit-backdrop-filter: blur(var(--glass-blur-regular)) saturate(120%);
-  backdrop-filter: blur(var(--glass-blur-regular)) saturate(120%);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 @keyframes fade { from { opacity: 0; } }
 @keyframes sheet { from { transform: translateY(28px); opacity: 0; } }
@@ -4404,7 +4424,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   background: transparent;
   border: 0;
   box-shadow: none;
-  transition: transform 320ms var(--ease);
+  transition: transform 160ms var(--ease);
   pointer-events: none;
   z-index: 0;
 }
@@ -4493,9 +4513,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
 
   /* Mobile input latency: skip page fade + kill remaining acrylic blur */
-  .screen-transition {
-    animation: none;
-  }
   .button {
     transition: color 120ms, background 120ms, border-color 120ms;
   }
@@ -4509,9 +4526,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .bottom-nav,
   .ai-actions,
   .message-menu,
-  .new-messages-pill {
+  .new-messages-pill,
+  .conversation,
+  .order-card-inline {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
+  }
+  .nav-indicator {
+    transition: none;
   }
   .button,
   .bottom-nav button,

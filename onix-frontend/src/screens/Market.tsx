@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { api, friendlyError } from '../api/client';
 import {
   API_PATHS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
-  type Product, type PublicProfile, type TrustCard,
+  sellerIsPresent, type Product, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import { Button, Card, Input, Skeleton, StateView } from '../design-system';
 import { LotSheet } from './LotSheet';
@@ -139,7 +139,7 @@ function rememberViewedLot(id: string, store: Set<string>) {
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
-  externalCategory, onExternalCategoryConsumed, onRequestLogin,
+  externalCategory, onExternalCategoryConsumed, onRequestLogin, active = true,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -152,6 +152,8 @@ export function Market({
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
   onRequestLogin?: () => void;
+  /** False while another tab is shown (keep-alive). */
+  active?: boolean;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [lotOrigin, setLotOrigin] = useState<'catalog' | 'profile'>('catalog');
@@ -255,11 +257,18 @@ export function Market({
   }, [externalCategory, onExternalCategoryConsumed]);
 
   useEffect(() => {
+    if (!active) return;
     const el = catRowRef.current;
     if (!el) return;
+    let raf = 0;
     const sync = () => {
-      const max = Math.max(0, el.scrollWidth - el.clientWidth);
-      setCatScroll({ max, value: Math.min(el.scrollLeft, max) });
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const max = Math.max(0, el.scrollWidth - el.clientWidth);
+        const value = Math.min(el.scrollLeft, max);
+        setCatScroll((prev) => (prev.max === max && prev.value === value ? prev : { max, value }));
+      });
     };
     sync();
     el.addEventListener('scroll', sync, { passive: true });
@@ -270,8 +279,9 @@ export function Market({
       el.removeEventListener('scroll', sync);
       ro?.disconnect();
       window.removeEventListener('resize', sync);
+      if (raf) cancelAnimationFrame(raf);
     };
-  }, [visibleCats.length]);
+  }, [active, visibleCats.length]);
 
   useEffect(() => {
     const isDefaultBrowse =
@@ -364,17 +374,23 @@ export function Market({
   };
 
   useEffect(() => {
+    if (!active) return;
+    let raf = 0;
     const onScroll = () => {
-      setShowTop(readCatalogScroll() > 360);
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const next = readCatalogScroll() > 360;
+        setShowTop((prev) => (prev === next ? prev : next));
+      });
     };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
-    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
     return () => {
       window.removeEventListener('scroll', onScroll);
-      document.removeEventListener('scroll', onScroll, true);
+      if (raf) cancelAnimationFrame(raf);
     };
-  }, []);
+  }, [active]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore || !items.length) return;
@@ -512,18 +528,20 @@ export function Market({
   };
 
   useEffect(() => {
+    if (!active) return;
     const track = heroTrackRef.current;
     if (!track) return;
     const onScroll = () => {
       const width = track.clientWidth || 1;
-      const index = Math.round(track.scrollLeft / width);
-      setHeroSlide(Math.min(Math.max(index, 0), heroSlides.length - 1));
+      const index = Math.min(Math.max(Math.round(track.scrollLeft / width), 0), heroSlides.length - 1);
+      setHeroSlide((prev) => (prev === index ? prev : index));
     };
     track.addEventListener('scroll', onScroll, { passive: true });
     return () => track.removeEventListener('scroll', onScroll);
-  }, [heroSlides.length]);
+  }, [active, heroSlides.length]);
 
   useEffect(() => {
+    if (!active) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     // Auto-advance only on phones; desktop stays on the chosen slide.
     const mobile = window.matchMedia('(max-width: 699px)');
@@ -540,7 +558,7 @@ export function Market({
       });
     }, 10_000);
     return () => window.clearInterval(timer);
-  }, [heroSlides.length]);
+  }, [active, heroSlides.length]);
 
   return <div className="stack">
     {selected && (
@@ -803,7 +821,7 @@ export function Market({
         <ProductLotCard
           key={product.id}
           product={product}
-          core={core}
+          online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
           onOpen={() => void openProduct(product)}
           onFavorite={() => {
             if (!core.profile) {

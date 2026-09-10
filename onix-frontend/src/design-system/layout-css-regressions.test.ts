@@ -43,16 +43,21 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).not.toMatch(/\.thread-list, \.conversation\s*\{[^}]*gap:\s*0;/s);
   });
 
+  it('keeps screens keep-alive without page-turn remount animation', () => {
+    expect(appCss).toMatch(/\.screen-panel\.is-active\s*\{[^}]*display:\s*block;/s);
+    expect(appCss).toMatch(/\.screen-transition\s*\{[^}]*animation:\s*none;/s);
+  });
+
   it('does not force a crushed icon rail between 900px and 1099px', () => {
     expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
   });
 
-  it('keeps AI helper questions as a glass overlay above messages', () => {
+  it('keeps AI helper questions as a solid overlay above messages', () => {
     expect(appCss).toMatch(
       /\.ai-actions\s*\{[^}]*position:\s*absolute;/s,
     );
     expect(appCss).toMatch(
-      /\.ai-actions\s*\{[^}]*backdrop-filter:\s*blur\(18px\) saturate\(160%\);/s,
+      /\.ai-actions\s*\{[^}]*backdrop-filter:\s*none;/s,
     );
   });
 

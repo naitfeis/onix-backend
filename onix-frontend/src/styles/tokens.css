@@ -680,8 +680,9 @@ html[data-glass="vision"] .thread-list {
 html[data-glass="vision"] .modal__panel,
 html[data-glass="vision"] .bottom-nav,
 html[data-glass="vision"] .auth-notice {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  /* Vision tint without live acrylic — blur tanks scroll FPS */
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
   box-shadow: var(--glass-highlight) !important;

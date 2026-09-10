@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { api, ApiError, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, formatLedgerAmount, ledgerTypeLabel,
+  API_PATHS, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import { isTelegramMiniApp } from '../auth/telegramEnv';
@@ -648,7 +648,7 @@ export function Profile({
         <ProductLotCard
           key={item.id}
           product={item}
-          core={core}
+          online={sellerIsPresent(item.seller, core.profile, core.presenceOf(item.seller.onixId))}
           onOpen={() => openProductCard(item.id)}
           onFavorite={() => {
             setFavoriteProducts((prev) => prev.filter((row) => row.id !== item.id));
@@ -663,7 +663,7 @@ export function Profile({
         <ProductLotCard
           key={item.id}
           product={item}
-          core={core}
+          online={sellerIsPresent(item.seller, core.profile, core.presenceOf(item.seller.onixId))}
           onOpen={() => setEditing(item)}
           footer={(
             <div className="product-card__footer product-card__footer--bar">

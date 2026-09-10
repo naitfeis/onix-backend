@@ -262,13 +262,22 @@ export default function App() {
   ));
 
   useEffect(() => {
-    const sync = () => setShellWidth(window.innerWidth);
+    let raf = 0;
+    const sync = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const next = window.innerWidth;
+        setShellWidth((prev) => (prev === next ? prev : next));
+      });
+    };
     sync();
-    window.addEventListener('resize', sync);
+    window.addEventListener('resize', sync, { passive: true });
     window.visualViewport?.addEventListener('resize', sync);
     return () => {
       window.removeEventListener('resize', sync);
       window.visualViewport?.removeEventListener('resize', sync);
+      if (raf) cancelAnimationFrame(raf);
     };
   }, []);
 
@@ -380,6 +389,14 @@ export default function App() {
     window.addEventListener('pointerup', onUp);
   }, [leftIcons, rails.left, rails.right, rightIcons]);
 
+  const [mountedScreens, setMountedScreens] = useState<Record<Screen, boolean>>({
+    market: true,
+    deals: false,
+    create: false,
+    chat: false,
+    profile: false,
+  });
+
   const switchTo = (next: Screen) => {
     const from = TABS.findIndex(tab => tab.id === screen);
     const to = TABS.findIndex(tab => tab.id === next);
@@ -394,6 +411,7 @@ export default function App() {
     } else if (next === 'market') {
       setLoginPrompt(false);
     }
+    setMountedScreens((prev) => (prev[next] ? prev : { ...prev, [next]: true }));
     // Keep nav highlight snappy; heavy screen mount stays low-priority.
     startTransition(() => setScreen(next));
     telegramImpact('light');
@@ -712,53 +730,76 @@ export default function App() {
       <div className="screen-transition">
         <SoftErrorBoundary label="Экран не загрузился (сеть). Нажмите «Обновить».">
         <Suspense fallback={<ScreenFallback />}>
-          {screen === 'market' && <Market
-            core={core}
-            switchTo={switchTo}
-            setToast={setToast}
-            focusProductId={focusProductId}
-            onFocusProductHandled={() => setFocusProductId(null)}
-            openDirectChat={openDirectChat}
-            openProductCard={openProductCard}
-            onRequestLogin={() => setLoginPrompt(true)}
-            openDealChat={(chatId: string) => {
-              setFocusChatId(chatId);
-              switchTo('chat');
-            }}
-            externalCategory={marketCategory}
-            onExternalCategoryConsumed={() => setMarketCategory(MARKET_ALL_CATEGORY)}
-          />}
-          {screen === 'deals' && <Deals
-            core={core}
-            switchTo={switchTo}
-            setToast={setToast}
-            focusDealId={focusDealId}
-            onFocusDealHandled={() => setFocusDealId(null)}
-            openDirectChat={openDirectChat}
-            openDealChat={(chatId: string) => {
-              setFocusChatId(chatId);
-              switchTo('chat');
-            }}
-          />}
-          {screen === 'create' && <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />}
-          {screen === 'chat' && <Chats
-            core={core}
-            focusChatId={focusChatId}
-            onFocusChatHandled={() => setFocusChatId(null)}
-            openDirectChat={openDirectChat}
-            openProductCard={openProductCard}
-            openDeal={openDeal}
-            setToast={setToast}
-          />}
-          {screen === 'profile' && <Profile
-            core={core}
-            switchTo={switchTo}
-            setToast={setToast}
-            openDirectChat={openDirectChat}
-            openProductCard={openProductCard}
-            openTopup={openWalletTopup}
-            onTopupConsumed={() => setOpenWalletTopup(false)}
-          />}
+          {mountedScreens.market && (
+            <div className={`screen-panel${screen === 'market' ? ' is-active' : ''}`} hidden={screen !== 'market'} aria-hidden={screen !== 'market'}>
+              <Market
+                core={core}
+                active={screen === 'market'}
+                switchTo={switchTo}
+                setToast={setToast}
+                focusProductId={focusProductId}
+                onFocusProductHandled={() => setFocusProductId(null)}
+                openDirectChat={openDirectChat}
+                openProductCard={openProductCard}
+                onRequestLogin={() => setLoginPrompt(true)}
+                openDealChat={(chatId: string) => {
+                  setFocusChatId(chatId);
+                  switchTo('chat');
+                }}
+                externalCategory={marketCategory}
+                onExternalCategoryConsumed={() => setMarketCategory(MARKET_ALL_CATEGORY)}
+              />
+            </div>
+          )}
+          {mountedScreens.deals && (
+            <div className={`screen-panel${screen === 'deals' ? ' is-active' : ''}`} hidden={screen !== 'deals'} aria-hidden={screen !== 'deals'}>
+              <Deals
+                core={core}
+                active={screen === 'deals'}
+                switchTo={switchTo}
+                setToast={setToast}
+                focusDealId={focusDealId}
+                onFocusDealHandled={() => setFocusDealId(null)}
+                openDirectChat={openDirectChat}
+                openDealChat={(chatId: string) => {
+                  setFocusChatId(chatId);
+                  switchTo('chat');
+                }}
+              />
+            </div>
+          )}
+          {mountedScreens.create && (
+            <div className={`screen-panel${screen === 'create' ? ' is-active' : ''}`} hidden={screen !== 'create'} aria-hidden={screen !== 'create'}>
+              <ProductForm core={core} onDone={() => switchTo('market')} setToast={setToast} />
+            </div>
+          )}
+          {mountedScreens.chat && (
+            <div className={`screen-panel${screen === 'chat' ? ' is-active' : ''}`} hidden={screen !== 'chat'} aria-hidden={screen !== 'chat'}>
+              <Chats
+                core={core}
+                active={screen === 'chat'}
+                focusChatId={focusChatId}
+                onFocusChatHandled={() => setFocusChatId(null)}
+                openDirectChat={openDirectChat}
+                openProductCard={openProductCard}
+                openDeal={openDeal}
+                setToast={setToast}
+              />
+            </div>
+          )}
+          {mountedScreens.profile && (
+            <div className={`screen-panel${screen === 'profile' ? ' is-active' : ''}`} hidden={screen !== 'profile'} aria-hidden={screen !== 'profile'}>
+              <Profile
+                core={core}
+                switchTo={switchTo}
+                setToast={setToast}
+                openDirectChat={openDirectChat}
+                openProductCard={openProductCard}
+                openTopup={openWalletTopup}
+                onTopupConsumed={() => setOpenWalletTopup(false)}
+              />
+            </div>
+          )}
         </Suspense>
         </SoftErrorBoundary>
       </div>

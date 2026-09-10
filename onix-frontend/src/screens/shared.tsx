@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, isOnline, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
+  formatLastSeen, isOnline, sellerIsPresent, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { ReviewCard } from '../components/ReviewCard';
@@ -250,7 +250,7 @@ export function PublicProfileModal({
             <ProductLotCard
               key={item.id}
               product={product}
-              core={core}
+              online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
               onOpen={() => onOpenProduct?.(item.id)}
               hidePrice={false}
               footer={item.status !== 'ACTIVE' ? (
