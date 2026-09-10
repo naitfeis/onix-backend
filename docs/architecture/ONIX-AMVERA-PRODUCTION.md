@@ -195,4 +195,3 @@ Local `npx prisma migrate status` may show **P1001** if the laptop cannot reach 
 - Key rotation: `ONIX-KEY-ROTATION-RUNBOOK.md`
 - Bot login diagnostics: `ONIX-TELEGRAM-BOT-CHAIN-BREAK.md`
 - Attachments: `ONIX-CHAT-ATTACHMENTS-V1.md`
-- Historical cutover (wrong as of 2026-09): `ONIX-SINGLE-ORIGIN-MIGRATION.md`

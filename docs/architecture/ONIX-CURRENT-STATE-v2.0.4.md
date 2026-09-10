@@ -216,8 +216,16 @@ Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri 
 | `docs/architecture/ONIX-KEY-ROTATION-RUNBOOK.md` | ротация ключей |
 | `docs/architecture/AMVERA-SHIP-v2.0.4.md` | ship note ветки |
 | `docs/architecture/ops-evidence/*` | redacted evidence probes |
+| `docs/architecture/ONIX-STAGE-*` | доменная архитектура этапов (ещё актуальна) |
+| `docs/architecture/ONIX-PRIVACY-FIRST-SECURITY.md` | privacy principles |
+| `docs/architecture/ONIX-REDIS-SCALE-COORDINATION.md` | Redis scale-out |
+| `docs/architecture/ONIX-ADMIN-CONTROL-PLANE.md` | admin plane |
+| `docs/architecture/ONIX-AUTH-ED25519-PRODUCTION-CONFIG.md` | формат ключей Ed25519 |
+| `docs/architecture/ONIX-CHAT-ATTACHMENTS-V1.md` | R2 вложения |
+| `docs/architecture/ONIX-TELEGRAM-BOT-CHAIN-BREAK.md` | диагностика bot login |
+| `docs/architecture/ONIX-TRUST-STAGE1-FOUNDATION.md` | trust score |
 
-Исторические audit/hotfix `ONIX-HOTFIX-*`, `ONIX-AUTH-P*` — архив; не считать каноном топологии сентября 2026.
+Старые audit/hotfix/completion-отчёты (HOTFIX-*, AUTH-P*, SINGLE-ORIGIN, cutover Render/Vercel и т.п.) **удалены 2026-09-10** — канон топологии только этот файл + Amvera production.
 
 ---
 
@@ -225,4 +233,4 @@ Invoke-RestMethod -Method Post -ContentType "application/json" -Body $body -Uri 
 
 | Дата | Что зафиксировано |
 | --- | --- |
-| **2026-09-10** | Первая полная сводка v2.0.4: Amvera+grey-cloud ACK, Slack alerts, dispute SLA, durable Telegram update_id, money-launch gates, ветка `v2.0.4-amvera`, in-memory vs DB drills |
+| **2026-09-10** | Первая полная сводка v2.0.4; позже в тот же день — чистка устаревших architecture docs (46 файлов) |

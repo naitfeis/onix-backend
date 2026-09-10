@@ -146,9 +146,8 @@ flow до изменения UI.
 **Ship branch:** `docs/architecture/AMVERA-SHIP-v2.0.4.md`  
 **До денег (gates):** `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md`
 
-Исторические docs (`ONIX-SINGLE-ORIGIN-MIGRATION.md`, cutover с Vercel→Render
-webhook) описывают **июль 2026**. С сентября публичный origin — **Amvera Moscow**,
-не Render и не Vercel rewrite.
+Исторические cutover-доки (Vercel→Render webhook, SINGLE-ORIGIN, AUTH-P* reports, HOTFIX-*)
+**удалены 2026-09-10**. Канон топологии — только CURRENT-STATE + этот §0.1 + Amvera production.
 
 ```text
 Canonical:  https://www.onixtg.shop     (SPA + /api, same origin)
