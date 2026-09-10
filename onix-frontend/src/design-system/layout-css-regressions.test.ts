@@ -37,6 +37,12 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
+  it('keeps chat threads spaced so they do not stick together', () => {
+    expect(appCss).toMatch(/\.thread-list\s*\{[^}]*gap:\s*8px;/s);
+    expect(appCss).toMatch(/@media \(max-width: 699px\)\s*\{[\s\S]*?\.thread-list\s*\{[^}]*gap:\s*10px;/s);
+    expect(appCss).not.toMatch(/\.thread-list, \.conversation\s*\{[^}]*gap:\s*0;/s);
+  });
+
   it('does not force a crushed icon rail between 900px and 1099px', () => {
     expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
   });

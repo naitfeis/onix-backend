@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { Suspense, startTransition, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import SiteFooter from './components/SiteFooter';
 import { api, money, moneyAmount } from './api/client';
 import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
@@ -240,7 +240,6 @@ export default function App() {
   const [focusChatId, setFocusChatId] = useState<string | null>(null);
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
-  const [headerBlur, setHeaderBlur] = useState(0);
   const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -395,7 +394,8 @@ export default function App() {
     } else if (next === 'market') {
       setLoginPrompt(false);
     }
-    setScreen(next);
+    // Keep nav highlight snappy; heavy screen mount stays low-priority.
+    startTransition(() => setScreen(next));
     telegramImpact('light');
   };
 
@@ -442,16 +442,6 @@ export default function App() {
     const id = window.setInterval(tick, 30_000);
     return () => window.clearInterval(id);
   }, [banNotice?.bannedUntil, banNotice?.permanent]);
-
-  useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY || document.documentElement.scrollTop || 0;
-      setHeaderBlur(Math.min(1, y / 40));
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   useEffect(() => {
     void import('./screens/Market');
@@ -574,7 +564,6 @@ export default function App() {
     <div
       className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
       style={{
-        '--header-blur': headerBlur,
         '--sidebar-left-w': `${rails.left}px`,
         '--sidebar-right-w': `${rails.right}px`,
       } as CSSProperties}
@@ -720,7 +709,7 @@ export default function App() {
       </header>
 
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
-      <div key={screen} className="screen-transition">
+      <div className="screen-transition">
         <SoftErrorBoundary label="Экран не загрузился (сеть). Нажмите «Обновить».">
         <Suspense fallback={<ScreenFallback />}>
           {screen === 'market' && <Market

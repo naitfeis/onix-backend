@@ -758,28 +758,13 @@ export function useOnixCore() {
       }
       if (msg.type === 'presence') {
         const key = normOnixId(msg.onixId);
-        setPresenceByOnixId((previous) => ({
-          ...previous,
-          [key]: { online: msg.online, lastOnline: msg.lastOnline },
-        }));
-        setStore((previous) => ({
-          ...previous,
-          chats: previous.chats.map((chat) => (
-            chat.peerOnixId && normOnixId(chat.peerOnixId) === key
-              ? { ...chat, peerLastOnline: msg.lastOnline }
-              : chat
-          )),
-          products: previous.products.map((product) => (
-            normOnixId(product.seller.onixId) === key
-              ? { ...product, seller: { ...product.seller, lastOnline: msg.lastOnline } }
-              : product
-          )),
-          deals: previous.deals.map((deal) => (
-            normOnixId(deal.counterparty.onixId) === key
-              ? { ...deal, counterparty: { ...deal.counterparty, lastOnline: msg.lastOnline } }
-              : deal
-          )),
-        }));
+        // Presence map is the source of truth for online dots / last-seen.
+        // Do not remap products/chats/deals — that re-renders the whole app on every beat.
+        setPresenceByOnixId((previous) => {
+          const cur = previous[key];
+          if (cur && cur.online === msg.online && cur.lastOnline === msg.lastOnline) return previous;
+          return { ...previous, [key]: { online: msg.online, lastOnline: msg.lastOnline } };
+        });
         return;
       }
       if (msg.type === 'order.updated') {

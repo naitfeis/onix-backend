@@ -501,7 +501,10 @@ html[data-theme="dark"] .wallet-strip,
 html[data-theme="dark"] .section-head,
 html[data-theme="dark"] .search-bar,
 html[data-theme="dark"] .bottom-nav,
-html[data-theme="dark"] .auth-notice {
+html[data-theme="dark"] .auth-notice,
+html[data-theme="dark"] .topbar,
+html[data-theme="dark"] .control,
+html[data-theme="dark"] .modal__panel {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background: var(--glass-card-bg) !important;

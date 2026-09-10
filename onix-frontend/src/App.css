@@ -646,6 +646,7 @@ html[data-theme="light"] .auth-notice__command {
   letter-spacing: .01em;
   text-decoration: none;
   cursor: pointer;
+  touch-action: manipulation;
   transition: transform 120ms var(--ease), color 180ms, background 180ms, border-color 180ms, box-shadow 180ms;
 }
 .button:hover:not(:disabled) { transform: translateY(-1px); }
@@ -2957,7 +2958,9 @@ html[data-theme="light"] .timeline li {
   grid-template-columns: 1fr;
   gap: 0;
 }
-.thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; gap: 0; }
+.thread-list, .conversation { min-width: 0; display: flex; flex-direction: column; }
+.thread-list { gap: 8px; }
+.conversation { gap: 0; }
 
 /* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
 .app-shell--chat .viewport {
@@ -3210,8 +3213,8 @@ body.is-resizing-chat * {
 .chat-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .thread {
   width: 100%;
-  padding: 13px;
-  min-height: 116px;
+  padding: 12px;
+  min-height: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -3229,6 +3232,7 @@ body.is-resizing-chat * {
   backdrop-filter: none;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 html[data-theme="light"] .thread {
   background: #fff;
@@ -3268,13 +3272,13 @@ html[data-theme="light"] .thread {
 .thread small {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.35;
-  max-height: calc(1.35em * 4);
+  max-height: calc(1.35em * 2);
 }
 .thread small, .conversation__head small { color: var(--muted); }
 .conversation__head small {
@@ -4355,6 +4359,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   transition: color 220ms;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 .bottom-nav button:active,
 .bottom-nav button:focus-visible {
@@ -4476,11 +4481,47 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .app-shell--chat .chat-col-resizer {
     display: none !important;
   }
+  .thread-list {
+    gap: 10px;
+  }
   .thread {
-    min-height: 128px;
+    min-height: 0;
+    padding: 12px;
   }
   .public-profile > .profile-card {
     padding: 16px;
+  }
+
+  /* Mobile input latency: skip page fade + kill remaining acrylic blur */
+  .screen-transition {
+    animation: none;
+  }
+  .button {
+    transition: color 120ms, background 120ms, border-color 120ms;
+  }
+  .button:hover:not(:disabled) {
+    transform: none;
+  }
+  html[data-theme="dark"] .topbar,
+  html[data-theme="dark"] .control,
+  html[data-theme="dark"] .modal__panel,
+  html[data-theme="dark"] .select-menu__trigger,
+  .bottom-nav,
+  .ai-actions,
+  .message-menu,
+  .new-messages-pill {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .button,
+  .bottom-nav button,
+  .product-card__buy,
+  .product-card__media-hit,
+  .product-main,
+  .favorite,
+  .cat-card,
+  .icon-btn {
+    touch-action: manipulation;
   }
 }
 @media (min-width: 560px) {
