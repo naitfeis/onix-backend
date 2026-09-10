@@ -336,6 +336,8 @@ export type ProductListQuery = {
   autoDeliver?: boolean;
   limit?: number;
   offset?: number;
+  /** Keyset cursor from encodeProductListCursor — preferred over offset for load-more. */
+  cursor?: string;
 };
 
 export type OrderListSort = 'newest' | 'oldest' | 'expensive' | 'cheap';
@@ -344,6 +346,8 @@ export type OrderListStatus = 'open' | 'active' | 'completed' | 'canceled' | 'di
 export type OrderListQuery = {
   sort?: OrderListSort;
   status?: OrderListStatus;
+  limit?: number;
+  cursor?: string;
 };
 
 export function productsListPath(query: ProductListQuery = {}): string {
@@ -357,7 +361,8 @@ export function productsListPath(query: ProductListQuery = {}): string {
   if (query.sort) params.set('sort', query.sort);
   if (query.autoDeliver) params.set('autoDeliver', 'true');
   if (query.limit != null) params.set('limit', String(query.limit));
-  if (query.offset != null) params.set('offset', String(query.offset));
+  if (query.cursor) params.set('cursor', query.cursor);
+  else if (query.offset != null) params.set('offset', String(query.offset));
   const qs = params.toString();
   return qs ? `/api/products?${qs}` : '/api/products';
 }
@@ -382,6 +387,8 @@ export function ordersListPath(query: OrderListQuery = {}): string {
   const params = new URLSearchParams();
   if (query.sort) params.set('sort', query.sort);
   if (query.status) params.set('status', query.status);
+  if (query.limit != null) params.set('limit', String(query.limit));
+  if (query.cursor) params.set('cursor', query.cursor);
   const qs = params.toString();
   return qs ? `/api/orders?${qs}` : '/api/orders';
 }

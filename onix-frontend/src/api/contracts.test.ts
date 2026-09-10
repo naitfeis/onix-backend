@@ -40,6 +40,8 @@ describe('ONIX API paths', () => {
       .toBe('/api/products?category=STEAM&sort=rating&limit=30&offset=0');
     expect(productsListPath({ search: 'Knife', minPriceCents: '1000', maxPriceCents: '50000' }))
       .toBe('/api/products?search=Knife&minPriceCents=1000&maxPriceCents=50000');
+    expect(productsListPath({ limit: 15, cursor: 'newest|id|2026-01-01T00:00:00.000Z' }))
+      .toBe('/api/products?limit=15&cursor=newest%7Cid%7C2026-01-01T00%3A00%3A00.000Z');
   });
 
   it('builds lazy wallet ledger and mine listings pages', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, createContext, useContext, type ReactNode } from 'react';
 import { api, money } from '../api/client';
 import { API_PATHS, SUBCATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -8,6 +8,18 @@ import type { Core, Screen } from './types';
 import { DEAL_FILTERS, DEAL_PHASES, PublicProfileModal, dealLabels, dealProgress } from './shared';
 import { WARRANTY_DEFAULT_HOURS, formatDealCountdown } from '../utils/warranty';
 import { categoryLabel as displayCategory } from '../i18n';
+
+const DealClockContext = createContext(Date.now());
+
+function DealClockProvider({ children, active }: { children: ReactNode; active: boolean }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return <DealClockContext.Provider value={now}>{children}</DealClockContext.Provider>;
+}
 
 export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | null; core: Core; onClose: () => void; setToast: (text: string) => void }) {
   const [rating, setRating] = useState(5);
@@ -64,6 +76,12 @@ export function Deals({
     onFocusDealHandled();
   }, [core.deals, focusDealId, onFocusDealHandled]);
   const deals = core.deals.filter(deal => deal.role === role);
+  const needsClock = deals.some((d) => (
+    Boolean(d.warrantyEndsAt)
+    && d.status !== 'COMPLETED'
+    && d.status !== 'CANCELED'
+    && d.status !== 'REFUNDED'
+  ));
 
   const openPeer = async (deal: Deal) => {
     try {
@@ -97,7 +115,7 @@ export function Deals({
     ))}</div>
     {core.states.deals === 'loading' ? <Card><Skeleton lines={5} /></Card> : core.states.deals === 'error' ? <StateView title="Сделки не загрузились" text={core.errors.deals || ''} action={<Button onClick={core.refreshAll}>Повторить</Button>} /> :
       deals.length === 0 ? <StateView title="Здесь пока пусто" text={role === 'buyer' ? 'Купите товар — сделка появится здесь.' : 'Опубликуйте товар и дождитесь покупателя.'} /> :
-      deals.map(deal => {
+      <DealClockProvider active={needsClock}>{deals.map(deal => {
         const categoryName = displayCategory(deal.product.category);
         const subLabel = deal.product.subcategory
           ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)
@@ -198,7 +216,7 @@ export function Deals({
         </div>
       </Card>
         );
-      })}
+      })}</DealClockProvider>}
     <Confirm open={Boolean(confirm)} dangerous={confirm?.action === 'dispute' || confirm?.action === 'cancel'} busy={core.actionBusy?.startsWith('deal-')} title={confirm?.action === 'complete' ? 'Выдать деньги продавцу?' : confirm?.action === 'dispute' ? 'Открыть спор?' : confirm?.action === 'cancel' ? 'Отменить сделку?' : 'Подтвердить передачу?'}
       text={confirm?.action === 'complete' ? 'Это действие необратимо. Подтверждайте только после проверки товара.' : confirm?.action === 'dispute' ? 'Сделка будет остановлена и передана администратору.' : confirm?.action === 'cancel' ? 'Отменить можно только до передачи товара, пока деньги ещё в сейфе. Сумма вернётся покупателю, продавец выплату не получит.' : 'Покупатель получит уведомление о передаче.'}
       onCancel={() => setConfirm(null)} onConfirm={async () => { if (confirm && await core.dealAction(confirm.deal, confirm.action)) { setToast(confirm.action === 'cancel' ? 'Сделка отменена, средства возвращены.' : 'Статус сделки обновлён.'); setConfirm(null); } }} />
@@ -223,14 +241,7 @@ export function Deals({
 }
 function DealPayoutTimer({ deal }: { deal: Deal }) {
   const hours = deal.warrantyHours ?? deal.product.warrantyHours ?? WARRANTY_DEFAULT_HOURS;
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!deal.warrantyEndsAt || deal.status === 'COMPLETED' || deal.status === 'CANCELED' || deal.status === 'REFUNDED') {
-      return;
-    }
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [deal.status, deal.warrantyEndsAt]);
+  const now = useContext(DealClockContext);
   if (deal.status === 'COMPLETED') {
     return <em className="timeline__timer">выплачено</em>;
   }

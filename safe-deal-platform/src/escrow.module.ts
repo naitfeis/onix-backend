@@ -38,6 +38,53 @@ import { computeSaleAmounts } from './pricing';
 import { dealPartySelect, dealProductSelect, dealWarrantySelect } from './query-selects';
 import { dealDto } from './response';
 import { hideReviewsForOrder } from './marketplace/review-aggregate';
+
+function decodeOrderListCursor(
+  raw: string | undefined,
+  sort: string,
+): Prisma.OrderWhereInput | null {
+  if (!raw?.trim()) return null;
+  const sep = raw.indexOf('|');
+  if (sep <= 0) return null;
+  const left = raw.slice(0, sep);
+  const idRaw = raw.slice(sep + 1).trim();
+  if (!/^\d+$/.test(idRaw)) return null;
+  const id = BigInt(idRaw);
+  if (sort === 'expensive' || sort === 'cheap') {
+    if (!/^\d+$/.test(left)) return null;
+    const totalAmountCents = BigInt(left);
+    if (sort === 'cheap') {
+      return {
+        OR: [
+          { totalAmountCents: { gt: totalAmountCents } },
+          { AND: [{ totalAmountCents }, { id: { gt: id } }] },
+        ],
+      };
+    }
+    return {
+      OR: [
+        { totalAmountCents: { lt: totalAmountCents } },
+        { AND: [{ totalAmountCents }, { id: { lt: id } }] },
+      ],
+    };
+  }
+  const createdAt = new Date(left);
+  if (!Number.isFinite(createdAt.getTime())) return null;
+  if (sort === 'oldest') {
+    return {
+      OR: [
+        { createdAt: { gt: createdAt } },
+        { AND: [{ createdAt }, { id: { gt: id } }] },
+      ],
+    };
+  }
+  return {
+    OR: [
+      { createdAt: { lt: createdAt } },
+      { AND: [{ createdAt }, { id: { lt: id } }] },
+    ],
+  };
+}
 import { CHECKOUT_SETTLEMENT, type PurchaseInTxOptions } from './checkout-settlement';
 import {
   ADMIN_COMPLETE_FROM,
@@ -68,6 +115,9 @@ class OrderQuery {
   @IsOptional() @IsIn(['newest', 'oldest', 'expensive', 'cheap']) sort?: string;
   /** all (omit) | open | completed | active | canceled | dispute | archive */
   @IsOptional() @IsIn(['open', 'active', 'completed', 'canceled', 'dispute', 'archive']) status?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit?: number;
+  /** Keyset: opaque `createdAt|id` or `totalAmountCents|id` depending on sort. */
+  @IsOptional() @IsString() @Length(3, 120) cursor?: string;
 }
 
 /**
@@ -125,13 +175,21 @@ export class EscrowService {
       query.status === 'dispute' ? { status: 'DISPUTE' } :
       query.status === 'archive' ? { status: { in: ['CANCELED', 'REFUNDED'] } } :
       {};
-    const orderBy: Prisma.OrderOrderByWithRelationInput =
-      query.sort === 'oldest' ? { createdAt: 'asc' } :
-      query.sort === 'expensive' ? { totalAmountCents: 'desc' } :
-      query.sort === 'cheap' ? { totalAmountCents: 'asc' } :
-      { createdAt: 'desc' };
+    const sort = query.sort ?? 'newest';
+    const orderBy: Prisma.OrderOrderByWithRelationInput[] =
+      sort === 'oldest' ? [{ createdAt: 'asc' }, { id: 'asc' }] :
+      sort === 'expensive' ? [{ totalAmountCents: 'desc' }, { id: 'desc' }] :
+      sort === 'cheap' ? [{ totalAmountCents: 'asc' }, { id: 'asc' }] :
+      [{ createdAt: 'desc' }, { id: 'desc' }];
+    const take = Math.min(Math.max(query.limit ?? 100, 1), 100);
+    const cursorWhere = decodeOrderListCursor(query.cursor, sort);
     const orders = await this.prisma.order.findMany({
-      where: { OR: [{ buyerId: user.id }, { sellerId: user.id }], ...statusWhere },
+      relationLoadStrategy: 'join',
+      where: {
+        OR: [{ buyerId: user.id }, { sellerId: user.id }],
+        ...statusWhere,
+        ...(cursorWhere ?? {}),
+      },
       select: {
         id: true,
         buyerId: true,
@@ -152,7 +210,7 @@ export class EscrowService {
         },
       },
       orderBy,
-      take: 100,
+      take,
     });
     return orders.map((order) => {
       const ticket = order.supportTickets[0]

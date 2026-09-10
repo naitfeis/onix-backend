@@ -59,21 +59,45 @@ export class WithdrawVelocityService {
       where: { id: userId },
       select: { createdAt: true },
     });
-    if (!isNewAccount(user.createdAt, now)) return null;
+    const batch = await this.resolveAccountSaleProtectionFlags(
+      [{ id: userId, createdAt: user.createdAt }],
+      db,
+      now,
+    );
+    return batch.get(userId.toString()) ?? null;
+  }
 
-    const rows = await this.loadProvenanceRows(db, userId);
-    const { bucketsAfterHistory } = allocateWithdraw(rows, 0n);
-    if (bucketsAfterHistory.accountSale <= 0n) return null;
+  /**
+   * Batch yellow-flag resolve — one ledger + order round-trip for many users
+   * (admin dashboard / withdrawals list). Same semantics as the single-user path.
+   */
+  async resolveAccountSaleProtectionFlags(
+    users: Array<{ id: bigint; createdAt: Date }>,
+    db: Db = this.prisma,
+    now = new Date(),
+  ): Promise<Map<string, AccountSaleProtectionFlag>> {
+    const out = new Map<string, AccountSaleProtectionFlag>();
+    const newUsers = users.filter((u) => isNewAccount(u.createdAt, now));
+    if (!newUsers.length) return out;
 
-    const until = protectionUntil(user.createdAt);
-    return {
-      code: 'ACCOUNT_SALE_FUNDS_UNDER_PROTECTION',
-      severity: 'YELLOW',
-      userId: userId.toString(),
-      accountAgeDays: accountAgeDays(user.createdAt, now),
-      restrictedAccountSaleCents: bucketsAfterHistory.accountSale.toString(),
-      protectionUntil: until.toISOString(),
-    };
+    const userIds = newUsers.map((u) => u.id);
+    const rowsByUser = await this.loadProvenanceRowsForUsers(db, userIds);
+
+    for (const user of newUsers) {
+      const rows = rowsByUser.get(user.id.toString()) ?? [];
+      const { bucketsAfterHistory } = allocateWithdraw(rows, 0n);
+      if (bucketsAfterHistory.accountSale <= 0n) continue;
+      const until = protectionUntil(user.createdAt);
+      out.set(user.id.toString(), {
+        code: 'ACCOUNT_SALE_FUNDS_UNDER_PROTECTION',
+        severity: 'YELLOW',
+        userId: user.id.toString(),
+        accountAgeDays: accountAgeDays(user.createdAt, now),
+        restrictedAccountSaleCents: bucketsAfterHistory.accountSale.toString(),
+        protectionUntil: until.toISOString(),
+      });
+    }
+    return out;
   }
 
   async assertAllowed(input: WithdrawAssertInput): Promise<{ allocation: WithdrawAllocation; newAccount: boolean }> {
@@ -153,10 +177,22 @@ export class WithdrawVelocityService {
   }
 
   private async loadProvenanceRows(db: Db, userId: bigint): Promise<LedgerRowForProvenance[]> {
+    const map = await this.loadProvenanceRowsForUsers(db, [userId]);
+    return map.get(userId.toString()) ?? [];
+  }
+
+  private async loadProvenanceRowsForUsers(
+    db: Db,
+    userIds: bigint[],
+  ): Promise<Map<string, LedgerRowForProvenance[]>> {
+    const out = new Map<string, LedgerRowForProvenance[]>();
+    if (!userIds.length) return out;
+
     const entries = await db.ledgerEntry.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'asc' },
+      where: { userId: { in: userIds } },
+      orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }],
       select: {
+        userId: true,
         type: true,
         amountCents: true,
         fundKind: true,
@@ -189,16 +225,26 @@ export class WithdrawVelocityService {
       }
     }
 
-    return entries.map((e) => ({
-      type: e.type,
-      amountCents: e.amountCents,
-      fundKind: e.fundKind as LedgerRowForProvenance['fundKind'],
-      saleKind: (e.saleKind as LedgerRowForProvenance['saleKind']) ?? null,
-      idempotencyKey: e.idempotencyKey,
-      createdAt: e.createdAt,
-      productSubcategory: e.orderId
-        ? subcategoryByOrder.get(e.orderId.toString()) ?? null
-        : null,
-    }));
+    for (const e of entries) {
+      const key = (e as { userId?: bigint }).userId != null
+        ? (e as { userId: bigint }).userId.toString()
+        : (userIds.length === 1 ? userIds[0]!.toString() : '');
+      if (!key) continue;
+      const row: LedgerRowForProvenance = {
+        type: e.type,
+        amountCents: e.amountCents,
+        fundKind: e.fundKind as LedgerRowForProvenance['fundKind'],
+        saleKind: (e.saleKind as LedgerRowForProvenance['saleKind']) ?? null,
+        idempotencyKey: e.idempotencyKey,
+        createdAt: e.createdAt,
+        productSubcategory: e.orderId
+          ? subcategoryByOrder.get(e.orderId.toString()) ?? null
+          : null,
+      };
+      const list = out.get(key);
+      if (list) list.push(row);
+      else out.set(key, [row]);
+    }
+    return out;
   }
 }

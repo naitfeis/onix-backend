@@ -133,10 +133,13 @@ export class AdminSecurityService {
       orderBy: { createdAt: 'desc' },
       take: 500,
     });
+    const flagByUser = await this.withdrawVelocity.resolveAccountSaleProtectionFlags(
+      candidates.map((u) => ({ id: u.id, createdAt: u.createdAt })),
+    );
     const flags: Array<Record<string, unknown>> = [];
     for (const user of candidates) {
       if (flags.length >= limit) break;
-      const flag = await this.withdrawVelocity.resolveAccountSaleProtectionFlag(user.id);
+      const flag = flagByUser.get(user.id.toString());
       if (!flag) continue;
       flags.push({
         ...flag,
@@ -1537,12 +1540,17 @@ export class AdminSecurityService {
       },
     });
 
+    const flagCandidates = rows
+      .filter((row) => isNewAccount(row.user.createdAt))
+      .map((row) => ({ id: row.userId, createdAt: row.user.createdAt }));
+    const flagByUser = flagCandidates.length
+      ? await this.withdrawVelocity.resolveAccountSaleProtectionFlags(flagCandidates)
+      : new Map();
+
     const out: Array<Record<string, unknown>> = [];
     for (const row of rows) {
       const ageDays = Math.floor((Date.now() - row.user.createdAt.getTime()) / 86_400_000);
-      const yellow = isNewAccount(row.user.createdAt)
-        ? await this.withdrawVelocity.resolveAccountSaleProtectionFlag(row.userId)
-        : null;
+      const yellow = flagByUser.get(row.userId.toString()) ?? null;
       out.push({
         id: row.id.toString(),
         userId: row.userId.toString(),

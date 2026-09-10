@@ -39,6 +39,11 @@ import {
   clampWarrantyHoursForSeller,
   WARRANTY_DEFAULT_HOURS,
 } from './marketplace/warranty';
+import {
+  decodeProductListCursor,
+  productListCursorWhere,
+  type ProductListSort,
+} from './marketplace/product-list-cursor';
 
 function toBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -107,6 +112,8 @@ class ProductQuery {
   @IsOptional() @Transform(({ value }) => toBoolean(value)) @IsBoolean() autoDeliver?: boolean;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 30;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(10_000) offset = 0;
+  /** Keyset cursor — preferred over offset for deep pages (same filters/sort). */
+  @IsOptional() @IsString() @Length(3, 240) cursor?: string;
 }
 
 function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
@@ -143,6 +150,9 @@ function deliveryFields(dto: { autoDeliver?: boolean; deliveryText?: string }) {
 
 @Injectable()
 export class MarketplaceService {
+  /** Short TTL cache for Roblox reco preference — avoids order scan on every first page. */
+  private readonly recoCache = new Map<string, { roblox: boolean; expiresAt: number }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeBus,
@@ -200,6 +210,8 @@ export class MarketplaceService {
       const n = Number(m[1]);
       return Number.isFinite(n) && n > 0 ? n : undefined;
     })();
+    const sort = (query.sort ?? 'newest') as ProductListSort;
+    const cursor = decodeProductListCursor(query.cursor, sort);
     const where: Prisma.ProductWhereInput = {
       status: ProductStatus.ACTIVE,
       shadowBannedAt: null,
@@ -221,24 +233,28 @@ export class MarketplaceService {
           ...(query.maxPriceCents ? { lte: BigInt(query.maxPriceCents) } : {}),
         },
       } : {}),
+      ...(cursor ? productListCursorWhere(cursor) : {}),
     };
     const orderBy: Prisma.ProductOrderByWithRelationInput | Prisma.ProductOrderByWithRelationInput[] =
-      query.sort === 'price_asc' ? { priceCents: 'asc' } :
-      query.sort === 'price_desc' ? { priceCents: 'desc' } :
-      query.sort === 'rating' ? [{ seller: { ratingAverage: 'desc' } }, { seller: { ratingCount: 'desc' } }] :
-      query.sort === 'warranty' ? { warrantyHours: 'desc' } :
-      query.sort === 'reliability' ? [
+      sort === 'price_asc' ? [{ priceCents: 'asc' }, { id: 'asc' }] :
+      sort === 'price_desc' ? [{ priceCents: 'desc' }, { id: 'desc' }] :
+      sort === 'rating' ? [{ seller: { ratingAverage: 'desc' } }, { seller: { ratingCount: 'desc' } }, { id: 'desc' }] :
+      sort === 'warranty' ? [{ warrantyHours: 'desc' }, { id: 'desc' }] :
+      sort === 'reliability' ? [
         { seller: { ratingAverage: 'desc' } },
         { seller: { ratingCount: 'desc' } },
         { warrantyHours: 'desc' },
         { seller: { completedSales: 'desc' } },
+        { id: 'desc' },
       ] :
-      { createdAt: 'desc' };
+      [{ createdAt: 'desc' }, { id: 'desc' }];
     // Lean catalog: no description, no view counts, no followers COUNT / Follow probe.
     // Single round-trip via relationLoadStrategy join (avoids parallel client.query on adapter-pg).
+    // Prefer keyset cursor; offset kept for API compat / first-page bootstrap.
     let products = await this.prisma.product.findMany({
       relationLoadStrategy: 'join',
-      where, orderBy, take: query.limit, skip: query.offset,
+      where, orderBy, take: query.limit,
+      ...(cursor ? {} : { skip: query.offset }),
       select: {
         ...productListSelect,
         seller: { select: sellerCatalogSelect },
@@ -247,7 +263,7 @@ export class MarketplaceService {
           : {}),
       },
     });
-    if (viewerId != null && query.offset === 0) {
+    if (viewerId != null && !cursor && query.offset === 0) {
       products = await this.prioritizeRecommendations(viewerId, products, query.limit);
     }
     return products.map((product) => productDto(
@@ -546,17 +562,31 @@ export class MarketplaceService {
     warrantyHours?: number | null;
     seller: { ratingAverage: unknown; ratingCount: number; completedSales: number };
   }>(viewerId: bigint, products: T[], limit: number): Promise<T[]> {
-    const bought = await this.prisma.order.findMany({
-      where: { buyerId: viewerId, status: { in: ['COMPLETED', 'PAYMENT_HOLD', 'DELIVERING'] } },
-      orderBy: { createdAt: 'desc' },
-      take: 40,
-      select: { product: { select: { category: true, subcategory: true } } },
-    });
-    const roblox = bought.some((row) => (
-      row.product.category === 'ROBLOX'
-      || (row.product.subcategory != null
-        && (ROBLOX_RECO_SUBCATEGORIES as readonly string[]).includes(row.product.subcategory))
-    ));
+    const cacheKey = viewerId.toString();
+    const cached = this.recoCache.get(cacheKey);
+    let roblox: boolean;
+    if (cached && cached.expiresAt > Date.now()) {
+      roblox = cached.roblox;
+    } else {
+      const bought = await this.prisma.order.findMany({
+        where: { buyerId: viewerId, status: { in: ['COMPLETED', 'PAYMENT_HOLD', 'DELIVERING'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+        select: { product: { select: { category: true, subcategory: true } } },
+      });
+      roblox = bought.some((row) => (
+        row.product.category === 'ROBLOX'
+        || (row.product.subcategory != null
+          && (ROBLOX_RECO_SUBCATEGORIES as readonly string[]).includes(row.product.subcategory))
+      ));
+      this.recoCache.set(cacheKey, { roblox, expiresAt: Date.now() + 120_000 });
+      if (this.recoCache.size > 5_000) {
+        const now = Date.now();
+        for (const [k, v] of this.recoCache) {
+          if (v.expiresAt <= now) this.recoCache.delete(k);
+        }
+      }
+    }
     if (!roblox) return products;
     const scored = products.map((product) => {
       const similar = product.category === 'ROBLOX'

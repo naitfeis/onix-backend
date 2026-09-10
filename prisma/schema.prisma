@@ -102,6 +102,7 @@ model User {
 
   @@index([platformStatus])
   @@index([displayName])
+  @@index([ratingAverage, ratingCount])
 }
 
 model Product {
@@ -142,6 +143,7 @@ model Product {
   @@index([status, priceCents])
   @@index([status, shadowBannedAt, createdAt])
   @@index([warrantyHours])
+  @@index([status, warrantyHours])
 }
 
 model Favorite {

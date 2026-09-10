@@ -17,6 +17,7 @@ import { getRealtimeClient } from '../realtime/client';
 import { t, categoryLabel, isMarketAllCategory, MARKET_ALL_CATEGORY } from '../i18n';
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
 import { AllGridIcon } from '../components/BrandLogos';
+import { encodeProductListCursor } from '../utils/productListCursor';
 
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
@@ -167,7 +168,6 @@ export function Market({
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
-  const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
@@ -286,7 +286,6 @@ export function Market({
         setHasMore(next.length >= PAGE);
         setMarketError(undefined);
         setMarketState('success');
-        setOffset(0);
         return;
       }
       if (core.states.products === 'loading' || core.states.products === 'idle') {
@@ -300,7 +299,6 @@ export function Market({
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
       setMarketState('loading');
-      setOffset(0);
       const q = query.trim();
         const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
       void core.listProducts({
@@ -379,23 +377,23 @@ export function Market({
   }, []);
 
   const loadMore = async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || !items.length) return;
     setLoadingMore(true);
-    const next = offset + PAGE;
     try {
       const q = query.trim();
       const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
+      const serverSort = toServerSort(sort);
+      const last = items[items.length - 1]!;
       const data = await core.listProducts({
         search: searchCat ? undefined : (q || undefined),
         category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
-        sort: toServerSort(sort),
+        sort: serverSort,
         autoDeliver: autoDeliverOnly || undefined,
         limit: PAGE,
-        offset: next,
+        cursor: encodeProductListCursor(serverSort, last),
       });
       setItems((prev) => [...prev, ...visibleProducts(data)]);
-      setOffset(next);
       setHasMore(data.length >= PAGE);
     } catch (error) {
       setToast(friendlyError(error));
@@ -446,11 +444,16 @@ export function Market({
   useEffect(() => {
     const entries = Object.entries(core.presenceByOnixId);
     if (!entries.length) return;
-    setItems((prev) => prev.map((product) => {
-      const live = core.presenceOf(product.seller.onixId);
-      if (!live || product.seller.lastOnline === live.lastOnline) return product;
-      return { ...product, seller: { ...product.seller, lastOnline: live.lastOnline } };
-    }));
+    setItems((prev) => {
+      let touched = false;
+      const next = prev.map((product) => {
+        const live = core.presenceOf(product.seller.onixId);
+        if (!live || product.seller.lastOnline === live.lastOnline) return product;
+        touched = true;
+        return { ...product, seller: { ...product.seller, lastOnline: live.lastOnline } };
+      });
+      return touched ? next : prev;
+    });
   }, [core.presenceByOnixId, core.presenceOf]);
 
   useEffect(() => {

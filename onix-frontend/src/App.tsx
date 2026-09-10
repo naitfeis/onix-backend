@@ -455,13 +455,26 @@ export default function App() {
 
   useEffect(() => {
     void import('./screens/Market');
-    const warm = window.setTimeout(() => {
+    const warmScreens = () => {
       void import('./screens/Deals');
       void import('./screens/Chats');
       void import('./screens/Profile');
       void import('./screens/ProductForm');
-    }, 1500);
-    return () => window.clearTimeout(warm);
+    };
+    let idleId = 0;
+    let timeoutId = 0;
+    const ric = window.requestIdleCallback;
+    if (typeof ric === 'function') {
+      idleId = ric(() => warmScreens(), { timeout: 2500 });
+    } else {
+      timeoutId = window.setTimeout(warmScreens, 1500);
+    }
+    return () => {
+      if (idleId && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const onAuthenticated = () => {

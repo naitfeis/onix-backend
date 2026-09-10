@@ -404,20 +404,28 @@ export function Profile({
   useEffect(() => {
     if (!stepUp) return;
     let cancelled = false;
+    let intervalId = 0;
+    const stop = () => {
+      if (intervalId) window.clearInterval(intervalId);
+      intervalId = 0;
+    };
     const tick = async () => {
       try {
         const row = await api.get<{ status: string }>(API_PATHS.mfaStatus(stepUp.challengeId));
         if (cancelled) return;
         setStepUpStatus(row.status);
+        if (row.status === 'VERIFIED' || row.status === 'EXPIRED' || row.status === 'CANCELED' || row.status === 'FAILED') {
+          stop();
+        }
       } catch {
         /* keep polling */
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 2500);
+    intervalId = window.setInterval(() => void tick(), 2500);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      stop();
     };
   }, [stepUp]);
 

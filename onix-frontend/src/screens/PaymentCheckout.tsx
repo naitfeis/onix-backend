@@ -34,6 +34,11 @@ export default function PaymentCheckout({
       return;
     }
     let cancelled = false;
+    let intervalId = 0;
+    const stop = () => {
+      if (intervalId) window.clearInterval(intervalId);
+      intervalId = 0;
+    };
     const tick = async () => {
       try {
         const row = await api.get<IntentView>(API_PATHS.paymentIntent(intentId));
@@ -41,9 +46,11 @@ export default function PaymentCheckout({
         setIntent(row);
         if (row.status === 'SUCCEEDED' && !doneRef.current) {
           doneRef.current = true;
+          stop();
           onDone();
         }
-        if (row.status === 'FAILED' || row.status === 'CANCELED') {
+        if (row.status === 'FAILED' || row.status === 'CANCELED' || row.status === 'EXPIRED') {
+          stop();
           setError('Платёж не прошёл. Попробуйте ещё раз.');
         }
       } catch (err) {
@@ -51,10 +58,10 @@ export default function PaymentCheckout({
       }
     };
     void tick();
-    const id = window.setInterval(() => void tick(), 2500);
+    intervalId = window.setInterval(() => void tick(), 2500);
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      stop();
     };
   }, [intentId, onDone]);
 
