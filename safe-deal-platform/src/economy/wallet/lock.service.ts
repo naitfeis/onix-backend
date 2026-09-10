@@ -69,14 +69,88 @@ export class LockService {
     return this.releaseLock(tx, lock.id);
   }
 
-  /** Keep frozen until dispute resolution. */
+  /**
+   * Keep frozen until dispute resolution.
+   * - Missing lock (pre-complete dispute): freeze available deposit as HELD_DISPUTE.
+   * - ACTIVE → HELD_DISPUTE.
+   * - RELEASED (lazy unlock already ran): re-freeze from available into HELD_DISPUTE.
+   * Never a silent no-op when seller still has deposit available.
+   */
   async holdForDispute(tx: Tx, orderId: bigint) {
-    const lock = await tx.depositLock.findUnique({ where: { orderId } });
-    if (!lock || lock.status !== 'ACTIVE') return lock;
-    return tx.depositLock.update({
-      where: { id: lock.id },
-      data: { status: 'HELD_DISPUTE' },
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { sellerId: true, payoutCents: true, totalAmountCents: true },
     });
+    if (!order) return null;
+
+    const existing = await tx.depositLock.findUnique({ where: { orderId } });
+    if (existing?.status === 'HELD_DISPUTE') return existing;
+    if (existing?.status === 'SEIZED') return existing;
+
+    const target = order.payoutCents > 0n
+      ? order.payoutCents
+      : order.totalAmountCents;
+
+    if (existing?.status === 'ACTIVE') {
+      return tx.depositLock.update({
+        where: { id: existing.id },
+        data: { status: 'HELD_DISPUTE' },
+      });
+    }
+
+    if (existing?.status === 'RELEASED') {
+      const snap = await this.deposit.getSnapshot(tx, order.sellerId);
+      const amount = existing.amountCents < snap.availableCents
+        ? existing.amountCents
+        : snap.availableCents;
+      if (amount <= 0n) return existing;
+      await this.deposit.moveAvailableToLocked(tx, order.sellerId, amount, {
+        idempotencyKey: `deposit-relock:dispute:${orderId}:${existing.id}`,
+        orderId,
+        lockId: existing.id,
+      });
+      return tx.depositLock.update({
+        where: { id: existing.id },
+        data: {
+          status: 'HELD_DISPUTE',
+          amountCents: amount,
+          releasedAt: null,
+          unlockAt: new Date(Date.now() + depositHoldDays() * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    // No lock yet (dispute before COMPLETED) — create HELD_DISPUTE collateral if deposit exists.
+    const snap = await this.deposit.getSnapshot(tx, order.sellerId);
+    const amount = target < snap.availableCents ? target : snap.availableCents;
+    if (amount <= 0n) return null;
+
+    const lockId = createId();
+    const unlockAt = new Date(Date.now() + depositHoldDays() * 24 * 60 * 60 * 1000);
+    const lock = await tx.depositLock.create({
+      data: {
+        id: lockId,
+        userId: order.sellerId,
+        orderId,
+        amountCents: amount,
+        status: 'HELD_DISPUTE',
+        unlockAt,
+      },
+    });
+    await this.deposit.moveAvailableToLocked(tx, order.sellerId, amount, {
+      idempotencyKey: `deposit-lock:dispute:${orderId}`,
+      orderId,
+      lockId: lock.id,
+    });
+    logMoneyEvent('escrow_lock', {
+      status: 'success',
+      operationId: `deposit-lock:dispute:${orderId}`,
+      dealId: orderId.toString(),
+      userId: order.sellerId.toString(),
+      amount: amount.toString(),
+      reason: 'HELD_DISPUTE',
+    });
+    return lock;
   }
 
   /** Release HELD_DISPUTE back to ACTIVE (or unlock if past unlockAt). */

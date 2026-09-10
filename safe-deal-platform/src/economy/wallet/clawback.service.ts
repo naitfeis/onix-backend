@@ -79,6 +79,10 @@ export class ClawbackService {
       },
     });
 
+    if (remaining > 0n) {
+      await this.flagClawbackDebt(tx, opts.sellerId, opts.orderId, remaining);
+    }
+
     logMoneyEvent('refund', {
       status: 'success',
       operationId: `order:${opts.orderId}:clawback`,
@@ -136,6 +140,10 @@ export class ClawbackService {
       data: { recoveredCents: nextRecovered, status },
     });
 
+    if (status === 'RECOVERED') {
+      await this.clearClawbackDebtFlagIfClean(tx, row.sellerId);
+    }
+
     logMoneyEvent('refund', {
       status: 'success',
       operationId: `order:${row.orderId}:clawback:r${row.recoveredCents}`,
@@ -172,6 +180,70 @@ export class ClawbackService {
     return Boolean(row);
   }
 
+  /**
+   * Visible withdraw block + security signal while clawback debt remains.
+   * Cleared only when no OPEN/PARTIAL clawbacks left and no Risk Engine lock.
+   */
+  private async flagClawbackDebt(
+    tx: Tx,
+    sellerId: bigint,
+    orderId: bigint,
+    remainingCents: bigint,
+  ): Promise<void> {
+    const now = new Date();
+    await tx.user.update({
+      where: { id: sellerId },
+      data: { withdrawBlockedAt: now },
+    });
+    await tx.securityEvent.create({
+      data: {
+        userId: sellerId,
+        type: 'CLAWBACK_DEBT',
+        severity: 80,
+        status: 'OPEN',
+        payload: {
+          orderId: orderId.toString(),
+          remainingCents: remainingCents.toString(),
+          reason: 'Post-complete clawback shortfall after seller withdrawal',
+        },
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: null,
+        action: 'CLAWBACK_DEBT_OPEN',
+        entity: 'OrderClawback',
+        entityId: orderId.toString(),
+        metadata: {
+          sellerId: sellerId.toString(),
+          remainingCents: remainingCents.toString(),
+        },
+      },
+    });
+  }
+
+  private async clearClawbackDebtFlagIfClean(tx: Tx, sellerId: bigint): Promise<void> {
+    if (await this.hasOpenDebt(tx, sellerId)) return;
+    const user = await tx.user.findUnique({
+      where: { id: sellerId },
+      select: { securityLockedAt: true, withdrawBlockedAt: true },
+    });
+    if (!user?.withdrawBlockedAt || user.securityLockedAt) return;
+    await tx.user.update({
+      where: { id: sellerId },
+      data: { withdrawBlockedAt: null },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: null,
+        action: 'CLAWBACK_DEBT_CLEARED',
+        entity: 'User',
+        entityId: sellerId.toString(),
+        metadata: { reason: 'all_clawbacks_recovered' },
+      },
+    });
+  }
+
   async waive(
     tx: Tx,
     orderId: bigint,
@@ -189,6 +261,7 @@ export class ClawbackService {
         reason: reason.trim().slice(0, 1000),
       },
     });
+    await this.clearClawbackDebtFlagIfClean(tx, row.sellerId);
     return { id: updated.id, status: updated.status };
   }
 }

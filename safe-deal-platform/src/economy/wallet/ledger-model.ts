@@ -335,6 +335,21 @@ export class LedgerModel {
     return take;
   }
 
+  /** True when seller has unrecovered clawback debt (blocks withdraw). */
+  hasOpenClawbackDebt(sellerId: string): boolean {
+    for (const row of this.clawbacks.values()) {
+      if (row.sellerId !== sellerId) continue;
+      if (row.status === 'OPEN' || row.status === 'PARTIAL') return true;
+    }
+    return false;
+  }
+
+  assertCanWithdraw(sellerId: string): void {
+    if (this.hasOpenClawbackDebt(sellerId)) {
+      throw new MonetaryInvariantError('withdraw blocked: open clawback debt');
+    }
+  }
+
   /** Assert all monetary invariants for every user. */
   assertInvariants(): void {
     for (const [userId, u] of this.users) {

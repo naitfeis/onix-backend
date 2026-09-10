@@ -115,6 +115,8 @@ Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (
 - `TELEGRAM_WEBHOOK_SECRET` is required in production. Rotate anything pasted in chats.
 - Render Valkey `0.0.0.0/0` is a standing risk if `REDIS_URL` leaks.
 - Remaining list: `docs/Documentation/Onix-Notes.md` §0.2.
+- **Origin guard (v2.0.4+):** production rejects literal-IP `Host` and hosts outside `ALLOWED_HOSTS`. Set `ALLOWED_HOSTS=www.onixtg.shop,onixtg.shop`. This does **not** replace an Amvera network allowlist — see `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` §1.
+- Optional `ORIGIN_EDGE_SECRET` + header `X-ONIX-Edge-Secret` when a non-CF edge sits in front.
 
 ---
 
@@ -126,10 +128,11 @@ Typical catalog/health on `www`: ~200–300 ms. Neon + Redis stay in Frankfurt (
 
 | Слой | Как |
 | --- | --- |
-| Код (сделано) | Глобальный лимит ~240 req/мин на IP для `/api`, витрина 40/мин для гостей, JSON ≤ 128kb, WebSocket: Origin обязателен в production, 8 unauth-сокетов на IP, auth за 3с |
-| Amvera | Одна реплика; при реальном L3/L4 флуде — тикет в Amvera / смена IP / более жирный тариф |
-| Cloudflare | Только DNS-only на www. WAF/Bot Fight на orange **нельзя** для этого origin |
+| Код | Host allowlist + optional edge secret; глобальный лимит ~240 req/мин на IP для `/api`, витрина 40/мин для гостей, JSON ≤ 128kb, WebSocket: Origin обязателен в production |
+| Amvera | Одна реплика; **обязательно** закрыть прямой IP насколько позволяет панель; при L3/L4 флуде — тикет Amvera / смена IP |
+| Cloudflare | Только DNS-only на www. WAF на orange **нельзя** для RU |
 | Redis | Не открывать `0.0.0.0/0`. Если URL утечёт — ротация |
+| Ops | `docs/architecture/ONIX-LAUNCH-BLOCKERS-OPS.md` — firewall verify + backup-drill + WS restart drill |
 
 **Allowlist админки:** в админке → Сотрудники скопируйте «ваш IP» → Amvera env `ADMIN_IP_ALLOWLIST=1.2.3.4` (домашний/офисный публичный IP, не 127.0.0.1). Несколько через запятую. Перезапуск.
 

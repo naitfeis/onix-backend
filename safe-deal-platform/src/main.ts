@@ -18,6 +18,7 @@ import { structuredLog } from './observability/structured-logger';
 import { requestTimingMiddleware } from './request-timing.middleware';
 import { httpNoiseMiddleware } from './http-noise.middleware';
 import { createSecurityMiddleware, resolveCorsOrigins, canonicalWwwHostMiddleware } from './security-headers';
+import { originAccessMiddleware } from './http/origin-access.middleware';
 import { RealtimeHubService } from './realtime/realtime-hub.service';
 import { spaAuthGoogleCallbackMiddleware, spaIndexExists } from './spa-static';
 import { validationExceptionFactory } from './validation-errors';
@@ -65,6 +66,8 @@ async function bootstrap(): Promise<void> {
   // Security headers first (Helmet + CSP).
   app.use(createSecurityMiddleware());
   app.use(canonicalWwwHostMiddleware);
+  // Reject direct-IP Host / unknown hosts in production (DNS-only Amvera).
+  app.use(originAccessMiddleware);
   // Scanners before ServeStatic / Nest (clean 404, never 500).
   app.use(httpNoiseMiddleware);
   app.use(spaAuthGoogleCallbackMiddleware);
