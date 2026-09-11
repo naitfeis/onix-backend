@@ -3280,12 +3280,7 @@ html[data-theme="light"] .timeline li {
   position: relative;
   overflow: visible;
 }
-.money-tile--wallet {
-  background:
-    radial-gradient(120% 90% at 0% 50%, rgba(63, 191, 143, 0.18), transparent 55%),
-    var(--glass-card-bg);
-  border-color: rgba(63, 191, 143, 0.22);
-}
+.money-tile--wallet,
 .money-tile--deposit {
   background: var(--glass-card-bg);
   border-color: rgba(255, 255, 255, 0.14);
@@ -3299,11 +3294,7 @@ html[data-theme="light"] .timeline li {
   flex-shrink: 0;
   margin-top: 2px;
 }
-.money-tile--wallet .money-tile__icon {
-  color: #3FBF8F;
-  background: rgba(63, 191, 143, 0.14);
-  border: 1px solid rgba(63, 191, 143, 0.32);
-}
+.money-tile--wallet .money-tile__icon,
 .money-tile--deposit .money-tile__icon {
   color: rgba(255, 255, 255, 0.78);
   background: rgba(255, 255, 255, 0.06);
@@ -3326,7 +3317,7 @@ html[data-theme="light"] .timeline li {
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
-.money-tile--wallet .money-tile__body strong { color: #3FBF8F; }
+.money-tile--wallet .money-tile__body strong,
 .money-tile--deposit .money-tile__body strong { color: var(--text-primary); }
 .money-tile__body em {
   font-style: normal;
