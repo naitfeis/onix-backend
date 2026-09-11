@@ -635,64 +635,59 @@ html[data-glass="vision"] {
   --glass-blur-thick: 64px;
   --glass-saturate: 190%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-bg: rgba(14, 14, 18, 0.18);
-  --glass-thin-bg: rgba(14, 14, 18, 0.12);
-  --glass-regular-bg: rgba(16, 16, 22, 0.22);
-  --glass-thick-bg: rgba(18, 18, 26, 0.28);
-  --glass-card-bg: rgba(16, 16, 22, 0.2);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  --glass-bg: rgba(14, 14, 18, 0.28);
+  --glass-fill: var(--glass-bg);
+  --glass-thin-bg: rgba(14, 14, 18, 0.18);
+  --glass-regular-bg: rgba(16, 16, 22, 0.32);
+  --glass-thick-bg: rgba(18, 18, 26, 0.42);
+  --glass-card-bg: rgba(16, 16, 22, 0.34);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.2);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-shadow: var(--glass-highlight);
+  --surface: var(--glass-card-bg);
 }
 html[data-theme="light"][data-glass="vision"] {
-  --glass-bg: rgba(255, 255, 255, 0.22);
-  --glass-thin-bg: rgba(255, 255, 255, 0.14);
-  --glass-regular-bg: rgba(255, 255, 255, 0.26);
-  --glass-thick-bg: rgba(255, 255, 255, 0.34);
-  --glass-card-bg: rgba(255, 255, 255, 0.24);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.42);
+  --glass-bg: rgba(255, 255, 255, 0.28);
+  --glass-fill: var(--glass-bg);
+  --glass-thin-bg: rgba(255, 255, 255, 0.18);
+  --glass-regular-bg: rgba(255, 255, 255, 0.34);
+  --glass-thick-bg: rgba(255, 255, 255, 0.44);
+  --glass-card-bg: rgba(255, 255, 255, 0.32);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.48);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --glass-shadow: var(--glass-highlight);
+  --surface: var(--glass-card-bg);
 }
 
+/* Real Vision glass — translucent fill + blur (overrides opaque solid fills). */
 html[data-glass="vision"] .card,
 html[data-glass="vision"] .widget,
 html[data-glass="vision"] .product-card,
 html[data-glass="vision"] .section-head,
-html[data-glass="vision"] .desktop-hero:not(.market-hero),
+html[data-glass="vision"] .desktop-hero,
+html[data-glass="vision"] .market-hero,
 html[data-glass="vision"] .wallet-hero,
 html[data-glass="vision"] .wallet-strip,
+html[data-glass="vision"] .topbar,
+html[data-glass="vision"] .bottom-nav,
+html[data-glass="vision"] .modal__panel,
+html[data-glass="vision"] .auth-notice,
+html[data-glass="vision"] .search-bar,
 html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: transparent !important;
-  box-shadow: var(--glass-highlight) !important;
-  border: var(--glass-border) !important;
-}
-/* Chrome only: near-black opaque so content does not bleed (not grey slab). */
-html[data-glass="vision"] .topbar,
-html[data-glass="vision"] .bottom-nav {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: #0B0B0C !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
   box-shadow: var(--glass-highlight) !important;
 }
-html[data-glass="vision"] .modal__panel,
-html[data-glass="vision"] .auth-notice {
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: rgba(16, 16, 22, 0.92) !important;
+html[data-glass="vision"] .settings-sheet {
+  isolation: auto !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) !important;
+  backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) !important;
+  background: var(--glass-thick-bg) !important;
   border: var(--glass-border) !important;
   box-shadow: var(--glass-highlight) !important;
-}
-html[data-theme="light"][data-glass="vision"] .topbar,
-html[data-theme="light"][data-glass="vision"] .bottom-nav,
-html[data-theme="light"][data-glass="vision"] .modal__panel,
-html[data-theme="light"][data-glass="vision"] .auth-notice {
-  background: #ffffff !important;
-}
-/* Market hero keeps solid charcoal like the reference banner. */
-html[data-glass="vision"] .market-hero {
-  background: #1c1c1c !important;
-  border: var(--glass-border) !important;
 }
 /* Chat stays frameless in Vision too */
 html[data-glass="vision"] .chat-layout,
@@ -704,21 +699,6 @@ html[data-glass="vision"] .thread-list {
   box-shadow: none !important;
   border: 0 !important;
 }
-html[data-glass="vision"] .settings-sheet {
+html[data-glass="vision"] .market-hero {
   isolation: auto !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
-  background: #0B0B0C !important;
-  box-shadow: none !important;
-}
-html[data-theme="light"][data-glass="vision"] .settings-sheet {
-  background: rgba(255, 255, 255, 0.92) !important;
-}
-html[data-glass="vision"] .market-hero,
-html[data-theme="dark"] .market-hero,
-html[data-theme="light"] .market-hero,
-.market-hero {
-  isolation: auto !important;
-  -webkit-backdrop-filter: none !important;
-  backdrop-filter: none !important;
 }

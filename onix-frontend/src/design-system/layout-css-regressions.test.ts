@@ -157,9 +157,11 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/html\[data-theme="light"\] \.market-hero \.desktop-hero__dots button\.active\s*\{[^}]*background:\s*#111;/s);
   });
 
-  it('does not blur the market banner so the violet CTA cannot paint edge fringes', () => {
-    expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.desktop-hero:not\(\.market-hero\)/);
-    expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.market-hero[\s\S]*?backdrop-filter:\s*none !important;/s);
+  it('applies Vision glass blur to the market banner and chrome', () => {
+    expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.market-hero/);
+    expect(tokensCss).toMatch(
+      /html\[data-glass="vision"\] \.card,[\s\S]*?\.market-hero,[\s\S]*?backdrop-filter:\s*blur\(var\(--glass-blur\)\) saturate\(var\(--glass-saturate\)\) !important;/s,
+    );
   });
 
   it('keeps the Google bind row on its own full-width profile grid line', () => {

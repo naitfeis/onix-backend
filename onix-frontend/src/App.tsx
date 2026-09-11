@@ -158,6 +158,8 @@ function clampSidebarWidths(shellWidth: number, left: number, right: number, sho
 
 const THEME_KEY = 'onix-theme';
 const GLASS_KEY = 'onix-glass';
+/** Older builds wrote solid on first visit — migrate once to Vision as product default. */
+const GLASS_DEFAULT_MIGRATION = 'onix-glass-default-vision-v1';
 type ThemeMode = 'dark' | 'light';
 type GlassMode = 'solid' | 'vision';
 
@@ -171,10 +173,15 @@ function readStoredTheme(): ThemeMode | null {
 
 function readStoredGlass(): GlassMode {
   try {
+    if (!localStorage.getItem(GLASS_DEFAULT_MIGRATION)) {
+      localStorage.setItem(GLASS_DEFAULT_MIGRATION, '1');
+      localStorage.setItem(GLASS_KEY, 'vision');
+      return 'vision';
+    }
     const v = localStorage.getItem(GLASS_KEY);
     if (v === 'vision' || v === 'solid') return v;
   } catch { /* ignore */ }
-  return 'solid';
+  return 'vision';
 }
 
 function applyTheme(theme: ThemeMode) {
