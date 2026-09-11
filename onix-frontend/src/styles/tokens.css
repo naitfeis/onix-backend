@@ -28,9 +28,9 @@ html[data-theme="dark"] {
   --glass-bg: #0B0B0C;
   --glass-fill: var(--glass-bg);
   --glass-thin-bg: #0B0B0C;
-  --glass-regular-bg: #111113;
-  --glass-thick-bg: #1c1c1c;
-  --glass-card-bg: #1c1c1c;
+  --glass-regular-bg: #111111;
+  --glass-thick-bg: #151515;
+  --glass-card-bg: #151515;
 
   /* Visible glass rim — keep fills as --glass-card-bg (no global #1c1c1c recolor) */
   --glass-border: 1px solid rgba(255, 255, 255, 0.18);
@@ -633,16 +633,17 @@ html[data-glass="vision"] {
   --glass-blur-thin: 32px;
   --glass-blur-regular: 48px;
   --glass-blur-thick: 64px;
-  --glass-saturate: 190%;
+  /* Keep saturate near 100% — high saturate turns charcoal glass purple-black. */
+  --glass-saturate: 105%;
   --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  --glass-bg: rgba(14, 14, 18, 0.28);
+  --glass-bg: rgba(18, 18, 18, 0.72);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(14, 14, 18, 0.18);
-  --glass-regular-bg: rgba(16, 16, 22, 0.32);
-  --glass-thick-bg: rgba(18, 18, 26, 0.42);
-  --glass-card-bg: rgba(16, 16, 22, 0.34);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.2);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-thin-bg: rgba(14, 14, 14, 0.55);
+  --glass-regular-bg: rgba(20, 20, 20, 0.78);
+  --glass-thick-bg: rgba(22, 22, 22, 0.88);
+  --glass-card-bg: rgba(20, 20, 20, 0.82);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --glass-shadow: var(--glass-highlight);
   --surface: var(--glass-card-bg);
 }

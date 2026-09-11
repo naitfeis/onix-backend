@@ -98,12 +98,12 @@
   flex-direction: column;
   padding: 20px 18px 24px;
   isolation: auto;
-  border-left: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(16, 16, 22, 0.42) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 18, 0.92) !important;
   color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  -webkit-backdrop-filter: blur(48px) saturate(190%);
-  backdrop-filter: blur(48px) saturate(190%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(48px) saturate(105%);
+  backdrop-filter: blur(48px) saturate(105%);
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
 }
@@ -674,13 +674,13 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: 999px;
   box-shadow: none;
 }
-/* Market / profile banners — same glass rim, original fills (not a global recolor) */
+/* Market / profile banners — neutral charcoal (not purple-black) */
 .market-hero {
   position: relative;
   margin-bottom: 16px;
   padding: 0;
   border-radius: var(--radius-hero);
-  background: #1c1c1c;
+  background: #151515;
   border: var(--glass-border);
   box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: none !important;
@@ -690,10 +690,15 @@ html[data-theme="light"] .auth-notice__command {
 html[data-theme="light"] .market-hero {
   background: #ffffff;
 }
-html[data-glass="vision"] .market-hero {
-  background: var(--glass-card-bg);
+html[data-glass="vision"] .market-hero,
+html[data-glass="vision"] .desktop-hero {
+  background: #151515 !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+}
+html[data-theme="light"][data-glass="vision"] .market-hero,
+html[data-theme="light"][data-glass="vision"] .desktop-hero {
+  background: rgba(255, 255, 255, 0.88) !important;
 }
 .market-hero__track {
   display: flex;
