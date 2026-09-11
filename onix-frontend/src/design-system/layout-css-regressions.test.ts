@@ -43,6 +43,13 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).not.toMatch(/\.thread-list, \.conversation\s*\{[^}]*gap:\s*0;/s);
   });
 
+  it('keeps thread rows horizontal and tight under the topbar on chat', () => {
+    expect(appCss).toMatch(/\.thread-peer\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/s);
+    expect(appCss).not.toMatch(/\.thread span\s*\{[^}]*display:\s*grid;/s);
+    expect(appCss).toMatch(/\.app-shell--chat \.topbar\s*\{[^}]*margin-bottom:\s*4px;/s);
+    expect(appCss).toMatch(/\.app-shell--chat \.viewport\s*\{[^}]*padding-top:\s*0;/s);
+  });
+
   it('keeps screens keep-alive without page-turn remount animation', () => {
     expect(appCss).toMatch(/\.screen-panel\.is-active\s*\{[^}]*display:\s*block;/s);
     expect(appCss).toMatch(/\.screen-transition\s*\{[^}]*animation:\s*none;/s);

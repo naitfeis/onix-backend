@@ -3405,8 +3405,12 @@ html[data-theme="light"] .timeline li {
 .conversation { gap: 0; }
 
 /* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
+.app-shell--chat .topbar {
+  margin-bottom: 4px;
+}
 .app-shell--chat .viewport {
   margin: 0;
+  padding-top: 0;
   height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
   min-height: min(760px, calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom)));
   max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
@@ -3474,7 +3478,7 @@ html[data-theme="light"] .timeline li {
   position: sticky;
   top: 0;
   z-index: 3;
-  margin: 0 0 10px;
+  margin: 0 0 6px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -3579,7 +3583,7 @@ html[data-theme="light"] .timeline li {
   padding: 6px 4px;
 }
 .app-shell--chat .thread-list {
-  padding: 8px 10px 12px;
+  padding: 0 0 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -3703,11 +3707,11 @@ body.is-resizing-chat * {
   padding: 12px 12px 14px;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   text-align: left;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: var(--radius-md);
   background: #0C0C0C;
   color: var(--text);
@@ -3720,6 +3724,8 @@ body.is-resizing-chat * {
   outline: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 html[data-theme="light"] .thread {
   background: #fff;
@@ -3732,7 +3738,13 @@ html[data-theme="light"] .thread {
 .thread:active {
   transform: none;
 }
-.thread-peer { display: flex; align-items: flex-start; gap: 10px; min-width: 0; flex: 1; }
+.thread-peer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
 .thread-peer .user-avatar-wrap {
   flex: 0 0 auto;
   width: 28px;
@@ -3747,16 +3759,19 @@ html[data-theme="light"] .thread {
 }
 .thread-peer > span:not(.user-avatar-wrap) {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
+  flex: 1;
+  align-content: center;
 }
-.thread span { display: grid; gap: 4px; min-width: 0; }
-.thread b {
+/* Do not target .thread-peer itself — that broke avatar+title into a vertical stack. */
+.thread-peer > span:not(.user-avatar-wrap) b {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
 }
-.thread small {
+.thread-peer > span:not(.user-avatar-wrap) small {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -3766,10 +3781,11 @@ html[data-theme="light"] .thread {
   overflow-wrap: anywhere;
   line-height: 1.35;
   max-height: calc(1.35em * 2);
+  color: var(--muted);
 }
-.thread small, .conversation__head small { color: var(--muted); }
 .conversation__head small {
   display: block;
+  color: var(--muted);
   -webkit-line-clamp: unset;
   max-height: none;
   overflow: visible;
@@ -4938,6 +4954,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
     max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
     min-height: 0;
+    padding-top: 0;
     overflow: hidden;
   }
   .app-shell--chat .screen-transition {
@@ -4972,7 +4989,8 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .thread {
     min-height: 0;
-    padding: 12px;
+    padding: 10px 12px;
+    align-items: center;
   }
   .public-profile > .profile-card {
     padding: 16px;
@@ -5863,8 +5881,8 @@ html[data-theme="light"] .thread-list .thread {
   backdrop-filter: none !important;
 }
 html[data-theme="dark"] .thread-list .thread {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: #0C0C0C !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -5876,7 +5894,7 @@ html[data-theme="light"] .thread-list .thread:focus-visible {
 }
 html[data-theme="dark"] .thread-list .thread:hover,
 html[data-theme="dark"] .thread-list .thread:focus-visible {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: #111111 !important;
 }
 
 html[data-theme="light"] .thread-list .chat-toolbar .control {
