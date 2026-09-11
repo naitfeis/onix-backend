@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { api, friendlyError, money } from '../api/client';
+import { api, friendlyError } from '../api/client';
 import { API_PATHS, formatLastSeen, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
@@ -7,7 +7,7 @@ import { formatOnixId } from '../utils/onixId';
 import { parseMemberTokens } from '../utils/parseMemberTokens';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
-import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge, dealLabels } from './shared';
+import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge } from './shared';
 import { playSound, unlockSounds } from '../audio/sounds';
 import { getRealtimeClient } from '../realtime/client';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -582,11 +582,6 @@ export function Chats({
         <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
       )}
       </div>
-      {thread.orderCard && <div className="order-card-inline" role="region" aria-label="Карточка заказа">
-        <div><small>Заказ #{thread.orderCard.id}</small><b>{thread.orderCard.productTitle}</b>
-          <span>{money(thread.orderCard.totalAmountCents)} · {dealLabels[thread.orderCard.status]} · деньги в сейфе</span></div>
-        <Button variant="primary" className="order-card-inline__cta" onClick={() => openDeal(thread.dealId || thread.orderCard!.id)}>Открыть заказ</Button>
-      </div>}
       <div className="messages-wrap">
       <div
         className="messages messages--virtual"
