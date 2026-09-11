@@ -28,6 +28,7 @@ import {
 } from '../perf/bootstrapTiming';
 import { markAppReady } from '../perf/timing';
 import { getRealtimeClient } from '../realtime/client';
+import { stripToSafeRichHtml } from '../utils/formattedDescription';
 import { isOrderNotification, playSound } from '../audio/sounds';
 import {
   hideCatalogProduct,
@@ -883,7 +884,7 @@ export function useOnixCore() {
   const createProduct = useCallback((draft: ProductDraft) => run('product-form', () =>
     api.post<Product>(API_PATHS.productCreate, {
       title: draft.title.trim(),
-      description: draft.description.trim(),
+      description: stripToSafeRichHtml(draft.description.trim()),
       priceCents: cents(draft.priceRubles),
       quantity: draft.quantity,
       category: draft.category,
@@ -898,7 +899,7 @@ export function useOnixCore() {
 
   const updateProduct = useCallback((id: string, draft: ProductDraft) => run('product-form', () =>
     api.patch<Product>(API_PATHS.productUpdate(id), {
-      title: draft.title.trim(), description: draft.description.trim(), priceCents: cents(draft.priceRubles),
+      title: draft.title.trim(), description: stripToSafeRichHtml(draft.description.trim()), priceCents: cents(draft.priceRubles),
       quantity: draft.quantity, category: draft.category, subcategory: draft.subcategory.trim() || undefined,
       autoDeliver: Boolean(draft.autoDeliver),
       ...(draft.autoDeliver && draft.deliveryText?.trim()

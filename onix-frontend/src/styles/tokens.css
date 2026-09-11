@@ -148,11 +148,11 @@ html[data-theme="dark"] {
 html[data-theme="light"] {
   color-scheme: light;
   --bg-scene-0: #e8eef6;
-  --bg-scene-1: #e2eaf4;
-  --bg-scene-2: #d8e2ef;
-  --bg-scene-warm: #ebe6f2;
-  --bg-scene-deep: #d8e2ef;
-  --page-bg: #d8e2ef;
+  --bg-scene-1: #e4ebf4;
+  --bg-scene-2: #dce5f0;
+  --bg-scene-warm: #e8eef6;
+  --bg-scene-deep: #dce5f0;
+  --page-bg: #e8eef6;
 
   --text: #141820;
   --text-primary: #141820;
@@ -228,8 +228,8 @@ html[data-theme="light"] {
 
   --nav-capsule: rgba(255, 255, 255, 0.5);
   --sparkle: rgba(255, 255, 255, 0.95);
-  --_glow: rgba(107, 95, 224, 0.14);
-  --_bg: linear-gradient(145deg, #8B7FF5, #6B5FE0);
+  --_glow: rgba(40, 60, 100, 0.06);
+  --_bg: linear-gradient(145deg, #6C78F0, #5560D4);
 
   --modal-backdrop: rgb(20 24 32 / 45%);
   --modal-backdrop-blur: none;
@@ -647,16 +647,17 @@ html[data-glass="vision"] {
   --surface: var(--glass-card-bg);
 }
 html[data-theme="light"][data-glass="vision"] {
-  --glass-bg: rgba(255, 255, 255, 0.28);
-  --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.18);
-  --glass-regular-bg: rgba(255, 255, 255, 0.34);
-  --glass-thick-bg: rgba(255, 255, 255, 0.44);
-  --glass-card-bg: rgba(255, 255, 255, 0.32);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.48);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
-  --glass-shadow: var(--glass-highlight);
-  --surface: var(--glass-card-bg);
+  /* Opaque light surfaces — translucent Vision blur reads as purple washes */
+  --glass-bg: #ffffff;
+  --glass-fill: #ffffff;
+  --glass-thin-bg: #ffffff;
+  --glass-regular-bg: #ffffff;
+  --glass-thick-bg: #ffffff;
+  --glass-card-bg: #ffffff;
+  --glass-border: 1px solid rgba(20, 25, 35, 0.12);
+  --glass-highlight: none;
+  --glass-shadow: none;
+  --surface: #ffffff;
 }
 
 /* Real Vision glass — deep black + rim (Автовыдача material). */
@@ -714,4 +715,34 @@ html[data-glass="vision"] .thread-list {
 }
 html[data-glass="vision"] .market-hero {
   isolation: auto !important;
+}
+
+/* Light + Vision: never frosted — blur samples accents as purple bands */
+html[data-theme="light"][data-glass="vision"] .card,
+html[data-theme="light"][data-glass="vision"] .widget,
+html[data-theme="light"][data-glass="vision"] .product-card,
+html[data-theme="light"][data-glass="vision"] .section-head,
+html[data-theme="light"][data-glass="vision"] .desktop-hero,
+html[data-theme="light"][data-glass="vision"] .market-hero,
+html[data-theme="light"][data-glass="vision"] .wallet-hero,
+html[data-theme="light"][data-glass="vision"] .wallet-strip,
+html[data-theme="light"][data-glass="vision"] .money-tile,
+html[data-theme="light"][data-glass="vision"] .topbar,
+html[data-theme="light"][data-glass="vision"] .bottom-nav,
+html[data-theme="light"][data-glass="vision"] .search-bar,
+html[data-theme="light"][data-glass="vision"] .control,
+html[data-theme="light"][data-glass="vision"] .select-menu__trigger,
+html[data-theme="light"][data-glass="vision"] .auto-deliver-filter,
+html[data-theme="light"][data-glass="vision"] .deal-chip,
+html[data-theme="light"][data-glass="vision"] .input-shell,
+html[data-theme="light"][data-glass="vision"] .sidebar-left,
+html[data-theme="light"][data-glass="vision"] .sidebar-right,
+html[data-theme="light"][data-glass="vision"] .modal__panel,
+html[data-theme="light"][data-glass="vision"] .auth-notice,
+html[data-theme="light"][data-glass="vision"] .settings-sheet {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(20, 25, 35, 0.12) !important;
+  box-shadow: none !important;
 }

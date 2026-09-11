@@ -13,6 +13,7 @@ import {
   waitAndLinkBotTelegram,
 } from '../auth';
 import UserAvatar from '../components/UserAvatar';
+import { DescriptionEditor, DESCRIPTION_MAX_CHARS, type DescAlign, type DescFont } from '../components/DescriptionEditor';
 import { CardLogo, GoogleLogo, SbpLogo, TelegramLogo } from '../components/BrandLogos';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -26,7 +27,7 @@ import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from 
 import { TrustLevelMeter } from '../components/TrustLevelMeter';
 import { ReviewCard } from '../components/ReviewCard';
 import { LedgerOpIcon } from '../components/LedgerOpIcon';
-import { IconInfo, IconLogout, IconShield, IconWallet } from '../components/NavIcons';
+import { IconInfo, IconLogout, IconShield, IconWallet, IconSettings } from '../components/NavIcons';
 import { t } from '../i18n';
 
 const SellerAnalyticsPanel = lazy(() => import('./SellerAnalytics'));
@@ -186,6 +187,8 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
   const [draft, setDraft] = useState<ProductDraft>(emptyDraft);
   const [full, setFull] = useState<Product | null>(null);
   const [loadingDesc, setLoadingDesc] = useState(false);
+  const [descAlign, setDescAlign] = useState<DescAlign>('left');
+  const [descFont, setDescFont] = useState<DescFont>('body');
   useEffect(() => {
     if (!product) {
       setFull(null);
@@ -194,6 +197,8 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
     }
     let cancelled = false;
     setLoadingDesc(true);
+    setDescAlign('left');
+    setDescFont('body');
     setDraft({
       title: product.title,
       description: product.description || '',
@@ -235,8 +240,17 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
     }
   }}>
     <Field label="Название" hint="До 32 символов"><Input maxLength={32} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></Field>
-    <Field label="Описание" hint={loadingDesc ? 'Загрузка описания…' : undefined}>
-      <Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} disabled={loadingDesc} />
+    <Field label="Описание" hint={loadingDesc ? 'Загрузка описания…' : `До ${DESCRIPTION_MAX_CHARS} символов`}>
+      <DescriptionEditor
+        value={draft.description}
+        onChange={(description) => setDraft({ ...draft, description })}
+        align={descAlign}
+        font={descFont}
+        onAlignChange={setDescAlign}
+        onFontChange={setDescFont}
+        disabled={loadingDesc}
+        placeholder="Подробно опишите товар"
+      />
     </Field>
     <div className="form-grid"><Field label="Цена, ₽"><Input value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field><Field label="Количество"><Input type="number" min={1} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
     <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
@@ -262,7 +276,7 @@ function ListingViews({ count }: { count: number }) {
 
 export function Profile({
   core, switchTo, setToast, openDirectChat, openProductCard,
-  openTopup, onTopupConsumed,
+  openTopup, onTopupConsumed, onOpenSettings,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -271,6 +285,7 @@ export function Profile({
   openProductCard: (productId: string) => void;
   openTopup?: boolean;
   onTopupConsumed?: () => void;
+  onOpenSettings?: () => void;
 }) {
   const [section, setSection] = useState<'overview' | 'listings' | 'favorites' | 'reviews' | 'analytics' | 'support'>('overview');
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
@@ -563,6 +578,16 @@ export function Profile({
       </Card>
     )}
     <Card className="profile-card profile-card--dash">
+      {onOpenSettings ? (
+        <button
+          type="button"
+          className="profile-settings-btn mobile-only"
+          onClick={onOpenSettings}
+          aria-label={t('settings.open')}
+        >
+          <IconSettings size={18} />
+        </button>
+      ) : null}
       <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online />
       <div className="profile-main">
         <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1>

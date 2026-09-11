@@ -2976,15 +2976,84 @@ html[data-theme="light"] .category-toggle.is-open {
   background: rgba(255, 255, 255, 0.14);
   margin: 0 2px;
 }
-.desc-editor__font select {
-  height: 32px;
-  padding: 0 10px;
+.desc-editor__font-menu {
+  position: relative;
+  z-index: 4;
+  min-width: 148px;
+}
+.desc-editor__font-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 148px;
+  height: 36px;
+  padding: 0 36px 0 14px;
   border: var(--glass-border);
-  border-radius: 8px;
+  border-radius: 999px;
   background: #0C0C0C;
   color: var(--text-primary);
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23FFFFFF' stroke-opacity='0.55' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
+}
+.desc-editor__font-trigger.is-open {
+  border-color: rgba(139, 127, 245, 0.45);
+  box-shadow: 0 0 0 3px rgba(139, 127, 245, 0.15);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 6.5L6 1.5L11 6.5' stroke='%23FFFFFF' stroke-opacity='0.75' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+.desc-editor__font-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(12, 12, 12, 0.96);
+  border: var(--glass-border);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+}
+.desc-editor__font-list button {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.desc-editor__font-list button.is-active,
+.desc-editor__font-list button:hover {
+  color: #fff;
+  background: var(--accent-violet-deep);
+  border-color: var(--accent-violet-deep);
+}
+html[data-theme="light"] .desc-editor__font-trigger {
+  background-color: #fff;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'><path d='M1 1.5L6 6.5L11 1.5' stroke='%23161420' stroke-opacity='0.45' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+}
+html[data-theme="light"] .desc-editor__font-list {
+  background: #fff;
+  border-color: rgba(20, 24, 32, 0.12);
+}
+html[data-theme="light"] .desc-editor__font-list button {
+  background: rgba(20, 24, 32, 0.04);
 }
 .desc-editor__area {
   min-height: 140px;
@@ -3125,6 +3194,9 @@ html[data-theme="dark"] .muted { color: rgba(255, 255, 255, 0.68); }
   border-radius: 18px;
   background: var(--glass-card-bg);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.deal-order__compact {
+  display: none;
 }
 html[data-theme="light"] .deal-card.deal-card--order {
   background: #fff;
@@ -3447,9 +3519,93 @@ html[data-theme="light"] .timeline li {
   white-space: nowrap;
 }
 @media (max-width: 899px) {
+  .deal-order__compact {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    gap: 8px 10px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    align-items: center;
+  }
+  .deal-order__compact-copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .deal-order__compact-copy strong {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+  }
+  .deal-order__compact-copy span {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .deal-order__compact-meta {
+    display: grid;
+    gap: 4px;
+    justify-items: end;
+    min-width: 0;
+  }
+  .deal-order__compact-badge {
+    margin: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .deal-order__compact-badge--success { color: var(--success); }
+  .deal-order__compact-badge--danger { color: var(--danger); }
+  .deal-order__compact-badge--warning { color: var(--warning); }
+  .deal-order__compact-badge--accent { color: var(--accent-violet); }
+  .deal-order__compact-badge--neutral { color: var(--text-secondary); }
+  .deal-order__compact-sum {
+    font-size: 13px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+  }
+  .deal-order__compact-chevron {
+    font-size: 10px;
+    color: var(--text-caption);
+    align-self: center;
+  }
+  .deal-card--order:not(.is-open) .deal-order,
+  .deal-card--order:not(.is-open) .deal-order__footer {
+    display: none;
+  }
+  .deal-card--order.is-open .deal-order__compact {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  html[data-theme="light"] .deal-card--order.is-open .deal-order__compact {
+    border-bottom-color: rgba(20, 24, 32, 0.08);
+  }
   .deal-order {
     grid-template-columns: 1fr;
-    gap: 14px;
+    gap: 10px;
+    padding: 12px 14px 10px;
   }
   .deal-order__right {
     justify-items: start;
@@ -3458,6 +3614,27 @@ html[data-theme="light"] .timeline li {
     width: 100%;
   }
   .deal-order__sum { justify-items: start; text-align: left; order: -1; }
+  .deal-status-banner {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .deal-status-banner__text b { font-size: 13px; }
+  .deal-status-banner__text small { font-size: 11px; }
+  .deal-order__peer-actions,
+  .deal-order__actions {
+    gap: 6px;
+  }
+  .deal-chip {
+    min-height: 32px;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 900px) {
+  .deal-order__compact {
+    display: none !important;
+  }
 }
 
 .money-tiles {
@@ -4288,6 +4465,33 @@ html[data-theme="light"] .ai-actions {
   gap: 12px;
   min-width: 0;
   overflow: visible;
+  position: relative;
+}
+.profile-settings-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 25, 35, 0.12);
+  background: #fff;
+  color: var(--text-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+html[data-theme="dark"] .profile-settings-btn {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #0C0C0C;
+  color: #fff;
+}
+.profile-settings-btn:hover,
+.profile-settings-btn:focus-visible {
+  border-color: var(--accent-violet);
 }
 .card.profile-card {
   overflow: visible;
@@ -5218,11 +5422,17 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   html[data-theme="light"] .topbar,
   html[data-theme="light"] .bottom-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
     background: #ffffff !important;
+    border: 1px solid rgba(20, 25, 35, 0.12) !important;
+    box-shadow: none !important;
   }
   html[data-theme="light"][data-glass="vision"] .topbar,
   html[data-theme="light"][data-glass="vision"] .bottom-nav {
-    background: var(--glass-card-bg) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: #ffffff !important;
   }
   html[data-theme="dark"] .control,
   html[data-theme="dark"] .modal__panel,

@@ -180,7 +180,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
               font={descFont}
               onAlignChange={setDescAlign}
               onFontChange={setDescFont}
-              maxLength={20000}
               placeholder="Подробно опишите товар: что получит покупатель, условия передачи, нюансы."
             />
           </Section>

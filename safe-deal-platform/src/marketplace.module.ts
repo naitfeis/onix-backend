@@ -33,6 +33,7 @@ import {
 import { assertRateLimit } from './rate-limit';
 import { productDto } from './response';
 import { fieldBadRequest } from './validation-errors';
+import { sanitizeProductDescription } from './sanitize-user-text';
 import { ROBLOX_RECO_SUBCATEGORIES } from './marketplace/platform-rules';
 import { reliabilityScore } from './marketplace/reliability';
 import {
@@ -55,7 +56,7 @@ function toBoolean(value: unknown): boolean | undefined {
 
 class ProductDto {
   @IsString() @Length(5, 32) title!: string;
-  @IsOptional() @IsString() @MaxLength(20_000) description?: string;
+  @IsOptional() @IsString() @MaxLength(2500) description?: string;
   @IsString() @Matches(/^\d+$/) priceCents!: string;
   @Transform(({ value }) => {
     if (value === undefined || value === null || value === '') return value;
@@ -78,7 +79,7 @@ class ProductDto {
 
 class UpdateProductDto {
   @IsOptional() @IsString() @Length(5, 32) title?: string;
-  @IsOptional() @IsString() @MaxLength(20_000) description?: string;
+  @IsOptional() @IsString() @MaxLength(2500) description?: string;
   @IsOptional() @IsString() @Matches(/^\d+$/) priceCents?: string;
   @IsOptional()
   @Transform(({ value }) => {
@@ -399,10 +400,11 @@ export class MarketplaceService {
       throw fieldBadRequest('autoDeliver', 'Автовыдача доступна только для лотов с количеством 1.');
     }
     const secret = deliveryFields(dto);
-    const { deliveryText: _omit, autoDeliver: _a, acceptedRules: _rules, warrantyHours, ...rest } = dto;
+    const { deliveryText: _omit, autoDeliver: _a, acceptedRules: _rules, warrantyHours, description, ...rest } = dto;
     const product = await this.prisma.product.create({
       data: {
         ...rest,
+        description: sanitizeProductDescription(description),
         priceCents: BigInt(dto.priceCents),
         sellerId: user.id,
         expiresAt: new Date(Date.now() + 30 * 86400_000),
@@ -467,7 +469,7 @@ export class MarketplaceService {
       } catch (e) {
         throw fieldBadRequest('subcategory', (e as Error).message);
       }
-      const { priceCents, deliveryText, autoDeliver, warrantyHours, ...data } = dto;
+      const { priceCents, deliveryText, autoDeliver, warrantyHours, description, ...data } = dto;
       const nextQuantity = dto.quantity ?? item.quantity;
       const wantAutoDeliver = autoDeliver ?? item.autoDeliver;
       if (wantAutoDeliver && nextQuantity > 1) {
@@ -482,6 +484,7 @@ export class MarketplaceService {
       }
       const patch: Prisma.ProductUpdateInput = {
         ...data,
+        ...(description !== undefined ? { description: sanitizeProductDescription(description) } : {}),
         ...(priceCents ? { priceCents: BigInt(priceCents) } : {}),
         ...(warrantyHours !== undefined
           ? { warrantyHours: clampWarrantyHoursForSeller(warrantyHours, seller?.createdAt) }

@@ -55,6 +55,10 @@ const DealOrderCard = memo(function DealOrderCard({
   deal, role, online, lastSeenLabel, highlighted, timersActive, supportBusy,
   onOpenPeer, onGoToChat, onDeliver, onComplete, onRefund, onSupport, onReview,
 }: DealCardProps) {
+  const [open, setOpen] = useState(highlighted);
+  useEffect(() => {
+    if (highlighted) setOpen(true);
+  }, [highlighted]);
   const categoryName = displayCategory(deal.product.category);
   const subLabel = deal.product.subcategory
     ? (SUBCATEGORY_LABELS[deal.product.subcategory] ?? deal.product.subcategory)
@@ -69,7 +73,31 @@ const DealOrderCard = memo(function DealOrderCard({
   const canSupport = !deal.complaintOpen;
 
   return (
-    <Card className={`deal-card deal-card--order${highlighted ? ' deal-card--focus' : ''} deal-card--${status.tone}`}>
+    <Card className={`deal-card deal-card--order${highlighted ? ' deal-card--focus' : ''} deal-card--${status.tone}${open ? ' is-open' : ''}`}>
+      <button
+        type="button"
+        className="deal-order__compact"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <UserAvatar
+          userId={deal.counterparty.id}
+          avatarUrl={deal.counterparty.avatarUrl}
+          name={deal.counterparty.username}
+          size="small"
+          online={online}
+        />
+        <div className="deal-order__compact-copy">
+          <strong title={deal.product.title}>{deal.product.title}</strong>
+          <span>{publicAt(deal.counterparty.username)} · {status.title}</span>
+        </div>
+        <div className="deal-order__compact-meta">
+          <em className={`deal-order__compact-badge deal-order__compact-badge--${status.tone}`}>{status.badge}</em>
+          <b className="deal-order__compact-sum">{money(deal.totalAmountCents)}</b>
+        </div>
+        <span className="deal-order__compact-chevron" aria-hidden="true">{open ? '▲' : '▼'}</span>
+      </button>
+
       <div className="deal-order">
         <div className="deal-order__left">
           <div className="deal-order__identity">

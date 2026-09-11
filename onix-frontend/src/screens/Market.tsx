@@ -374,7 +374,10 @@ export function Market({
   };
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      setShowTop(false);
+      return;
+    }
     let raf = 0;
     const onScroll = () => {
       if (raf) return;
@@ -867,7 +870,7 @@ export function Market({
       }}
       setToast={setToast}
     />
-    {showTop && !selected && createPortal(
+    {active && showTop && !selected && createPortal(
       <button
         type="button"
         className="scroll-top"

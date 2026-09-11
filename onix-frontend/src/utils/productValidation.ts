@@ -1,7 +1,12 @@
 import type { ProductDraft } from '../api/contracts';
+import { DESCRIPTION_MAX_CHARS } from '../components/DescriptionEditor';
 import { parseRublesToCents } from './moneyCents';
 
 const SOFT_MIN_SUB = new Set(['STANDOFF_GOLD', 'ROBLOX_ROBUX', 'STEAM_TOPUP', 'RP_VIRTS']);
+
+function plainDescriptionLength(html: string): number {
+  return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim().length;
+}
 
 export function minPriceRubles(subcategory?: string): number {
   return subcategory && SOFT_MIN_SUB.has(subcategory) ? 0.1 : 10;
@@ -15,6 +20,9 @@ export function validateDraft(
   const title = draft.title.trim();
   if (title.length < 5) errors.push('Название должно содержать минимум 5 символов');
   if (title.length > 32) errors.push('Название не длиннее 32 символов');
+  if (plainDescriptionLength(draft.description || '') > DESCRIPTION_MAX_CHARS) {
+    errors.push(`Описание не длиннее ${DESCRIPTION_MAX_CHARS} символов`);
+  }
   const priceCents = parseRublesToCents(draft.priceRubles);
   const minRub = minPriceRubles(draft.subcategory);
   const minCents = parseRublesToCents(minRub);

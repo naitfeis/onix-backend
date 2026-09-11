@@ -2,27 +2,22 @@ import {
   useEffect,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
+import { sanitizeDescriptionHtml, stripToSafeRichHtml } from '../utils/formattedDescription';
 
 export type DescAlign = 'left' | 'center' | 'right';
-export type DescFont = 'body' | 'display' | 'mono' | 'hand' | 'script';
+export type DescFont = 'body' | 'display' | 'mono' | 'hand';
 
-const FONT_NAME: Record<DescFont, string> = {
-  body: 'DM Sans',
-  display: 'Syne',
-  mono: 'JetBrains Mono',
-  hand: 'Segoe Print',
-  script: 'Segoe Script',
-};
+const FONT_OPTIONS: { id: DescFont; label: string; face: string; stack: string }[] = [
+  { id: 'body', label: 'Обычный', face: 'DM Sans', stack: 'var(--font-body), "DM Sans", system-ui, sans-serif' },
+  { id: 'display', label: 'Заголовок', face: 'Syne', stack: 'var(--font-display), Syne, system-ui, sans-serif' },
+  { id: 'mono', label: 'Mono', face: 'JetBrains Mono', stack: 'var(--font-mono), "JetBrains Mono", ui-monospace, monospace' },
+  { id: 'hand', label: 'Почерк', face: 'Segoe Print', stack: '"Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive' },
+];
 
-const FONT_STACK: Record<DescFont, string> = {
-  body: 'var(--font-body), "DM Sans", system-ui, sans-serif',
-  display: 'var(--font-display), Syne, system-ui, sans-serif',
-  mono: 'var(--font-mono), "JetBrains Mono", ui-monospace, monospace',
-  hand: '"Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive',
-  script: '"Segoe Script", "Apple Chancery", "Bradley Hand", cursive',
-};
+const DESC_MAX = 500;
 
 type Props = {
   value: string;
@@ -41,15 +36,15 @@ function plainLength(html: string): number {
     return html.replace(/<[^>]+>/g, '').length;
   }
   const probe = document.createElement('div');
-  probe.innerHTML = html;
-  return (probe.textContent || '').length;
+  probe.innerHTML = sanitizeDescriptionHtml(html);
+  return (probe.textContent || '').replace(/\u00a0/g, ' ').length;
 }
 
 function runCommand(command: string, value?: string) {
   try {
     document.execCommand(command, false, value);
   } catch {
-    /* ignore unsupported command */
+    /* ignore */
   }
 }
 
@@ -60,37 +55,51 @@ export function DescriptionEditor({
   font,
   onAlignChange,
   onFontChange,
-  maxLength = 20000,
+  maxLength = DESC_MAX,
   disabled,
   placeholder = 'Подробно опишите товар',
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const lastHtml = useRef(value);
+  const [fontOpen, setFontOpen] = useState(false);
   const [boldOn, setBoldOn] = useState(false);
   const [italicOn, setItalicOn] = useState(false);
   const [underlineOn, setUnderlineOn] = useState(false);
+  const activeFont = FONT_OPTIONS.find((item) => item.id === font) ?? FONT_OPTIONS[0];
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     if (value !== lastHtml.current) {
-      el.innerHTML = value || '';
+      el.innerHTML = sanitizeDescriptionHtml(value || '');
       lastHtml.current = value;
     }
   }, [value]);
 
+  useEffect(() => {
+    if (!fontOpen) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && rootRef.current?.contains(target)) return;
+      setFontOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [fontOpen]);
+
   const syncFromEditor = () => {
     const el = ref.current;
     if (!el) return;
-    const html = el.innerHTML === '<br>' ? '' : el.innerHTML;
-    const len = (el.textContent || '').length;
+    const safe = stripToSafeRichHtml(el.innerHTML === '<br>' ? '' : el.innerHTML);
+    const len = plainLength(safe);
     if (len > maxLength) {
-      // Soft trim: keep previous value if over limit
-      el.innerHTML = lastHtml.current || '';
+      el.innerHTML = sanitizeDescriptionHtml(lastHtml.current || '');
       return;
     }
-    lastHtml.current = html;
-    onChange(html);
+    if (el.innerHTML !== safe) el.innerHTML = safe;
+    lastHtml.current = safe;
+    onChange(safe);
   };
 
   const refreshCommandState = () => {
@@ -127,16 +136,26 @@ export function DescriptionEditor({
   };
 
   const setFont = (next: DescFont) => {
-    onFontChange(next);
+    const option = FONT_OPTIONS.find((item) => item.id === next) ?? FONT_OPTIONS[0];
+    onFontChange(option.id);
+    setFontOpen(false);
     focusEditor();
-    runCommand('fontName', FONT_NAME[next]);
+    runCommand('fontName', option.face);
+    syncFromEditor();
+  };
+
+  const onPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const plain = event.clipboardData.getData('text/plain') || '';
+    const clipped = plain.slice(0, Math.max(0, maxLength - plainLength(lastHtml.current || '')));
+    runCommand('insertText', clipped);
     syncFromEditor();
   };
 
   const empty = plainLength(value) === 0;
 
   return (
-    <div className={`desc-editor${disabled ? ' is-disabled' : ''}`}>
+    <div ref={rootRef} className={`desc-editor${disabled ? ' is-disabled' : ''}`}>
       <div className="desc-editor__toolbar" role="toolbar" aria-label="Форматирование описания">
         <button
           type="button"
@@ -188,27 +207,45 @@ export function DescriptionEditor({
           aria-pressed={align === 'right'}
         >⫸</button>
         <span className="desc-editor__sep" aria-hidden="true" />
-        <label className="desc-editor__font">
-          <span className="sr-only">Шрифт</span>
-          <select
-            value={font}
+        <div className="desc-editor__font-menu">
+          <button
+            type="button"
+            className={`desc-editor__font-trigger${fontOpen ? ' is-open' : ''}`}
             disabled={disabled}
-            onMouseDown={(event) => event.stopPropagation()}
-            onChange={(event) => setFont(event.target.value as DescFont)}
-            aria-label="Шрифт описания"
+            aria-expanded={fontOpen}
+            aria-haspopup="listbox"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setFontOpen((open) => !open);
+            }}
           >
-            <option value="body">Обычный</option>
-            <option value="display">Заголовок</option>
-            <option value="mono">Моно</option>
-            <option value="hand">Почерк</option>
-            <option value="script">Скрипт</option>
-          </select>
-        </label>
+            <span>{activeFont.label}</span>
+          </button>
+          {fontOpen && (
+            <div className="desc-editor__font-list" role="listbox" aria-label="Шрифт описания">
+              {FONT_OPTIONS.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  role="option"
+                  aria-selected={item.id === font}
+                  className={item.id === font ? 'is-active' : undefined}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    setFont(item.id);
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <div
         ref={ref}
         className={`control control--area desc-editor__area desc-editor__area--${align}${empty ? ' is-empty' : ''}`}
-        style={{ fontFamily: FONT_STACK[font] }}
+        style={{ fontFamily: activeFont.stack }}
         contentEditable={!disabled}
         role="textbox"
         aria-multiline="true"
@@ -219,6 +256,7 @@ export function DescriptionEditor({
         onKeyUp={refreshCommandState}
         onMouseUp={refreshCommandState}
         onBlur={syncFromEditor}
+        onPaste={onPaste}
       />
       <div className="desc-editor__meta">
         <span>{plainLength(value)}/{maxLength}</span>
@@ -226,3 +264,5 @@ export function DescriptionEditor({
     </div>
   );
 }
+
+export const DESCRIPTION_MAX_CHARS = DESC_MAX;

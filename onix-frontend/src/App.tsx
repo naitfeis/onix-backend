@@ -705,19 +705,10 @@ export default function App() {
       />
     </aside>
 
-    {/* keep theme on mobile topbar */}
+    {/* keep identity on mobile topbar — settings live in Profile */}
     <header className={`topbar mobile-only${chatImmersive ? ' topbar--chat' : ''}`}>
         <BrandMark />
         <div className="topbar__actions">
-          <button
-            type="button"
-            className={`icon-btn${settingsOpen ? ' is-active' : ''}`}
-            onClick={() => setSettingsOpen((open) => !open)}
-            aria-expanded={settingsOpen}
-            aria-label={t('settings.open')}
-          >
-            <IconSettings />
-          </button>
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (
               <strong>…</strong>
@@ -804,6 +795,7 @@ export default function App() {
                 openProductCard={openProductCard}
                 openTopup={openWalletTopup}
                 onTopupConsumed={() => setOpenWalletTopup(false)}
+                onOpenSettings={() => setSettingsOpen(true)}
               />
             </div>
           )}
