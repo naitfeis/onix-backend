@@ -670,8 +670,6 @@ html[data-glass="vision"] .market-hero,
 html[data-glass="vision"] .wallet-hero,
 html[data-glass="vision"] .wallet-strip,
 html[data-glass="vision"] .money-tile,
-html[data-glass="vision"] .topbar,
-html[data-glass="vision"] .bottom-nav,
 html[data-glass="vision"] .search-bar,
 html[data-glass="vision"] .control,
 html[data-glass="vision"] .select-menu__trigger,
@@ -684,6 +682,15 @@ html[data-glass="vision"] .sidebar-right {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
+  box-shadow: none !important;
+}
+/* Dock/topbar stay opaque — Vision blur paints blue vertical «потеки» on the nav */
+html[data-glass="vision"] .bottom-nav,
+html[data-glass="vision"] .topbar {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #0C0C0C !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
   box-shadow: none !important;
 }
 /* Modals / profile sheets stay solid — no frosted backdrop sampling. */

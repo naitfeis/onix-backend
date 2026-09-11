@@ -198,7 +198,7 @@ html[data-theme="dark"]:not([data-glass="vision"]) .settings-sheet {
   padding:
     calc(12px + env(safe-area-inset-top))
     16px
-    calc(78px + env(safe-area-inset-bottom));
+    calc(96px + env(safe-area-inset-bottom));
   position: relative;
   z-index: var(--z-content);
   background: transparent;
@@ -3810,9 +3810,9 @@ html[data-theme="light"] .money-tile--deposit .money-tile__icon {
 .app-shell--chat .viewport {
   margin: 0;
   padding-top: 0;
-  height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 70px - env(safe-area-inset-bottom));
-  min-height: min(760px, calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 70px - env(safe-area-inset-bottom)));
-  max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 70px - env(safe-area-inset-bottom));
+  height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
+  min-height: min(760px, calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom)));
+  max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
   overflow: hidden;
   display: flex;
   align-items: stretch;
@@ -5284,20 +5284,26 @@ html[data-theme="light"] .seller-identity__actions .button {
 .toast--danger { color: var(--accent-coral); }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } }
 
-/* Compact floating tab bar */
+/* Floating tab bar — solid chrome, no blur streaks */
 .bottom-nav {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(6px + env(safe-area-inset-bottom));
+  bottom: calc(10px + env(safe-area-inset-bottom));
   z-index: var(--z-sticky);
-  width: min(380px, calc(100vw - 28px));
-  height: 52px;
+  width: min(420px, calc(100vw - 24px));
+  height: 64px;
   margin-inline: auto;
   display: flex;
-  border-radius: 18px;
+  border-radius: 22px;
   padding-bottom: 0;
-  /* glass: tokens.css — blur via --glass-blur */
+  isolation: isolate;
+  contain: paint;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #0C0C0C !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  box-shadow: none !important;
 }
 .bottom-nav button {
   position: relative;
@@ -5311,7 +5317,7 @@ html[data-theme="light"] .seller-identity__actions .button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 1px;
+  gap: 3px;
   cursor: pointer;
   font: inherit;
   font-weight: 600;
@@ -5326,16 +5332,16 @@ html[data-theme="light"] .seller-identity__actions .button {
   box-shadow: none;
 }
 .bottom-nav button > span {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   font-size: 0;
   opacity: 0.75;
 }
 .bottom-nav button > span svg {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.5;
@@ -5343,45 +5349,52 @@ html[data-theme="light"] .seller-identity__actions .button {
   stroke-linejoin: round;
 }
 .bottom-nav button small {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: .01em;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-inline: 1px;
+  padding-inline: 2px;
 }
 .bottom-nav button.active { color: var(--text-primary); }
 .bottom-nav button.active > span { opacity: 1; }
 .nav-indicator {
   position: absolute;
   left: 0;
-  top: 4px;
+  top: 6px;
   width: 20%;
-  height: 26px;
+  height: 32px;
   background: transparent;
   border: 0;
   box-shadow: none;
+  outline: none;
   transition: transform 160ms var(--ease);
   pointer-events: none;
   z-index: 0;
+  filter: none !important;
 }
 .nav-indicator::after {
   content: "";
   display: block;
-  width: 36px;
-  height: 24px;
+  width: 44px;
+  height: 30px;
   margin: 0 auto;
-  border-radius: 12px;
-  background: var(--nav-capsule);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none !important;
+  filter: none !important;
+}
+html[data-theme="light"] .bottom-nav {
+  background: #ffffff !important;
+  border: 1px solid rgba(20, 25, 35, 0.12) !important;
 }
 html[data-theme="light"] .nav-indicator::after {
   border-color: rgba(20, 25, 35, 0.1);
   background: rgba(20, 25, 35, 0.06);
-  box-shadow: none;
+  box-shadow: none !important;
 }
 .nav-count {
   position: absolute;
@@ -5402,7 +5415,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 
   /* Keep the end of each screen clear of the fixed navigation dock. */
   .app-shell:not(.app-shell--chat) .viewport {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
 
   /* Mini-app chat: same chrome as other tabs so the dock / categories do not jump */
@@ -5410,11 +5423,11 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     padding:
       calc(12px + env(safe-area-inset-top))
       16px
-      calc(78px + env(safe-area-inset-bottom));
+      calc(96px + env(safe-area-inset-bottom));
   }
   .app-shell--chat .viewport {
-    height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 70px - env(safe-area-inset-bottom));
-    max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 70px - env(safe-area-inset-bottom));
+    height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
+    max-height: calc(var(--tg-viewport-height, 100dvh) - 12px - env(safe-area-inset-top) - 84px - env(safe-area-inset-bottom));
     min-height: 0;
     padding-top: 0;
     overflow: hidden;
@@ -5465,36 +5478,26 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .button:hover:not(:disabled) {
     transform: none;
   }
-  /* Mobile: solid chrome only when Vision glass is off */
+  /* Mobile: solid chrome — never Vision blur on dock (blue «потеки») */
   html[data-theme="dark"]:not([data-glass="vision"]) .topbar,
-  html[data-theme="dark"]:not([data-glass="vision"]) .bottom-nav {
+  html[data-theme="dark"]:not([data-glass="vision"]) .bottom-nav,
+  html[data-glass="vision"] .topbar,
+  html[data-glass="vision"] .bottom-nav {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
-    background: #000000 !important;
+    background: #0C0C0C !important;
     border: 1px solid rgba(255, 255, 255, 0.14) !important;
     box-shadow: none !important;
   }
-  html[data-glass="vision"] .topbar,
-  html[data-glass="vision"] .bottom-nav {
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-    background: var(--glass-card-bg) !important;
-    border: var(--glass-border) !important;
-    box-shadow: var(--glass-highlight) !important;
-  }
   html[data-theme="light"] .topbar,
-  html[data-theme="light"] .bottom-nav {
-    -webkit-backdrop-filter: none !important;
-    backdrop-filter: none !important;
-    background: #ffffff !important;
-    border: 1px solid rgba(20, 25, 35, 0.12) !important;
-    box-shadow: none !important;
-  }
+  html[data-theme="light"] .bottom-nav,
   html[data-theme="light"][data-glass="vision"] .topbar,
   html[data-theme="light"][data-glass="vision"] .bottom-nav {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
     background: #ffffff !important;
+    border: 1px solid rgba(20, 25, 35, 0.12) !important;
+    box-shadow: none !important;
   }
   html[data-theme="dark"] .control,
   html[data-theme="dark"] .modal__panel,
@@ -5510,8 +5513,10 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   html[data-glass="vision"] .modal__panel,
   html[data-glass="vision"] .bottom-nav {
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: #0C0C0C !important;
+    box-shadow: none !important;
   }
   .nav-indicator {
     transition: none;

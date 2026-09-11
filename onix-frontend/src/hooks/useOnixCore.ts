@@ -197,7 +197,7 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
   // No cookie-probe hop: production disables /api/session-probe (404 → false "network"
   // → refresh storms / rotation races). Refresh cookie is the source of truth.
   markBootstrapPhase('session-check', 0);
-  try {
+  const tryRefresh = async (): Promise<AuthBootstrap> => {
     await bootstrapPhase('refresh', () => manager.refreshAccessToken());
     if (manager.getAccessToken()) {
       markBootstrapPhase('cookie-check', 1);
@@ -205,6 +205,13 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     }
     markBootstrapPhase('cookie-check', 0);
     return { status: 'guest' };
+  };
+  try {
+    const first = await tryRefresh();
+    if (first.status === 'authenticated') return first;
+    // Empty token can mean the HttpOnly cookie was not ready yet — one soft retry.
+    await new Promise((r) => setTimeout(r, 450));
+    return await tryRefresh();
   } catch (error) {
     markBootstrapPhase('cookie-check', 0);
     if (manager.getAccessToken() && !manager.isAccessExpired()) {
@@ -212,6 +219,18 @@ async function restoreWebsiteSession(): Promise<AuthBootstrap> {
     }
     if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
     if (isTransientRefreshFailure(error)) return { status: 'network' };
+    // Cold start / CF race: one delayed retry before flashing guest.
+    await new Promise((r) => setTimeout(r, 450));
+    try {
+      const again = await tryRefresh();
+      if (again.status === 'authenticated') return again;
+    } catch (retryError) {
+      if (manager.getAccessToken() && !manager.isAccessExpired()) {
+        return { status: 'authenticated', mode: 'website' };
+      }
+      if (getAccessToken()) return { status: 'authenticated', mode: 'legacy' };
+      if (isTransientRefreshFailure(retryError)) return { status: 'network' };
+    }
     return { status: 'guest' };
   }
 }
@@ -598,7 +617,10 @@ export function useOnixCore() {
       if (event.type !== 'token-updated' || !event.accessToken) return;
       const sub = readJwtSub(event.accessToken);
       const currentId = profileRef.current?.id;
-      if (sub && currentId && sub === currentId) return;
+      // Cold bootstrap owns the first profile load — do not clear the store /
+      // re-fetch when refreshAccessToken emits token-updated (looks like 2–3 refreshes).
+      if (!currentId) return;
+      if (sub && sub === currentId) return;
       void (async () => {
         setStore(emptyStore);
         setMessages({});

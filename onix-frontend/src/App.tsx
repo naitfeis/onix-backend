@@ -516,15 +516,15 @@ export default function App() {
   const mode = screen === 'chat' ? 'chat' : screen === 'deals' || screen === 'create' ? 'focus' : 'normal';
   const unread = core.unread > 99 ? '99+' : String(core.unread);
   // Guests browse market + lots; soft login CTA stays visible on every screen.
-  // Hard wall only for ban, website login bridge, or network session failure.
+  // Hard wall only for ban, website login bridge, or confirmed guest (not network/pending).
+  // Network restore must NOT flash the guest AuthNotice — that looked like "logout + refresh".
   const guestSoftAuth = !core.profile
     && !miniApp
     && !websiteLoginBridge
-    && (core.sessionRestore === 'guest' || core.sessionRestore === 'network' || loginPrompt);
+    && (core.sessionRestore === 'guest' || loginPrompt);
   const showAuth = Boolean(banNotice)
     || websiteLoginBridge
-    || guestSoftAuth
-    || (core.sessionRestore === 'network' && !core.profile && core.states.profile === 'error');
+    || guestSoftAuth;
   const shellReady = core.states.products === 'success'
     || core.states.products === 'error'
     || Boolean(core.profile)

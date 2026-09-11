@@ -61,6 +61,8 @@ function registerWebsitePwa(opts?: {
         void registration?.update().catch(() => { /* offline / timed out */ });
       },
       onNeedRefresh() {
+        // Never auto-reload — that looked like the site "refreshing 2–3 times" on entry.
+        // Offer update only when the host UI passes a banner handler.
         opts?.onNeedRefresh?.(() => {
           void Promise.resolve(updateSW(true)).catch(() => { /* ignore */ });
         });
