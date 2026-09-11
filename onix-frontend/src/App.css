@@ -99,11 +99,11 @@
   padding: 20px 18px 24px;
   isolation: auto;
   border-left: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(18, 18, 18, 0.92) !important;
+  background: rgba(10, 10, 10, 0.92) !important;
   color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(48px) saturate(105%);
-  backdrop-filter: blur(48px) saturate(105%);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(48px) saturate(100%);
+  backdrop-filter: blur(48px) saturate(100%);
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
 }
@@ -674,15 +674,15 @@ html[data-theme="light"] .auth-notice__command {
   border-radius: 999px;
   box-shadow: none;
 }
-/* Market / profile banners — neutral charcoal (not purple-black) */
+/* Market / profile banners — deep black glass rim (Автовыдача material) */
 .market-hero {
   position: relative;
   margin-bottom: 16px;
   padding: 0;
   border-radius: var(--radius-hero);
-  background: #151515;
+  background: #0C0C0C;
   border: var(--glass-border);
-  box-shadow: var(--glass-highlight);
+  box-shadow: none;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   overflow: clip;
@@ -692,7 +692,7 @@ html[data-theme="light"] .market-hero {
 }
 html[data-glass="vision"] .market-hero,
 html[data-glass="vision"] .desktop-hero {
-  background: #151515 !important;
+  background: var(--glass-card-bg) !important;
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
 }
@@ -2585,24 +2585,27 @@ html[data-theme="light"] .select-menu__option.is-active {
   gap: 8px;
   min-height: 48px;
   padding: 0 14px 0 10px;
-  border: 1px solid var(--line-strong);
+  border: var(--glass-border);
   border-radius: 26px;
-  background: transparent;
-  color: inherit;
+  background: var(--glass-card-bg);
+  color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: none;
 }
 .auto-deliver-filter.is-on {
-  border-color: var(--line-strong);
-  color: inherit;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text-primary);
+  background: var(--glass-card-bg);
 }
 .auto-deliver-filter__dot {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2618,8 +2621,8 @@ html[data-theme="light"] .select-menu__option.is-active {
 .search-row select.control,
 .search-row .select-menu__trigger {
   border-radius: 26px !important;
-  background-color: transparent;
-  border: 1px solid var(--line-strong);
+  background-color: var(--glass-card-bg);
+  border: var(--glass-border);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
@@ -2980,9 +2983,9 @@ html[data-theme="light"] .deal-card.deal-card--order {
   min-height: 36px;
   padding: 8px 14px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.82);
+  border: var(--glass-border);
+  background: var(--glass-card-bg);
+  color: rgba(255, 255, 255, 0.88);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -3206,7 +3209,7 @@ html[data-theme="light"] .deal-chip {
   height: 16px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.22);
-  background: #141418;
+  background: #0A0A0A;
   display: grid;
   place-items: center;
   z-index: 1;
@@ -3464,7 +3467,7 @@ html[data-theme="light"] .timeline li {
   margin: 0 0 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: #1c1c1c;
+  background: #0C0C0C;
   box-shadow: none;
 }
 .app-shell--chat .chat-list-head {
@@ -3595,7 +3598,7 @@ html[data-theme="light"] .timeline li {
   background: transparent !important;
 }
 .app-shell--chat .conversation__head {
-  background: #1c1c1c !important;
+  background: #0C0C0C !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   box-shadow: none !important;
   border-radius: var(--radius-md) !important;
@@ -3706,7 +3709,7 @@ body.is-resizing-chat * {
   text-align: left;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  background: #1c1c1c;
+  background: #0C0C0C;
   color: var(--text);
   font-size: 12px;
   font-family: inherit;
@@ -3724,7 +3727,7 @@ html[data-theme="light"] .thread {
 }
 .thread.active {
   border-color: color-mix(in srgb, var(--accent-violet) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent-violet) 16%, #1c1c1c);
+  background: color-mix(in srgb, var(--accent-violet) 16%, #0C0C0C);
 }
 .thread:active {
   transform: none;
@@ -4026,7 +4029,7 @@ html[data-theme="light"] .ai-actions {
   font: inherit;
   font-size: 12px;
   color: var(--text);
-  background: #1c1c1c !important;
+  background: #0C0C0C !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
@@ -4079,7 +4082,7 @@ html[data-theme="light"] .ai-actions {
 .card.profile-card {
   overflow: visible;
   border: var(--glass-border) !important;
-  background: #1c1c1c;
+  background: #0C0C0C;
   box-shadow: var(--glass-highlight) !important;
   border-radius: var(--radius-hero, var(--radius-card));
 }
@@ -4987,9 +4990,9 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   html[data-theme="dark"]:not([data-glass="vision"]) .bottom-nav {
     -webkit-backdrop-filter: none !important;
     backdrop-filter: none !important;
-    background: #0B0B0C !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06) !important;
+    background: #000000 !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    box-shadow: none !important;
   }
   html[data-glass="vision"] .topbar,
   html[data-glass="vision"] .bottom-nav {
@@ -5884,7 +5887,7 @@ html[data-theme="light"] .thread-list .chat-toolbar .control {
   backdrop-filter: none !important;
 }
 html[data-theme="dark"] .thread-list .chat-toolbar .control {
-  background: #1c1c1c !important;
+  background: #0C0C0C !important;
   border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;
@@ -5899,7 +5902,7 @@ html[data-theme="light"] .thread-list .chat-toolbar .button--secondary {
   backdrop-filter: none !important;
 }
 html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
-  background: #1c1c1c !important;
+  background: #0C0C0C !important;
   border: 0 !important;
   box-shadow: none !important;
   -webkit-backdrop-filter: none !important;

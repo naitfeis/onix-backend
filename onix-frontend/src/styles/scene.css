@@ -17,7 +17,7 @@
   filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  background: #0B0B0C;
+  background: #000000;
 }
 
 html[data-theme="light"] .onix-bg__base {
@@ -25,8 +25,8 @@ html[data-theme="light"] .onix-bg__base {
 }
 
 html[data-theme="dark"] {
-  --page-bg: #0B0B0C;
-  --bg-scene-deep: #0B0B0C;
+  --page-bg: #000000;
+  --bg-scene-deep: #000000;
 }
 
 html[data-theme="light"] {
