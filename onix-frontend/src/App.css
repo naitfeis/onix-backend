@@ -3287,10 +3287,8 @@ html[data-theme="light"] .timeline li {
   border-color: rgba(63, 191, 143, 0.22);
 }
 .money-tile--deposit {
-  background:
-    radial-gradient(120% 90% at 0% 50%, rgba(124, 108, 240, 0.2), transparent 55%),
-    var(--glass-card-bg);
-  border-color: rgba(124, 108, 240, 0.22);
+  background: var(--glass-card-bg);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 .money-tile__icon {
   width: 44px;
@@ -3307,9 +3305,9 @@ html[data-theme="light"] .timeline li {
   border: 1px solid rgba(63, 191, 143, 0.32);
 }
 .money-tile--deposit .money-tile__icon {
-  color: #8B7FF5;
-  background: rgba(139, 127, 245, 0.14);
-  border: 1px solid rgba(139, 127, 245, 0.32);
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 .money-tile__body { display: grid; gap: 6px; min-width: 0; align-content: start; }
 .money-tile__body small {
@@ -3329,7 +3327,7 @@ html[data-theme="light"] .timeline li {
   overflow-wrap: anywhere;
 }
 .money-tile--wallet .money-tile__body strong { color: #3FBF8F; }
-.money-tile--deposit .money-tile__body strong { color: #8B7FF5; }
+.money-tile--deposit .money-tile__body strong { color: var(--text-primary); }
 .money-tile__body em {
   font-style: normal;
   font-size: 11px;
@@ -3340,6 +3338,11 @@ html[data-theme="light"] .timeline li {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
+}
+.money-tile__stats--stack {
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin-top: 4px;
 }
 .money-tile__stats span {
   display: grid;

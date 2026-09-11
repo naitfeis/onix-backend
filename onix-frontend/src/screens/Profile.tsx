@@ -603,12 +603,10 @@ export function Profile({
         <span className="money-tile__icon" aria-hidden="true"><IconShield size={22} /></span>
         <div className="money-tile__body">
           <small>Залог <IconInfo size={12} /></small>
-          <strong>{money(deposit?.totalCents ?? '0')}</strong>
-          <em>Сумма заморожена на время сделок</em>
+          <strong>{money(deposit?.availableCents ?? '0')}</strong>
+          <em>Доступно для вывода и новых сделок</em>
           {deposit && (
-            <div className="money-tile__stats" aria-label="Детализация залога">
-              <span><b>{money(deposit.totalCents)}</b><small>всего</small></span>
-              <span><b>{money(deposit.availableCents)}</b><small>доступно</small></span>
+            <div className="money-tile__stats money-tile__stats--stack" aria-label="Замороженный залог">
               <span><b>{money(deposit.lockedCents)}</b><small>заморожено</small></span>
             </div>
           )}
