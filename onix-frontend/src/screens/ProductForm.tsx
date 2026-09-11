@@ -109,7 +109,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
       <Card className="lot-form__card">
         <header className="lot-form__head">
           <h2>Создание товара</h2>
-          <p>Заполните информацию о товаре. Чем подробнее описание — тем быстрее его купят.</p>
         </header>
         <form className="form lot-form__form" onSubmit={submit}>
           {errors.length > 0 && (

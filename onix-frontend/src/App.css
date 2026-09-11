@@ -2989,10 +2989,33 @@ html[data-theme="light"] .category-toggle.is-open {
 .desc-editor__area {
   min-height: 140px;
   resize: vertical;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.desc-editor__area.is-empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-caption);
+  pointer-events: none;
+}
+.desc-editor__area:focus {
+  outline: none;
+}
+.desc-editor.is-disabled .desc-editor__area {
+  opacity: 0.6;
+  pointer-events: none;
 }
 .desc-editor__area--left { text-align: left; }
 .desc-editor__area--center { text-align: center; }
 .desc-editor__area--right { text-align: right; }
+.lot-sheet__rich {
+  display: block;
+}
+.lot-sheet__rich b,
+.lot-sheet__rich strong { font-weight: 700; }
+.lot-sheet__rich i,
+.lot-sheet__rich em { font-style: italic; }
+.lot-sheet__rich u { text-decoration: underline; }
 .desc-editor__meta {
   display: flex;
   justify-content: flex-end;
