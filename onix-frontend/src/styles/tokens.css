@@ -134,9 +134,9 @@ html[data-theme="dark"] {
   --page-bg: #000000;
   --sparkle: rgba(255, 252, 245, 0.95);
 
-  /* Modal focus — dark: glass-first scene stays visible but recedes */
-  --modal-backdrop: rgb(0 0 0 / 42%);
-  --modal-backdrop-blur: blur(8px);
+  /* Modal focus — dark overlay, no backdrop blur */
+  --modal-backdrop: rgb(0 0 0 / 62%);
+  --modal-backdrop-blur: none;
 
   /* Nav states — subtle, not gaming glow pills */
   --nav-hover-bg: rgb(255 255 255 / 5%);
@@ -231,8 +231,8 @@ html[data-theme="light"] {
   --_glow: rgba(107, 95, 224, 0.14);
   --_bg: linear-gradient(145deg, #8B7FF5, #6B5FE0);
 
-  --modal-backdrop: rgb(20 24 32 / 28%);
-  --modal-backdrop-blur: blur(16px);
+  --modal-backdrop: rgb(20 24 32 / 45%);
+  --modal-backdrop-blur: none;
 
   --nav-hover-bg: rgba(20, 25, 35, 0.06);
   --nav-active-bg: rgba(20, 25, 35, 0.1);
@@ -671,8 +671,6 @@ html[data-glass="vision"] .wallet-strip,
 html[data-glass="vision"] .money-tile,
 html[data-glass="vision"] .topbar,
 html[data-glass="vision"] .bottom-nav,
-html[data-glass="vision"] .modal__panel,
-html[data-glass="vision"] .auth-notice,
 html[data-glass="vision"] .search-bar,
 html[data-glass="vision"] .control,
 html[data-glass="vision"] .select-menu__trigger,
@@ -687,13 +685,22 @@ html[data-glass="vision"] .sidebar-right {
   border: var(--glass-border) !important;
   box-shadow: none !important;
 }
+/* Modals / profile sheets stay solid — no frosted backdrop sampling. */
+html[data-glass="vision"] .modal__panel,
+html[data-glass="vision"] .auth-notice {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #0C0C0C !important;
+  border: var(--glass-border) !important;
+  box-shadow: none !important;
+}
 html[data-glass="vision"] .settings-sheet {
   isolation: auto !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) !important;
-  backdrop-filter: blur(var(--glass-blur-thick)) saturate(var(--glass-saturate)) !important;
-  background: var(--glass-thick-bg) !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background: #0C0C0C !important;
   border: var(--glass-border) !important;
-  box-shadow: var(--glass-highlight) !important;
+  box-shadow: none !important;
 }
 /* Chat stays frameless in Vision too */
 html[data-glass="vision"] .chat-layout,

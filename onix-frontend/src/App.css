@@ -99,11 +99,11 @@
   padding: 20px 18px 24px;
   isolation: auto;
   border-left: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(10, 10, 10, 0.92) !important;
+  background: rgba(10, 10, 10, 0.96) !important;
   color: #fff;
   box-shadow: none;
-  -webkit-backdrop-filter: blur(48px) saturate(100%);
-  backdrop-filter: blur(48px) saturate(100%);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   transform: translateX(100%);
   transition: transform 280ms var(--ease);
 }
@@ -2811,16 +2811,19 @@ html[data-theme="light"] .category-toggle.is-open {
   padding: 4px 2px 2px;
 }
 
-/* Sell form — same banner violet as «Смотреть лоты» / «Пополнить» */
+/* Sell form — violet sections, no red / drafts / screenshots */
 .lot-form .button--primary,
-.lot-form .button--violet {
+.lot-form .button--violet,
+.lot-form__publish {
   color: #fff;
   background: var(--accent-violet-deep);
   border: 0;
   box-shadow: none;
+  width: 100%;
 }
 .lot-form .button--primary:hover:not(:disabled),
-.lot-form .button--violet:hover:not(:disabled) {
+.lot-form .button--violet:hover:not(:disabled),
+.lot-form__publish:hover:not(:disabled) {
   background: var(--accent-violet);
 }
 .lot-form .check-row input[type="checkbox"] {
@@ -2838,6 +2841,174 @@ html[data-theme="light"] .category-toggle.is-open {
 }
 .lot-form .summary-line strong {
   color: var(--accent-violet);
+}
+.lot-form__card {
+  padding: 18px 16px 20px;
+}
+.lot-form__head {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.lot-form__head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.lot-form__head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+.lot-form__form {
+  display: grid;
+  gap: 16px;
+}
+.lot-form__section {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: #0C0C0C;
+}
+.lot-form__section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.lot-form__section-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent-violet-deep);
+}
+.lot-form__section-body {
+  display: grid;
+  gap: 12px;
+}
+.lot-form__types .active,
+.lot-form .chips button.active {
+  border-color: var(--accent-violet);
+  background: color-mix(in srgb, var(--accent-violet-deep) 22%, transparent);
+  color: #fff;
+}
+.lot-form__advanced {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: var(--glass-border);
+  border-radius: var(--radius-card);
+  background: #0C0C0C;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.lot-form__advanced span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.lot-form__advanced strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.lot-form__advanced small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.lot-form__advanced em {
+  font-style: normal;
+  color: var(--text-secondary);
+}
+.lot-form__advanced-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 2px;
+}
+.desc-editor {
+  display: grid;
+  gap: 8px;
+}
+.desc-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.desc-editor__btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: var(--glass-border);
+  border-radius: 8px;
+  background: #0C0C0C;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.desc-editor__btn--italic { font-style: italic; }
+.desc-editor__btn.is-active,
+.desc-editor__btn:hover:not(:disabled) {
+  border-color: var(--accent-violet);
+  background: color-mix(in srgb, var(--accent-violet-deep) 22%, transparent);
+}
+.desc-editor__sep {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 0 2px;
+}
+.desc-editor__font select {
+  height: 32px;
+  padding: 0 10px;
+  border: var(--glass-border);
+  border-radius: 8px;
+  background: #0C0C0C;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+.desc-editor__area {
+  min-height: 140px;
+  resize: vertical;
+}
+.desc-editor__area--left { text-align: left; }
+.desc-editor__area--center { text-align: center; }
+.desc-editor__area--right { text-align: right; }
+.desc-editor__meta {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 11px;
+  color: var(--text-caption);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .segmented {
   display: grid;
@@ -4321,8 +4492,8 @@ html[data-theme="dark"] .stats b { color: #fff; }
     12px
     calc(12px + env(safe-area-inset-bottom, 0px));
   background: var(--modal-backdrop);
-  -webkit-backdrop-filter: var(--modal-backdrop-blur);
-  backdrop-filter: var(--modal-backdrop-blur);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
   animation: modal-focus 220ms var(--ease) forwards;
   box-sizing: border-box;
   overscroll-behavior: none;
@@ -4330,8 +4501,8 @@ html[data-theme="dark"] .stats b { color: #fff; }
 @keyframes modal-focus {
   to {
     background: var(--modal-backdrop);
-    -webkit-backdrop-filter: var(--modal-backdrop-blur);
-    backdrop-filter: var(--modal-backdrop-blur);
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }
 .modal__panel {
@@ -4398,12 +4569,14 @@ html[data-theme="light"] .lot-island {
   border: var(--glass-border);
 }
 .lot-island--seller .seller-identity.profile-card {
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
   padding: 0;
   overflow: visible;
   color: var(--text-primary);
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 .lot-island--seller .seller-identity .profile-main h1,
 .lot-island--seller .seller-identity .profile-main > p,

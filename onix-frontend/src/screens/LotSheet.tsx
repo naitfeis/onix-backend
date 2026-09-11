@@ -14,6 +14,7 @@ import { SellerIdentityCard } from './SellerIdentityCard';
 import { lotWarrantyBadge } from '../utils/warranty';
 import { CardLogo, OnixPayMark, SbpLogo } from '../components/BrandLogos';
 import { categoryLabel as displayCategory } from '../i18n';
+import { FormattedDescription } from '../utils/formattedDescription';
 
 const PAYMENT_WARNING =
   'Не подтверждайте заказ, пока продавец не передал товар. Снимите передачу на видео — так проще решить спор.';
@@ -185,7 +186,7 @@ export function LotSheet({
           <p className="lot-sheet__section">Название</p>
           <p className="lot-sheet__title">{title}</p>
           <p className="lot-sheet__section lot-sheet__section--next">Описание</p>
-          <p className="lot-sheet__detail">{detail}</p>
+          <p className="lot-sheet__detail"><FormattedDescription text={detail} /></p>
         </section>
 
         <section className="lot-island lot-island--seller" aria-label="Продавец">

@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
-import { Button, Card, Field, Input, Textarea } from '../design-system';
+import { Button, Card, Field, Input } from '../design-system';
+import { DescriptionEditor, type DescAlign, type DescFont } from '../components/DescriptionEditor';
 import { minPriceRubles, validateDraft } from '../utils/productValidation';
 import {
   NEW_SELLER_WARRANTY_MIN_HOURS,
@@ -22,6 +23,18 @@ function sellerRegisteredAt(core: Core): string | null {
     ?? null;
 }
 
+function Section({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <section className="lot-form__section">
+      <h3 className="lot-form__section-title">
+        <span className="lot-form__section-num" aria-hidden="true">{n}</span>
+        {title}
+      </h3>
+      <div className="lot-form__section-body">{children}</div>
+    </section>
+  );
+}
+
 export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: () => void; setToast: (text: string) => void }) {
   const registeredAt = sellerRegisteredAt(core);
   const profileReady = core.states.profile === 'success' && Boolean(core.profile);
@@ -36,6 +49,9 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   }));
   const [errors, setErrors] = useState<string[]>([]);
   const [catsOpen, setCatsOpen] = useState(false);
+  const [descAlign, setDescAlign] = useState<DescAlign>('left');
+  const [descFont, setDescFont] = useState<DescFont>('body');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!profileReady) {
@@ -88,89 +104,191 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   };
   const showNewSellerNote = !profileReady || newSeller;
 
-  return <div className="stack narrow lot-form">
-    <Card><form className="form" onSubmit={submit}>
-      {errors.length > 0 && <div className="form-error" role="alert"><strong>Проверьте данные:</strong>{errors.map(item => <span key={item}>— {item}</span>)}</div>}
-      {core.errors['product-form'] && <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>}
-      <Field label="Название" hint="До 32 символов"><Input required minLength={5} maxLength={32} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} placeholder="Например, Butterfly | Fade" /></Field>
-      <Field
-        label="Описание"
-        hint="Пишите правду: логины, ключи, коды, игровой ID — как есть. Пишите что получить покупатель : услугу, аккаунт, предмет, ключ доступа."
-      >
-        <Textarea maxLength={20000} value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} />
-      </Field>
-      <div className="field">
-        <span className="field__label">Категория</span>
-        <button
-          type="button"
-          className={`control category-toggle${catsOpen ? ' is-open' : ''}`}
-          aria-expanded={catsOpen}
-          aria-controls="lot-category-list"
-          onClick={() => setCatsOpen((open) => !open)}
-        >
-          <span>{categoryLabel(draft.category)}</span>
-        </button>
-        {catsOpen && (
-          <div id="lot-category-list" className="chips category-picker" role="list" aria-label="Все категории">
-            {CATEGORIES.map((item) => (
+  return (
+    <div className="stack narrow lot-form">
+      <Card className="lot-form__card">
+        <header className="lot-form__head">
+          <h2>Создание товара</h2>
+          <p>Заполните информацию о товаре. Чем подробнее описание — тем быстрее его купят.</p>
+        </header>
+        <form className="form lot-form__form" onSubmit={submit}>
+          {errors.length > 0 && (
+            <div className="form-error" role="alert">
+              <strong>Проверьте данные:</strong>
+              {errors.map((item) => <span key={item}>— {item}</span>)}
+            </div>
+          )}
+          {core.errors['product-form'] && (
+            <div className="form-error" role="alert"><strong>{core.errors['product-form']}</strong></div>
+          )}
+
+          <Section n={1} title="Основная информация">
+            <Field label="Название товара" hint={`${draft.title.length}/32`}>
+              <Input
+                required
+                minLength={5}
+                maxLength={32}
+                value={draft.title}
+                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                placeholder="Например: Steam аккаунт с играми"
+              />
+            </Field>
+            <div className="field">
+              <span className="field__label">Категория</span>
               <button
                 type="button"
-                role="listitem"
-                key={item}
-                className={draft.category === item ? 'active' : ''}
-                onClick={() => pickCategory(item)}
-              >{categoryLabel(item)}</button>
-            ))}
+                className={`control category-toggle${catsOpen ? ' is-open' : ''}`}
+                aria-expanded={catsOpen}
+                aria-controls="lot-category-list"
+                onClick={() => setCatsOpen((open) => !open)}
+              >
+                <span>{categoryLabel(draft.category)}</span>
+              </button>
+              {catsOpen && (
+                <div id="lot-category-list" className="chips category-picker" role="list" aria-label="Все категории">
+                  {CATEGORIES.map((item) => (
+                    <button
+                      type="button"
+                      role="listitem"
+                      key={item}
+                      className={draft.category === item ? 'active' : ''}
+                      onClick={() => pickCategory(item)}
+                    >{categoryLabel(item)}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Field label="Тип товара">
+              <div className="chips lot-form__types" role="list" aria-label="Подкатегории">
+                {subs.map((item) => (
+                  <button
+                    type="button"
+                    role="listitem"
+                    className={draft.subcategory === item ? 'active' : ''}
+                    key={item}
+                    onClick={() => setDraft({ ...draft, subcategory: item })}
+                  >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
+                ))}
+              </div>
+            </Field>
+          </Section>
+
+          <Section n={2} title="Описание">
+            <DescriptionEditor
+              value={draft.description}
+              onChange={(description) => setDraft({ ...draft, description })}
+              align={descAlign}
+              font={descFont}
+              onAlignChange={setDescAlign}
+              onFontChange={setDescFont}
+              maxLength={20000}
+              placeholder="Подробно опишите товар: что получит покупатель, условия передачи, нюансы."
+            />
+          </Section>
+
+          <Section n={3} title="Цена и количество">
+            <div className="form-grid">
+              <Field label="Цена, ₽" hint={`От ${minRub} ₽ · комиссия 5% (= ${payout ? `${payout} ₽` : '0,00 ₽'})`}>
+                <Input
+                  required
+                  inputMode="decimal"
+                  value={draft.priceRubles}
+                  onChange={(event) => setDraft({ ...draft, priceRubles: event.target.value })}
+                />
+              </Field>
+              <Field label="Количество">
+                <Input
+                  required
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={draft.quantity}
+                  onChange={(event) => setDraft({ ...draft, quantity: Number(event.target.value) })}
+                />
+              </Field>
+            </div>
+          </Section>
+
+          <button
+            type="button"
+            className={`lot-form__advanced${advancedOpen ? ' is-open' : ''}`}
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen((open) => !open)}
+          >
+            <span>
+              <strong>Дополнительные настройки</strong>
+              <small>Автоматическая выдача, заморозка средств, гарантии</small>
+            </span>
+            <em aria-hidden="true">{advancedOpen ? '▴' : '▾'}</em>
+          </button>
+          {advancedOpen && (
+            <div className="lot-form__advanced-body">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.autoDeliver)}
+                  onChange={(event) => setDraft({ ...draft, autoDeliver: event.target.checked })}
+                />
+                Автоматическая выдача
+              </label>
+                  {draft.autoDeliver && (
+                <Field label="Текст товара" hint="login / password / код / ссылка — выдаётся только после оплаты">
+                  <textarea
+                    className="control control--area"
+                    required
+                    maxLength={4000}
+                    value={draft.deliveryText || ''}
+                    onChange={(event) => setDraft({ ...draft, deliveryText: event.target.value })}
+                  />
+                </Field>
+              )}
+              <Field
+                label="Заморозка денег продавца"
+                hint={showNewSellerNote
+                  ? NEW_SELLER_HOLD_HINT
+                  : 'Сколько часов после передачи товара деньги ещё не уходят продавцу (от 5 часов до 30 дней, по умолчанию 10).'}
+              >
+                <Input
+                  type="number"
+                  min={minWarranty}
+                  max={720}
+                  value={draft.warrantyHours ?? minWarranty}
+                  onChange={(event) => setDraft({
+                    ...draft,
+                    warrantyHours: clampListingWarranty(Number(event.target.value), registeredAt),
+                  })}
+                />
+              </Field>
+            </div>
+          )}
+
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={Boolean(draft.acceptedRules)}
+              onChange={(event) => setDraft({ ...draft, acceptedRules: event.target.checked })}
+            />
+            Я прочитал и согласен с правилами платформы
+          </label>
+          {core.profile && core.profile.hasTelegram === false && (
+            <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
+          )}
+          <div className="summary-line">
+            <span>К получению (после 5%)</span>
+            <strong>{payout ? `${payout} ₽` : '—'}</strong>
           </div>
-        )}
-      </div>
-      <Field label="Подкатегория">
-        <div className="chips" role="list" aria-label="Подкатегории">
-          {subs.map(item => (
-            <button
-              type="button"
-              role="listitem"
-              className={draft.subcategory === item ? 'active' : ''}
-              key={item}
-              onClick={() => setDraft({ ...draft, subcategory: item })}
-            >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
-          ))}
-        </div>
-      </Field>
-      <div className="form-grid"><Field label="Цена, ₽" hint={`От ${minRub} ₽ · комиссия 5%`}><Input required inputMode="decimal" value={draft.priceRubles} onChange={event => setDraft({ ...draft, priceRubles: event.target.value })} /></Field>
-        <Field label="Количество"><Input required type="number" min={1} max={999} value={draft.quantity} onChange={event => setDraft({ ...draft, quantity: Number(event.target.value) })} /></Field></div>
-      <label className="check-row"><input type="checkbox" checked={Boolean(draft.autoDeliver)} onChange={event => setDraft({ ...draft, autoDeliver: event.target.checked })} /> Автоматическая выдача</label>
-      {draft.autoDeliver && <Field label="Текст товара" hint="login / password / код / ссылка — выдаётся только после оплаты"><Textarea required maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} /></Field>}
-      <Field
-        label="Заморозка денег продавца"
-        hint={showNewSellerNote
-          ? NEW_SELLER_HOLD_HINT
-          : 'Сколько часов после передачи товара деньги ещё не уходят продавцу (от 5 часов до 30 дней, по умолчанию 10).'}
-      >
-        <Input
-          type="number"
-          min={minWarranty}
-          max={720}
-          value={draft.warrantyHours ?? minWarranty}
-          onChange={(event) => setDraft({
-            ...draft,
-            warrantyHours: clampListingWarranty(Number(event.target.value), registeredAt),
-          })}
-        />
-      </Field>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={Boolean(draft.acceptedRules)}
-          onChange={(event) => setDraft({ ...draft, acceptedRules: event.target.checked })}
-        />
-        Я прочитал и согласен с правилами платформы
-      </label>
-      {core.profile && core.profile.hasTelegram === false && (
-        <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
-      )}
-      <div className="summary-line"><span>К получению (после 5%)</span><strong>{payout ? `${payout} ₽` : '—'}</strong></div>
-      <Button type="submit" variant="violet" busy={core.actionBusy === 'product-form'} disabled={core.profile?.hasTelegram === false}>ОПУБЛИКОВАТЬ ЛОТ</Button>
-    </form></Card></div>;
+          <Button
+            type="submit"
+            variant="violet"
+            className="lot-form__publish"
+            busy={core.actionBusy === 'product-form'}
+            disabled={core.profile?.hasTelegram === false}
+          >
+            Опубликовать товар
+          </Button>
+        </form>
+      </Card>
+    </div>
+  );
 }
 export default ProductForm;
