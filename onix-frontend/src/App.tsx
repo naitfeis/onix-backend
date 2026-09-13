@@ -96,7 +96,7 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
 };
 
 function formatLotCount(n: number): string {
-  if (n <= 0) return '·';
+  if (n <= 0) return '0';
   if (n > 99) return '99+';
   return String(n);
 }

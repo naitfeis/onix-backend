@@ -125,12 +125,12 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('renders category lot share as a corner badge with a black core', () => {
+  it('renders category lot count as a corner circle badge with a black core', () => {
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?position:\s*absolute;/);
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?top:\s*-4px;/);
     expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?right:\s*-4px;/);
-    expect(appCss).toMatch(/\.cat-card__ring::before[\s\S]*?background:\s*#0b0b0c;/);
-    expect(appCss).toMatch(/\.cat-card__ring-value[\s\S]*?stroke:\s*#fff;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?background:\s*#0b0b0c;/);
+    expect(appCss).toMatch(/\.cat-card__ring[\s\S]*?border:\s*2\.5px solid #3a3a3e;/);
     expect(appCss).toMatch(/\.cat-card__ring-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
     expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__emblem--other[\s\S]*?background:\s*#fff/);
     expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__dots i[\s\S]*?background:\s*#111;/);

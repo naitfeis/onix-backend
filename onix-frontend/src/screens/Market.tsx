@@ -67,6 +67,7 @@ function writeCatalogScroll(top: number, behavior: ScrollBehavior = 'auto') {
 
 function scrollCatalogToSearch() {
   const target = (document.querySelector('.search-row')
+    || document.querySelector('.game-page')
     || document.querySelector('.cat-block')
     || document.querySelector('.market-hero')) as HTMLElement | null;
   if (!target) {
@@ -90,35 +91,17 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function CategoryShareRing({ count, total }: { count: number; total: number }) {
+function CategoryShareRing({ count }: { count: number; total?: number }) {
   const shown = count > 99 ? '99+' : String(count);
-  const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
-  const size = 28;
-  const stroke = 2.75;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
   return (
     <span className="cat-card__ring" aria-label={`${count} лотов`}>
-      <svg className="cat-card__ring-svg" viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <circle
-          className="cat-card__ring-track"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-        />
-        <circle
-          className="cat-card__ring-value"
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - fraction)}
-          opacity={fraction > 0 ? 1 : 0}
-        />
-      </svg>
       <span className="cat-card__ring-num">{shown}</span>
     </span>
   );
+}
+
+function formatSubCount(n: number): string {
+  return n.toLocaleString('ru-RU');
 }
 
 const VIEWED_LOTS_KEY = 'onix-viewed-lots';
@@ -521,6 +504,24 @@ export function Market({
     [categoryCounts],
   );
 
+  const gameView = !isMarketAllCategory(category);
+  const gameStyle = CAT_STYLE[category];
+  const gameImage = CATEGORY_IMAGES[category];
+  const gameLotCount = categoryCounts[category] ?? 0;
+  const subcategoryCounts = useMemo(() => {
+    if (!gameView) return {} as Record<string, number>;
+    const byId = new Map<string, Product>();
+    for (const product of [...core.products, ...items]) {
+      if (product.category !== category) continue;
+      byId.set(product.id, product);
+    }
+    const acc: Record<string, number> = {};
+    for (const sub of marketSubs) {
+      acc[sub] = [...byId.values()].filter((p) => p.subcategory === sub).length;
+    }
+    return acc;
+  }, [category, core.products, gameView, items, marketSubs]);
+
   const goHeroSlide = (index: number) => {
     const next = ((index % heroSlides.length) + heroSlides.length) % heroSlides.length;
     setHeroSlide(next);
@@ -605,125 +606,186 @@ export function Market({
       />
     )}
     {!selected && <>
-    <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
-      <div className="market-hero__track" ref={heroTrackRef}>
-        {heroSlides.map((slide, index) => (
-          <article
-            key={slide.id}
-            className="market-hero__slide"
-            aria-hidden={heroSlide !== index}
-            aria-label={`${index + 1} из ${heroSlides.length}`}
-          >
-            <h2>{slide.title}</h2>
-            <p>{slide.text}</p>
-            <Button
-              variant="violet"
-              onClick={() => {
-                if (slide.action === 'create') switchTo('create');
-                else heroTrackRef.current?.closest('.stack')?.querySelector('.cat-row')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            >
-              {slide.cta}
-            </Button>
-          </article>
-        ))}
-      </div>
-      <div className="desktop-hero__dots" role="tablist" aria-label="Слайды">
-        {heroSlides.map((slide, index) => (
-          <button
-            key={slide.id}
-            type="button"
-            role="tab"
-            aria-selected={heroSlide === index}
-            className={heroSlide === index ? 'active' : undefined}
-            onClick={() => goHeroSlide(index)}
-            aria-label={`Слайд ${index + 1}`}
-          />
-        ))}
-      </div>
-    </section>
-
-    <div className="cat-block">
-      {catScroll.max > 0 && (
-        <input
-          type="range"
-          className="cat-scroll-slider mobile-only"
-          min={0}
-          max={catScroll.max}
-          step={1}
-          value={catScroll.value}
-          aria-label="Прокрутка категорий"
-          onChange={(event) => {
-            const next = Number(event.target.value);
-            const row = catRowRef.current;
-            if (row) row.scrollLeft = next;
-            setCatScroll((prev) => ({ ...prev, value: next }));
-          }}
-        />
-      )}
-      <div
-        className="cat-row"
-        role="list"
-        aria-label={t('market.categories')}
-        ref={catRowRef}
-      >
+    {gameView ? (
+      <section className="game-page" aria-label={categoryLabel(category)}>
         <button
           type="button"
-          role="listitem"
-          className={`cat-card${isMarketAllCategory(category) ? ' active' : ''}`}
+          className="game-page__back"
           onClick={() => { setCategory(MARKET_ALL_CATEGORY); setSubcategory(''); }}
         >
-          <span className="cat-card__icon">
-            <span className="cat-card__emblem cat-card__emblem--all">
-              <AllGridIcon />
-            </span>
-            <CategoryShareRing count={totalLots} total={totalLots || 1} />
-          </span>
-          <span className="cat-card__name">{t('market.all')}</span>
+          ← {t('market.backAll')}
         </button>
-        {visibleCats.map((cat) => {
-          const style = CAT_STYLE[cat];
-          const count = categoryCounts[cat] ?? 0;
-          const image = CATEGORY_IMAGES[cat];
-          return (
+        <div className="game-page__banner">
+          <div className="game-page__banner-copy">
+            <div className="game-page__title-row">
+              {category === 'OTHER' ? (
+                <span className="game-page__logo cat-card__emblem cat-card__emblem--other">
+                  <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+                </span>
+              ) : gameImage ? (
+                <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
+                  <img src={gameImage} alt="" width={56} height={56} loading="lazy" decoding="async" draggable={false} />
+                </span>
+              ) : (
+                <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
+              )}
+              <h2 className="game-page__title">{categoryLabel(category)}</h2>
+            </div>
+            <p className="game-page__blurb">{t('market.gameBlurb')}</p>
+          </div>
+          {gameImage && category !== 'OTHER' && (
+            <div className="game-page__banner-art" aria-hidden="true">
+              <img src={gameImage} alt="" loading="lazy" decoding="async" draggable={false} />
+            </div>
+          )}
+        </div>
+        <div className="game-page__subs" role="list" aria-label="Подкатегории">
+          <button
+            type="button"
+            role="listitem"
+            className={`game-page__sub${!subcategory ? ' is-active' : ''}`}
+            onClick={() => setSubcategory('')}
+          >
+            <span className="game-page__sub-label">{t('market.allProducts')}</span>
+            <span className="game-page__sub-count">{formatSubCount(gameLotCount)}</span>
+          </button>
+          {marketSubs.map((item) => (
             <button
               type="button"
               role="listitem"
-              key={cat}
-              className={`cat-card${category === cat ? ' active' : ''}`}
-              onClick={() => { setCategory(cat); setSubcategory(''); }}
+              key={item}
+              className={`game-page__sub${subcategory === item ? ' is-active' : ''}`}
+              onClick={() => setSubcategory(subcategory === item ? '' : item)}
+            >
+              <span className="game-page__sub-label">{SUBCATEGORY_LABELS[item] ?? item}</span>
+              <span className="game-page__sub-count">{formatSubCount(subcategoryCounts[item] ?? 0)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    ) : (
+      <>
+        <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
+          <div className="market-hero__track" ref={heroTrackRef}>
+            {heroSlides.map((slide, index) => (
+              <article
+                key={slide.id}
+                className="market-hero__slide"
+                aria-hidden={heroSlide !== index}
+                aria-label={`${index + 1} из ${heroSlides.length}`}
+              >
+                <h2>{slide.title}</h2>
+                <p>{slide.text}</p>
+                <Button
+                  variant="violet"
+                  onClick={() => {
+                    if (slide.action === 'create') switchTo('create');
+                    else heroTrackRef.current?.closest('.stack')?.querySelector('.cat-row')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                >
+                  {slide.cta}
+                </Button>
+              </article>
+            ))}
+          </div>
+          <div className="desktop-hero__dots" role="tablist" aria-label="Слайды">
+            {heroSlides.map((slide, index) => (
+              <button
+                key={slide.id}
+                type="button"
+                role="tab"
+                aria-selected={heroSlide === index}
+                className={heroSlide === index ? 'active' : undefined}
+                onClick={() => goHeroSlide(index)}
+                aria-label={`Слайд ${index + 1}`}
+              />
+            ))}
+          </div>
+        </section>
+
+        <div className="cat-block">
+          {catScroll.max > 0 && (
+            <input
+              type="range"
+              className="cat-scroll-slider mobile-only"
+              min={0}
+              max={catScroll.max}
+              step={1}
+              value={catScroll.value}
+              aria-label="Прокрутка категорий"
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                const row = catRowRef.current;
+                if (row) row.scrollLeft = next;
+                setCatScroll((prev) => ({ ...prev, value: next }));
+              }}
+            />
+          )}
+          <div
+            className="cat-row"
+            role="list"
+            aria-label={t('market.categories')}
+            ref={catRowRef}
+          >
+            <button
+              type="button"
+              role="listitem"
+              className={`cat-card${isMarketAllCategory(category) ? ' active' : ''}`}
+              onClick={() => { setCategory(MARKET_ALL_CATEGORY); setSubcategory(''); }}
             >
               <span className="cat-card__icon">
-                {cat === 'OTHER' ? (
-                  <span className="cat-card__emblem cat-card__emblem--other">
-                    <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
-                  </span>
-                ) : image ? (
-                  <span className="cat-card__emblem cat-card__emblem--photo">
-                    <img
-                      src={image}
-                      alt=""
-                      width={48}
-                      height={48}
-                      loading="lazy"
-                      decoding="async"
-                      draggable={false}
-                    />
-                  </span>
-                ) : (
-                  <span
-                    className="cat-card__emblem"
-                    style={{ background: style.bg }}
-                  >{style.letter}</span>
-                )}
-                <CategoryShareRing count={count} total={totalLots} />
+                <span className="cat-card__emblem cat-card__emblem--all">
+                  <AllGridIcon />
+                </span>
+                <CategoryShareRing count={totalLots} />
               </span>
-              <span className="cat-card__name">{categoryLabel(cat)}</span>
+              <span className="cat-card__name">{t('market.all')}</span>
             </button>
-          );
-        })}
-      </div>
-    </div>
+            {visibleCats.map((cat) => {
+              const style = CAT_STYLE[cat];
+              const count = categoryCounts[cat] ?? 0;
+              const image = CATEGORY_IMAGES[cat];
+              return (
+                <button
+                  type="button"
+                  role="listitem"
+                  key={cat}
+                  className={`cat-card${category === cat ? ' active' : ''}`}
+                  onClick={() => { setCategory(cat); setSubcategory(''); }}
+                >
+                  <span className="cat-card__icon">
+                    {cat === 'OTHER' ? (
+                      <span className="cat-card__emblem cat-card__emblem--other">
+                        <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+                      </span>
+                    ) : image ? (
+                      <span className="cat-card__emblem cat-card__emblem--photo">
+                        <img
+                          src={image}
+                          alt=""
+                          width={48}
+                          height={48}
+                          loading="lazy"
+                          decoding="async"
+                          draggable={false}
+                        />
+                      </span>
+                    ) : (
+                      <span
+                        className="cat-card__emblem"
+                        style={{ background: style.bg }}
+                      >{style.letter}</span>
+                    )}
+                    <CategoryShareRing count={count} />
+                  </span>
+                  <span className="cat-card__name">{categoryLabel(cat)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </>
+    )}
 
     <div className="search-row desktop-search">
       <Input
@@ -780,20 +842,6 @@ export function Market({
         <span>Автовыдача</span>
       </button>
     </div>
-
-    {marketSubs.length > 0 && (
-      <div className="chips market-subchips" role="list" aria-label="Подкатегории">
-        {marketSubs.map((item) => (
-          <button
-            type="button"
-            role="listitem"
-            className={subcategory === item ? 'active' : ''}
-            key={item}
-            onClick={() => setSubcategory(subcategory === item ? '' : item)}
-          >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
-        ))}
-      </div>
-    )}
 
     {onixLotNumber != null && Number.isFinite(onixLotNumber) && (
       <Button
