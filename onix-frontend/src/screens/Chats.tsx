@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, friendlyError } from '../api/client';
-import { API_PATHS, formatLastSeen, sellerIsPresent, type ChatMemberItem, type ChatUserHit, type Product, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, sellerIsPresent, type Product, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView } from '../design-system';
+import { Button, Card, Input, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
-import { parseMemberTokens } from '../utils/parseMemberTokens';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge } from './shared';
@@ -44,29 +43,19 @@ export function Chats({
 }) {
   const [threadId, setThreadId] = useState('');
   const [text, setText] = useState('');
-  const [chatQuery, setChatQuery] = useState('');
   const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
   const [reportOnixId, setReportOnixId] = useState<string | null>(null);
-  const [groupOpen, setGroupOpen] = useState(false);
-  const [addMembersOpen, setAddMembersOpen] = useState(false);
-  const [groupTitle, setGroupTitle] = useState('');
-  const [groupSearch, setGroupSearch] = useState('');
-  const [groupHits, setGroupHits] = useState<ChatUserHit[]>([]);
-  const [groupSelected, setGroupSelected] = useState<ChatUserHit[]>([]);
-  const [groupErrors, setGroupErrors] = useState<string[]>([]);
-  const [groupBusy, setGroupBusy] = useState(false);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
-  const [leaveGroupId, setLeaveGroupId] = useState<string | null>(null);
-  const [groupMembers, setGroupMembers] = useState<ChatMemberItem[] | null>(null);
-  const [groupMembersTitle, setGroupMembersTitle] = useState('');
-  const groupPressRef = useRef<number | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
-  const prevChatQueryRef = useRef('');
   const lastSeenMsgIdRef = useRef<string | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
-  const thread = core.chats.find(item => item.id === threadId);
+  const visibleChats = useMemo(
+    () => core.chats.filter((chat) => chat.kind !== 'GROUP'),
+    [core.chats],
+  );
+  const thread = visibleChats.find(item => item.id === threadId);
   const rawMessages = threadId ? core.messages[threadId] || [] : [];
   const messages = useMemo(() => {
     const seenIds = new Set<string>();
@@ -99,8 +88,7 @@ export function Chats({
     overscan: 10,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
-  const { loadMessages, searchChats, refreshChats, sendMessage } = core;
-  const memberPickerOpen = groupOpen || addMembersOpen;
+  const { loadMessages, refreshChats, sendMessage } = core;
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
@@ -222,9 +210,20 @@ export function Chats({
 
   useEffect(() => {
     if (!focusChatId) return;
+    const focused = core.chats.find((c) => c.id === focusChatId);
+    if (focused?.kind === 'GROUP') {
+      onFocusChatHandled();
+      return;
+    }
     setThreadId(focusChatId);
     onFocusChatHandled();
-  }, [focusChatId, onFocusChatHandled]);
+  }, [focusChatId, onFocusChatHandled, core.chats]);
+
+  useEffect(() => {
+    if (threadId && !visibleChats.some((c) => c.id === threadId)) {
+      setThreadId('');
+    }
+  }, [threadId, visibleChats]);
 
   useEffect(() => {
     stickToBottomRef.current = true;
@@ -253,81 +252,9 @@ export function Chats({
     }
   }, [threadId, messages.length, messages[messages.length - 1]?.id]);
 
-  useEffect(() => {
-    const q = chatQuery.trim();
-    const prev = prevChatQueryRef.current;
-    prevChatQueryRef.current = q;
-
-    if (!q) {
-      if (prev) void refreshChats();
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void searchChats(q);
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [chatQuery, searchChats, refreshChats]);
-
-  useEffect(() => {
-    const q = groupSearch.trim();
-    if (!memberPickerOpen || q.length < 1) {
-      setGroupHits([]);
-      return;
-    }
-    const tokens = parseMemberTokens(q);
-    if (tokens.length > 1) {
-      setGroupHits([]);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void api.get<ChatUserHit[]>(API_PATHS.chatUserSearch(tokens[0] ?? q)).then(setGroupHits).catch(() => setGroupHits([]));
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [memberPickerOpen, groupSearch]);
-
   useEffect(() => () => {
     if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
   }, []);
-
-  const resolveGroupMembers = async () => {
-    const tokens = parseMemberTokens(groupSearch);
-    const selected = [...groupSelected];
-    const errors: string[] = [];
-    for (const token of tokens) {
-      if (selected.some((s) => s.onixId.toLowerCase() === formatOnixId(token).toLowerCase()
-        || s.username.toLowerCase() === token.toLowerCase()
-        || s.onixId.replace(/^ONIX-/i, '') === token.replace(/^ONIX-/i, ''))) {
-        continue;
-      }
-      try {
-        const hits = await api.get<ChatUserHit[]>(API_PATHS.chatUserSearch(token));
-        const exact = hits.find((h) => {
-          const id = formatOnixId(h.onixId).toLowerCase();
-          const bare = id.replace(/^onix-/, '');
-          const t = token.toLowerCase().replace(/^onix-/, '').replace(/^@+/, '');
-          return id === `onix-${t}` || bare === t || h.username.toLowerCase() === t;
-        }) ?? hits[0];
-        if (!exact) {
-          errors.push(`${formatOnixId(token) || token} не найден`);
-          continue;
-        }
-        if (!selected.some((s) => s.onixId === exact.onixId)) selected.push(exact);
-      } catch {
-        errors.push(`${formatOnixId(token) || token} не найден`);
-      }
-    }
-    setGroupSelected(selected);
-    setGroupErrors(errors);
-    if (errors.length) setToast(errors.join('. '));
-    return selected;
-  };
-
-  const resetMemberPicker = () => {
-    setGroupSearch('');
-    setGroupSelected([]);
-    setGroupErrors([]);
-    setGroupHits([]);
-  };
 
   const deleteMessage = async (messageId: string, scope: 'self' | 'global') => {
     setMenuMessageId(null);
@@ -337,62 +264,6 @@ export function Chats({
       setToast(scope === 'global' ? 'Сообщение удалено у всех.' : 'Сообщение удалено у вас.');
     } catch (error) {
       setToast(error instanceof Error ? error.message : 'Не удалось удалить.');
-    }
-  };
-
-  const createGroup = async () => {
-    if (!groupTitle.trim()) return;
-    setGroupBusy(true);
-    try {
-      const members = groupSelected.length > 0 ? groupSelected : await resolveGroupMembers();
-      if (members.length < 1) {
-        setToast('Добавьте хотя бы одного участника.');
-        return;
-      }
-      const created = await api.post<{ id: string }>(API_PATHS.createGroupChat, {
-        title: groupTitle.trim(),
-        memberOnixIds: members.map((u) => u.onixId),
-      });
-      await refreshChats();
-      setGroupOpen(false);
-      setGroupTitle('');
-      resetMemberPicker();
-      setThreadId(created.id);
-      setToast('Группа создана.');
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Не удалось создать группу.');
-    } finally {
-      setGroupBusy(false);
-    }
-  };
-
-  const addMembers = async () => {
-    if (!threadId) return;
-    setGroupBusy(true);
-    try {
-      const members = groupSelected.length > 0 ? groupSelected : await resolveGroupMembers();
-      if (members.length < 1) {
-        setToast('Укажите участников.');
-        return;
-      }
-      const result = await api.post<{ added: string[]; missing: string[]; already: string[] }>(
-        API_PATHS.addChatMembers(threadId),
-        { memberOnixIds: members.map((u) => u.onixId) },
-      );
-      await loadMessages(threadId);
-      await refreshChats();
-      setAddMembersOpen(false);
-      resetMemberPicker();
-      const parts = [
-        result.added.length ? `Добавлено: ${result.added.join(', ')}` : '',
-        result.already.length ? `Уже в группе: ${result.already.join(', ')}` : '',
-        result.missing.length ? `Не найдены: ${result.missing.join(', ')}` : '',
-      ].filter(Boolean);
-      setToast(parts.join('. ') || 'Готово.');
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Не удалось добавить участников.');
-    } finally {
-      setGroupBusy(false);
     }
   };
 
@@ -421,37 +292,6 @@ export function Chats({
     }, LONG_PRESS_MS);
   };
 
-  const memberPickerFields = (
-    <>
-      <Field label="Поиск" hint="ONIX-1 · имя · 7">
-        <Input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="ONIX ID или ник" />
-      </Field>
-      <div className="card-actions">
-        <Button type="button" variant="secondary" onClick={() => void resolveGroupMembers()} disabled={!groupSearch.trim()}>
-          Добавить из поля
-        </Button>
-      </div>
-      {groupHits.length > 0 && <div className="chips">
-        {groupHits.map((hit) => (
-          <button
-            key={hit.onixId}
-            type="button"
-            className={groupSelected.some((s) => s.onixId === hit.onixId) ? 'active' : ''}
-            onClick={() => {
-              setGroupSelected((prev) => (
-                prev.some((s) => s.onixId === hit.onixId)
-                  ? prev.filter((s) => s.onixId !== hit.onixId)
-                  : [...prev, hit]
-              ));
-            }}
-          >{formatOnixId(hit.onixId)} · {publicAt(hit.username)}</button>
-        ))}
-      </div>}
-      {groupSelected.length > 0 && <p className="muted">Выбрано: {groupSelected.map((s) => formatOnixId(s.onixId)).join(', ')}</p>}
-      {groupErrors.length > 0 && <p className="muted">{groupErrors.join('. ')}</p>}
-    </>
-  );
-
   if (core.states.chats === 'loading' && core.chats.length === 0) {
     return <Card><Skeleton lines={6} /></Card>;
   }
@@ -461,35 +301,11 @@ export function Chats({
     style={{ '--chat-list-w': `${listW}px` } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
-      <div className="chat-list-head">
-        <div className="chat-toolbar">
-          <Input
-            value={chatQuery}
-            onChange={(event) => setChatQuery(event.target.value)}
-            placeholder={t('chat.search')}
-            aria-label={t('chat.searchAria')}
-          />
-          <Button type="button" variant="secondary" aria-label="Создать группу" onClick={() => { resetMemberPicker(); setGroupOpen(true); }}>+</Button>
-        </div>
-      </div>
-      {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : core.chats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
-        core.chats.map(chat => <button
+      {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : visibleChats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
+        visibleChats.map(chat => <button
           className={`thread${threadId === chat.id ? ' active' : ''}`}
           key={chat.id}
           onClick={() => setThreadId(chat.id)}
-          onContextMenu={(event) => {
-            if (chat.kind !== 'GROUP') return;
-            event.preventDefault();
-            setLeaveGroupId(chat.id);
-          }}
-          onPointerDown={() => {
-            if (chat.kind !== 'GROUP') return;
-            if (groupPressRef.current) window.clearTimeout(groupPressRef.current);
-            groupPressRef.current = window.setTimeout(() => setLeaveGroupId(chat.id), 480);
-          }}
-          onPointerUp={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
-          onPointerLeave={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
-          onPointerCancel={() => { if (groupPressRef.current) { window.clearTimeout(groupPressRef.current); groupPressRef.current = null; } }}
         >
           <span className="thread-peer">
             <UserAvatar
@@ -497,7 +313,7 @@ export function Chats({
               avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
               name={chat.kind === 'AI' ? 'Onix AI' : chat.title}
               initials={chat.kind === 'AI' ? 'AI' : undefined}
-              online={chat.kind === 'GROUP' || chat.kind === 'AI' || !chat.peerOnixId
+              online={chat.kind === 'AI' || !chat.peerOnixId
                 ? undefined
                 : sellerIsPresent(
                   { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
@@ -510,7 +326,7 @@ export function Chats({
                 {chat.kind === 'AI' ? 'Onix AI' : chat.title} <StaffBadge badge={chat.peerBadge} />
               </b>
               <small>
-                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : chat.kind === 'GROUP' ? 'Группа' : (chat.subtitle || 'Открыть диалог')}
+                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : (chat.subtitle || 'Открыть диалог')}
               </small>
             </span>
           </span>
@@ -526,19 +342,9 @@ export function Chats({
       <button
         type="button"
         className="conversation__peer"
-        disabled={thread.kind !== 'GROUP' && !thread.peerOnixId}
-        aria-label={thread.kind === 'GROUP' ? `Участники ${thread.title}` : (thread.peerOnixId ? `Профиль ${thread.title}` : undefined)}
+        disabled={!thread.peerOnixId}
+        aria-label={thread.peerOnixId ? `Профиль ${thread.title}` : undefined}
         onClick={async () => {
-          if (thread.kind === 'GROUP') {
-            try {
-              const data = await api.get<{ title?: string; members: ChatMemberItem[] }>(API_PATHS.chatMembers(thread.id));
-              setGroupMembersTitle(data.title || thread.title);
-              setGroupMembers(data.members);
-            } catch {
-              setToast('Не удалось загрузить участников');
-            }
-            return;
-          }
           if (!thread.peerOnixId) return;
           await openOnixProfile(thread.peerOnixId);
         }}
@@ -549,7 +355,7 @@ export function Chats({
             avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
             name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
             initials={thread.kind === 'AI' ? 'AI' : undefined}
-            online={thread.kind === 'GROUP' || thread.kind === 'AI' || !thread.peerOnixId
+            online={thread.kind === 'AI' || !thread.peerOnixId
               ? undefined
               : sellerIsPresent(
                 { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
@@ -563,21 +369,12 @@ export function Chats({
             {thread.kind === 'AI' ? 'Onix AI' : thread.title} <StaffBadge badge={thread.peerBadge} />
           </b>
           <small>
-            {thread.kind === 'GROUP'
-              ? 'Группа'
-              : thread.kind === 'AI'
-                ? 'Помощник'
-                : `${thread.peerOnixId ? `${formatOnixId(thread.peerOnixId)} · ` : ''}${formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}`}
+            {thread.kind === 'AI'
+              ? 'Помощник'
+              : `${thread.peerOnixId ? `${formatOnixId(thread.peerOnixId)} · ` : ''}${formatLastSeen(core.presenceOf(thread.peerOnixId ?? '')?.lastOnline ?? thread.peerLastOnline)}`}
           </small>
         </div>
       </button>
-      {thread.kind === 'GROUP' && (
-        <Button
-          variant="ghost"
-          aria-label="Добавить участников"
-          onClick={() => { resetMemberPicker(); setAddMembersOpen(true); }}
-        >+</Button>
-      )}
       {thread.peerOnixId && core.profile?.onixId !== thread.peerOnixId && (
         <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
       )}
@@ -780,26 +577,6 @@ export function Chats({
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
-    <Modal open={groupOpen} title="Создать группу" onClose={() => { setGroupOpen(false); resetMemberPicker(); }}>
-      <div className="form">
-        <Field label="Название"><Input value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={80} /></Field>
-        <p className="muted">Добавить участников</p>
-        {memberPickerFields}
-        <div className="modal__actions">
-          <Button type="button" variant="secondary" onClick={() => { setGroupOpen(false); resetMemberPicker(); }}>Отмена</Button>
-          <Button type="button" busy={groupBusy} disabled={!groupTitle.trim()} onClick={() => void createGroup()}>Создать</Button>
-        </div>
-      </div>
-    </Modal>
-    <Modal open={addMembersOpen} title="Добавить участников" onClose={() => { setAddMembersOpen(false); resetMemberPicker(); }}>
-      <div className="form">
-        {memberPickerFields}
-        <div className="modal__actions">
-          <Button type="button" variant="secondary" onClick={() => { setAddMembersOpen(false); resetMemberPicker(); }}>Отмена</Button>
-          <Button type="button" busy={groupBusy} onClick={() => void addMembers()}>Добавить</Button>
-        </div>
-      </div>
-    </Modal>
     <PublicProfileModal
       profile={peerProfile}
       onClose={() => setPeerProfile(null)}
@@ -822,59 +599,6 @@ export function Chats({
       onClose={() => setReportOnixId(null)}
       setToast={setToast}
     />
-    <Confirm
-      open={Boolean(leaveGroupId)}
-      title="Выйти из группы?"
-      text="Чат исчезнет из списка. Вернуться можно только по новому приглашению."
-      dangerous
-      onCancel={() => setLeaveGroupId(null)}
-      onConfirm={async () => {
-        if (!leaveGroupId) return;
-        const id = leaveGroupId;
-        setLeaveGroupId(null);
-        try {
-          await api.delete(API_PATHS.leaveGroupChat(id));
-          if (threadId === id) setThreadId('');
-          await core.refreshChats();
-          setToast('Вы вышли из группы');
-        } catch (error) {
-          setToast(error instanceof Error ? error.message : 'Не удалось выйти');
-        }
-      }}
-    />
-    <Modal open={groupMembers != null} title={groupMembersTitle || 'Участники'} onClose={() => setGroupMembers(null)}>
-      <div className="stack compact">
-        {(groupMembers ?? []).length === 0
-          ? <StateView title="Нет участников" text="Список пуст." />
-          : (groupMembers ?? []).map((member) => (
-            <button
-              type="button"
-              key={member.onixId}
-              className="thread"
-              onClick={async () => {
-                setGroupMembers(null);
-                await openOnixProfile(member.onixId);
-              }}
-            >
-              <span className="thread-peer">
-                <UserAvatar
-                  avatarUrl={member.avatarUrl}
-                  name={member.username}
-                  online={sellerIsPresent(
-                    { onixId: member.onixId, lastOnline: member.lastOnline },
-                    core.profile,
-                    core.presenceOf(member.onixId),
-                  )}
-                />
-                <span>
-                  <b>{publicAt(member.username)} <StaffBadge badge={member.badge} /></b>
-                  <small>{formatOnixId(member.onixId)} · {formatLastSeen(core.presenceOf(member.onixId)?.lastOnline ?? member.lastOnline)}</small>
-                </span>
-              </span>
-            </button>
-          ))}
-      </div>
-    </Modal>
   </div>;
 }
 export default Chats;
