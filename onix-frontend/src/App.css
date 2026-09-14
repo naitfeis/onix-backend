@@ -2846,7 +2846,7 @@ html[data-theme="light"] .select-menu__option.is-active {
   line-height: 0;
 }
 .lot-view-toggle button.is-active {
-  background: rgba(74, 123, 224, 0.4);
+  background: var(--accent);
   color: #fff;
 }
 html[data-theme="light"] .lot-view-toggle {
@@ -2857,8 +2857,8 @@ html[data-theme="light"] .lot-view-toggle button {
   color: rgba(20, 24, 32, 0.55);
 }
 html[data-theme="light"] .lot-view-toggle button.is-active {
-  background: color-mix(in srgb, var(--accent-violet) 22%, #fff);
-  color: #111;
+  background: var(--accent);
+  color: #fff;
 }
 .product-grid--list {
   display: flex;
@@ -6675,12 +6675,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     background: #111;
   }
   .market-hero {
+    --market-hero-h: 196px;
     margin-bottom: 20px;
-    height: 168px;
-    min-height: 168px;
-    max-height: 168px;
+    height: var(--market-hero-h);
+    min-height: var(--market-hero-h);
+    max-height: var(--market-hero-h);
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
   }
   .market-hero__track {
     flex: 1 1 auto;
@@ -6689,11 +6691,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .market-hero__slide {
     min-height: 0;
     height: 100%;
-    padding: 24px 28px 8px;
+    padding: 24px 28px 10px;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   .market-hero .desktop-hero__dots {
-    padding: 0 28px 16px;
+    padding: 0 28px 18px;
     margin: 0;
     flex: 0 0 auto;
   }
@@ -6903,9 +6908,9 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     box-sizing: border-box;
     align-self: start;
   }
-  /* Wallet 1:1 with market hero / game banner height. */
+  /* Wallet 1:1 with market hero on home, game banner on game page. */
   .app-shell--market > .sidebar-right > .widget:first-of-type {
-    --market-wallet-h: 168px;
+    --market-wallet-h: 196px;
     margin-top: 0;
     height: var(--market-wallet-h);
     min-height: var(--market-wallet-h);
@@ -6915,8 +6920,9 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     flex-direction: column;
     justify-content: space-between;
   }
-  /* Align wallet with banner under the back link (18px back + 8px gap). */
+  /* Game page: same height as game banner, offset under back link. */
   .app-shell--market:has(.game-page) > .sidebar-right > .widget:first-of-type {
+    --market-wallet-h: 168px;
     margin-top: 26px;
   }
 }

@@ -896,12 +896,6 @@ export function Market({
       </div>
     )}
 
-    {!gameView && marketState === 'success' && items.length > 0 && (
-      <div className="lot-view-bar">
-        <LotViewToggle value={lotView} onChange={setLotView} />
-      </div>
-    )}
-
     {onixLotNumber != null && Number.isFinite(onixLotNumber) && (
       <Button
         variant="secondary"
