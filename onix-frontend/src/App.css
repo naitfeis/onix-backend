@@ -1645,16 +1645,17 @@ html[data-theme="light"] .cat-card__ring {
 .game-page__banner {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(96px, 0.8fr);
-  align-items: center;
-  min-height: 64px;
-  max-height: 72px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(120px, 0.85fr);
+  gap: 12px;
+  align-items: stretch;
+  min-height: 148px;
+  max-height: none;
   padding: 0;
-  border-radius: 16px;
+  border-radius: var(--radius-hero, 22px);
   overflow: hidden;
   isolation: isolate;
   background: #0C0C0C;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: var(--glass-border);
   box-sizing: border-box;
 }
 html[data-theme="light"] .game-page__banner {
@@ -1668,29 +1669,30 @@ html[data-theme="light"] .game-page__banner {
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
+  gap: 8px;
   min-width: 0;
-  min-height: 64px;
-  padding: 10px 12px 10px 14px;
+  min-height: 148px;
+  padding: 20px 8px 20px 24px;
 }
 .game-page__title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 .game-page__logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   flex-shrink: 0;
 }
 .game-page__title {
   margin: 0;
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(18px, 2.6vw, 22px);
-  font-weight: 600;
+  font-size: clamp(22px, 3.2vw, 28px);
+  font-weight: 500;
   letter-spacing: -0.02em;
-  line-height: 1.1;
+  line-height: 1.15;
   color: var(--text-primary);
 }
 .game-page__blurb {
@@ -1699,11 +1701,11 @@ html[data-theme="light"] .game-page__banner {
 .game-page__banner-art {
   position: relative;
   align-self: stretch;
-  min-height: 64px;
+  min-height: 148px;
   overflow: hidden;
-  border-radius: 0 15px 15px 0;
-  mask-image: linear-gradient(90deg, transparent 0%, #000 28%, #000 100%);
-  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 28%, #000 100%);
+  border-radius: 0;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
 }
 .game-page__banner-art img {
   position: absolute;
@@ -1713,12 +1715,12 @@ html[data-theme="light"] .game-page__banner {
   object-fit: cover;
   object-position: center;
   display: block;
-  transform: none;
+  transform: scale(1.12);
 }
 .game-page__subs {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   max-width: 100%;
   overflow-x: auto;
@@ -1731,15 +1733,16 @@ html[data-theme="light"] .game-page__banner {
 .game-page__sub {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 10px;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
@@ -1755,11 +1758,16 @@ html[data-theme="light"] .game-page__banner {
   border-color: transparent;
   color: #fff;
 }
+.game-page__sub-label,
 .game-page__sub-count {
-  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.game-page__sub-count {
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  line-height: 1;
   opacity: 0.72;
 }
 .game-page__sub.is-active .game-page__sub-count {
@@ -1778,32 +1786,37 @@ html[data-theme="light"] .game-page__sub.is-active {
 }
 @media (max-width: 699px) {
   .game-page {
-    gap: 6px;
+    gap: 8px;
   }
   .game-page__banner {
-    grid-template-columns: minmax(0, 1fr) minmax(72px, 34%);
-    min-height: 56px;
-    max-height: 56px;
-    border-radius: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 38%);
+    min-height: 120px;
+    max-height: none;
+    border-radius: var(--radius-hero, 22px);
   }
   .game-page__banner-copy {
-    min-height: 56px;
-    padding: 8px 8px 8px 12px;
+    min-height: 120px;
+    padding: 14px 6px 14px 16px;
+    gap: 6px;
   }
   .game-page__logo {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
   }
   .game-page__title {
-    font-size: 17px;
+    font-size: 20px;
   }
   .game-page__banner-art {
-    min-height: 56px;
-    border-radius: 0 13px 13px 0;
+    min-height: 120px;
   }
   .game-page__subs {
     flex-wrap: nowrap;
+  }
+  .game-page__sub {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 13px;
   }
   .market-hero {
     margin-bottom: 12px;
@@ -6649,15 +6662,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     padding: 24px 28px 10px;
   }
   .game-page__banner {
-    min-height: 64px;
-    max-height: 72px;
+    min-height: 168px;
+    max-height: none;
   }
   .game-page__banner-copy {
-    min-height: 64px;
-    padding: 10px 12px 10px 18px;
+    min-height: 168px;
+    padding: 24px 10px 24px 28px;
   }
   .game-page__banner-art {
-    min-height: 64px;
+    min-height: 168px;
   }
   .analytics-panel {
     max-width: 720px;
@@ -6859,9 +6872,15 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     box-sizing: border-box;
     align-self: start;
   }
-  /* Wallet top edge matches market hero / banner in the center column. */
+  /* Wallet top edge matches market hero in the center column. */
   .app-shell--market > .sidebar-right > .widget:first-of-type {
     margin-top: 0;
+    min-height: 168px;
+    box-sizing: border-box;
+  }
+  /* On game page, shift wallet down to align with banner under the back link. */
+  .app-shell--market:has(.game-page) > .sidebar-right > .widget:first-of-type {
+    margin-top: 26px;
   }
 }
 .site-footer__brand strong {
