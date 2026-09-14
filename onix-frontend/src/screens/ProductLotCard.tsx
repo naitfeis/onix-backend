@@ -53,7 +53,7 @@ export const ProductLotCard = memo(function ProductLotCard({
             <span className="product-card__rating-count">{reviewCountLabel(product.seller.reviewCount)}</span>
           </div>
           {showFounder && (
-            <div className="product-card__flags">
+            <div className="product-card__flags product-card__flags--media">
               <span className="pill-super">Основатель</span>
             </div>
           )}
@@ -84,6 +84,9 @@ export const ProductLotCard = memo(function ProductLotCard({
       </div>
       <button type="button" className="product-main product-main--body" onClick={onOpen} aria-label={`Открыть ${product.title}`}>
         <div className="product-card__body">
+          {showFounder && (
+            <span className="pill-super product-card__founder-inline">Основатель</span>
+          )}
           <h2>{title}</h2>
           <p className="product-card__meta">
             {categoryLabel(product.category)}

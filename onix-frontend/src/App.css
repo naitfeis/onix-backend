@@ -1126,6 +1126,12 @@ html[data-theme="light"] .product-card__rating-count {
   font-size: 10px;
   padding: 4px 8px;
 }
+.product-card__founder-inline {
+  display: none;
+  margin: 0 0 2px;
+  width: fit-content;
+  max-width: 100%;
+}
 .product-card__body {
   padding: 10px 12px 12px;
   display: grid;
@@ -1566,32 +1572,50 @@ html[data-theme="light"] .cat-card__emblem--all {
   writing-mode: horizontal-tb;
   color: var(--text-primary);
 }
-.cat-card__ring {
+.cat-card__share {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -5px;
+  right: -5px;
   z-index: 2;
   pointer-events: none;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  padding: 0;
+  margin: 0;
   border-radius: 50%;
-  overflow: hidden;
-  background: #0b0b0c;
-  border: 2.5px solid #3a3a3e;
-  box-shadow: 0 0 0 2px var(--bg-scene-2, #0B0B0C);
+  border: 2px solid var(--page-bg, #0B0B0C);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  background: conic-gradient(#fff var(--share-deg, 0deg), rgba(255, 255, 255, 0.18) 0);
+  color: #141416;
+  box-sizing: border-box;
 }
-.cat-card__ring-num {
+.cat-card__share--full {
+  background: #fff;
+}
+.cat-card__share-num {
   position: relative;
   z-index: 1;
-  color: #fff;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ececef;
+  color: #141416;
   font-family: var(--font-body), sans-serif;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
+  text-align: center;
+}
+html[data-theme="light"] .cat-card__share {
+  border-color: var(--page-bg, #e8eef6);
+  box-shadow: 0 0 0 1px rgba(20, 24, 32, 0.12);
 }
 .cat-card__emblem--other {
   background: #0a0a0c !important;
@@ -1625,10 +1649,9 @@ html[data-theme="light"] .cat-card__emblem--other {
 html[data-theme="light"] .cat-card__dots i {
   background: #111;
 }
-html[data-theme="light"] .cat-card__ring {
-  background: #0b0b0c;
-  border-color: #3a3a3e;
-  box-shadow: 0 0 0 2px #F4F2F8;
+html[data-theme="light"] .cat-card__share-num {
+  background: #ececef;
+  color: #141416;
 }
 
 /* Game category page (selected game) */
@@ -1777,20 +1800,48 @@ html[data-theme="light"] .game-page__banner {
   border-color: transparent;
   color: #fff;
 }
-.game-page__sub-label,
-.game-page__sub-count {
+.game-page__sub-label {
   line-height: 1;
   display: inline-flex;
   align-items: center;
 }
-.game-page__sub-count {
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.72;
+.game-page__sub-share {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 50%;
+  border: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  background: conic-gradient(#fff var(--share-deg, 0deg), rgba(255, 255, 255, 0.16) 0);
+  flex: 0 0 auto;
+  box-sizing: border-box;
 }
-.game-page__sub.is-active .game-page__sub-count {
-  opacity: 0.85;
+.game-page__sub-share.is-full {
+  background: #fff;
+}
+.game-page__sub-share-num {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ececef;
+  color: #141416;
+  font-size: 9px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: 0;
+  text-align: center;
+}
+.game-page__sub.is-active .game-page__sub-share {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+.game-page__sub.is-active .game-page__sub-share-num {
+  background: #fff;
+  color: var(--accent-violet);
 }
 html[data-theme="light"] .game-page__sub {
   border-color: rgba(20, 24, 32, 0.12);
@@ -1865,13 +1916,11 @@ html[data-theme="light"] .game-page__sub.is-active {
   .cat-card__icon {
     overflow: visible;
   }
-  .cat-card__ring {
-    top: -4px;
-    right: -4px;
-    width: 22px;
-    height: 22px;
-    border: 2.5px solid #3a3a3e;
-    background: #0b0b0c;
+  .cat-card__share {
+    top: -5px;
+    right: -5px;
+    width: 24px;
+    height: 24px;
   }
 }
 
@@ -2879,7 +2928,7 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
 .product-grid--list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -2890,18 +2939,18 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
   align-items: center;
   width: 100%;
   max-width: 100%;
-  min-height: 68px;
+  min-height: 92px;
   box-sizing: border-box;
   overflow: hidden;
-  contain-intrinsic-size: auto 68px;
+  contain-intrinsic-size: auto 92px;
 }
 .product-grid--list .product-card__media {
   position: relative;
-  flex: 0 0 64px;
-  width: 64px;
-  min-width: 64px;
-  height: 68px;
-  min-height: 68px;
+  flex: 0 0 88px;
+  width: 88px;
+  min-width: 88px;
+  height: 92px;
+  min-height: 92px;
 }
 .product-grid--list .product-main--body {
   flex: 1 1 auto;
@@ -2909,21 +2958,29 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
   align-self: center;
 }
 .product-grid--list .product-card__body {
-  padding: 0 10px;
+  padding: 8px 14px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 4px;
   min-height: 0;
+}
+.product-grid--list .product-card__founder-inline {
+  display: inline-flex;
+  margin: 0;
+}
+.product-grid--list .product-card__flags--media {
+  display: none;
 }
 .product-grid--list .product-card__body h2 {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.2;
+  font-size: 16px;
+  line-height: 1.25;
 }
 .product-grid--list .product-card__meta {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 .product-grid--list .product-card__footer,
 .product-grid--list .product-card__footer--bar {
@@ -2932,83 +2989,86 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
   flex-direction: row;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
-  padding: 0 10px 0 4px;
+  padding: 0 14px 0 4px;
   grid-template-columns: none;
   grid-template-areas: none;
 }
 .product-grid--list .product-card__price {
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.1;
   white-space: nowrap;
 }
 .product-grid--list .product-card__buy {
-  min-height: 28px;
-  min-width: 68px;
-  padding: 4px 10px;
-  font-size: 11px;
+  min-height: 36px;
+  min-width: 88px;
+  padding: 8px 16px;
+  font-size: 13px;
 }
 .product-grid--list .product-card__badges {
-  top: 3px;
-  left: 3px;
-  right: 3px;
-  gap: 2px;
-  transform: scale(0.78);
-  transform-origin: top left;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  gap: 4px;
+  transform: none;
 }
 .product-grid--list .product-card__seller-float {
-  gap: 1px;
-  max-width: calc(100% - 6px);
+  gap: 2px;
+  max-width: calc(100% - 8px);
 }
 .product-grid--list .product-card__seller-float > span {
-  font-size: 9px;
+  font-size: 11px;
 }
 .product-grid--list .product-card__avatar .user-avatar,
 .product-grid--list .product-card__avatar .user-avatar-wrap {
-  width: 32px !important;
-  height: 32px !important;
+  width: 44px !important;
+  height: 44px !important;
 }
 .product-grid--list .favorite {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   top: auto;
-  bottom: 3px;
-  right: 3px;
+  bottom: 6px;
+  right: 6px;
 }
 .product-grid--list .product-card__bolt {
   top: auto;
-  bottom: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  font-size: 10px;
+  bottom: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
 }
 @media (max-width: 559px) {
   .product-grid--list .product-card {
-    min-height: 64px;
+    min-height: 84px;
   }
   .product-grid--list .product-card__media {
-    flex-basis: 58px;
-    width: 58px;
-    min-width: 58px;
-    height: 64px;
-    min-height: 64px;
+    flex-basis: 76px;
+    width: 76px;
+    min-width: 76px;
+    height: 84px;
+    min-height: 84px;
   }
   .product-grid--list .product-card__body {
-    padding: 0 8px;
+    padding: 6px 10px;
+  }
+  .product-grid--list .product-card__body h2 {
+    font-size: 15px;
   }
   .product-grid--list .product-card__footer,
   .product-grid--list .product-card__footer--bar {
-    padding: 0 8px 0 2px;
+    padding: 0 10px 0 2px;
     gap: 8px;
   }
   .product-grid--list .product-card__price {
-    font-size: 13px;
+    font-size: 15px;
   }
   .product-grid--list .product-card__buy {
-    min-width: 60px;
-    padding: 4px 8px;
+    min-width: 72px;
+    min-height: 32px;
+    padding: 6px 12px;
   }
 }
 .auto-deliver-filter {
@@ -6691,23 +6751,20 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     background: #111;
   }
   .market-hero {
-    --market-hero-h: 235px;
     margin-bottom: 20px;
-    height: var(--market-hero-h);
-    min-height: var(--market-hero-h);
-    max-height: var(--market-hero-h);
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    display: block;
   }
   .market-hero__track {
-    flex: 1 1 auto;
+    flex: none;
     min-height: 0;
   }
   .market-hero__slide {
-    min-height: 0;
-    height: 100%;
-    padding: 28px 32px 12px;
+    min-height: 178px;
+    height: auto;
+    padding: 24px 28px 10px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -6720,15 +6777,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     border-radius: 14px;
   }
   .market-hero .desktop-hero__dots {
-    padding: 0 32px 20px;
+    padding: 0 28px 16px;
     margin: 0;
-    flex: 0 0 auto;
   }
   .game-page__banner {
-    --game-banner-h: 168px;
+    --game-banner-h: 148px;
   }
   .game-page__banner-copy {
-    padding: 24px 10px 24px 28px;
+    padding: 20px 10px 20px 24px;
   }
   .analytics-panel {
     max-width: 720px;
@@ -6930,21 +6986,15 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     box-sizing: border-box;
     align-self: start;
   }
-  /* Wallet 1:1 with market hero on home, game banner on game page. */
+  /* Wallet content-sized like v2 — no forced height lock. */
   .app-shell--market > .sidebar-right > .widget:first-of-type {
-    --market-wallet-h: 235px;
     margin-top: 0;
-    height: var(--market-wallet-h);
-    min-height: var(--market-wallet-h);
-    max-height: var(--market-wallet-h);
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    height: auto;
+    min-height: 0;
+    max-height: none;
   }
-  /* Game page: same height as game banner, offset under back link. */
+  /* Align wallet with game banner under the back link. */
   .app-shell--market:has(.game-page) > .sidebar-right > .widget:first-of-type {
-    --market-wallet-h: 168px;
     margin-top: 26px;
   }
 }

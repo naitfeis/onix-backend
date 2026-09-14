@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { api, friendlyError } from '../api/client';
 import {
@@ -91,17 +91,40 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function CategoryShareRing({ count }: { count: number; total?: number }) {
+function CategoryShareRing({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
+  const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
+  const degrees = fraction >= 0.999 ? 360 : fraction > 0 ? Math.max(14, fraction * 360) : 0;
+  const label = total > 0 ? `${count} из ${total} лотов` : `${count} лотов`;
   return (
-    <span className="cat-card__ring" aria-label={`${count} лотов`}>
-      <span className="cat-card__ring-num">{shown}</span>
+    <span
+      className={`cat-card__share${fraction >= 0.999 ? ' cat-card__share--full' : ''}`}
+      title={label}
+      aria-label={label}
+      style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
+    >
+      <span className="cat-card__share-num">{shown}</span>
     </span>
   );
 }
 
-function formatSubCount(n: number): string {
-  return n.toLocaleString('ru-RU');
+function SubcategoryShareCount({ count, total }: { count: number; total: number }) {
+  const shown = count > 99 ? '99+' : String(count);
+  const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
+  const degrees = fraction >= 0.999 ? 360 : fraction > 0 ? Math.max(14, fraction * 360) : 0;
+  const label = total > 0
+    ? `${count} из ${total} лотов в категории`
+    : `${count} лотов в категории`;
+  return (
+    <span
+      className={`game-page__sub-share${fraction >= 0.999 ? ' is-full' : ''}`}
+      title={label}
+      aria-label={label}
+      style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
+    >
+      <span className="game-page__sub-share-num">{shown}</span>
+    </span>
+  );
 }
 
 function LotViewToggle({
@@ -697,7 +720,7 @@ export function Market({
             onClick={() => setSubcategory('')}
           >
             <span className="game-page__sub-label">{t('market.allProducts')}</span>
-            <span className="game-page__sub-count">{formatSubCount(gameLotCount)}</span>
+            <SubcategoryShareCount count={gameLotCount} total={gameLotCount} />
           </button>
           {marketSubs.map((item) => (
             <button
@@ -708,7 +731,7 @@ export function Market({
               onClick={() => setSubcategory(subcategory === item ? '' : item)}
             >
               <span className="game-page__sub-label">{SUBCATEGORY_LABELS[item] ?? item}</span>
-              <span className="game-page__sub-count">{formatSubCount(subcategoryCounts[item] ?? 0)}</span>
+              <SubcategoryShareCount count={subcategoryCounts[item] ?? 0} total={gameLotCount} />
             </button>
           ))}
         </div>
@@ -787,7 +810,7 @@ export function Market({
                 <span className="cat-card__emblem cat-card__emblem--all">
                   <AllGridIcon />
                 </span>
-                <CategoryShareRing count={totalLots} />
+                <CategoryShareRing count={totalLots} total={totalLots || 1} />
               </span>
               <span className="cat-card__name">{t('market.all')}</span>
             </button>
@@ -826,7 +849,7 @@ export function Market({
                         style={{ background: style.bg }}
                       >{style.letter}</span>
                     )}
-                    <CategoryShareRing count={count} />
+                    <CategoryShareRing count={count} total={totalLots || 1} />
                   </span>
                   <span className="cat-card__name">{categoryLabel(cat)}</span>
                 </button>

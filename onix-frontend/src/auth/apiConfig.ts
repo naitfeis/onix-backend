@@ -1,9 +1,8 @@
 /**
- * API origin for Website — single-origin production.
+ * API origin for Website — single-origin Amvera production.
  *
  * Browser always uses relative `/api/...` on https://www.onixtg.shop
- * (Vercel rewrite → Render). Absolute backends (e.g. onrender.com) are ignored
- * so the Network panel never shows Render.
+ * (SPA+API same origin on Amvera). Absolute backends are ignored.
  *
  * Local: empty base + Vite `/api` proxy → Nest (or VITE_API_PROXY_TARGET).
  */

@@ -13,9 +13,8 @@
 
 - Abstraction: `WebsiteAuthProvider` (`legacy` | `auth_v2`) under `src/auth/`.
 - Temporary switch: `VITE_WEBSITE_AUTH_MODE=legacy|auth_v2` (default `legacy`). Remove after soak.
-- Same-origin API: **leave `VITE_API_URL` empty** (required). Browser calls `/api/...`; Vercel rewrites to Render.
-- Absolute Render URLs are stripped by `resolveApiBase` so the Network panel never shows onrender.com.
+- Same-origin API: **leave `VITE_API_URL` empty** (required). Browser calls `/api/...` on Amvera.
+- Absolute third-party API URLs are stripped by `resolveApiBase`.
 - Local proxy target: `VITE_API_PROXY_TARGET` (default `http://localhost:3000`).
-- Do not change `vercel.json` while the existing `/api` rewrite works.
 
 See `docs/architecture/ONIX-WEBSITE-AUTH-TESTS.md`.
