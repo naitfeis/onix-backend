@@ -643,17 +643,28 @@ export function Profile({
       </div>
     </div>
 
-    <div className="chips profile-tabs">
+    <div className="profile-tabs game-page__subs" role="tablist" aria-label="Разделы профиля">
       {profileSections.map(item =>
-        <button className={section === item ? 'active' : ''} key={item} onClick={() => setSection(item)}>{({
-          overview: t('profile.history'),
-          listings: t('profile.listings'),
-          favorites: t('profile.favorites'),
-          reviews: t('profile.reviews'),
-          analytics: t('profile.analytics'),
-        })[item]}</button>)}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === item}
+          className={`game-page__sub${section === item ? ' is-active' : ''}`}
+          key={item}
+          onClick={() => setSection(item)}
+        >
+          <span className="game-page__sub-label">{({
+            overview: t('profile.history'),
+            listings: t('profile.listings'),
+            favorites: t('profile.favorites'),
+            reviews: t('profile.reviews'),
+            analytics: t('profile.analytics'),
+          })[item]}</span>
+        </button>)}
       {isAdmin && (
-        <button type="button" key="admin-plane" onClick={openAdminControlPlane}>{t('profile.admin')}</button>
+        <button type="button" className="game-page__sub" key="admin-plane" onClick={openAdminControlPlane}>
+          <span className="game-page__sub-label">{t('profile.admin')}</span>
+        </button>
       )}
     </div>
     {showWebsiteLogout && (

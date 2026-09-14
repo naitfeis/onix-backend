@@ -373,9 +373,25 @@ export function PublicProfileModal({
       </Card>
       {profile.bio && <p className="muted public-profile__bio">{profile.bio}</p>}
       {profile.createdAt && <p className="muted">На ONIX с {new Date(profile.createdAt).toLocaleDateString('ru-RU')}</p>}
-      <div className="chips profile-tabs">
-        <button className={section === 'products' ? 'active' : ''} onClick={() => setSection('products')}>ТОВАРЫ</button>
-        <button className={section === 'reviews' ? 'active' : ''} onClick={() => setSection('reviews')}>ОТЗЫВЫ</button>
+      <div className="profile-tabs game-page__subs" role="tablist" aria-label="Разделы профиля">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'products'}
+          className={`game-page__sub${section === 'products' ? ' is-active' : ''}`}
+          onClick={() => setSection('products')}
+        >
+          <span className="game-page__sub-label">Товары</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={section === 'reviews'}
+          className={`game-page__sub${section === 'reviews' ? ' is-active' : ''}`}
+          onClick={() => setSection('reviews')}
+        >
+          <span className="game-page__sub-label">Отзывы</span>
+        </button>
       </div>
       {section === 'products' && (products.length === 0
         ? <StateView title="Товаров нет" text="Продавец ещё не разместил лоты." />

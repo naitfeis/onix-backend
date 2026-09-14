@@ -158,15 +158,17 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
               )}
             </div>
             <Field label="Тип товара">
-              <div className="chips lot-form__types" role="list" aria-label="Подкатегории">
+              <div className="lot-form__types game-page__subs" role="list" aria-label="Подкатегории">
                 {subs.map((item) => (
                   <button
                     type="button"
                     role="listitem"
-                    className={draft.subcategory === item ? 'active' : ''}
+                    className={`game-page__sub${draft.subcategory === item ? ' is-active' : ''}`}
                     key={item}
                     onClick={() => setDraft({ ...draft, subcategory: item })}
-                  >{(SUBCATEGORY_LABELS[item] ?? item).toUpperCase()}</button>
+                  >
+                    <span className="game-page__sub-label">{SUBCATEGORY_LABELS[item] ?? item}</span>
+                  </button>
                 ))}
               </div>
             </Field>

@@ -394,18 +394,22 @@ export function Chats({
     style={{ '--chat-list-w': `${listW}px` } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
-      <div className="chat-filters" role="tablist" aria-label={t('chat.filtersAria')}>
+      <div className="chat-filters game-page__subs" role="tablist" aria-label={t('chat.filtersAria')}>
         {CHAT_FILTERS.map(({ id, labelKey }) => (
           <button
             key={id}
             type="button"
             role="tab"
             aria-selected={filter === id}
-            className={filter === id ? 'active' : ''}
+            className={`game-page__sub${filter === id ? ' is-active' : ''}`}
             onClick={() => setFilter(id)}
           >
-            <span>{t(labelKey)}</span>
-            {id === 'all' && totalUnread > 0 && <em className="chat-filters__badge">{totalUnread}</em>}
+            <span className="game-page__sub-label">{t(labelKey)}</span>
+            {id === 'all' && totalUnread > 0 && (
+              <span className="game-page__sub-share" aria-hidden="true">
+                <span className="game-page__sub-share-num">{totalUnread > 99 ? '99+' : totalUnread}</span>
+              </span>
+            )}
           </button>
         ))}
       </div>
