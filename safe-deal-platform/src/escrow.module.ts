@@ -8,6 +8,7 @@ import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from '
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
 import { assertRateLimit } from './rate-limit';
+import { assertUsersNotBlocked } from './user-block';
 import { withSerializableTransaction } from './database/transaction-retry';
 import {
   lockOrderForUpdate,
@@ -261,6 +262,12 @@ export class EscrowService {
       throw new ConflictException('Товар недоступен.');
     }
     if (product.sellerId === user.id) throw new BadRequestException('Нельзя купить собственный товар.');
+    await assertUsersNotBlocked(
+      tx,
+      user.id,
+      product.sellerId,
+      'Покупка недоступна: пользователь в чёрном списке.',
+    );
     if (product.priceCents < 0n) throw new BadRequestException('Некорректная цена товара.');
     const unitPrice = opts?.frozenUnitPriceCents ?? product.priceCents;
     if (opts?.frozenUnitPriceCents != null && product.priceCents !== opts.frozenUnitPriceCents) {

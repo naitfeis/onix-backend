@@ -28,8 +28,12 @@ export interface Seller {
   reviewCount: number;
   salesCount: number;
   followersCount: number;
+  /** Present on public profile. */
+  followingCount?: number;
   lastOnline?: string;
   followed?: boolean;
+  favorited?: boolean;
+  blocked?: boolean;
   /** Always present from API (default USER). */
   status?: PlatformStatus;
   /** Non-USER status badge for UI chips. */
@@ -249,6 +253,9 @@ export interface TrustCard {
 export interface PublicProfile extends Seller {
   bio?: string | null;
   createdAt?: string;
+  followingCount?: number;
+  favorited?: boolean;
+  blocked?: boolean;
   /** Present only for ADMIN viewers. */
   sellBanned?: boolean;
   products?: Array<{
@@ -407,6 +414,12 @@ export const API_PATHS = {
   productPurchase: (id: string) => `/api/orders/product/${encodeURIComponent(id)}`,
   favorite: (id: string) => `/api/favorites/${encodeURIComponent(id)}`,
   favorites: '/api/favorites',
+  favoriteUsers: '/api/users/me/favorite-users',
+  blocks: '/api/users/me/blocks',
+  userFavorite: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/favorite`,
+  userBlock: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/block`,
+  userFollowers: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/followers`,
+  userFollowing: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/following`,
   userReport: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/report`,
   follow: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/follow`,
   orders: '/api/orders',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { api, friendlyError } from '../api/client';
-import { API_PATHS, formatLastSeen, sellerIsPresent, type Product, type PublicProfile } from '../api/contracts';
+import { API_PATHS, formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type Seller } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { Button, Card, Input, Skeleton, StateView } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -17,6 +17,16 @@ const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_LIST_DEFAULT = 320;
 const CHAT_LIST_MIN = 220;
+
+type ChatFilter = 'all' | 'direct' | 'orders' | 'favorites' | 'blacklist';
+
+const CHAT_FILTERS: Array<{ id: ChatFilter; labelKey: 'chat.filterAll' | 'chat.filterDirect' | 'chat.filterOrders' | 'chat.filterFavorites' | 'chat.filterBlacklist' }> = [
+  { id: 'all', labelKey: 'chat.filterAll' },
+  { id: 'direct', labelKey: 'chat.filterDirect' },
+  { id: 'orders', labelKey: 'chat.filterOrders' },
+  { id: 'favorites', labelKey: 'chat.filterFavorites' },
+  { id: 'blacklist', labelKey: 'chat.filterBlacklist' },
+];
 
 function readStoredChatSize(key: string, fallback: number, min: number): number {
   try {
@@ -47,6 +57,9 @@ export function Chats({
   const [reportOnixId, setReportOnixId] = useState<string | null>(null);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
+  const [filter, setFilter] = useState<ChatFilter>('all');
+  const [favoriteUsers, setFavoriteUsers] = useState<Seller[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<Seller[]>([]);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const lastSeenMsgIdRef = useRef<string | null>(null);
@@ -54,6 +67,59 @@ export function Chats({
   const visibleChats = useMemo(
     () => core.chats.filter((chat) => chat.kind !== 'GROUP'),
     [core.chats],
+  );
+  const favoriteIds = useMemo(
+    () => new Set(favoriteUsers.map((u) => u.onixId)),
+    [favoriteUsers],
+  );
+  const blockedIds = useMemo(
+    () => new Set(blockedUsers.map((u) => u.onixId)),
+    [blockedUsers],
+  );
+  const totalUnread = useMemo(
+    () => visibleChats.reduce((sum, chat) => {
+      if (chat.peerOnixId && blockedIds.has(chat.peerOnixId)) return sum;
+      return sum + (chat.unreadCount > 0 ? chat.unreadCount : 0);
+    }, 0),
+    [visibleChats, blockedIds],
+  );
+  const filteredChats = useMemo(() => {
+    const notBlocked = (chat: (typeof visibleChats)[number]) => (
+      !chat.peerOnixId || !blockedIds.has(chat.peerOnixId)
+    );
+    switch (filter) {
+      case 'direct':
+        return visibleChats.filter((chat) => (
+          notBlocked(chat)
+          && chat.kind !== 'AI'
+          && (chat.kind === 'DIRECT' || chat.kind == null)
+          && !chat.dealId
+          && !chat.orderCard
+        ));
+      case 'orders':
+        return visibleChats.filter((chat) => (
+          notBlocked(chat)
+          && chat.kind !== 'AI'
+          && Boolean(chat.dealId || chat.orderCard)
+        ));
+      case 'favorites':
+        return visibleChats.filter((chat) => (
+          Boolean(chat.peerOnixId && favoriteIds.has(chat.peerOnixId))
+        ));
+      case 'blacklist':
+        return [];
+      case 'all':
+      default:
+        return visibleChats.filter(notBlocked);
+    }
+  }, [filter, visibleChats, favoriteIds, blockedIds]);
+  const chatPeerIds = useMemo(
+    () => new Set(visibleChats.map((chat) => chat.peerOnixId).filter(Boolean) as string[]),
+    [visibleChats],
+  );
+  const favoriteWithoutChat = useMemo(
+    () => favoriteUsers.filter((user) => !chatPeerIds.has(user.onixId)),
+    [favoriteUsers, chatPeerIds],
   );
   const thread = visibleChats.find(item => item.id === threadId);
   const rawMessages = threadId ? core.messages[threadId] || [] : [];
@@ -158,6 +224,33 @@ export function Chats({
       })
       .catch(() => { /* AI optional */ });
   }, [refreshChats, core.subscribeRealtimeChat]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+      .then(([favs, blocks]) => {
+        if (!cancelled) {
+          setFavoriteUsers(favs);
+          setBlockedUsers(blocks);
+        }
+      })
+      .catch(() => { /* optional social lists */ });
+    return () => { cancelled = true; };
+  }, [core.listFavoriteUsers, core.listBlockedUsers]);
+
+  useEffect(() => {
+    if (filter !== 'favorites' && filter !== 'blacklist') return;
+    let cancelled = false;
+    void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+      .then(([favs, blocks]) => {
+        if (!cancelled) {
+          setFavoriteUsers(favs);
+          setBlockedUsers(blocks);
+        }
+      })
+      .catch(() => { /* optional social lists */ });
+    return () => { cancelled = true; };
+  }, [filter, core.listFavoriteUsers, core.listBlockedUsers]);
 
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
@@ -301,37 +394,164 @@ export function Chats({
     style={{ '--chat-list-w': `${listW}px` } as CSSProperties}
   >
     <div className={`thread-list ${thread ? 'mobile-hidden' : ''}`}>
-      {core.states.chats === 'error' ? <StateView title="Чаты недоступны" text={core.errors.chats || ''} /> : visibleChats.length === 0 ? <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} /> :
-        visibleChats.map(chat => <button
-          className={`thread${threadId === chat.id ? ' active' : ''}`}
-          key={chat.id}
-          onClick={() => setThreadId(chat.id)}
-        >
-          <span className="thread-peer">
-            <UserAvatar
-              userId={chat.kind === 'AI' ? undefined : chat.peerUserId}
-              avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
-              name={chat.kind === 'AI' ? 'Onix AI' : chat.title}
-              initials={chat.kind === 'AI' ? 'AI' : undefined}
-              online={chat.kind === 'AI' || !chat.peerOnixId
-                ? undefined
-                : sellerIsPresent(
-                  { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
-                  core.profile,
-                  core.presenceOf(chat.peerOnixId),
-                )}
-            />
-            <span>
-              <b title={chat.kind === 'AI' ? 'Onix AI' : chat.title}>
-                {chat.kind === 'AI' ? 'Onix AI' : chat.title} <StaffBadge badge={chat.peerBadge} />
-              </b>
-              <small>
-                {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : (chat.subtitle || 'Открыть диалог')}
-              </small>
+      <div className="chat-filters" role="tablist" aria-label={t('chat.filtersAria')}>
+        {CHAT_FILTERS.map(({ id, labelKey }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={filter === id}
+            className={filter === id ? 'active' : ''}
+            onClick={() => setFilter(id)}
+          >
+            <span>{t(labelKey)}</span>
+            {id === 'all' && totalUnread > 0 && <em className="chat-filters__badge">{totalUnread}</em>}
+          </button>
+        ))}
+      </div>
+      {core.states.chats === 'error' ? (
+        <StateView title="Чаты недоступны" text={core.errors.chats || ''} />
+      ) : filter === 'blacklist' ? (
+        blockedUsers.length === 0 ? (
+          <StateView title={t('chat.emptyBlacklist')} text="" />
+        ) : (
+          blockedUsers.map((user) => (
+            <div className="thread" key={user.onixId}>
+              <button
+                type="button"
+                className="thread-peer-hit"
+                onClick={() => void openOnixProfile(user.onixId)}
+              >
+                <span className="thread-peer">
+                  <UserAvatar
+                    userId={user.id}
+                    avatarUrl={user.avatarUrl}
+                    name={user.username}
+                    online={sellerIsPresent(user, core.profile, core.presenceOf(user.onixId))}
+                  />
+                  <span>
+                    <b title={user.username}>{publicAt(user.username)} <StaffBadge badge={user.badge} /></b>
+                    <small>{formatOnixId(user.onixId)}</small>
+                  </span>
+                </span>
+              </button>
+              <Button
+                variant="ghost"
+                busy={core.actionBusy === `user-block-${user.onixId}`}
+                onClick={() => {
+                  void (async () => {
+                    const result = await core.toggleUserBlock(user.onixId, true);
+                    if (!result) return;
+                    setBlockedUsers((prev) => prev.filter((item) => item.onixId !== user.onixId));
+                    setToast(t('social.unblock'));
+                  })();
+                }}
+              >{t('social.unblock')}</Button>
+            </div>
+          ))
+        )
+      ) : filter === 'favorites' ? (
+        filteredChats.length === 0 && favoriteWithoutChat.length === 0 ? (
+          <StateView title={t('chat.emptyFavorites')} text="" />
+        ) : (
+          <>
+            {filteredChats.map((chat) => (
+              <button
+                className={`thread${threadId === chat.id ? ' active' : ''}`}
+                key={chat.id}
+                type="button"
+                onClick={() => setThreadId(chat.id)}
+              >
+                <span className="thread-peer">
+                  <UserAvatar
+                    userId={chat.peerUserId}
+                    avatarUrl={chat.peerAvatarUrl}
+                    name={chat.title}
+                    online={!chat.peerOnixId
+                      ? undefined
+                      : sellerIsPresent(
+                        { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
+                        core.profile,
+                        core.presenceOf(chat.peerOnixId),
+                      )}
+                  />
+                  <span>
+                    <b title={chat.title}>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
+                    <small>{chat.subtitle || 'Открыть диалог'}</small>
+                  </span>
+                </span>
+                {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
+              </button>
+            ))}
+            {favoriteWithoutChat.map((user) => (
+              <div className="thread" key={`fav-${user.onixId}`}>
+                <button
+                  type="button"
+                  className="thread-peer-hit"
+                  onClick={() => void openOnixProfile(user.onixId)}
+                >
+                  <span className="thread-peer">
+                    <UserAvatar
+                      userId={user.id}
+                      avatarUrl={user.avatarUrl}
+                      name={user.username}
+                      online={sellerIsPresent(user, core.profile, core.presenceOf(user.onixId))}
+                    />
+                    <span>
+                      <b title={user.username}>{publicAt(user.username)} <StaffBadge badge={user.badge} /></b>
+                      <small>{formatOnixId(user.onixId)}</small>
+                    </span>
+                  </span>
+                </button>
+                <Button
+                  variant="ghost"
+                  busy={core.actionBusy === `chat-${user.onixId}`}
+                  onClick={() => { void openDirectChat(user.onixId); }}
+                >Написать</Button>
+              </div>
+            ))}
+          </>
+        )
+      ) : visibleChats.length === 0 ? (
+        <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} />
+      ) : filteredChats.length === 0 ? (
+        <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} />
+      ) : (
+        filteredChats.map((chat) => (
+          <button
+            className={`thread${threadId === chat.id ? ' active' : ''}`}
+            key={chat.id}
+            type="button"
+            onClick={() => setThreadId(chat.id)}
+          >
+            <span className="thread-peer">
+              <UserAvatar
+                userId={chat.kind === 'AI' ? undefined : chat.peerUserId}
+                avatarUrl={chat.kind === 'AI' ? undefined : chat.peerAvatarUrl}
+                name={chat.kind === 'AI' ? 'Onix AI' : chat.title}
+                initials={chat.kind === 'AI' ? 'AI' : undefined}
+                online={chat.kind === 'AI' || !chat.peerOnixId
+                  ? undefined
+                  : sellerIsPresent(
+                    { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
+                    core.profile,
+                    core.presenceOf(chat.peerOnixId),
+                  )}
+              />
+              <span>
+                <b title={chat.kind === 'AI' ? 'Onix AI' : chat.title}>
+                  {chat.kind === 'AI' ? 'Onix AI' : chat.title} <StaffBadge badge={chat.peerBadge} />
+                </b>
+                <small>
+                  {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : (chat.subtitle || 'Открыть диалог')}
+                </small>
+              </span>
             </span>
-          </span>
-          {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
-        </button>)}</div>
+            {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
+          </button>
+        ))
+      )}
+    </div>
     <button
       type="button"
       className="chat-col-resizer chat-col-resizer--list desktop-only"
@@ -376,7 +596,49 @@ export function Chats({
         </div>
       </button>
       {thread.peerOnixId && core.profile?.onixId !== thread.peerOnixId && (
-        <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
+        <>
+          <Button
+            variant="ghost"
+            busy={core.actionBusy === `user-favorite-${thread.peerOnixId}`}
+            onClick={() => {
+              const peerId = thread.peerOnixId!;
+              const wasFavorited = favoriteIds.has(peerId);
+              void (async () => {
+                const result = await core.toggleUserFavorite(peerId, wasFavorited);
+                if (!result) return;
+                if (wasFavorited) {
+                  setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                } else {
+                  try {
+                    setFavoriteUsers(await core.listFavoriteUsers());
+                  } catch { /* keep optimistic */ }
+                }
+              })();
+            }}
+          >{favoriteIds.has(thread.peerOnixId) ? t('social.favoriteRemove') : t('social.favoriteAdd')}</Button>
+          <Button
+            variant="ghost"
+            busy={core.actionBusy === `user-block-${thread.peerOnixId}`}
+            onClick={() => {
+              const peerId = thread.peerOnixId!;
+              const wasBlocked = blockedIds.has(peerId);
+              void (async () => {
+                const result = await core.toggleUserBlock(peerId, wasBlocked);
+                if (!result) return;
+                if (wasBlocked) {
+                  setBlockedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                } else {
+                  setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                  try {
+                    setBlockedUsers(await core.listBlockedUsers());
+                  } catch { /* keep local */ }
+                  setToast(t('social.block'));
+                }
+              })();
+            }}
+          >{blockedIds.has(thread.peerOnixId) ? t('social.unblock') : t('social.block')}</Button>
+          <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
+        </>
       )}
       </div>
       <div className="messages-wrap">
@@ -579,7 +841,15 @@ export function Chats({
     </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
     <PublicProfileModal
       profile={peerProfile}
-      onClose={() => setPeerProfile(null)}
+      onClose={() => {
+        setPeerProfile(null);
+        void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+          .then(([favs, blocks]) => {
+            setFavoriteUsers(favs);
+            setBlockedUsers(blocks);
+          })
+          .catch(() => { /* ignore */ });
+      }}
       core={core}
       onOpenOnix={openOnixProfile}
       onWrite={async (onixId) => {

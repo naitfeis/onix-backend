@@ -32,6 +32,7 @@ import {
 } from './query-selects';
 import { assertRateLimit } from './rate-limit';
 import { productDto } from './response';
+import { filterUnblockedRecipients } from './user-block';
 import { fieldBadRequest } from './validation-errors';
 import { sanitizeProductDescription } from './sanitize-user-text';
 import { ROBLOX_RECO_SUBCATEGORIES } from './marketplace/platform-rules';
@@ -433,14 +434,22 @@ export class MarketplaceService {
       take: 500,
     });
     if (!followers.length) return;
+    const allowedIds = await filterUnblockedRecipients(
+      this.prisma,
+      sellerId,
+      followers.map((f) => f.followerId),
+    );
+    const allowed = new Set(allowedIds.map((id) => id.toString()));
+    const recipients = followers.filter((f) => allowed.has(f.followerId.toString()));
+    if (!recipients.length) return;
     await this.prisma.notification.createMany({
-      data: followers.map(({ followerId }) => ({
+      data: recipients.map(({ followerId }) => ({
         userId: followerId, type: 'NEW_PRODUCT', title: 'Новый товар у продавца',
         body: `${product.title} · ${product.category}`, data: { productId: product.id },
       })),
     });
     await pushNewProductToFollowers(
-      followers.map((f) => ({ telegramId: f.follower.telegramId })),
+      recipients.map((f) => ({ telegramId: f.follower.telegramId })),
       product,
     );
   }

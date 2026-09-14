@@ -18,7 +18,7 @@ import {
   waitForTelegramMiniAppSurface,
 } from '../auth/telegramEnv';
 import { isTransientRefreshFailure } from '../auth/refreshClient';
-import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type SubcategoryCatalog } from '../api/contracts';
+import { API_PATHS, SUBCATEGORIES_BY_CATEGORY, normOnixId, type AsyncState, type BanInfo, type BanReasonCode, type ChatThread, type Deal, type Message, type Notification, type OrderListQuery, type Product, type ProductDraft, type ProductListQuery, type Profile, type Review, type Seller, type SubcategoryCatalog } from '../api/contracts';
 import {
   bootstrapPhase,
   bootstrapPhaseSync,
@@ -1014,6 +1014,25 @@ export function useOnixCore() {
     });
   }, [run]);
 
+  const toggleUserFavorite = useCallback((onixId: string, favorited = false) => run(
+    `user-favorite-${onixId}`,
+    () => (favorited
+      ? api.delete<{ onixId: string; favorited: boolean }>(API_PATHS.userFavorite(onixId))
+      : api.post<{ onixId: string; favorited: boolean }>(API_PATHS.userFavorite(onixId))),
+  ), [run]);
+
+  const toggleUserBlock = useCallback((onixId: string, blocked = false) => run(
+    `user-block-${onixId}`,
+    () => (blocked
+      ? api.delete<{ onixId: string; blocked: boolean }>(API_PATHS.userBlock(onixId))
+      : api.post<{ onixId: string; blocked: boolean }>(API_PATHS.userBlock(onixId))),
+  ), [run]);
+
+  const listFavoriteUsers = useCallback(() => api.get<Seller[]>(API_PATHS.favoriteUsers), []);
+  const listBlockedUsers = useCallback(() => api.get<Seller[]>(API_PATHS.blocks), []);
+  const listFollowers = useCallback((onixId: string) => api.get<Seller[]>(API_PATHS.userFollowers(onixId)), []);
+  const listFollowing = useCallback((onixId: string) => api.get<Seller[]>(API_PATHS.userFollowing(onixId)), []);
+
   const purchase = useCallback(async (productId: string, idempotencyKey?: string) => {
     if (!productId || purchaseLockRef.current.has(productId) || actionBusyRef.current) return null;
     purchaseLockRef.current.add(productId);
@@ -1299,14 +1318,16 @@ export function useOnixCore() {
     sessionRestore,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
+    toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
+    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
     markNotificationRead, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
   }), [
     profile, catalogSubcategories, categoryLotCounts, store, states, errors, messages, actionBusy, unread, banFromAuth,
     sessionRestore, presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
+    toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
+    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
     markNotificationRead, reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
   ]);

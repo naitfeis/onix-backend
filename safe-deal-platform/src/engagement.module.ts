@@ -10,6 +10,7 @@ import {
 import { ensurePairChat, pairChatKey } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
 import { createDomainNotification, deliverTelegramAfterCommit } from './domain-notify';
+import { assertUsersNotBlocked } from './user-block';
 import { formatOnixId, onixIdLookupCandidates } from './onix-id';
 import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
@@ -764,10 +765,12 @@ export class ChatService {
   }
 
   private async assertNotBlocked(a: bigint, b: bigint) {
-    const blocked = await this.prisma.userBlock.findFirst({
-      where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },
-    });
-    if (blocked) throw new BadRequestException('Обмен сообщениями между пользователями заблокирован.');
+    await assertUsersNotBlocked(
+      this.prisma,
+      a,
+      b,
+      'Обмен сообщениями между пользователями заблокирован.',
+    );
   }
 }
 

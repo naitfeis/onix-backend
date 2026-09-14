@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
-  formatLastSeen, isOnline, sellerIsPresent, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type TrustCard,
+  formatLastSeen, isOnline, sellerIsPresent, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type Seller, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
 import { ReviewCard } from '../components/ReviewCard';
@@ -11,6 +11,7 @@ import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { ProductLotCard } from './ProductLotCard';
+import { t } from '../i18n';
 
 export const emptyDraft: ProductDraft = {
   title: '', description: '', priceRubles: '', quantity: 1,
@@ -193,12 +194,22 @@ export function PublicProfileModal({
   const [section, setSection] = useState<'products' | 'reviews'>('products');
   const [followed, setFollowed] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [favorited, setFavorited] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [socialList, setSocialList] = useState<'followers' | 'following' | null>(null);
+  const [socialPeople, setSocialPeople] = useState<Seller[]>([]);
   const [reportOpen, setReportOpen] = useState(false);
   const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
     setFollowersCount(profile.followersCount);
+    setFollowingCount(profile.followingCount ?? 0);
+    setFavorited(Boolean(profile.favorited));
+    setBlocked(Boolean(profile.blocked));
+    setSocialList(null);
+    setSocialPeople([]);
     setSection('products');
     setReportOpen(false);
     setTrustCard(null);
@@ -209,12 +220,26 @@ export function PublicProfileModal({
       if (!cancelled) setTrustCard(null);
     });
     return () => { cancelled = true; };
-  }, [profile?.onixId, profile?.followed, profile?.followersCount]);
+  }, [profile?.onixId, profile?.followed, profile?.followersCount, profile?.followingCount, profile?.favorited, profile?.blocked]);
   if (!profile) return null;
   const products = profile.products ?? [];
   const reviews = profile.reviews ?? [];
   const isSelf = Boolean(core?.profile && core.profile.onixId === profile.onixId);
   const isSeller = products.length > 0 || profile.salesCount > 0;
+
+  const openSocialList = async (kind: 'followers' | 'following') => {
+    if (!core) return;
+    setSocialList(kind);
+    setSocialPeople([]);
+    try {
+      const people = kind === 'followers'
+        ? await core.listFollowers(profile.onixId)
+        : await core.listFollowing(profile.onixId);
+      setSocialPeople(people);
+    } catch {
+      setSocialPeople([]);
+    }
+  };
 
   const asMarketProduct = (item: NonNullable<PublicProfile['products']>[number]): Product => ({
     id: item.id,
@@ -253,7 +278,22 @@ export function PublicProfileModal({
           <div className="stats">
             <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
             <span><b>{profile.salesCount}</b> сделок</span>
-            <span><b>{followersCount}</b> подписчиков</span>
+            <button
+              type="button"
+              className="stats__link"
+              onClick={() => void openSocialList('followers')}
+              disabled={!core}
+            >
+              <b>{followersCount}</b> {t('social.followers').toLowerCase()}
+            </button>
+            <button
+              type="button"
+              className="stats__link"
+              onClick={() => void openSocialList('following')}
+              disabled={!core}
+            >
+              <b>{followingCount}</b> {t('social.following').toLowerCase()}
+            </button>
           </div>
         </div>
         {!isSelf && core && <div className="card-actions">
@@ -280,6 +320,42 @@ export function PublicProfileModal({
               setFollowersCount(result.followersCount);
             }}
           >{followed ? 'Отписаться' : 'Подписаться'}</Button>}
+          <Button
+            variant="secondary"
+            busy={core.actionBusy === `user-favorite-${profile.onixId}`}
+            onClick={async () => {
+              const previous = favorited;
+              setFavorited(!previous);
+              const result = await core.toggleUserFavorite(profile.onixId, previous);
+              if (!result) {
+                setFavorited(previous);
+                return;
+              }
+              setFavorited(result.favorited);
+            }}
+          >{favorited ? t('social.favoriteRemove') : t('social.favoriteAdd')}</Button>
+          <Button
+            variant="secondary"
+            busy={core.actionBusy === `user-block-${profile.onixId}`}
+            onClick={async () => {
+              const previous = blocked;
+              const previousFavorited = favorited;
+              setBlocked(!previous);
+              if (!previous) setFavorited(false);
+              const result = await core.toggleUserBlock(profile.onixId, previous);
+              if (!result) {
+                setBlocked(previous);
+                setFavorited(previousFavorited);
+                return;
+              }
+              setBlocked(result.blocked);
+              if (result.blocked) {
+                setFavorited(false);
+                setToast?.(t('social.block'));
+                onClose();
+              }
+            }}
+          >{blocked ? t('social.unblock') : t('social.block')}</Button>
           <Button
             variant="danger"
             onClick={() => {
@@ -342,6 +418,44 @@ export function PublicProfileModal({
           />
         ))}</div>)}
     </div>
+    <Modal
+      open={socialList !== null}
+      title={socialList === 'following' ? t('social.following') : t('social.followers')}
+      onClose={() => {
+        setSocialList(null);
+        setSocialPeople([]);
+      }}
+    >
+      {socialPeople.length === 0 ? (
+        <StateView
+          title={socialList === 'following' ? t('social.followingEmpty') : t('social.followersEmpty')}
+          text=""
+        />
+      ) : (
+        <div className="stack">
+          {socialPeople.map((person) => (
+            <button
+              key={person.onixId}
+              type="button"
+              className="thread"
+              onClick={() => {
+                setSocialList(null);
+                setSocialPeople([]);
+                onOpenOnix?.(person.onixId);
+              }}
+            >
+              <span className="thread-peer">
+                <UserAvatar userId={person.id} avatarUrl={person.avatarUrl} name={person.username} />
+                <span>
+                  <b>{publicAt(person.username)} <StaffBadge badge={person.badge} /></b>
+                  <small>{formatOnixId(person.onixId)}</small>
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </Modal>
     {core && setToast && reportOpen && (
       <ReportUserModal
         onixId={profile.onixId}

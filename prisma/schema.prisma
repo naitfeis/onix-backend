@@ -75,6 +75,8 @@ model User {
   sellerAnalyticsDaily  SellerAnalyticsDaily[]
   productViewUniques    ProductViewUnique[]  @relation("ViewViewer")
   favorites             Favorite[]
+  userFavoritesMade     UserFavorite[]       @relation("UserFavoritesMade")
+  userFavoritesReceived UserFavorite[]       @relation("UserFavoritesReceived")
   following             Follow[]             @relation("Following")
   followers             Follow[]             @relation("Followers")
   chatMembers           ChatMember[]
@@ -167,6 +169,18 @@ model Follow {
 
   @@id([followerId, sellerId])
   @@index([sellerId])
+}
+
+/** Favorite person (not product) — used by chat «Избранное». */
+model UserFavorite {
+  userId    BigInt
+  targetId  BigInt
+  createdAt DateTime @default(now())
+  user      User     @relation("UserFavoritesMade", fields: [userId], references: [id], onDelete: Cascade)
+  target    User     @relation("UserFavoritesReceived", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([userId, targetId])
+  @@index([targetId])
 }
 
 model Order {
@@ -432,6 +446,8 @@ model UserBlock {
   blocked   User     @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@id([blockerId, blockedId])
+  @@index([blockerId, createdAt])
+  @@index([blockedId])
 }
 
 model Notification {

@@ -144,8 +144,10 @@ export class ProfilesService {
         id: true, onixId: true, telegramNick: true, displayName: true, avatarUrl: true, bio: true,
         ratingAverage: true, ratingCount: true, completedSales: true, lastSeenAt: true,
         createdAt: true, isAdmin: true, isSupport: true, platformStatus: true, deletedAt: true, sellBannedAt: true,
-        _count: { select: { followers: true } },
+        _count: { select: { followers: true, following: true } },
         followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
+        userFavoritesReceived: { where: { userId: viewer.id }, select: { userId: true }, take: 1 },
+        blocksReceived: { where: { blockerId: viewer.id }, select: { blockerId: true }, take: 1 },
         products: {
           where: {
             status: 'ACTIVE',
@@ -177,6 +179,9 @@ export class ProfilesService {
         _count: profile._count,
         followers: profile.followers,
       }),
+      followingCount: profile._count.following,
+      favorited: profile.userFavoritesReceived.length > 0,
+      blocked: profile.blocksReceived.length > 0,
       bio: profile.bio,
       createdAt: profile.createdAt.toISOString(),
       ...(viewer.isAdmin ? { sellBanned: Boolean(profile.sellBannedAt) } : {}),

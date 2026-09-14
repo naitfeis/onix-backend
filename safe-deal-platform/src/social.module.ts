@@ -11,7 +11,8 @@ import { requireUserByOnixId } from './onix-id-lookup';
 import { PrismaService } from './prisma.service';
 import { productListSelect, sellerPublicSelect } from './query-selects';
 import { assertRateLimit } from './rate-limit';
-import { productDto } from './response';
+import { productDto, sellerDto } from './response';
+import { areUsersBlocked } from './user-block';
 
 class ReportUserDto {
   @IsEnum(BanReason) reason!: BanReason;
@@ -74,6 +75,9 @@ export class SocialService {
   async follow(user: AuthUser, onixId: string) {
     const seller = await this.target(onixId);
     if (seller.id === user.id) throw new BadRequestException('Нельзя подписаться на себя.');
+    if (await areUsersBlocked(this.prisma, user.id, seller.id)) {
+      throw new BadRequestException('Нельзя подписаться: пользователь в чёрном списке.');
+    }
     await this.prisma.follow.upsert({
       where: { followerId_sellerId: { followerId: user.id, sellerId: seller.id } },
       create: { followerId: user.id, sellerId: seller.id }, update: {},
@@ -87,17 +91,110 @@ export class SocialService {
     const followersCount = await this.prisma.follow.count({ where: { sellerId: seller.id } });
     return { onixId, followed: false, followersCount };
   }
+
+  async favoriteUser(user: AuthUser, onixId: string) {
+    const target = await this.target(onixId);
+    if (target.id === user.id) throw new BadRequestException('Нельзя добавить себя в избранное.');
+    if (await areUsersBlocked(this.prisma, user.id, target.id)) {
+      throw new BadRequestException('Нельзя добавить в избранное: пользователь в чёрном списке.');
+    }
+    await this.prisma.userFavorite.upsert({
+      where: { userId_targetId: { userId: user.id, targetId: target.id } },
+      create: { userId: user.id, targetId: target.id },
+      update: {},
+    });
+    return { onixId: target.onixId, favorited: true };
+  }
+
+  async unfavoriteUser(user: AuthUser, onixId: string) {
+    const target = await this.target(onixId);
+    await this.prisma.userFavorite.deleteMany({ where: { userId: user.id, targetId: target.id } });
+    return { onixId: target.onixId, favorited: false };
+  }
+
+  async listFavoriteUsers(user: AuthUser) {
+    const rows = await this.prisma.userFavorite.findMany({
+      where: { userId: user.id, target: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        target: { select: sellerPublicSelect(user.id) },
+      },
+    });
+    return rows.map((row) => ({ ...sellerDto(row.target), favorited: true }));
+  }
+
   async block(user: AuthUser, onixId: string) {
     const target = await this.target(onixId);
     if (target.id === user.id) throw new BadRequestException('Нельзя заблокировать себя.');
-    return this.prisma.userBlock.upsert({
-      where: { blockerId_blockedId: { blockerId: user.id, blockedId: target.id } },
-      create: { blockerId: user.id, blockedId: target.id }, update: {},
-    });
+    await this.prisma.$transaction([
+      this.prisma.userBlock.upsert({
+        where: { blockerId_blockedId: { blockerId: user.id, blockedId: target.id } },
+        create: { blockerId: user.id, blockedId: target.id },
+        update: {},
+      }),
+      this.prisma.userFavorite.deleteMany({
+        where: {
+          OR: [
+            { userId: user.id, targetId: target.id },
+            { userId: target.id, targetId: user.id },
+          ],
+        },
+      }),
+      this.prisma.follow.deleteMany({
+        where: {
+          OR: [
+            { followerId: user.id, sellerId: target.id },
+            { followerId: target.id, sellerId: user.id },
+          ],
+        },
+      }),
+    ]);
+    return { onixId: target.onixId, blocked: true };
   }
+
   async unblock(user: AuthUser, onixId: string) {
     const target = await this.target(onixId);
-    return this.prisma.userBlock.deleteMany({ where: { blockerId: user.id, blockedId: target.id } });
+    await this.prisma.userBlock.deleteMany({ where: { blockerId: user.id, blockedId: target.id } });
+    return { onixId: target.onixId, blocked: false };
+  }
+
+  async listBlockedUsers(user: AuthUser) {
+    const rows = await this.prisma.userBlock.findMany({
+      where: { blockerId: user.id, blocked: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+      select: {
+        blocked: { select: sellerPublicSelect(user.id) },
+      },
+    });
+    return rows.map((row) => ({ ...sellerDto(row.blocked), blocked: true }));
+  }
+
+  async listFollowers(user: AuthUser, onixId: string) {
+    const target = await this.target(onixId);
+    const rows = await this.prisma.follow.findMany({
+      where: { sellerId: target.id, follower: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        follower: { select: sellerPublicSelect(user.id) },
+      },
+    });
+    return rows.map((row) => sellerDto(row.follower));
+  }
+
+  async listFollowing(user: AuthUser, onixId: string) {
+    const target = await this.target(onixId);
+    const rows = await this.prisma.follow.findMany({
+      where: { followerId: target.id, seller: { deletedAt: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        seller: { select: sellerPublicSelect(user.id) },
+      },
+    });
+    return rows.map((row) => sellerDto(row.seller));
   }
 
   /** User report → DB + Telegram admin notify (no admin UI). */
@@ -159,17 +256,36 @@ export class SocialController {
     return this.favorites.unfavorite(user, id);
   }
 
+  @Get('users/me/favorite-users') listFavoriteUsers(@CurrentUser() user: AuthUser) {
+    return this.social.listFavoriteUsers(user);
+  }
+  @Get('users/me/blocks') listBlocks(@CurrentUser() user: AuthUser) {
+    return this.social.listBlockedUsers(user);
+  }
+
   @Post('users/:onixId/follow') follow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.follow(user, id);
   }
   @Delete('users/:onixId/follow') unfollow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.unfollow(user, id);
   }
+  @Post('users/:onixId/favorite') favoriteUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.favoriteUser(user, id);
+  }
+  @Delete('users/:onixId/favorite') unfavoriteUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.unfavoriteUser(user, id);
+  }
   @Post('users/:onixId/block') block(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.block(user, id);
   }
   @Delete('users/:onixId/block') unblock(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.unblock(user, id);
+  }
+  @Get('users/:onixId/followers') followers(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.listFollowers(user, id);
+  }
+  @Get('users/:onixId/following') following(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.listFollowing(user, id);
   }
   @Post('users/:onixId/report') report(
     @CurrentUser() user: AuthUser,
@@ -184,6 +300,6 @@ export class SocialController {
 @Module({
   controllers: [SocialController],
   providers: [SocialService, FavoritesService],
-  exports: [FavoritesService],
+  exports: [FavoritesService, SocialService],
 })
 export class SocialModule {}
