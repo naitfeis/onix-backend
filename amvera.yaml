@@ -2,13 +2,12 @@ meta:
   environment: node
   toolchain:
     name: npm
-    version: 22
+    version: "22"
 
 build:
   additionalCommands: npm ci --include=dev && npm run build && npm run build:spa
 
 run:
-  scriptName: dist/main.js
   command: node scripts/start-amvera.mjs
   containerPort: 3000
   persistenceMount: /data

@@ -726,26 +726,30 @@ html[data-theme="light"][data-glass="vision"] .desktop-hero {
   scroll-snap-align: start;
   scroll-snap-stop: always;
   box-sizing: border-box;
-  padding: 20px 24px 8px;
-  min-height: 148px;
+  padding: 24px 28px 12px;
+  min-height: 178px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 .market-hero__slide h2 {
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(22px, 3.2vw, 28px);
+  font-size: clamp(26px, 3.8vw, 34px);
   font-weight: 500;
   line-height: 1.15;
   letter-spacing: -0.02em;
   max-width: 22ch;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   color: var(--text-primary);
 }
 .market-hero__slide p {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 400;
   line-height: 1.45;
   max-width: 420px;
-  margin: 0 0 12px;
+  margin: 0 0 14px;
 }
 .market-hero .desktop-hero__dots {
   display: flex;
@@ -779,6 +783,13 @@ html[data-theme="light"] .market-hero .desktop-hero__dots button.active {
 .desktop-hero .button--primary,
 .market-hero .button {
   margin-top: 2px;
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 12px 22px;
+  border-radius: 14px;
 }
 .market-hero .button--violet {
   color: #fff;
@@ -1825,23 +1836,28 @@ html[data-theme="light"] .game-page__sub.is-active {
     margin-bottom: 12px;
   }
   .market-hero__slide {
-    min-height: 0;
-    padding: 14px 16px 6px;
+    min-height: 168px;
+    padding: 18px 18px 8px;
+    align-items: flex-start;
   }
   .market-hero__slide h2 {
-    font-size: 20px;
-    margin-bottom: 4px;
+    font-size: 24px;
+    margin-bottom: 6px;
   }
   .market-hero__slide p {
-    font-size: 12px;
-    margin-bottom: 8px;
+    font-size: 14px;
+    margin-bottom: 12px;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     overflow: hidden;
   }
+  .market-hero .button {
+    width: auto;
+    align-self: flex-start;
+  }
   .market-hero .desktop-hero__dots {
-    padding: 0 16px 12px;
+    padding: 0 18px 14px;
   }
   .cat-block {
     padding-top: 6px;
@@ -6675,7 +6691,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     background: #111;
   }
   .market-hero {
-    --market-hero-h: 196px;
+    --market-hero-h: 235px;
     margin-bottom: 20px;
     height: var(--market-hero-h);
     min-height: var(--market-hero-h);
@@ -6691,14 +6707,20 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .market-hero__slide {
     min-height: 0;
     height: 100%;
-    padding: 24px 28px 10px;
+    padding: 28px 32px 12px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+  .market-hero .button {
+    width: auto;
+    align-self: flex-start;
+    border-radius: 14px;
   }
   .market-hero .desktop-hero__dots {
-    padding: 0 28px 18px;
+    padding: 0 32px 20px;
     margin: 0;
     flex: 0 0 auto;
   }
@@ -6910,7 +6932,7 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
   }
   /* Wallet 1:1 with market hero on home, game banner on game page. */
   .app-shell--market > .sidebar-right > .widget:first-of-type {
-    --market-wallet-h: 196px;
+    --market-wallet-h: 235px;
     margin-top: 0;
     height: var(--market-wallet-h);
     min-height: var(--market-wallet-h);
