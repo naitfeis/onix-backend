@@ -1780,13 +1780,19 @@ html[data-theme="light"] .game-page__banner {
 }
 .game-page__subs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 10px;
   align-items: center;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
-  padding-right: 2px;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0 4px;
   scrollbar-width: none;
+  box-sizing: border-box;
 }
 .game-page__subs::-webkit-scrollbar {
   display: none;
@@ -1796,23 +1802,26 @@ html[data-theme="light"] .game-page__banner {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
+  min-height: 36px;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #161616;
+  color: rgba(255, 255, 255, 0.55);
   font: inherit;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   line-height: 1;
   cursor: pointer;
   transition: background 160ms, border-color 160ms, color 160ms;
   flex: 0 0 auto;
   box-sizing: border-box;
+  white-space: nowrap;
 }
 .game-page__sub:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #1c1c1c;
 }
 .game-page__sub.is-active {
   background: var(--accent-violet);
@@ -1868,14 +1877,16 @@ html[data-theme="light"] .game-page__banner {
   color: #fff;
 }
 html[data-theme="light"] .game-page__sub {
-  border-color: rgba(20, 24, 32, 0.12);
-  background: rgba(20, 24, 32, 0.04);
+  border-color: rgba(20, 24, 32, 0.14);
+  background: #f2f3f6;
+  color: rgba(20, 24, 32, 0.55);
 }
 html[data-theme="light"] .game-page__sub:hover {
-  background: rgba(20, 24, 32, 0.08);
+  background: #e9ebf0;
 }
 html[data-theme="light"] .game-page__sub.is-active {
   background: var(--accent-violet);
+  border-color: transparent;
   color: #fff;
 }
 @media (max-width: 699px) {
@@ -1903,9 +1914,10 @@ html[data-theme="light"] .game-page__sub.is-active {
     flex-wrap: nowrap;
   }
   .game-page__sub {
-    min-height: 40px;
-    padding: 8px 14px;
-    font-size: 13px;
+    min-height: 36px;
+    padding: 9px 14px;
+    font-size: 11px;
+    border-radius: 12px;
   }
   .market-hero {
     margin-bottom: 12px;
@@ -3221,7 +3233,7 @@ html[data-theme="light"] .search-row .sort-picker__list {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   overflow: visible;
   padding-bottom: 3px;
   margin-top: 2px;
@@ -3232,39 +3244,70 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips.profile-tabs {
   justify-content: flex-start;
-  gap: 12px;
-  row-gap: 12px;
+  gap: 10px;
+  row-gap: 10px;
   margin: 4px 0 8px;
   padding-bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.chips.profile-tabs::-webkit-scrollbar { display: none; }
 .market-subchips {
   margin: 4px 0 12px;
   justify-content: flex-start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
 }
+.market-subchips::-webkit-scrollbar { display: none; }
 @media (max-width: 699px) {
   .market-subchips {
-    justify-content: center;
+    justify-content: flex-start;
   }
 }
 .chips button, .segmented button {
-  flex: 0 1 auto;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 8px 14px;
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 12px;
-  line-height: 1.25;
+  padding: 9px 14px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   text-align: center;
-  /* subtle glass: tokens.css */
-  transition: background 200ms, color 200ms, border-color 200ms;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #161616;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  transition: background 160ms, color 160ms, border-color 160ms;
+}
+html[data-theme="light"] .chips button,
+html[data-theme="light"] .segmented button {
+  color: rgba(20, 24, 32, 0.55);
+  border-color: rgba(20, 24, 32, 0.14);
+  background: #f2f3f6;
 }
 .chips.profile-tabs button {
-  padding: 9px 16px;
+  padding: 9px 14px;
 }
 .deal-role-tabs {
   display: flex;
@@ -3454,6 +3497,19 @@ html[data-theme="light"] .lot-form__section {
   display: grid;
   gap: 12px;
 }
+.lot-form__types {
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  gap: 10px;
+}
+.lot-form__types::-webkit-scrollbar { display: none; }
 .lot-form__types .active,
 .lot-form .chips button.active {
   border-color: transparent;
@@ -4535,9 +4591,14 @@ html[data-theme="light"] .app-shell--chat .conversation__head {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
   height: 100%;
+  box-sizing: border-box;
 }
 /* Chat stays frameless — do not inherit banner glass rim. */
 .app-shell--chat .thread-list,
@@ -4661,26 +4722,40 @@ body.is-resizing-chat * {
 .chat-filters {
   display: flex;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   overflow-x: auto;
-  padding: 4px 2px 10px;
-  margin: 0 0 4px;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 0 10px;
+  margin: 0;
   scrollbar-width: none;
 }
 .chat-filters::-webkit-scrollbar { display: none; }
 .chat-filters button {
   position: relative;
   flex: 0 0 auto;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(108, 120, 240, 0.28);
-  background: rgba(108, 120, 240, 0.08);
-  color: var(--text-primary);
+  max-width: none;
+  padding: 9px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #161616;
+  color: rgba(255, 255, 255, 0.55);
   font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .chat-filters button.active {
   background: var(--accent-violet);
@@ -4689,8 +4764,8 @@ body.is-resizing-chat * {
 }
 .chat-filters__badge {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -5px;
+  right: -5px;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
@@ -4703,11 +4778,17 @@ body.is-resizing-chat * {
   place-items: center;
   font-style: normal;
   line-height: 1;
-  box-shadow: 0 0 0 2px var(--bg, #0a0a0a);
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: 0 0 0 2px #000;
 }
 html[data-theme="light"] .chat-filters button {
-  background: rgba(108, 120, 240, 0.1);
-  border-color: rgba(108, 120, 240, 0.35);
+  background: #f2f3f6;
+  border-color: rgba(20, 24, 32, 0.14);
+  color: rgba(20, 24, 32, 0.55);
+}
+html[data-theme="light"] .chat-filters__badge {
+  box-shadow: 0 0 0 2px #fff;
 }
 .thread-peer-hit {
   flex: 1;
@@ -4739,8 +4820,9 @@ html[data-theme="light"] .chat-filters button {
 }
 .thread {
   width: 100%;
-  padding: 12px 12px 14px;
-  min-height: 0;
+  max-width: 100%;
+  padding: 12px;
+  min-height: 72px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4761,6 +4843,9 @@ html[data-theme="light"] .chat-filters button {
   touch-action: manipulation;
   overflow: hidden;
   box-sizing: border-box;
+}
+button.thread {
+  height: 72px;
 }
 html[data-theme="light"] .thread {
   background: #fff;
@@ -6083,11 +6168,17 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .thread-list {
     gap: 10px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   .thread {
-    min-height: 0;
-    padding: 10px 12px;
+    min-height: 72px;
+    padding: 12px;
     align-items: center;
+  }
+  button.thread {
+    height: 72px;
   }
   .public-profile > .profile-card {
     padding: 16px;
