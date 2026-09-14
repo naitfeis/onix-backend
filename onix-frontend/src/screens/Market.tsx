@@ -611,33 +611,32 @@ export function Market({
         <button
           type="button"
           className="game-page__back"
-          onClick={() => { setCategory(MARKET_ALL_CATEGORY); setSubcategory(''); }}
+          onClick={() => {
+            setCategory(MARKET_ALL_CATEGORY);
+            setSubcategory('');
+            setQuery('');
+            setSort('new');
+            setSortOpen(false);
+            setAutoDeliverOnly(false);
+          }}
         >
           ← {t('market.backAll')}
         </button>
         <div className="game-page__banner">
-          <div className="game-page__banner-copy">
-            <div className="game-page__title-row">
-              {category === 'OTHER' ? (
-                <span className="game-page__logo cat-card__emblem cat-card__emblem--other">
-                  <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
-                </span>
-              ) : gameImage ? (
-                <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
-                  <img src={gameImage} alt="" width={56} height={56} loading="lazy" decoding="async" draggable={false} />
-                </span>
-              ) : (
-                <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
-              )}
-              <h2 className="game-page__title">{categoryLabel(category)}</h2>
-            </div>
-            <p className="game-page__blurb">{t('market.gameBlurb')}</p>
+          <div className="game-page__title-row">
+            {category === 'OTHER' ? (
+              <span className="game-page__logo cat-card__emblem cat-card__emblem--other">
+                <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+              </span>
+            ) : gameImage ? (
+              <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
+                <img src={gameImage} alt="" width={40} height={40} loading="lazy" decoding="async" draggable={false} />
+              </span>
+            ) : (
+              <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
+            )}
+            <h2 className="game-page__title">{categoryLabel(category)}</h2>
           </div>
-          {gameImage && category !== 'OTHER' && (
-            <div className="game-page__banner-art" aria-hidden="true">
-              <img src={gameImage} alt="" loading="lazy" decoding="async" draggable={false} />
-            </div>
-          )}
         </div>
         <div className="game-page__subs" role="list" aria-label="Подкатегории">
           <button
@@ -787,61 +786,63 @@ export function Market({
       </>
     )}
 
-    <div className="search-row desktop-search">
-      <Input
-        type="search"
-        value={query}
-        onChange={(event) => {
-          const next = event.target.value;
-          setQuery(next);
-          const matched = matchCategorySearch(next);
-          if (matched) {
-            setCategory(matched);
-            setSubcategory('');
-          }
-        }}
-        placeholder={t('market.search')}
-        aria-label={t('market.searchAria')}
-      />
-      <div className="sort-picker">
+    {gameView && (
+      <div className="search-row desktop-search">
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => {
+            const next = event.target.value;
+            setQuery(next);
+            const matched = matchCategorySearch(next);
+            if (matched) {
+              setCategory(matched);
+              setSubcategory('');
+            }
+          }}
+          placeholder={t('market.search')}
+          aria-label={t('market.searchAria')}
+        />
+        <div className="sort-picker">
+          <button
+            type="button"
+            className={`control category-toggle${sortOpen ? ' is-open' : ''}`}
+            aria-expanded={sortOpen}
+            aria-controls="market-sort-list"
+            aria-label="Сортировка"
+            onClick={() => setSortOpen((open) => !open)}
+          >
+            <span>{SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Сначала новые'}</span>
+          </button>
+          {sortOpen && (
+            <div id="market-sort-list" className="chips category-picker sort-picker__list" role="list" aria-label="Варианты сортировки">
+              {SORT_OPTIONS.map((item) => (
+                <button
+                  type="button"
+                  role="listitem"
+                  key={item.value}
+                  className={sort === item.value ? 'active' : ''}
+                  onClick={() => {
+                    setSort(item.value);
+                    setSortOpen(false);
+                  }}
+                >{item.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           type="button"
-          className={`control category-toggle${sortOpen ? ' is-open' : ''}`}
-          aria-expanded={sortOpen}
-          aria-controls="market-sort-list"
-          aria-label="Сортировка"
-          onClick={() => setSortOpen((open) => !open)}
+          className={`auto-deliver-filter${autoDeliverOnly ? ' is-on' : ''}`}
+          aria-pressed={autoDeliverOnly}
+          aria-label="Только лоты с автовыдачей"
+          onClick={() => setAutoDeliverOnly((on) => !on)}
         >
-          <span>{SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Сначала новые'}</span>
+          <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
+          <span>Автовыдача</span>
         </button>
-        {sortOpen && (
-          <div id="market-sort-list" className="chips category-picker sort-picker__list" role="list" aria-label="Варианты сортировки">
-            {SORT_OPTIONS.map((item) => (
-              <button
-                type="button"
-                role="listitem"
-                key={item.value}
-                className={sort === item.value ? 'active' : ''}
-                onClick={() => {
-                  setSort(item.value);
-                  setSortOpen(false);
-                }}
-              >{item.label}</button>
-            ))}
-          </div>
-        )}
       </div>
-      <button
-        type="button"
-        className={`auto-deliver-filter${autoDeliverOnly ? ' is-on' : ''}`}
-        aria-pressed={autoDeliverOnly}
-        aria-label="Только лоты с автовыдачей"
-        onClick={() => setAutoDeliverOnly((on) => !on)}
-      >
-        <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
-        <span>Автовыдача</span>
-      </button>
-    </div>
+    )}
 
     {onixLotNumber != null && Number.isFinite(onixLotNumber) && (
       <Button
