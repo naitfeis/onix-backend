@@ -1623,19 +1623,20 @@ html[data-theme="light"] .cat-card__ring {
 .game-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 .game-page__back {
   align-self: flex-start;
   margin: 0;
-  padding: 6px 2px;
+  padding: 2px 2px 0;
   border: 0;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
 }
 .game-page__back:hover {
@@ -1644,15 +1645,17 @@ html[data-theme="light"] .cat-card__ring {
 .game-page__banner {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(120px, 0.85fr);
-  gap: 12px;
-  align-items: stretch;
-  min-height: 148px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(96px, 0.8fr);
+  align-items: center;
+  min-height: 64px;
+  max-height: 72px;
   padding: 0;
-  border-radius: var(--radius-hero, 22px);
+  border-radius: 16px;
   overflow: hidden;
+  isolation: isolate;
   background: #0C0C0C;
-  border: var(--glass-border);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-sizing: border-box;
 }
 html[data-theme="light"] .game-page__banner {
   background: #ffffff;
@@ -1664,44 +1667,43 @@ html[data-theme="light"] .game-page__banner {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
+  align-items: flex-start;
   min-width: 0;
-  padding: 20px 8px 20px 24px;
+  min-height: 64px;
+  padding: 10px 12px 10px 14px;
 }
 .game-page__title-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 .game-page__logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   flex-shrink: 0;
 }
 .game-page__title {
   margin: 0;
   font-family: var(--font-display), sans-serif;
-  font-size: clamp(22px, 3.2vw, 28px);
-  font-weight: 500;
+  font-size: clamp(18px, 2.6vw, 22px);
+  font-weight: 600;
   letter-spacing: -0.02em;
-  line-height: 1.15;
+  line-height: 1.1;
   color: var(--text-primary);
 }
 .game-page__blurb {
-  margin: 0;
-  max-width: 42ch;
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.45;
-  color: var(--text-secondary);
+  display: none;
 }
 .game-page__banner-art {
   position: relative;
-  min-height: 148px;
+  align-self: stretch;
+  min-height: 64px;
   overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+  border-radius: 0 15px 15px 0;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 28%, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 28%, #000 100%);
 }
 .game-page__banner-art img {
   position: absolute;
@@ -1711,29 +1713,39 @@ html[data-theme="light"] .game-page__banner {
   object-fit: cover;
   object-position: center;
   display: block;
-  transform: scale(1.12);
+  transform: none;
 }
 .game-page__subs {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-right: 2px;
+  scrollbar-width: none;
+}
+.game-page__subs::-webkit-scrollbar {
+  display: none;
 }
 .game-page__sub {
   display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  min-height: 40px;
-  padding: 8px 14px;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   transition: background 160ms, border-color 160ms, color 160ms;
+  flex: 0 0 auto;
+  box-sizing: border-box;
 }
 .game-page__sub:hover {
   background: rgba(255, 255, 255, 0.08);
@@ -1744,9 +1756,10 @@ html[data-theme="light"] .game-page__banner {
   color: #fff;
 }
 .game-page__sub-count {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
   opacity: 0.72;
 }
 .game-page__sub.is-active .game-page__sub-count {
@@ -1765,45 +1778,32 @@ html[data-theme="light"] .game-page__sub.is-active {
 }
 @media (max-width: 699px) {
   .game-page {
-    gap: 10px;
-  }
-  .game-page__banner {
-    grid-template-columns: minmax(0, 1fr) minmax(88px, 38%);
-    min-height: 120px;
-  }
-  .game-page__banner-copy {
-    padding: 14px 6px 14px 16px;
     gap: 6px;
   }
+  .game-page__banner {
+    grid-template-columns: minmax(0, 1fr) minmax(72px, 34%);
+    min-height: 56px;
+    max-height: 56px;
+    border-radius: 14px;
+  }
+  .game-page__banner-copy {
+    min-height: 56px;
+    padding: 8px 8px 8px 12px;
+  }
   .game-page__logo {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
   }
   .game-page__title {
-    font-size: 20px;
-  }
-  .game-page__blurb {
-    font-size: 12px;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    overflow: hidden;
+    font-size: 17px;
   }
   .game-page__banner-art {
-    min-height: 120px;
+    min-height: 56px;
+    border-radius: 0 13px 13px 0;
   }
   .game-page__subs {
     flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-  .game-page__subs::-webkit-scrollbar {
-    display: none;
-  }
-  .game-page__sub {
-    flex: 0 0 auto;
   }
   .market-hero {
     margin-bottom: 12px;
@@ -2784,40 +2784,46 @@ html[data-theme="light"] .select-menu__list {
 html[data-theme="light"] .select-menu__option.is-active {
   background: color-mix(in srgb, var(--accent-violet) 16%, #fff);
 }
-.search-row { display: grid; grid-template-columns: 1fr; gap: 8px; align-items: stretch; }
+.search-row { display: grid; grid-template-columns: 1fr; gap: 6px; align-items: center; }
 .lot-view-bar {
   display: flex;
   justify-content: flex-end;
-  margin: 2px 0 4px;
+  margin: 0 0 2px;
 }
 .lot-view-toggle {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 3px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
+  width: auto;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: 999px;
+  border: var(--glass-border);
+  background: var(--glass-card-bg);
   flex: 0 0 auto;
-  align-self: stretch;
-  min-height: 48px;
+  align-self: start;
+  min-height: 36px;
+  height: 36px;
   box-sizing: border-box;
+  box-shadow: none;
 }
 .lot-view-toggle button {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 30px;
+  height: 30px;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 10px;
+  border-radius: 999px;
   background: transparent;
   color: rgba(255, 255, 255, 0.72);
   cursor: pointer;
+  line-height: 0;
 }
 .lot-view-toggle button.is-active {
-  background: rgba(74, 123, 224, 0.35);
+  background: rgba(74, 123, 224, 0.4);
   color: #fff;
 }
 html[data-theme="light"] .lot-view-toggle {
@@ -2834,66 +2840,156 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
 .product-grid--list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .product-grid--list .product-card {
-  display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  align-items: stretch;
-  contain-intrinsic-size: auto 112px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-height: 68px;
+  box-sizing: border-box;
+  overflow: hidden;
+  contain-intrinsic-size: auto 68px;
 }
 .product-grid--list .product-card__media {
-  grid-row: 1 / span 2;
-  width: 112px;
-  min-width: 112px;
-  height: 100%;
-  min-height: 112px;
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  min-width: 64px;
+  height: 68px;
+  min-height: 68px;
 }
 .product-grid--list .product-main--body {
-  grid-column: 2;
-  align-self: end;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
 }
 .product-grid--list .product-card__body {
-  padding: 10px 12px 4px;
+  padding: 0 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
 }
-.product-grid--list .product-card__footer {
-  grid-column: 2;
-  margin-top: 0;
-  padding: 4px 12px 12px;
+.product-grid--list .product-card__body h2 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.product-grid--list .product-card__meta {
+  margin: 0;
+  font-size: 11px;
+}
+.product-grid--list .product-card__footer,
+.product-grid--list .product-card__footer--bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  padding: 0 10px 0 4px;
+  grid-template-columns: none;
+  grid-template-areas: none;
+}
+.product-grid--list .product-card__price {
+  font-size: 15px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.product-grid--list .product-card__buy {
+  min-height: 28px;
+  min-width: 68px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+.product-grid--list .product-card__badges {
+  top: 3px;
+  left: 3px;
+  right: 3px;
+  gap: 2px;
+  transform: scale(0.78);
+  transform-origin: top left;
+}
+.product-grid--list .product-card__seller-float {
+  gap: 1px;
+  max-width: calc(100% - 6px);
 }
 .product-grid--list .product-card__seller-float > span {
-  font-size: 10px;
+  font-size: 9px;
+}
+.product-grid--list .product-card__avatar .user-avatar,
+.product-grid--list .product-card__avatar .user-avatar-wrap {
+  width: 32px !important;
+  height: 32px !important;
 }
 .product-grid--list .favorite {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
+  top: auto;
+  bottom: 3px;
+  right: 3px;
+}
+.product-grid--list .product-card__bolt {
+  top: auto;
+  bottom: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
 }
 @media (max-width: 559px) {
   .product-grid--list .product-card {
-    grid-template-columns: 88px minmax(0, 1fr);
+    min-height: 64px;
   }
   .product-grid--list .product-card__media {
-    width: 88px;
-    min-width: 88px;
-    min-height: 96px;
+    flex-basis: 58px;
+    width: 58px;
+    min-width: 58px;
+    height: 64px;
+    min-height: 64px;
+  }
+  .product-grid--list .product-card__body {
+    padding: 0 8px;
+  }
+  .product-grid--list .product-card__footer,
+  .product-grid--list .product-card__footer--bar {
+    padding: 0 8px 0 2px;
+    gap: 8px;
+  }
+  .product-grid--list .product-card__price {
+    font-size: 13px;
+  }
+  .product-grid--list .product-card__buy {
+    min-width: 60px;
+    padding: 4px 8px;
   }
 }
 .auto-deliver-filter {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 48px;
-  padding: 0 14px 0 10px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 12px 0 8px;
   border: var(--glass-border);
-  border-radius: 26px;
+  border-radius: 999px;
   background: var(--glass-card-bg);
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
+  line-height: 1;
   cursor: pointer;
   white-space: nowrap;
   box-shadow: none;
+  box-sizing: border-box;
 }
 .auto-deliver-filter.is-on {
   border-color: rgba(255, 255, 255, 0.18);
@@ -2901,16 +2997,18 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
   background: var(--glass-card-bg);
 }
 .auto-deliver-filter__dot {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   border: 1.5px solid rgba(255, 255, 255, 0.28);
   background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  flex: 0 0 auto;
+  line-height: 1;
 }
 .auto-deliver-filter.is-on .auto-deliver-filter__dot {
   border-color: var(--accent);
@@ -2919,13 +3017,36 @@ html[data-theme="light"] .lot-view-toggle button.is-active {
 }
 .search-row .control,
 .search-row select.control,
-.search-row .select-menu__trigger {
-  border-radius: 26px !important;
+.search-row .select-menu__trigger,
+.search-row .category-toggle {
+  min-height: 36px !important;
+  height: 36px;
+  border-radius: 999px !important;
   background-color: var(--glass-card-bg);
   border: var(--glass-border);
   box-shadow: none;
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
+  line-height: 36px;
+  padding: 0 14px !important;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+.search-row input.control {
+  display: block;
+}
+.search-row .category-toggle,
+.search-row .select-menu__trigger {
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.search-row .category-toggle {
+  padding-right: 34px !important;
+  background-position: right 12px center;
+}
+.search-row .lot-view-toggle {
+  justify-self: start;
 }
 .search-row .select-menu { min-width: 0; }
 .search-row .sort-picker {
@@ -5823,11 +5944,13 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
-  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto auto; }
+  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto auto; align-items: center; }
   .search-row select.control,
-  .search-row .select-menu__trigger {
-    border-radius: 26px !important;
-    height: 48px;
+  .search-row .select-menu__trigger,
+  .search-row .category-toggle {
+    border-radius: 999px !important;
+    height: 36px;
+    min-height: 36px;
   }
   .form-grid { grid-template-columns: 1fr 1fr; }
   .profile-card { grid-template-columns: auto minmax(0, 1fr); }
@@ -6526,13 +6649,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     padding: 24px 28px 10px;
   }
   .game-page__banner {
-    min-height: 168px;
+    min-height: 64px;
+    max-height: 72px;
   }
   .game-page__banner-copy {
-    padding: 24px 10px 24px 28px;
+    min-height: 64px;
+    padding: 10px 12px 10px 18px;
   }
   .game-page__banner-art {
-    min-height: 168px;
+    min-height: 64px;
   }
   .analytics-panel {
     max-width: 720px;

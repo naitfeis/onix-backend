@@ -675,14 +675,13 @@ export function Market({
                 </span>
               ) : gameImage ? (
                 <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
-                  <img src={gameImage} alt="" width={44} height={44} loading="lazy" decoding="async" draggable={false} />
+                  <img src={gameImage} alt="" width={36} height={36} loading="lazy" decoding="async" draggable={false} />
                 </span>
               ) : (
                 <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
               )}
               <h2 className="game-page__title">{categoryLabel(category)}</h2>
             </div>
-            <p className="game-page__blurb">{t('market.gameBlurb')}</p>
           </div>
           {gameImage && category !== 'OTHER' && (
             <div className="game-page__banner-art" aria-hidden="true">
