@@ -1589,7 +1589,7 @@ html[data-theme="light"] .cat-card__emblem--all {
   border-radius: 50%;
   border: 0;
   box-shadow: none;
-  background: transparent;
+  background: #0b0b0c;
   color: #fff;
   box-sizing: border-box;
 }
@@ -1619,6 +1619,9 @@ html[data-theme="light"] .cat-card__emblem--all {
   line-height: 1;
   letter-spacing: 0;
   text-align: center;
+}
+html[data-theme="light"] .cat-card__share {
+  background: #fff;
 }
 html[data-theme="light"] .cat-card__share::before {
   background: conic-gradient(#111 var(--share-deg, 0deg), rgba(20, 24, 32, 0.22) 0);
@@ -1823,7 +1826,7 @@ html[data-theme="light"] .game-page__banner {
   border-radius: 50%;
   border: 0;
   box-shadow: none;
-  background: transparent;
+  background: #0b0b0c;
   flex: 0 0 auto;
   box-sizing: border-box;
 }
@@ -3305,8 +3308,8 @@ html[data-theme="light"] .search-row .sort-picker__list {
 }
 .chips button.active, .segmented button.active {
   color: #fff;
-  background: var(--accent-violet-deep);
-  border-color: var(--accent-violet-deep);
+  background: var(--accent-violet);
+  border-color: transparent;
   box-shadow: none !important;
 }
 
@@ -3445,9 +3448,10 @@ html[data-theme="light"] .lot-form__section {
 }
 .lot-form__types .active,
 .lot-form .chips button.active {
-  border-color: var(--accent-violet);
-  background: color-mix(in srgb, var(--accent-violet-deep) 22%, transparent);
+  border-color: transparent;
+  background: var(--accent-violet);
   color: #fff;
+  box-shadow: none;
 }
 .lot-form__advanced {
   display: flex;
@@ -3519,8 +3523,9 @@ html[data-theme="light"] .desc-editor__btn {
 .desc-editor__btn--italic { font-style: italic; }
 .desc-editor__btn.is-active,
 .desc-editor__btn:hover:not(:disabled) {
-  border-color: var(--accent-violet);
-  background: color-mix(in srgb, var(--accent-violet-deep) 22%, transparent);
+  border-color: transparent;
+  background: var(--accent-violet);
+  color: #fff;
 }
 .desc-editor__sep {
   width: 1px;
@@ -3593,8 +3598,8 @@ html[data-theme="light"] .desc-editor__btn {
 .desc-editor__font-list button.is-active,
 .desc-editor__font-list button:hover {
   color: #fff;
-  background: var(--accent-violet-deep);
-  border-color: var(--accent-violet-deep);
+  background: var(--accent-violet);
+  border-color: transparent;
 }
 html[data-theme="light"] .desc-editor__font-trigger {
   background-color: #fff;
