@@ -125,11 +125,12 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('renders category lot share as a white corner circle badge', () => {
+  it('renders category lot share as a white outline circle badge', () => {
     expect(appCss).toMatch(/\.cat-card__share[\s\S]*?position:\s*absolute;/);
     expect(appCss).toMatch(/\.cat-card__share[\s\S]*?top:\s*-5px;/);
     expect(appCss).toMatch(/\.cat-card__share[\s\S]*?right:\s*-5px;/);
-    expect(appCss).toMatch(/\.cat-card__share[\s\S]*?conic-gradient\(#fff/);
+    expect(appCss).toMatch(/\.cat-card__share::before[\s\S]*?conic-gradient\(#fff/);
+    expect(appCss).toMatch(/\.cat-card__share-num[\s\S]*?background:\s*transparent;/);
     expect(appCss).toMatch(/\.cat-card__share-num[\s\S]*?font-variant-numeric:\s*tabular-nums;/);
     expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__emblem--other[\s\S]*?background:\s*#fff/);
     expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__dots i[\s\S]*?background:\s*#111;/);
