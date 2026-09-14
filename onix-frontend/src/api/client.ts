@@ -183,6 +183,7 @@ export function money(cents: string): string {
   return new Intl.NumberFormat('ru-RU', {
     style: 'currency',
     currency: 'RUB',
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value / 100);
 }
@@ -192,7 +193,7 @@ export function moneyAmount(cents: string): string {
   const value = Number(cents);
   if (!Number.isFinite(value)) return '—';
   return new Intl.NumberFormat('ru-RU', {
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(value / 100).replace(/\u00A0/g, '\u202F');
 }

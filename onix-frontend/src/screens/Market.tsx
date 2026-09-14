@@ -104,6 +104,49 @@ function formatSubCount(n: number): string {
   return n.toLocaleString('ru-RU');
 }
 
+function LotViewToggle({
+  value,
+  onChange,
+}: {
+  value: 'grid' | 'list';
+  onChange: (next: 'grid' | 'list') => void;
+}) {
+  return (
+    <div className="lot-view-toggle" role="group" aria-label="Вид лотов">
+      <button
+        type="button"
+        className={value === 'grid' ? 'is-active' : undefined}
+        aria-pressed={value === 'grid'}
+        aria-label="Сетка"
+        onClick={() => onChange('grid')}
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <rect x="1" y="1" width="5.5" height="5.5" rx="1.2" fill="currentColor" />
+          <rect x="9.5" y="1" width="5.5" height="5.5" rx="1.2" fill="currentColor" />
+          <rect x="1" y="9.5" width="5.5" height="5.5" rx="1.2" fill="currentColor" />
+          <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1.2" fill="currentColor" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className={value === 'list' ? 'is-active' : undefined}
+        aria-pressed={value === 'list'}
+        aria-label="Список"
+        onClick={() => onChange('list')}
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <rect x="1" y="2" width="3" height="3" rx="0.8" fill="currentColor" />
+          <rect x="6" y="2.75" width="9" height="1.5" rx="0.75" fill="currentColor" />
+          <rect x="1" y="6.5" width="3" height="3" rx="0.8" fill="currentColor" />
+          <rect x="6" y="7.25" width="9" height="1.5" rx="0.75" fill="currentColor" />
+          <rect x="1" y="11" width="3" height="3" rx="0.8" fill="currentColor" />
+          <rect x="6" y="11.75" width="9" height="1.5" rx="0.75" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 const VIEWED_LOTS_KEY = 'onix-viewed-lots';
 function readViewedLots(): Set<string> {
   try {
@@ -150,6 +193,7 @@ export function Market({
   const [sort, setSort] = useState('new');
   const [sortOpen, setSortOpen] = useState(false);
   const [autoDeliverOnly, setAutoDeliverOnly] = useState(false);
+  const [lotView, setLotView] = useState<'grid' | 'list'>('grid');
   const [items, setItems] = useState<Product[]>([]);
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
@@ -623,20 +667,28 @@ export function Market({
           ← {t('market.backAll')}
         </button>
         <div className="game-page__banner">
-          <div className="game-page__title-row">
-            {category === 'OTHER' ? (
-              <span className="game-page__logo cat-card__emblem cat-card__emblem--other">
-                <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
-              </span>
-            ) : gameImage ? (
-              <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
-                <img src={gameImage} alt="" width={40} height={40} loading="lazy" decoding="async" draggable={false} />
-              </span>
-            ) : (
-              <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
-            )}
-            <h2 className="game-page__title">{categoryLabel(category)}</h2>
+          <div className="game-page__banner-copy">
+            <div className="game-page__title-row">
+              {category === 'OTHER' ? (
+                <span className="game-page__logo cat-card__emblem cat-card__emblem--other">
+                  <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
+                </span>
+              ) : gameImage ? (
+                <span className="game-page__logo cat-card__emblem cat-card__emblem--photo">
+                  <img src={gameImage} alt="" width={44} height={44} loading="lazy" decoding="async" draggable={false} />
+                </span>
+              ) : (
+                <span className="game-page__logo cat-card__emblem" style={{ background: gameStyle?.bg }}>{gameStyle?.letter}</span>
+              )}
+              <h2 className="game-page__title">{categoryLabel(category)}</h2>
+            </div>
+            <p className="game-page__blurb">{t('market.gameBlurb')}</p>
           </div>
+          {gameImage && category !== 'OTHER' && (
+            <div className="game-page__banner-art" aria-hidden="true">
+              <img src={gameImage} alt="" loading="lazy" decoding="async" draggable={false} />
+            </div>
+          )}
         </div>
         <div className="game-page__subs" role="list" aria-label="Подкатегории">
           <button
@@ -841,6 +893,13 @@ export function Market({
           <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
           <span>Автовыдача</span>
         </button>
+        <LotViewToggle value={lotView} onChange={setLotView} />
+      </div>
+    )}
+
+    {!gameView && marketState === 'success' && items.length > 0 && (
+      <div className="lot-view-bar">
+        <LotViewToggle value={lotView} onChange={setLotView} />
       </div>
     )}
 
@@ -866,10 +925,10 @@ export function Market({
       }
     }}>Открыть профиль</Button>}
 
-    {marketState === 'loading' ? <div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
+    {marketState === 'loading' ? <div className={`product-grid${lotView === 'list' ? ' product-grid--list' : ' product-grid--compact'}`}><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div> :
       marketState === 'error' ? <StateView title={t('market.unavailable')} text={marketError || ''} action={<Button onClick={() => void core.refreshAll()}>{t('common.retry')}</Button>} /> :
       items.length === 0 ? <StateView title={t('market.emptyTitle')} text={t('market.emptyText')} action={<Button onClick={() => switchTo('create')}>Разместить лот</Button>} /> :
-      <div className="product-grid product-grid--compact">{items.map(product => (
+      <div className={`product-grid${lotView === 'list' ? ' product-grid--list' : ' product-grid--compact'}`}>{items.map(product => (
         <ProductLotCard
           key={product.id}
           product={product}

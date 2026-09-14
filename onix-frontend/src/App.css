@@ -1643,41 +1643,75 @@ html[data-theme="light"] .cat-card__ring {
 }
 .game-page__banner {
   position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 0;
-  padding: 10px 14px;
-  border-radius: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(120px, 0.85fr);
+  gap: 12px;
+  align-items: stretch;
+  min-height: 148px;
+  padding: 0;
+  border-radius: var(--radius-hero, 22px);
   overflow: hidden;
-  background:
-    linear-gradient(120deg, rgba(18, 28, 52, 0.96) 0%, rgba(12, 16, 28, 0.9) 55%, rgba(10, 12, 18, 0.72) 100%),
-    #0d1424;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0C0C0C;
+  border: var(--glass-border);
 }
 html[data-theme="light"] .game-page__banner {
-  background:
-    linear-gradient(120deg, rgba(230, 236, 250, 0.98) 0%, rgba(244, 246, 252, 0.92) 60%, rgba(255, 255, 255, 0.86) 100%);
+  background: #ffffff;
   border-color: rgba(20, 24, 32, 0.1);
+}
+.game-page__banner-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 20px 8px 20px 24px;
 }
 .game-page__title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
 }
 .game-page__logo {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   flex-shrink: 0;
 }
 .game-page__title {
   margin: 0;
-  font-size: clamp(18px, 2.4vw, 22px);
-  font-weight: 800;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(22px, 3.2vw, 28px);
+  font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1.15;
   color: var(--text-primary);
+}
+.game-page__blurb {
+  margin: 0;
+  max-width: 42ch;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.game-page__banner-art {
+  position: relative;
+  min-height: 148px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 22%, #000 100%);
+}
+.game-page__banner-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transform: scale(1.12);
 }
 .game-page__subs {
   display: flex;
@@ -1734,8 +1768,12 @@ html[data-theme="light"] .game-page__sub.is-active {
     gap: 10px;
   }
   .game-page__banner {
-    padding: 8px 12px;
-    border-radius: 14px;
+    grid-template-columns: minmax(0, 1fr) minmax(88px, 38%);
+    min-height: 120px;
+  }
+  .game-page__banner-copy {
+    padding: 14px 6px 14px 16px;
+    gap: 6px;
   }
   .game-page__logo {
     width: 36px;
@@ -1743,7 +1781,17 @@ html[data-theme="light"] .game-page__sub.is-active {
     border-radius: 10px;
   }
   .game-page__title {
-    font-size: 17px;
+    font-size: 20px;
+  }
+  .game-page__blurb {
+    font-size: 12px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .game-page__banner-art {
+    min-height: 120px;
   }
   .game-page__subs {
     flex-wrap: nowrap;
@@ -2737,6 +2785,100 @@ html[data-theme="light"] .select-menu__option.is-active {
   background: color-mix(in srgb, var(--accent-violet) 16%, #fff);
 }
 .search-row { display: grid; grid-template-columns: 1fr; gap: 8px; align-items: stretch; }
+.lot-view-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 2px 0 4px;
+}
+.lot-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 48px;
+  box-sizing: border-box;
+}
+.lot-view-toggle button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+.lot-view-toggle button.is-active {
+  background: rgba(74, 123, 224, 0.35);
+  color: #fff;
+}
+html[data-theme="light"] .lot-view-toggle {
+  border-color: rgba(20, 24, 32, 0.12);
+  background: rgba(20, 24, 32, 0.04);
+}
+html[data-theme="light"] .lot-view-toggle button {
+  color: rgba(20, 24, 32, 0.55);
+}
+html[data-theme="light"] .lot-view-toggle button.is-active {
+  background: color-mix(in srgb, var(--accent-violet) 22%, #fff);
+  color: #111;
+}
+.product-grid--list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.product-grid--list .product-card {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: stretch;
+  contain-intrinsic-size: auto 112px;
+}
+.product-grid--list .product-card__media {
+  grid-row: 1 / span 2;
+  width: 112px;
+  min-width: 112px;
+  height: 100%;
+  min-height: 112px;
+}
+.product-grid--list .product-main--body {
+  grid-column: 2;
+  align-self: end;
+}
+.product-grid--list .product-card__body {
+  padding: 10px 12px 4px;
+}
+.product-grid--list .product-card__footer {
+  grid-column: 2;
+  margin-top: 0;
+  padding: 4px 12px 12px;
+}
+.product-grid--list .product-card__seller-float > span {
+  font-size: 10px;
+}
+.product-grid--list .favorite {
+  width: 30px;
+  height: 30px;
+}
+@media (max-width: 559px) {
+  .product-grid--list .product-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+  .product-grid--list .product-card__media {
+    width: 88px;
+    min-width: 88px;
+    min-height: 96px;
+  }
+}
 .auto-deliver-filter {
   display: inline-flex;
   align-items: center;
@@ -5681,7 +5823,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 560px) {
   .app-shell { padding-inline: 20px; }
-  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto; }
+  .search-row { grid-template-columns: minmax(0,1fr) minmax(148px, 180px) auto auto; }
   .search-row select.control,
   .search-row .select-menu__trigger {
     border-radius: 26px !important;
@@ -6382,6 +6524,15 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .market-hero__slide {
     min-height: 168px;
     padding: 24px 28px 10px;
+  }
+  .game-page__banner {
+    min-height: 168px;
+  }
+  .game-page__banner-copy {
+    padding: 24px 10px 24px 28px;
+  }
+  .game-page__banner-art {
+    min-height: 168px;
   }
   .analytics-panel {
     max-width: 720px;
