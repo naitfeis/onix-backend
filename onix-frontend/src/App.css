@@ -2783,8 +2783,8 @@ html[data-theme="dark"] .user-avatar__presence,
 }
 .control::placeholder { color: var(--text-caption); }
 .control:focus {
-  border-color: rgba(139, 127, 245, 0.45);
-  box-shadow: 0 0 0 3px rgba(139, 127, 245, 0.15);
+  border-color: var(--line, rgba(255, 255, 255, 0.14));
+  box-shadow: none;
   outline: none;
 }
 .control--area { min-height: 104px; resize: vertical; border-radius: var(--radius-lg); }
@@ -3408,7 +3408,7 @@ html[data-theme="light"] .category-toggle.is-open {
 .lot-form .control:focus,
 .lot-form .category-toggle.is-open,
 .lot-form .category-toggle:focus {
-  border-color: var(--accent-violet);
+  border-color: var(--line, rgba(255, 255, 255, 0.14));
   box-shadow: none;
   outline: none;
 }
