@@ -632,24 +632,8 @@ export function useOnixCore() {
     });
   }, [load, loadProfile]);
 
-  // Ping origin while the tab is open — Render free tier sleeps after idle;
-  // a warm instance cuts RU cold-start hangs on refresh/products.
-  useEffect(() => {
-    if (isTelegramMiniApp()) return;
-    const ping = () => {
-      void fetch('/api/health/live', { method: 'GET', cache: 'no-store', credentials: 'omit' })
-        .catch(() => { /* offline */ });
-    };
-    const id = window.setInterval(ping, 4 * 60_000);
-    const onVis = () => {
-      if (!document.hidden) ping();
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, []);
+  // Keep-alive ping removed: Amvera/production does not sleep like Render free tier.
+  // Client /api/health/live polling inflated Edge Requests on idle open tabs.
 
   // Keep lastSeenAt fresh on a timer — not on every click, focus, or screen switch.
   // getMe() already writes lastSeenAt; WS auth also announces online.

@@ -350,33 +350,35 @@ export function Market({
     const isDefaultBrowse =
       isMarketAllCategory(category) && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
 
-    // Default home feed: reuse bootstrap catalog — do not fire a second /api/products
-    // with AbortSignal (that disables GET dedupe and can hit the 15s timeout alone).
-    if (isDefaultBrowse) {
-      if (core.states.products === 'success') {
-        const next = visibleProducts(core.products);
-        setItems(next);
-        setHasMore(next.length >= PAGE);
-        setMarketError(undefined);
-        setMarketState('success');
-        return;
-      }
-      if (core.states.products === 'loading' || core.states.products === 'idle') {
-        setMarketState((prev) => (prev === 'success' ? prev : 'loading'));
-        return;
-      }
-      // products === 'error' → fall through to one recoverable fetch
+    // Default home feed: reuse bootstrap catalog — do not fire a second /api/products.
+    if (!isDefaultBrowse) return;
+
+    if (core.states.products === 'success') {
+      const next = visibleProducts(core.products);
+      setItems(next);
+      setHasMore(next.length >= PAGE);
+      setMarketError(undefined);
+      setMarketState('success');
+      return;
     }
+    if (core.states.products === 'loading' || core.states.products === 'idle') {
+      setMarketState((prev) => (prev === 'success' ? prev : 'loading'));
+    }
+  }, [autoDeliverOnly, category, core.products, core.states.products, query, sort, subcategory]);
+
+  useEffect(() => {
+    const isDefaultBrowse =
+      isMarketAllCategory(category) && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
+    // Filtered/game views only — home is store-synced (recover effect below).
+    if (isDefaultBrowse) return;
 
     const controller = new AbortController();
     const debounceMs = query.trim() ? 300 : 0;
     const timer = window.setTimeout(() => {
       setMarketState('loading');
       const q = query.trim();
-        const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
+      const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
       void core.listProducts({
-        // Exact category name → filter by category (all lots in that game).
-        // Otherwise keep free-text title/seller search.
         search: searchCat ? undefined : (q || undefined),
         category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
@@ -399,7 +401,34 @@ export function Market({
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [autoDeliverOnly, category, core.listProducts, core.products, core.states.products, query, sort, subcategory]);
+  }, [autoDeliverOnly, category, core.listProducts, query, sort, subcategory]);
+
+  useEffect(() => {
+    const isDefaultBrowse =
+      isMarketAllCategory(category) && !subcategory && !query.trim() && sort === 'new' && !autoDeliverOnly;
+    if (!isDefaultBrowse || core.states.products !== 'error') return;
+
+    const controller = new AbortController();
+    setMarketState('loading');
+    void core.listProducts({
+      sort: 'newest',
+      limit: PAGE,
+      offset: 0,
+    }, controller.signal).then((data) => {
+      const next = visibleProducts(data);
+      setItems(next);
+      setHasMore(next.length >= PAGE);
+      setMarketError(undefined);
+      setMarketState('success');
+    }).catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setItems([]);
+      setHasMore(false);
+      setMarketError(friendlyError(error));
+      setMarketState('error');
+    });
+    return () => { controller.abort(); };
+  }, [autoDeliverOnly, category, core.listProducts, core.states.products, query, sort, subcategory]);
 
   const closeLot = () => {
     const origin = lotOrigin;

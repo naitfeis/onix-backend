@@ -7095,10 +7095,6 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     min-height: 0;
     max-height: none;
   }
-  /* Align wallet with game banner under the back link. */
-  .app-shell--market:has(.game-page) > .sidebar-right > .widget:first-of-type {
-    margin-top: 26px;
-  }
 }
 .site-footer__brand strong {
   display: block;
