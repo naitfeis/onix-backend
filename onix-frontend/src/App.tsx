@@ -248,6 +248,7 @@ export default function App() {
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
   const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
+  const [marketHomeTick, setMarketHomeTick] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
@@ -422,6 +423,12 @@ export default function App() {
     // Sync highlight immediately — startTransition made taps feel frozen.
     setScreen(next);
     telegramImpact('light');
+  };
+
+  const goMarketHome = () => {
+    setMarketCategory(MARKET_ALL_CATEGORY);
+    setMarketHomeTick((tick) => tick + 1);
+    switchTo('market');
   };
 
   const toggleTheme = () => {
@@ -618,7 +625,7 @@ export default function App() {
 
     {/* Desktop left sidebar */}
     <aside className={`sidebar-left desktop-only${leftIcons ? ' sidebar-left--icons' : ''}`} aria-label={t('navigation.sidebar')}>
-      <div className="sidebar-left__brand"><BrandMark /></div>
+      <div className="sidebar-left__brand"><BrandMark onClick={goMarketHome} /></div>
       <nav className="sidebar-nav">
         {SIDEBAR_NAV.map((item) => (
           <button
@@ -707,7 +714,7 @@ export default function App() {
 
     {/* keep identity on mobile topbar — settings live in Profile */}
     <header className={`topbar mobile-only${chatImmersive ? ' topbar--chat' : ''}`}>
-        <BrandMark />
+        <BrandMark onClick={goMarketHome} />
         <div className="topbar__actions">
           <div className="identity">
             {core.states.profile === 'loading' && !core.profile ? (
@@ -745,6 +752,7 @@ export default function App() {
                   switchTo('chat');
                 }}
                 externalCategory={marketCategory}
+                marketHomeTick={marketHomeTick}
                 onExternalCategoryConsumed={() => setMarketCategory(MARKET_ALL_CATEGORY)}
               />
             </div>

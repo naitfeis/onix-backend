@@ -241,7 +241,21 @@ export function IconEye({ size = 20 }: { size?: number }) {
   );
 }
 
-export function BrandMark() {
+export function BrandMark({ onClick }: { onClick?: () => void }) {
+  if (onClick) {
+    return (
+      <button type="button" className="brand brand--button" aria-label="ONIX — на главный маркет" onClick={onClick}>
+        <img
+          className="brand__mark"
+          src="/brand/onix-mark.png"
+          width={28}
+          height={28}
+          alt=""
+        />
+        <span className="brand__text">ONIX</span>
+      </button>
+    );
+  }
   return (
     <div className="brand" aria-label="ONIX">
       <img

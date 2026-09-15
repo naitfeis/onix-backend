@@ -188,7 +188,7 @@ function rememberViewedLot(id: string, store: Set<string>) {
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
-  externalCategory, onExternalCategoryConsumed, onRequestLogin, active = true,
+  externalCategory, onExternalCategoryConsumed, marketHomeTick, onRequestLogin, active = true,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -200,6 +200,8 @@ export function Market({
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
+  /** Increment to force return to the main market catalog. */
+  marketHomeTick?: number;
   onRequestLogin?: () => void;
   /** False while another tab is shown (keep-alive). */
   active?: boolean;
@@ -305,6 +307,17 @@ export function Market({
     setSubcategory('');
     onExternalCategoryConsumed?.();
   }, [externalCategory, onExternalCategoryConsumed]);
+
+  useEffect(() => {
+    if (!marketHomeTick) return;
+    setCategory(MARKET_ALL_CATEGORY);
+    setSubcategory('');
+    setQuery('');
+    setSort('new');
+    setSortOpen(false);
+    setAutoDeliverOnly(false);
+    setSelected(null);
+  }, [marketHomeTick]);
 
   useEffect(() => {
     if (!active) return;
@@ -675,20 +688,6 @@ export function Market({
     {!selected && <>
     {gameView ? (
       <section className="game-page" aria-label={categoryLabel(category)}>
-        <button
-          type="button"
-          className="game-page__back"
-          onClick={() => {
-            setCategory(MARKET_ALL_CATEGORY);
-            setSubcategory('');
-            setQuery('');
-            setSort('new');
-            setSortOpen(false);
-            setAutoDeliverOnly(false);
-          }}
-        >
-          ← {t('market.backAll')}
-        </button>
         <div className="game-page__banner">
           <div className="game-page__banner-copy">
             <div className="game-page__title-row">
