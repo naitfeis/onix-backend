@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { money } from '../api/client';
 import type { Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -25,6 +25,8 @@ export const ProductLotCard = memo(function ProductLotCard({
   online,
   onOpen,
   onFavorite,
+  onBlock,
+  onReport,
   hidePrice,
   footer,
 }: {
@@ -32,12 +34,28 @@ export const ProductLotCard = memo(function ProductLotCard({
   online?: boolean;
   onOpen: () => void;
   onFavorite?: () => void;
+  onBlock?: () => void;
+  onReport?: () => void;
   hidePrice?: boolean;
   footer?: ReactNode;
 }) {
   const rating = product.seller.rating.toFixed(1);
   const showFounder = product.seller.badge === 'SUPER_ADMIN';
   const title = product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const hasMenu = Boolean(onFavorite || onBlock || onReport);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [menuOpen]);
+
   return (
     <Card interactive className="product-card product-card--compact">
       <div className="product-card__media">
@@ -73,13 +91,58 @@ export const ProductLotCard = memo(function ProductLotCard({
           </div>
           <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
         </div>
-        {onFavorite && (
-          <button
-            type="button"
-            className={`favorite ${product.favorite ? 'active' : ''}`}
-            onClick={onFavorite}
-            aria-label={product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
-          >♥</button>
+        {hasMenu && (
+          <div className="product-card__menu" ref={menuRef}>
+            <button
+              type="button"
+              className="product-card__menu-trigger"
+              aria-label="Действия"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <div className="product-card__menu-list" role="menu">
+                {onFavorite && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onFavorite();
+                    }}
+                  >
+                    {product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
+                  </button>
+                )}
+                {onBlock && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onBlock();
+                    }}
+                  >
+                    {t('social.block')}
+                  </button>
+                )}
+                {onReport && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onReport();
+                    }}
+                  >
+                    Пожаловаться
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
       <button type="button" className="product-main product-main--body" onClick={onOpen} aria-label={`Открыть ${product.title}`}>
@@ -95,9 +158,8 @@ export const ProductLotCard = memo(function ProductLotCard({
         </div>
       </button>
       {footer ?? (
-        <div className="product-card__footer product-card__footer--bar">
+        <div className="product-card__footer product-card__footer--bar product-card__footer--price-only">
           {!hidePrice && <strong className="product-card__price">{money(product.priceCents)}</strong>}
-          <button type="button" className="button button--buy product-card__buy" onClick={onOpen}>{t('market.buy')}</button>
         </div>
       )}
     </Card>

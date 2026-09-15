@@ -10,26 +10,7 @@ import { sanitizeDescriptionHtml, stripToSafeRichHtml } from '../utils/formatted
 export type DescAlign = 'left' | 'center' | 'right';
 export type DescFont = 'body' | 'display' | 'mono' | 'hand';
 
-const FONT_OPTIONS: { id: DescFont; label: string; face: string; stack: string }[] = [
-  { id: 'body', label: 'Обычный', face: 'DM Sans', stack: 'var(--font-body), "DM Sans", system-ui, sans-serif' },
-  { id: 'display', label: 'Заголовок', face: 'Syne', stack: 'var(--font-display), Syne, system-ui, sans-serif' },
-  { id: 'mono', label: 'Mono', face: 'JetBrains Mono', stack: 'var(--font-mono), "JetBrains Mono", ui-monospace, monospace' },
-  { id: 'hand', label: 'Почерк', face: 'Segoe Print', stack: '"Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive' },
-];
-
 const DESC_MAX = 500;
-
-type Props = {
-  value: string;
-  onChange: (value: string) => void;
-  align: DescAlign;
-  font: DescFont;
-  onAlignChange: (align: DescAlign) => void;
-  onFontChange: (font: DescFont) => void;
-  maxLength?: number;
-  disabled?: boolean;
-  placeholder?: string;
-};
 
 function plainLength(html: string): number {
   if (typeof document === 'undefined') {
@@ -52,21 +33,26 @@ export function DescriptionEditor({
   value,
   onChange,
   align,
-  font,
   onAlignChange,
-  onFontChange,
   maxLength = DESC_MAX,
   disabled,
   placeholder = 'Подробно опишите товар',
-}: Props) {
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  align: DescAlign;
+  font?: DescFont;
+  onAlignChange: (align: DescAlign) => void;
+  onFontChange?: (font: DescFont) => void;
+  maxLength?: number;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const lastHtml = useRef(value);
-  const [fontOpen, setFontOpen] = useState(false);
   const [boldOn, setBoldOn] = useState(false);
   const [italicOn, setItalicOn] = useState(false);
   const [underlineOn, setUnderlineOn] = useState(false);
-  const activeFont = FONT_OPTIONS.find((item) => item.id === font) ?? FONT_OPTIONS[0];
 
   useEffect(() => {
     const el = ref.current;
@@ -76,17 +62,6 @@ export function DescriptionEditor({
       lastHtml.current = value;
     }
   }, [value]);
-
-  useEffect(() => {
-    if (!fontOpen) return;
-    const close = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (target && rootRef.current?.contains(target)) return;
-      setFontOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [fontOpen]);
 
   const syncFromEditor = () => {
     const el = ref.current;
@@ -135,15 +110,6 @@ export function DescriptionEditor({
     syncFromEditor();
   };
 
-  const setFont = (next: DescFont) => {
-    const option = FONT_OPTIONS.find((item) => item.id === next) ?? FONT_OPTIONS[0];
-    onFontChange(option.id);
-    setFontOpen(false);
-    focusEditor();
-    runCommand('fontName', option.face);
-    syncFromEditor();
-  };
-
   const onPaste = (event: ReactClipboardEvent<HTMLDivElement>) => {
     event.preventDefault();
     const plain = event.clipboardData.getData('text/plain') || '';
@@ -155,7 +121,7 @@ export function DescriptionEditor({
   const empty = plainLength(value) === 0;
 
   return (
-    <div ref={rootRef} className={`desc-editor${disabled ? ' is-disabled' : ''}`}>
+    <div className={`desc-editor${disabled ? ' is-disabled' : ''}`}>
       <div className="desc-editor__toolbar" role="toolbar" aria-label="Форматирование описания">
         <button
           type="button"
@@ -206,46 +172,11 @@ export function DescriptionEditor({
           title="По правому краю"
           aria-pressed={align === 'right'}
         >⫸</button>
-        <span className="desc-editor__sep" aria-hidden="true" />
-        <div className="desc-editor__font-menu">
-          <button
-            type="button"
-            className={`desc-editor__font-trigger${fontOpen ? ' is-open' : ''}`}
-            disabled={disabled}
-            aria-expanded={fontOpen}
-            aria-haspopup="listbox"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              setFontOpen((open) => !open);
-            }}
-          >
-            <span>{activeFont.label}</span>
-          </button>
-          {fontOpen && (
-            <div className="desc-editor__font-list" role="listbox" aria-label="Шрифт описания">
-              {FONT_OPTIONS.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  role="option"
-                  aria-selected={item.id === font}
-                  className={item.id === font ? 'is-active' : undefined}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    setFont(item.id);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
       <div
         ref={ref}
         className={`control control--area desc-editor__area desc-editor__area--${align}${empty ? ' is-empty' : ''}`}
-        style={{ fontFamily: activeFont.stack }}
+        style={{ fontFamily: 'var(--font-body), "DM Sans", system-ui, sans-serif' }}
         contentEditable={!disabled}
         role="textbox"
         aria-multiline="true"

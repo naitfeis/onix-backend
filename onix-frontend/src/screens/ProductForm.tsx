@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS, type ProductDraft } from '../api/contracts';
 import { Button, Card, Field, Input } from '../design-system';
-import { DescriptionEditor, type DescAlign, type DescFont } from '../components/DescriptionEditor';
+import { DescriptionEditor, type DescAlign } from '../components/DescriptionEditor';
 import { minPriceRubles, validateDraft } from '../utils/productValidation';
 import {
   NEW_SELLER_WARRANTY_MIN_HOURS,
@@ -50,7 +50,6 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   const [errors, setErrors] = useState<string[]>([]);
   const [catsOpen, setCatsOpen] = useState(false);
   const [descAlign, setDescAlign] = useState<DescAlign>('left');
-  const [descFont, setDescFont] = useState<DescFont>('body');
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
@@ -179,9 +178,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
               value={draft.description}
               onChange={(description) => setDraft({ ...draft, description })}
               align={descAlign}
-              font={descFont}
               onAlignChange={setDescAlign}
-              onFontChange={setDescFont}
               placeholder="Подробно опишите товар: что получит покупатель, условия передачи, нюансы."
             />
           </Section>

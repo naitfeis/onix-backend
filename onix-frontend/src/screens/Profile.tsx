@@ -13,7 +13,7 @@ import {
   waitAndLinkBotTelegram,
 } from '../auth';
 import UserAvatar from '../components/UserAvatar';
-import { DescriptionEditor, DESCRIPTION_MAX_CHARS, type DescAlign, type DescFont } from '../components/DescriptionEditor';
+import { DescriptionEditor, DESCRIPTION_MAX_CHARS, type DescAlign } from '../components/DescriptionEditor';
 import { CardLogo, GoogleLogo, SbpLogo, TelegramLogo } from '../components/BrandLogos';
 import { Button, Card, Confirm, Field, Input, Modal, Skeleton, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -188,7 +188,6 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
   const [full, setFull] = useState<Product | null>(null);
   const [loadingDesc, setLoadingDesc] = useState(false);
   const [descAlign, setDescAlign] = useState<DescAlign>('left');
-  const [descFont, setDescFont] = useState<DescFont>('body');
   useEffect(() => {
     if (!product) {
       setFull(null);
@@ -198,7 +197,6 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
     let cancelled = false;
     setLoadingDesc(true);
     setDescAlign('left');
-    setDescFont('body');
     setDraft({
       title: product.title,
       description: product.description || '',
@@ -245,9 +243,7 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
         value={draft.description}
         onChange={(description) => setDraft({ ...draft, description })}
         align={descAlign}
-        font={descFont}
         onAlignChange={setDescAlign}
-        onFontChange={setDescFont}
         disabled={loadingDesc}
         placeholder="Подробно опишите товар"
       />

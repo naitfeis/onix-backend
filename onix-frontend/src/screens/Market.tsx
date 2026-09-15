@@ -12,7 +12,7 @@ import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
-import { PublicProfileModal } from './shared';
+import { PublicProfileModal, ReportUserModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 import { t, categoryLabel, isMarketAllCategory, MARKET_ALL_CATEGORY } from '../i18n';
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
@@ -226,6 +226,7 @@ export function Market({
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
+  const [reportOnixId, setReportOnixId] = useState<string | null>(null);
   const [heroSlide, setHeroSlide] = useState(0);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
@@ -905,45 +906,47 @@ export function Market({
           placeholder={t('market.search')}
           aria-label={t('market.searchAria')}
         />
-        <div className="sort-picker">
+        <div className="search-row__tools">
+          <div className="sort-picker">
+            <button
+              type="button"
+              className={`control category-toggle${sortOpen ? ' is-open' : ''}`}
+              aria-expanded={sortOpen}
+              aria-controls="market-sort-list"
+              aria-label="Сортировка"
+              onClick={() => setSortOpen((open) => !open)}
+            >
+              <span>{SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Сначала новые'}</span>
+            </button>
+            {sortOpen && (
+              <div id="market-sort-list" className="chips category-picker sort-picker__list" role="list" aria-label="Варианты сортировки">
+                {SORT_OPTIONS.map((item) => (
+                  <button
+                    type="button"
+                    role="listitem"
+                    key={item.value}
+                    className={sort === item.value ? 'active' : ''}
+                    onClick={() => {
+                      setSort(item.value);
+                      setSortOpen(false);
+                    }}
+                  >{item.label}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <button
             type="button"
-            className={`control category-toggle${sortOpen ? ' is-open' : ''}`}
-            aria-expanded={sortOpen}
-            aria-controls="market-sort-list"
-            aria-label="Сортировка"
-            onClick={() => setSortOpen((open) => !open)}
+            className={`auto-deliver-filter${autoDeliverOnly ? ' is-on' : ''}`}
+            aria-pressed={autoDeliverOnly}
+            aria-label="Только лоты с автовыдачей"
+            onClick={() => setAutoDeliverOnly((on) => !on)}
           >
-            <span>{SORT_OPTIONS.find((o) => o.value === sort)?.label ?? 'Сначала новые'}</span>
+            <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
+            <span>Автовыдача</span>
           </button>
-          {sortOpen && (
-            <div id="market-sort-list" className="chips category-picker sort-picker__list" role="list" aria-label="Варианты сортировки">
-              {SORT_OPTIONS.map((item) => (
-                <button
-                  type="button"
-                  role="listitem"
-                  key={item.value}
-                  className={sort === item.value ? 'active' : ''}
-                  onClick={() => {
-                    setSort(item.value);
-                    setSortOpen(false);
-                  }}
-                >{item.label}</button>
-              ))}
-            </div>
-          )}
+          <LotViewToggle value={lotView} onChange={setLotView} />
         </div>
-        <button
-          type="button"
-          className={`auto-deliver-filter${autoDeliverOnly ? ' is-on' : ''}`}
-          aria-pressed={autoDeliverOnly}
-          aria-label="Только лоты с автовыдачей"
-          onClick={() => setAutoDeliverOnly((on) => !on)}
-        >
-          <span className="auto-deliver-filter__dot" aria-hidden="true">{autoDeliverOnly ? '✓' : ''}</span>
-          <span>Автовыдача</span>
-        </button>
-        <LotViewToggle value={lotView} onChange={setLotView} />
       </div>
     )}
 
@@ -987,6 +990,26 @@ export function Market({
             setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
             void core.toggleFavorite(product);
           }}
+          onBlock={() => {
+            if (!core.profile) {
+              setToast('Войдите, чтобы добавить в чёрный список.');
+              onRequestLogin?.();
+              return;
+            }
+            void (async () => {
+              const result = await core.toggleUserBlock(product.seller.onixId, false);
+              if (!result) return;
+              setToast(t('social.block'));
+            })();
+          }}
+          onReport={() => {
+            if (!core.profile) {
+              setToast('Войдите, чтобы пожаловаться.');
+              onRequestLogin?.();
+              return;
+            }
+            setReportOnixId(product.seller.onixId);
+          }}
         />
       ))}</div>}
     {marketState === 'success' && hasMore && (
@@ -1022,6 +1045,14 @@ export function Market({
       }}
       setToast={setToast}
     />
+    {reportOnixId && (
+      <ReportUserModal
+        onixId={reportOnixId}
+        core={core}
+        onClose={() => setReportOnixId(null)}
+        setToast={setToast}
+      />
+    )}
     {active && showTop && !selected && createPortal(
       <button
         type="button"
