@@ -1,7 +1,8 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { money } from '../api/client';
 import type { Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
+import { MoreActionsMenu } from '../components/MoreActionsMenu';
 import { IconStar } from '../components/NavIcons';
 import { Card } from '../design-system';
 import { publicAt } from '../utils/publicAt';
@@ -42,19 +43,30 @@ export const ProductLotCard = memo(function ProductLotCard({
   const rating = product.seller.rating.toFixed(1);
   const showFounder = product.seller.badge === 'SUPER_ADMIN';
   const title = product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  const hasMenu = Boolean(onFavorite || onBlock || onReport);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return;
-      setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuOpen]);
+  const menuItems = [
+    onFavorite
+      ? {
+          id: 'favorite',
+          label: product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd'),
+          onSelect: onFavorite,
+        }
+      : null,
+    onBlock
+      ? {
+          id: 'block',
+          label: t('social.block'),
+          onSelect: onBlock,
+        }
+      : null,
+    onReport
+      ? {
+          id: 'report',
+          label: 'Пожаловаться',
+          danger: true,
+          onSelect: onReport,
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
   return (
     <Card interactive className="product-card product-card--compact">
@@ -91,58 +103,8 @@ export const ProductLotCard = memo(function ProductLotCard({
           </div>
           <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
         </div>
-        {hasMenu && (
-          <div className="product-card__menu" ref={menuRef}>
-            <button
-              type="button"
-              className="product-card__menu-trigger"
-              aria-label="Действия"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              ⋯
-            </button>
-            {menuOpen && (
-              <div className="product-card__menu-list" role="menu">
-                {onFavorite && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onFavorite();
-                    }}
-                  >
-                    {product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
-                  </button>
-                )}
-                {onBlock && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onBlock();
-                    }}
-                  >
-                    {t('social.block')}
-                  </button>
-                )}
-                {onReport && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onReport();
-                    }}
-                  >
-                    Пожаловаться
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+        {menuItems.length > 0 && (
+          <MoreActionsMenu className="product-card__menu" items={menuItems} />
         )}
       </div>
       <button type="button" className="product-main product-main--body" onClick={onOpen} aria-label={`Открыть ${product.title}`}>

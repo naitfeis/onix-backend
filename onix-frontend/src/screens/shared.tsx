@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { api, money } from '../api/client';
 import {
   API_PATHS, BAN_REASON_OPTIONS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY,
   formatLastSeen, isOnline, sellerIsPresent, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type Seller, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
+import { MoreActionsMenu } from '../components/MoreActionsMenu';
 import { ReviewCard } from '../components/ReviewCard';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -200,18 +201,7 @@ export function PublicProfileModal({
   const [socialList, setSocialList] = useState<'followers' | 'following' | null>(null);
   const [socialPeople, setSocialPeople] = useState<Seller[]>([]);
   const [reportOpen, setReportOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = (event: MouseEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) return;
-      setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [menuOpen]);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
@@ -223,7 +213,6 @@ export function PublicProfileModal({
     setSocialPeople([]);
     setSection('products');
     setReportOpen(false);
-    setMenuOpen(false);
     setTrustCard(null);
     let cancelled = false;
     void api.get<TrustCard>(API_PATHS.userTrustCard(profile.onixId)).then((card) => {
@@ -332,74 +321,62 @@ export function PublicProfileModal({
               setFollowersCount(result.followersCount);
             }}
           >{followed ? 'Отписаться' : 'Подписаться'}</Button>}
-          <div className="profile-more-menu" ref={menuRef}>
-            <button
-              type="button"
-              className="profile-more-menu__trigger"
-              aria-label="Ещё"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              ⋯
-            </button>
-            {menuOpen && (
-              <div className="profile-more-menu__list" role="menu">
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={core.actionBusy === `user-favorite-${profile.onixId}`}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void (async () => {
-                      const previous = favorited;
-                      setFavorited(!previous);
-                      const result = await core.toggleUserFavorite(profile.onixId, previous);
-                      if (!result) {
-                        setFavorited(previous);
-                        return;
-                      }
-                      setFavorited(result.favorited);
-                    })();
-                  }}
-                >{favorited ? t('social.favoriteRemove') : t('social.favoriteAdd')}</button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={core.actionBusy === `user-block-${profile.onixId}`}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    void (async () => {
-                      const previous = blocked;
-                      const previousFavorited = favorited;
-                      setBlocked(!previous);
-                      if (!previous) setFavorited(false);
-                      const result = await core.toggleUserBlock(profile.onixId, previous);
-                      if (!result) {
-                        setBlocked(previous);
-                        setFavorited(previousFavorited);
-                        return;
-                      }
-                      setBlocked(result.blocked);
-                      if (result.blocked) {
-                        setFavorited(false);
-                        setToast?.(t('social.block'));
-                        onClose();
-                      }
-                    })();
-                  }}
-                >{blocked ? t('social.unblock') : t('social.block')}</button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    if (onReport) onReport(profile.onixId);
-                    else setReportOpen(true);
-                  }}
-                >Пожаловаться</button>
-              </div>
-            )}
-          </div>
+          <MoreActionsMenu
+            className="profile-more-menu"
+            items={[
+              {
+                id: 'favorite',
+                label: favorited ? t('social.favoriteRemove') : t('social.favoriteAdd'),
+                disabled: core.actionBusy === `user-favorite-${profile.onixId}`,
+                onSelect: () => {
+                  void (async () => {
+                    const previous = favorited;
+                    setFavorited(!previous);
+                    const result = await core.toggleUserFavorite(profile.onixId, previous);
+                    if (!result) {
+                      setFavorited(previous);
+                      return;
+                    }
+                    setFavorited(result.favorited);
+                  })();
+                },
+              },
+              {
+                id: 'block',
+                label: blocked ? t('social.unblock') : t('social.block'),
+                disabled: core.actionBusy === `user-block-${profile.onixId}`,
+                onSelect: () => {
+                  void (async () => {
+                    const previous = blocked;
+                    const previousFavorited = favorited;
+                    setBlocked(!previous);
+                    if (!previous) setFavorited(false);
+                    const result = await core.toggleUserBlock(profile.onixId, previous);
+                    if (!result) {
+                      setBlocked(previous);
+                      setFavorited(previousFavorited);
+                      return;
+                    }
+                    setBlocked(result.blocked);
+                    if (result.blocked) {
+                      setFavorited(false);
+                      setToast?.(t('social.block'));
+                      onClose();
+                    }
+                  })();
+                },
+              },
+              {
+                id: 'report',
+                label: 'Пожаловаться',
+                danger: true,
+                onSelect: () => {
+                  if (onReport) onReport(profile.onixId);
+                  else setReportOpen(true);
+                },
+              },
+            ]}
+          />
         </div>}
         {trustCard && (
           <div className="balance">

@@ -42,6 +42,8 @@ export interface ProfileDto {
   /** Backward-compatible roles list derived from status. */
   roles: PlatformStatusCode[];
   balanceCents: string;
+  /** Buyer funds currently held in open orders. */
+  heldInOrdersCents?: string;
   walletHistory: LedgerDto[];
   /** Account creation time — used for new-seller warranty floor. */
   registeredAt?: string;

@@ -7,6 +7,7 @@ import { formatOnixId } from '../utils/onixId';
 import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge } from './shared';
+import { MoreActionsMenu } from '../components/MoreActionsMenu';
 import { playSound, unlockSounds } from '../audio/sounds';
 import { getRealtimeClient } from '../realtime/client';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -600,49 +601,59 @@ export function Chats({
         </div>
       </button>
       {thread.peerOnixId && core.profile?.onixId !== thread.peerOnixId && (
-        <>
-          <Button
-            variant="ghost"
-            busy={core.actionBusy === `user-favorite-${thread.peerOnixId}`}
-            onClick={() => {
-              const peerId = thread.peerOnixId!;
-              const wasFavorited = favoriteIds.has(peerId);
-              void (async () => {
-                const result = await core.toggleUserFavorite(peerId, wasFavorited);
-                if (!result) return;
-                if (wasFavorited) {
-                  setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
-                } else {
-                  try {
-                    setFavoriteUsers(await core.listFavoriteUsers());
-                  } catch { /* keep optimistic */ }
-                }
-              })();
-            }}
-          >{favoriteIds.has(thread.peerOnixId) ? t('social.favoriteRemove') : t('social.favoriteAdd')}</Button>
-          <Button
-            variant="ghost"
-            busy={core.actionBusy === `user-block-${thread.peerOnixId}`}
-            onClick={() => {
-              const peerId = thread.peerOnixId!;
-              const wasBlocked = blockedIds.has(peerId);
-              void (async () => {
-                const result = await core.toggleUserBlock(peerId, wasBlocked);
-                if (!result) return;
-                if (wasBlocked) {
-                  setBlockedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
-                } else {
-                  setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
-                  try {
-                    setBlockedUsers(await core.listBlockedUsers());
-                  } catch { /* keep local */ }
-                  setToast(t('social.block'));
-                }
-              })();
-            }}
-          >{blockedIds.has(thread.peerOnixId) ? t('social.unblock') : t('social.block')}</Button>
-          <Button variant="ghost" onClick={() => setReportOnixId(thread.peerOnixId!)}>Пожаловаться</Button>
-        </>
+        <MoreActionsMenu
+          className="conversation__more"
+          items={[
+            {
+              id: 'favorite',
+              label: favoriteIds.has(thread.peerOnixId) ? t('social.favoriteRemove') : t('social.favoriteAdd'),
+              disabled: core.actionBusy === `user-favorite-${thread.peerOnixId}`,
+              onSelect: () => {
+                const peerId = thread.peerOnixId!;
+                const wasFavorited = favoriteIds.has(peerId);
+                void (async () => {
+                  const result = await core.toggleUserFavorite(peerId, wasFavorited);
+                  if (!result) return;
+                  if (wasFavorited) {
+                    setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                  } else {
+                    try {
+                      setFavoriteUsers(await core.listFavoriteUsers());
+                    } catch { /* keep optimistic */ }
+                  }
+                })();
+              },
+            },
+            {
+              id: 'block',
+              label: blockedIds.has(thread.peerOnixId) ? t('social.unblock') : t('social.block'),
+              disabled: core.actionBusy === `user-block-${thread.peerOnixId}`,
+              onSelect: () => {
+                const peerId = thread.peerOnixId!;
+                const wasBlocked = blockedIds.has(peerId);
+                void (async () => {
+                  const result = await core.toggleUserBlock(peerId, wasBlocked);
+                  if (!result) return;
+                  if (wasBlocked) {
+                    setBlockedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                  } else {
+                    setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                    try {
+                      setBlockedUsers(await core.listBlockedUsers());
+                    } catch { /* keep local */ }
+                    setToast(t('social.block'));
+                  }
+                })();
+              },
+            },
+            {
+              id: 'report',
+              label: 'Пожаловаться',
+              danger: true,
+              onSelect: () => setReportOnixId(thread.peerOnixId!),
+            },
+          ]}
+        />
       )}
       </div>
       <div className="messages-wrap">

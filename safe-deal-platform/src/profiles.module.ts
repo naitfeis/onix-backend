@@ -64,7 +64,7 @@ export class ProfilesService {
       });
     }
 
-    const [profile, ledger, googleLink] = await Promise.all([
+    const [profile, ledger, googleLink, heldOrders] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({
         where: { id: user.id },
         select: {
@@ -90,6 +90,13 @@ export class ProfilesService {
         where: { userId: user.id, provider: 'GOOGLE', deletedAt: null },
         select: { id: true },
       }),
+      this.prisma.order.aggregate({
+        where: {
+          buyerId: user.id,
+          status: { in: ['PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] },
+        },
+        _sum: { totalAmountCents: true },
+      }),
     ]);
 
     const proActive = Boolean(
@@ -98,10 +105,12 @@ export class ProfilesService {
       && (!profile.sellerSubscription.endsAt || profile.sellerSubscription.endsAt > new Date()),
     );
     const depositTotal = profile.depositAvailableCents + profile.depositLockedCents;
+    const heldInOrdersCents = heldOrders._sum.totalAmountCents ?? 0n;
     const base = profileDto(profile, ledger);
     const hasTelegram = profile.telegramId != null;
     return {
       ...base,
+      heldInOrdersCents: heldInOrdersCents.toString(),
       canSell: hasTelegram && !profile.sellBannedAt && !profile.securityLockedAt,
       hasTelegram,
       hasGoogle: Boolean(googleLink),

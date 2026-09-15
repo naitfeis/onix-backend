@@ -614,6 +614,9 @@ export function Profile({
           <small>Баланс</small>
           <strong>{money(profile.balanceCents)}</strong>
           <em>Доступно для операций и покупок</em>
+          <div className="money-tile__stats money-tile__stats--stack" aria-label="Заморожено в заказах">
+            <span><b>{money(profile.heldInOrdersCents ?? '0')}</b><small>заморожено</small></span>
+          </div>
           <div className="money-tile__actions">
             <button type="button" className="deal-chip" onClick={() => openMoney('MAIN_TOPUP')}>Пополнить</button>
             <button type="button" className="deal-chip" onClick={() => openMoney('MAIN_WITHDRAW')}>Вывести</button>

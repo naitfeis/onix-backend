@@ -173,6 +173,8 @@ export interface Notification {
 export interface Profile extends Seller {
   bio?: string;
   balanceCents: string;
+  /** Buyer funds currently held in open orders (PAYMENT_HOLD / DELIVERING / DISPUTE). */
+  heldInOrdersCents?: string;
   isAdmin: boolean;
   isSupport?: boolean;
   status: PlatformStatus;
