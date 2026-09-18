@@ -5,7 +5,6 @@ import {
   formatLastSeen, isOnline, sellerIsPresent, type BanReasonCode, type Deal, type OrderListStatus, type PlatformStatus, type Product, type ProductDraft, type ProductStatus, type PublicProfile, type Seller, type TrustCard,
 } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { MoreActionsMenu } from '../components/MoreActionsMenu';
 import { ReviewCard } from '../components/ReviewCard';
 import { Badge, Button, Card, Field, Modal, Select, StateView, Textarea } from '../design-system';
 import { formatOnixId } from '../utils/onixId';
@@ -180,7 +179,7 @@ export function dealProgress(status: Deal['status']) {
 }
 
 export function PublicProfileModal({
-  profile, title = 'Профиль', onClose, core, onOpenOnix, onWrite, onOpenProduct, onReport, setToast,
+  profile, title = 'Профиль', onClose, core, onOpenOnix, onWrite, onOpenProduct,
 }: {
   profile: PublicProfile | null;
   title?: string;
@@ -189,30 +188,22 @@ export function PublicProfileModal({
   onOpenOnix?: (onixId: string) => void;
   onWrite?: (onixId: string) => void | Promise<void>;
   onOpenProduct?: (productId: string) => void;
-  onReport?: (onixId: string) => void;
-  setToast?: (text: string) => void;
 }) {
   const [section, setSection] = useState<'products' | 'reviews'>('products');
   const [followed, setFollowed] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
-  const [favorited, setFavorited] = useState(false);
-  const [blocked, setBlocked] = useState(false);
   const [socialList, setSocialList] = useState<'followers' | 'following' | null>(null);
   const [socialPeople, setSocialPeople] = useState<Seller[]>([]);
-  const [reportOpen, setReportOpen] = useState(false);
   const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
   useEffect(() => {
     if (!profile) return;
     setFollowed(Boolean(profile.followed));
     setFollowersCount(profile.followersCount);
     setFollowingCount(profile.followingCount ?? 0);
-    setFavorited(Boolean(profile.favorited));
-    setBlocked(Boolean(profile.blocked));
     setSocialList(null);
     setSocialPeople([]);
     setSection('products');
-    setReportOpen(false);
     setTrustCard(null);
     let cancelled = false;
     void api.get<TrustCard>(API_PATHS.userTrustCard(profile.onixId)).then((card) => {
@@ -221,7 +212,7 @@ export function PublicProfileModal({
       if (!cancelled) setTrustCard(null);
     });
     return () => { cancelled = true; };
-  }, [profile?.onixId, profile?.followed, profile?.followersCount, profile?.followingCount, profile?.favorited, profile?.blocked]);
+  }, [profile?.onixId, profile?.followed, profile?.followersCount, profile?.followingCount]);
   if (!profile) return null;
   const products = profile.products ?? [];
   const reviews = profile.reviews ?? [];
@@ -321,62 +312,6 @@ export function PublicProfileModal({
               setFollowersCount(result.followersCount);
             }}
           >{followed ? 'Отписаться' : 'Подписаться'}</Button>}
-          <MoreActionsMenu
-            className="profile-more-menu"
-            items={[
-              {
-                id: 'favorite',
-                label: favorited ? t('social.favoriteRemove') : t('social.favoriteAdd'),
-                disabled: core.actionBusy === `user-favorite-${profile.onixId}`,
-                onSelect: () => {
-                  void (async () => {
-                    const previous = favorited;
-                    setFavorited(!previous);
-                    const result = await core.toggleUserFavorite(profile.onixId, previous);
-                    if (!result) {
-                      setFavorited(previous);
-                      return;
-                    }
-                    setFavorited(result.favorited);
-                  })();
-                },
-              },
-              {
-                id: 'block',
-                label: blocked ? t('social.unblock') : t('social.block'),
-                disabled: core.actionBusy === `user-block-${profile.onixId}`,
-                onSelect: () => {
-                  void (async () => {
-                    const previous = blocked;
-                    const previousFavorited = favorited;
-                    setBlocked(!previous);
-                    if (!previous) setFavorited(false);
-                    const result = await core.toggleUserBlock(profile.onixId, previous);
-                    if (!result) {
-                      setBlocked(previous);
-                      setFavorited(previousFavorited);
-                      return;
-                    }
-                    setBlocked(result.blocked);
-                    if (result.blocked) {
-                      setFavorited(false);
-                      setToast?.(t('social.block'));
-                      onClose();
-                    }
-                  })();
-                },
-              },
-              {
-                id: 'report',
-                label: 'Пожаловаться',
-                danger: true,
-                onSelect: () => {
-                  if (onReport) onReport(profile.onixId);
-                  else setReportOpen(true);
-                },
-              },
-            ]}
-          />
         </div>}
         {trustCard && (
           <div className="balance">
@@ -486,14 +421,6 @@ export function PublicProfileModal({
         </div>
       )}
     </Modal>
-    {core && setToast && reportOpen && (
-      <ReportUserModal
-        onixId={profile.onixId}
-        core={core}
-        onClose={() => setReportOpen(false)}
-        setToast={setToast}
-      />
-    )}
   </Modal>;
 }
 

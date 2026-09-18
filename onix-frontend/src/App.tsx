@@ -11,7 +11,6 @@ import {
   IconChat,
   IconClose,
   IconDeals,
-  IconEye,
   IconLot,
   IconMarket,
   IconMoon,
@@ -157,11 +156,7 @@ function clampSidebarWidths(shellWidth: number, left: number, right: number, sho
 }
 
 const THEME_KEY = 'onix-theme';
-const GLASS_KEY = 'onix-glass';
-/** Older builds wrote solid on first visit — migrate once to Vision as product default. */
-const GLASS_DEFAULT_MIGRATION = 'onix-glass-default-vision-v1';
 type ThemeMode = 'dark' | 'light';
-type GlassMode = 'solid' | 'vision';
 
 function readStoredTheme(): ThemeMode | null {
   try {
@@ -171,34 +166,15 @@ function readStoredTheme(): ThemeMode | null {
   return null;
 }
 
-function readStoredGlass(): GlassMode {
-  try {
-    if (!localStorage.getItem(GLASS_DEFAULT_MIGRATION)) {
-      localStorage.setItem(GLASS_DEFAULT_MIGRATION, '1');
-      localStorage.setItem(GLASS_KEY, 'vision');
-      return 'vision';
-    }
-    const v = localStorage.getItem(GLASS_KEY);
-    if (v === 'vision' || v === 'solid') return v;
-  } catch { /* ignore */ }
-  return 'vision';
-}
-
 function applyTheme(theme: ThemeMode) {
   document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.setAttribute('data-glass', theme === 'dark' ? 'vision' : 'solid');
   const color = theme === 'light' ? '#F4F2F8' : '#000000';
   document.querySelectorAll('meta[name="theme-color"]').forEach((node) => {
     node.setAttribute('content', color);
   });
   try {
     localStorage.setItem(THEME_KEY, theme);
-  } catch { /* ignore */ }
-}
-
-function applyGlass(mode: GlassMode) {
-  document.documentElement.setAttribute('data-glass', mode);
-  try {
-    localStorage.setItem(GLASS_KEY, mode);
   } catch { /* ignore */ }
 }
 
@@ -257,11 +233,6 @@ export default function App() {
     return () => popModal(id);
   }, [settingsOpen]);
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
-  const [glass, setGlass] = useState<GlassMode>(() => {
-    const mode = readStoredGlass();
-    if (typeof document !== 'undefined') document.documentElement.setAttribute('data-glass', mode);
-    return mode;
-  });
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
   const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
   const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
@@ -438,16 +409,8 @@ export default function App() {
     telegramImpact('light');
   };
 
-  const toggleGlass = () => {
-    const next: GlassMode = glass === 'vision' ? 'solid' : 'vision';
-    setGlass(next);
-    applyGlass(next);
-    telegramImpact('light');
-  };
-
   useEffect(() => {
     setTheme(syncThemeFromTelegram());
-    applyGlass(readStoredGlass());
   }, []);
 
   useEffect(() => {
@@ -556,16 +519,6 @@ export default function App() {
       >
         {theme === 'dark' ? <IconSun /> : <IconMoon />}
         <span>{theme === 'dark' ? t('theme.light') : t('theme.dark')}</span>
-      </button>
-      <button
-        type="button"
-        className={`sidebar-theme${glass === 'vision' ? ' is-active' : ''}`}
-        onClick={toggleGlass}
-        aria-label={glass === 'vision' ? t('theme.disableGlass') : t('theme.enableGlass')}
-        aria-pressed={glass === 'vision'}
-      >
-        <IconEye />
-        <span>{t('theme.glass')}</span>
       </button>
       <p className="sidebar-settings__label">{t('settings.language')}</p>
       <div className="sidebar-settings__langs">

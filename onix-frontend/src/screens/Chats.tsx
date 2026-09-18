@@ -875,8 +875,6 @@ export function Chats({
         setPeerProfile(null);
         openProductCard(productId);
       }}
-      onReport={(onixId) => setReportOnixId(onixId)}
-      setToast={setToast}
     />
     <ReportUserModal
       onixId={reportOnixId}

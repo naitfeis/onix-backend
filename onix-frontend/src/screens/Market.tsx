@@ -12,7 +12,7 @@ import { publicAt } from '../utils/publicAt';
 import { CATEGORY_IMAGES } from '../utils/categoryImages';
 import { matchCategorySearch } from '../utils/matchCategorySearch';
 import type { Core, Screen } from './types';
-import { PublicProfileModal, ReportUserModal } from './shared';
+import { PublicProfileModal } from './shared';
 import { getRealtimeClient } from '../realtime/client';
 import { t, categoryLabel, isMarketAllCategory, MARKET_ALL_CATEGORY } from '../i18n';
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
@@ -226,7 +226,6 @@ export function Market({
   const [loadingMore, setLoadingMore] = useState(false);
   const [sellerTrust, setSellerTrust] = useState<TrustCard | null>(null);
   const [detailReady, setDetailReady] = useState(false);
-  const [reportOnixId, setReportOnixId] = useState<string | null>(null);
   const [heroSlide, setHeroSlide] = useState(0);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
   const heroTrackRef = useRef<HTMLDivElement>(null);
@@ -990,26 +989,6 @@ export function Market({
             setItems(previous => previous.map(item => item.id === product.id ? { ...item, favorite: !item.favorite } : item));
             void core.toggleFavorite(product);
           }}
-          onBlock={() => {
-            if (!core.profile) {
-              setToast('Войдите, чтобы добавить в чёрный список.');
-              onRequestLogin?.();
-              return;
-            }
-            void (async () => {
-              const result = await core.toggleUserBlock(product.seller.onixId, false);
-              if (!result) return;
-              setToast(t('social.block'));
-            })();
-          }}
-          onReport={() => {
-            if (!core.profile) {
-              setToast('Войдите, чтобы пожаловаться.');
-              onRequestLogin?.();
-              return;
-            }
-            setReportOnixId(product.seller.onixId);
-          }}
         />
       ))}</div>}
     {marketState === 'success' && hasMore && (
@@ -1043,16 +1022,7 @@ export function Market({
           .then((product) => openProduct(product, 'profile'))
           .catch((error) => setToast(friendlyError(error)));
       }}
-      setToast={setToast}
     />
-    {reportOnixId && (
-      <ReportUserModal
-        onixId={reportOnixId}
-        core={core}
-        onClose={() => setReportOnixId(null)}
-        setToast={setToast}
-      />
-    )}
     {active && showTop && !selected && createPortal(
       <button
         type="button"

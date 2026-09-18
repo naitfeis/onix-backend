@@ -1,0 +1,31 @@
+2026-09-18 11:19:13.809 MSK [11816] LOG:  starting PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35227, 64-bit
+2026-09-18 11:19:13.811 MSK [11816] LOG:  listening on IPv4 address "127.0.0.1", port 55432
+2026-09-18 11:19:13.854 MSK [8900] LOG:  database system was shut down at 2026-09-18 11:13:16 MSK
+2026-09-18 11:19:13.866 MSK [11816] LOG:  database system is ready to accept connections
+2026-09-18 11:19:14.306 MSK [13768] FATAL:  database "chaos" does not exist
+2026-09-18 11:20:43.003 MSK [1480] FATAL:  database "ledger_chaos" does not exist
+2026-09-18 11:20:55.706 MSK [6408] FATAL:  database "chaos" does not exist
+2026-09-18 11:21:42.213 MSK [21788] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.213 MSK [21788] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.213 MSK [21788] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.213 MSK [21788] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 11:21:42.248 MSK [26136] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.248 MSK [26136] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.248 MSK [26136] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.248 MSK [26136] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 11:21:42.259 MSK [3792] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.259 MSK [3792] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.259 MSK [3792] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.259 MSK [3792] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 11:21:42.263 MSK [5016] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.263 MSK [5016] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.263 MSK [5016] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.263 MSK [5016] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 11:21:42.268 MSK [31196] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.268 MSK [31196] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.268 MSK [31196] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.268 MSK [31196] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 11:21:42.271 MSK [5184] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 11:21:42.271 MSK [5184] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 11:21:42.271 MSK [5184] HINT:  The transaction might succeed if retried.
+2026-09-18 11:21:42.271 MSK [5184] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"

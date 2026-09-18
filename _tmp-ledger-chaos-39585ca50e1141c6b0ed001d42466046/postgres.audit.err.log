@@ -1,0 +1,34 @@
+2026-09-18 12:21:11.219 MSK [19692] LOG:  starting PostgreSQL 18.4 on x86_64-windows, compiled by msvc-19.44.35227, 64-bit
+2026-09-18 12:21:11.221 MSK [19692] LOG:  listening on IPv4 address "127.0.0.1", port 55432
+2026-09-18 12:21:11.264 MSK [30488] LOG:  database system was interrupted; last known up at 2026-09-18 11:19:13 MSK
+2026-09-18 12:21:11.893 MSK [25192] FATAL:  the database system is starting up
+2026-09-18 12:21:11.948 MSK [30488] LOG:  database system was not properly shut down; automatic recovery in progress
+2026-09-18 12:21:11.953 MSK [30488] LOG:  redo starts at 0/17F1218
+2026-09-18 12:21:12.119 MSK [30488] LOG:  invalid record length at 0/1F9A058: expected at least 24, got 0
+2026-09-18 12:21:12.119 MSK [30488] LOG:  redo done at 0/1F9A020 system usage: CPU: user: 0.04 s, system: 0.12 s, elapsed: 0.16 s
+2026-09-18 12:21:12.172 MSK [9816] LOG:  checkpoint starting: end-of-recovery immediate wait
+2026-09-18 12:21:12.449 MSK [31396] FATAL:  the database system is not yet accepting connections
+2026-09-18 12:21:12.449 MSK [31396] DETAIL:  Consistent recovery state has not been yet reached.
+2026-09-18 12:21:12.792 MSK [9816] LOG:  checkpoint complete: wrote 1522 buffers (9.3%), wrote 3 SLRU buffers; 0 WAL file(s) added, 0 removed, 0 recycled; write=0.040 s, sync=0.575 s, total=0.622 s; sync files=696, longest=0.006 s, average=0.001 s; distance=7843 kB, estimate=7843 kB; lsn=0/1F9A058, redo lsn=0/1F9A058
+2026-09-18 12:21:12.816 MSK [19692] LOG:  database system is ready to accept connections
+2026-09-18 12:21:12.994 MSK [10536] FATAL:  database "chaos" does not exist
+2026-09-18 12:21:44.567 MSK [30596] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 12:21:44.567 MSK [30596] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 12:21:44.567 MSK [30596] HINT:  The transaction might succeed if retried.
+2026-09-18 12:21:44.567 MSK [30596] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 12:21:44.591 MSK [14828] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 12:21:44.591 MSK [14828] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 12:21:44.591 MSK [14828] HINT:  The transaction might succeed if retried.
+2026-09-18 12:21:44.591 MSK [14828] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 12:21:44.597 MSK [14004] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 12:21:44.597 MSK [14004] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 12:21:44.597 MSK [14004] HINT:  The transaction might succeed if retried.
+2026-09-18 12:21:44.597 MSK [14004] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 12:21:44.602 MSK [1440] ERROR:  could not serialize access due to read/write dependencies among transactions
+2026-09-18 12:21:44.602 MSK [1440] DETAIL:  Reason code: Canceled on identification as a pivot, during write.
+2026-09-18 12:21:44.602 MSK [1440] HINT:  The transaction might succeed if retried.
+2026-09-18 12:21:44.602 MSK [1440] STATEMENT:  INSERT INTO "public"."IdempotencyRecord" ("id","key","userId","route","requestHash","createdAt","expiresAt") VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING "public"."IdempotencyRecord"."id", "public"."IdempotencyRecord"."key", "public"."IdempotencyRecord"."userId", "public"."IdempotencyRecord"."route", "public"."IdempotencyRecord"."requestHash", "public"."IdempotencyRecord"."responseCode", "public"."IdempotencyRecord"."responseBody", "public"."IdempotencyRecord"."createdAt", "public"."IdempotencyRecord"."expiresAt"
+2026-09-18 12:21:59.466 MSK [9816] FATAL:  could not open shared memory segment "Global/PostgreSQL.3332903684": No such file or directory
+2026-09-18 12:21:59.466 MSK [23964] FATAL:  could not open shared memory segment "Global/PostgreSQL.3332903684": No such file or directory
+2026-09-18 12:21:59.466 MSK [31940] FATAL:  could not open shared memory segment "Global/PostgreSQL.3332903684": No such file or directory
+2026-09-18 12:21:59.466 MSK [32236] FATAL:  could not open shared memory segment "Global/PostgreSQL.3332903684": No such file or directory

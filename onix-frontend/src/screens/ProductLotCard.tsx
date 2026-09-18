@@ -2,8 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { money } from '../api/client';
 import type { Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { MoreActionsMenu } from '../components/MoreActionsMenu';
-import { IconStar } from '../components/NavIcons';
+import { IconHeart, IconStar } from '../components/NavIcons';
 import { Card } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import { categoryLabel, t } from '../i18n';
@@ -26,8 +25,6 @@ export const ProductLotCard = memo(function ProductLotCard({
   online,
   onOpen,
   onFavorite,
-  onBlock,
-  onReport,
   hidePrice,
   footer,
 }: {
@@ -35,39 +32,12 @@ export const ProductLotCard = memo(function ProductLotCard({
   online?: boolean;
   onOpen: () => void;
   onFavorite?: () => void;
-  onBlock?: () => void;
-  onReport?: () => void;
   hidePrice?: boolean;
   footer?: ReactNode;
 }) {
   const rating = product.seller.rating.toFixed(1);
   const showFounder = product.seller.badge === 'SUPER_ADMIN';
   const title = product.title.length > 36 ? `${product.title.slice(0, 36)}…` : product.title;
-  const menuItems = [
-    onFavorite
-      ? {
-          id: 'favorite',
-          label: product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd'),
-          onSelect: onFavorite,
-        }
-      : null,
-    onBlock
-      ? {
-          id: 'block',
-          label: t('social.block'),
-          onSelect: onBlock,
-        }
-      : null,
-    onReport
-      ? {
-          id: 'report',
-          label: 'Пожаловаться',
-          danger: true,
-          onSelect: onReport,
-        }
-      : null,
-  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
-
   return (
     <Card interactive className="product-card product-card--compact">
       <div className="product-card__media">
@@ -91,6 +61,20 @@ export const ProductLotCard = memo(function ProductLotCard({
         {product.autoDeliver && (
           <span className="product-card__bolt" title="Автовыдача" aria-label="Автовыдача">⚡</span>
         )}
+        {onFavorite && (
+          <button
+            type="button"
+            className={`favorite${product.favorite ? ' active' : ''}`}
+            aria-label={product.favorite ? t('market.favoriteRemove') : t('market.favoriteAdd')}
+            aria-pressed={Boolean(product.favorite)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onFavorite();
+            }}
+          >
+            <IconHeart size={18} />
+          </button>
+        )}
         <div className="product-card__seller-float">
           <div className="product-card__avatar">
             <UserAvatar
@@ -103,9 +87,6 @@ export const ProductLotCard = memo(function ProductLotCard({
           </div>
           <span title={product.seller.username}>{publicAt(product.seller.username)}</span>
         </div>
-        {menuItems.length > 0 && (
-          <MoreActionsMenu className="product-card__menu" items={menuItems} />
-        )}
       </div>
       <button type="button" className="product-main product-main--body" onClick={onOpen} aria-label={`Открыть ${product.title}`}>
         <div className="product-card__body">

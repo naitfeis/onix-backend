@@ -390,7 +390,6 @@ export function Deals({
       profile={peerProfile}
       onClose={() => setPeerProfile(null)}
       core={core}
-      setToast={setToast}
       onWrite={async (onixId) => {
         setPeerProfile(null);
         await openDirectChat(onixId);

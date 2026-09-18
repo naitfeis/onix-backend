@@ -798,7 +798,6 @@ export function Profile({
         setAuthorProfile(null);
         openProductCard(productId);
       }}
-      setToast={setToast}
     />
     <EditProduct product={editing} core={core} onClose={() => setEditing(null)} setToast={setToast} />
     <Modal open={Boolean(moneyModal)} title={moneyTitle} onClose={() => setMoneyModal(null)}>
