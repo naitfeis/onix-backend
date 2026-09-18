@@ -108,6 +108,23 @@ const DEFAULT_RULES: AlertRule[] = [
     severity: 'critical',
     description: 'Dispute SLA breach events',
   },
+  {
+    id: 'appeal-sla-stale',
+    metric: 'onix_appeal_stale_count',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Stale ban/sell-ban appeals past SLA (possible wrongful lock unresolved)',
+    gauge: true,
+  },
+  {
+    id: 'appeal-sla-breaches',
+    metric: 'onix_appeal_sla_breach_events_total',
+    threshold: 1,
+    windowSec: 300,
+    severity: 'critical',
+    description: 'Appeal SLA breach events',
+  },
 ];
 
 /**

@@ -122,7 +122,10 @@ function runNodeTest(globs: string[]): boolean {
   const cookie = fileContains('safe-deal-platform/src/auth-v2/refresh-cookie.ts', 'HttpOnly')
     && fileContains('safe-deal-platform/src/auth-v2/refresh-cookie.ts', 'SameSite');
   const csrf = fileContains('safe-deal-platform/src/auth-v2/refresh-cookie.ts', 'assertCsrfHeader');
-  const authRate = fileContains('safe-deal-platform/src/auth-v2/auth-v2.controller.ts', 'assertRateLimit');
+  const authRate = fileContains(
+    'safe-deal-platform/src/auth-v2/auth-v2.controller.ts',
+    /(?:assertRateLimit|rateLimit\.assert)/,
+  );
   const rotate = fileContains('safe-deal-platform/src/auth-v2/auth-orchestrator.service.ts', 'RefreshRotated');
   if (cookie && csrf && authRate && rotate) {
     pass('production auth hardening', 'HttpOnly/SameSite/CSRF/rate-limit/refresh rotation');

@@ -1,6 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { PaymentWallet, PlatformStatus, Prisma, SecurityEventStatus } from '@prisma/client';
-import { isNewAccount } from '../economy/wallet/fund-provenance';
 import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
 import type { AuthUser } from '../common';
 import { lockUsersInIdOrder } from '../database/money-locks';
@@ -18,6 +17,7 @@ import type { AdminActor } from './admin-session.service';
 import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { recomputeSellerRating } from '../marketplace/review-aggregate';
 import { assertOrderResolvedForTicketClose } from '../support-ticket-guard';
+import { PayoutService } from '../economy/payouts/payout.service';
 
 const WIPED_DISPLAY_NAME = 'Удалённый аккаунт';
 const OPEN_ORDER_STATUSES = ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] as const;
@@ -29,6 +29,84 @@ type AdminIdentityRow = {
   isMain: boolean;
   wouldWipe: boolean;
 };
+
+type RiskAnalyticsEvent = {
+  payload: unknown;
+};
+
+type RiskReviewRow = {
+  action: string;
+};
+
+export function aggregateRiskAnalytics(
+  events: RiskAnalyticsEvent[],
+  reviews: RiskReviewRow[],
+) {
+  const scoreBuckets = [
+    { label: '0-24', min: 0, max: 24, count: 0 },
+    { label: '25-49', min: 25, max: 49, count: 0 },
+    { label: '50-69', min: 50, max: 69, count: 0 },
+    { label: '70-84', min: 70, max: 84, count: 0 },
+    { label: '85-100', min: 85, max: 100, count: 0 },
+  ];
+  const factorCounts: Record<string, number> = {};
+  const wouldLockByLevel: Record<string, number> = {};
+  let scoreDenominator = 0;
+  let wouldLockCount = 0;
+
+  for (const event of events) {
+    if (!event.payload || typeof event.payload !== 'object' || Array.isArray(event.payload)) continue;
+    const payload = event.payload as Record<string, unknown>;
+    const score = typeof payload.score === 'number' && Number.isFinite(payload.score)
+      ? Math.max(0, Math.min(100, payload.score))
+      : null;
+    if (score != null) {
+      scoreDenominator += 1;
+      scoreBuckets.find((bucket) => score >= bucket.min && score <= bucket.max)!.count += 1;
+    }
+    if (Array.isArray(payload.factors)) {
+      for (const factor of new Set(payload.factors.map(String))) {
+        factorCounts[factor] = (factorCounts[factor] ?? 0) + 1;
+      }
+    }
+    if (payload.wouldHaveLocked === true && payload.enforcementMode === 'shadow') {
+      wouldLockCount += 1;
+      const level = typeof payload.wouldHaveLockedLevel === 'string'
+        ? payload.wouldHaveLockedLevel
+        : 'UNKNOWN';
+      wouldLockByLevel[level] = (wouldLockByLevel[level] ?? 0) + 1;
+    }
+  }
+
+  const reviewOutcomes = {
+    UNLOCK: 0,
+    REDUCE_RESTRICTIONS: 0,
+    KEEP_LOCK: 0,
+    PERMANENT_BAN: 0,
+  };
+  for (const review of reviews) {
+    const outcome = review.action.replace(/^SECURITY_/, '') as keyof typeof reviewOutcomes;
+    if (Object.prototype.hasOwnProperty.call(reviewOutcomes, outcome)) reviewOutcomes[outcome] += 1;
+  }
+  const reviewDenominator = Object.values(reviewOutcomes).reduce((sum, count) => sum + count, 0);
+  const falsePositiveNumerator = reviewOutcomes.UNLOCK + reviewOutcomes.REDUCE_RESTRICTIONS;
+
+  return {
+    eventDenominator: events.length,
+    scoreDenominator,
+    scoreBuckets: scoreBuckets.map(({ label, count }) => ({ label, count })),
+    factorCounts,
+    wouldLock: { count: wouldLockCount, byLevel: wouldLockByLevel },
+    reviewOutcomes,
+    falsePositiveProxy: {
+      label: 'falsePositiveProxy',
+      numerator: falsePositiveNumerator,
+      denominator: reviewDenominator,
+      rate: reviewDenominator > 0 ? falsePositiveNumerator / reviewDenominator : null,
+      definition: 'UNLOCK + REDUCE_RESTRICTIONS divided by all recorded lock review outcomes; not an actual false-positive rate.',
+    },
+  };
+}
 
 function describeAdminIdentities(
   user: { telegramId: bigint | null; telegramNick: string | null; displayName: string | null },
@@ -91,6 +169,7 @@ export class AdminSecurityService {
     private readonly escrow: EscrowService,
     private readonly payments: PaymentsService,
     private readonly pro: ProSubscriptionService,
+    private readonly payouts: PayoutService,
   ) {}
 
   async dashboard() {
@@ -1522,53 +1601,99 @@ export class AdminSecurityService {
   }
   async listWithdrawals(opts?: { limit?: number }) {
     const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 200);
-    const rows = await this.prisma.ledgerEntry.findMany({
-      where: { type: 'WITHDRAWAL' },
-      orderBy: { createdAt: 'desc' },
+    const rows = await this.prisma.payoutRequest.findMany({
+      orderBy: { requestedAt: 'desc' },
       take: limit,
-      select: {
-        id: true,
-        userId: true,
-        amountCents: true,
-        fundKind: true,
-        saleKind: true,
-        source: true,
-        correlationId: true,
-        createdAt: true,
-        description: true,
+      include: {
         user: { select: { onixId: true, createdAt: true } },
+        withdrawalLedgerEntry: {
+          select: {
+            source: true,
+            fundKind: true,
+            saleKind: true,
+            correlationId: true,
+            description: true,
+          },
+        },
+        attempts: { orderBy: { startedAt: 'desc' }, take: 5 },
       },
     });
-
-    const flagCandidates = rows
-      .filter((row) => isNewAccount(row.user.createdAt))
-      .map((row) => ({ id: row.userId, createdAt: row.user.createdAt }));
-    const flagByUser = flagCandidates.length
-      ? await this.withdrawVelocity.resolveAccountSaleProtectionFlags(flagCandidates)
-      : new Map();
-
-    const out: Array<Record<string, unknown>> = [];
-    for (const row of rows) {
+    return rows.map((row) => {
       const ageDays = Math.floor((Date.now() - row.user.createdAt.getTime()) / 86_400_000);
-      const yellow = flagByUser.get(row.userId.toString()) ?? null;
-      out.push({
-        id: row.id.toString(),
+      return {
+        id: row.id,
         userId: row.userId.toString(),
         onixId: formatOnixId(row.user.onixId),
-        amountCents: (-row.amountCents).toString(),
-        amountRub: (Number(-row.amountCents) / 100).toFixed(2),
-        source: row.source,
-        fundKind: row.fundKind,
-        saleKind: row.saleKind,
+        withdrawalLedgerEntryId: row.withdrawalLedgerEntryId.toString(),
+        refundLedgerEntryId: row.refundLedgerEntryId?.toString() ?? null,
+        amountCents: row.amountCents.toString(),
+        amountRub: (Number(row.amountCents) / 100).toFixed(2),
+        currency: row.currency,
+        source: row.withdrawalLedgerEntry.source,
+        fundKind: row.withdrawalLedgerEntry.fundKind,
+        saleKind: row.withdrawalLedgerEntry.saleKind,
         accountAgeDays: ageDays,
-        status: yellow ? 'REVIEW' : 'RECORDED',
-        flag: yellow?.code ?? null,
-        createdAt: row.createdAt.toISOString(),
-        correlationId: row.correlationId,
-        description: row.description,
-      });
-    }
-    return out;
+        status: row.status,
+        provider: row.provider,
+        riskReasons: row.riskReasons,
+        reviewReason: row.reviewReason,
+        destinationFingerprint: row.destinationFingerprint,
+        createdAt: row.requestedAt.toISOString(),
+        reviewedAt: row.reviewedAt?.toISOString() ?? null,
+        correlationId: row.withdrawalLedgerEntry.correlationId,
+        description: row.withdrawalLedgerEntry.description,
+        attempts: row.attempts.map((attempt) => ({
+          id: attempt.id,
+          status: attempt.status,
+          provider: attempt.provider,
+          errorCode: attempt.errorCode,
+          errorMessage: attempt.errorMessage,
+          startedAt: attempt.startedAt.toISOString(),
+          finishedAt: attempt.finishedAt?.toISOString() ?? null,
+        })),
+      };
+    });
+  }
+
+  approvePayout(admin: AdminActor, id: string, reason: string) {
+    return this.payouts.approve(admin, id, reason);
+  }
+
+  rejectPayout(admin: AdminActor, id: string, reason: string) {
+    return this.payouts.reject(admin, id, reason);
+  }
+
+  async riskAnalytics(opts?: { windowHours?: number }) {
+    const requested = opts?.windowHours ?? 168;
+    const windowHours = Number.isFinite(requested)
+      ? Math.min(Math.max(Math.floor(requested), 1), 24 * 90)
+      : 168;
+    const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
+    const [events, reviews] = await Promise.all([
+      this.prisma.securityEvent.findMany({
+        where: { createdAt: { gte: since } },
+        select: { payload: true },
+      }),
+      this.prisma.adminActionLog.findMany({
+        where: {
+          createdAt: { gte: since },
+          action: {
+            in: [
+              'SECURITY_UNLOCK',
+              'SECURITY_REDUCE_RESTRICTIONS',
+              'SECURITY_KEEP_LOCK',
+              'SECURITY_PERMANENT_BAN',
+            ],
+          },
+        },
+        select: { action: true },
+      }),
+    ]);
+    return {
+      windowHours,
+      since: since.toISOString(),
+      ...aggregateRiskAnalytics(events, reviews),
+    };
   }
 
   async listRiskEvents(opts?: { limit?: number }) {

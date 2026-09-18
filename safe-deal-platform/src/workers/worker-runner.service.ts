@@ -15,7 +15,10 @@ import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { ShadowListingJob } from './jobs/shadow-listing.job';
 import { TelegramOutboxJob } from './jobs/telegram-outbox.job';
 import { DisputeSlaJob } from './jobs/dispute-sla.job';
+import { AppealSlaJob } from './jobs/appeal-sla.job';
+import { DisputeDigestJob } from './jobs/dispute-digest.job';
 import { WorkerLockService } from './worker-lock.service';
+import { PayoutProcessingJob } from './jobs/payout-processing.job';
 
 type JobDef = {
   name: string;
@@ -46,6 +49,9 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
     private readonly shadowListing: ShadowListingJob,
     private readonly telegramOutbox: TelegramOutboxJob,
     private readonly disputeSla: DisputeSlaJob,
+    private readonly appealSla: AppealSlaJob,
+    private readonly disputeDigest: DisputeDigestJob,
+    private readonly payoutProcessing: PayoutProcessingJob,
   ) {}
 
   onModuleInit(): void {
@@ -115,6 +121,24 @@ export class WorkerRunnerService implements OnModuleInit, OnModuleDestroy {
         intervalMs: Number(process.env.WORKER_DISPUTE_SLA_MS ?? 300_000),
         leaseTtlMs: 180_000,
         run: () => this.disputeSla.run(),
+      },
+      {
+        name: 'appeal-sla',
+        intervalMs: Number(process.env.WORKER_APPEAL_SLA_MS ?? 600_000),
+        leaseTtlMs: 180_000,
+        run: () => this.appealSla.run(),
+      },
+      {
+        name: 'dispute-digest',
+        intervalMs: Number(process.env.WORKER_DISPUTE_DIGEST_MS ?? 3_600_000),
+        leaseTtlMs: 180_000,
+        run: () => this.disputeDigest.run(),
+      },
+      {
+        name: 'payout-processing',
+        intervalMs: Number(process.env.WORKER_PAYOUT_PROCESSING_MS ?? 60_000),
+        leaseTtlMs: 120_000,
+        run: () => this.payoutProcessing.run(),
       },
     ];
 

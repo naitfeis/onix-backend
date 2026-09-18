@@ -145,7 +145,21 @@ Thresholds: MONITOR ≥ `RISK_MONITOR_SCORE` (25), STEP_UP ≥ `RISK_STEP_UP_SCO
 | `RISK_MONITOR_SCORE` | `25` | MONITOR floor |
 | `RISK_STEP_UP_SCORE` | `50` | STEP_UP floor |
 | `RISK_STEP_UP_ENFORCE` | `true` | Enforce step-up |
+| `RISK_ENFORCEMENT_MODE` | `live` | `live` applies new security locks; explicit `shadow` records queryable would-lock events without mutating lock/ban/hold/session state or blocking the action |
 | `MFA_CHALLENGE_TTL_MS` | `600000` | Telegram MFA challenge TTL (1–60 min) |
+
+### Shadow-mode calibration
+
+Set `RISK_ENFORCEMENT_MODE=shadow` only for a controlled observation window. Existing
+account locks and bans remain enforced; newly proposed locks are stored as
+`SecurityEvent.payload` with `enforcementMode=shadow`, `wouldHaveLocked=true`,
+level, score, factors, event type, and reasons. In Admin → Risk Center, select the
+same recent window and review score buckets, top factors, would-lock volume, and
+human outcomes. `falsePositiveProxy` is explicitly only
+`(UNLOCK + REDUCE_RESTRICTIONS) / all recorded lock review outcomes`; it is not an
+actual false-positive rate. Calibrate thresholds/factor weights, repeat the shadow
+window, then restore `live` after security review. Missing or invalid mode values
+fail closed to `live`.
 
 ## Financial Controls (Slice 4 + 4.1)
 

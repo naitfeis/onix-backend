@@ -886,12 +886,13 @@ export function Profile({
         }
         setAppealBusy(true);
         try {
-          const result = await api.post<{ publicId: string; caseId?: string | null }>(API_PATHS.supportAppeal, {
+          const result = await api.post<{ publicId: string; caseId?: string | null; slaHours?: number }>(API_PATHS.supportAppeal, {
             explanation: text,
           });
           setAppealOpen(false);
           setAppealText('');
-          setToast(`Апелляция ${result.publicId} отправлена.`);
+          const slaNote = result.slaHours ? ` Обычно отвечаем в течение ${result.slaHours} ч.` : '';
+          setToast(`Апелляция ${result.publicId} отправлена.${slaNote}`);
         } catch (error) {
           setToast(friendlyError(error));
         } finally {
@@ -901,6 +902,7 @@ export function Profile({
         <p className="muted">
           {profile.securityLock?.caseId ? `Дело ${profile.securityLock.caseId}. ` : ''}
           Напишите объяснение. Решение примет модератор — аккаунт не будет удалён автоматически.
+          Обычно рассматриваем апелляции в течение 24 ч.
         </p>
         <Field label="Объяснение">
           <Textarea maxLength={2000} value={appealText} onChange={(e) => setAppealText(e.target.value)} />

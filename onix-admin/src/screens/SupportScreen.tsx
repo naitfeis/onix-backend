@@ -14,6 +14,7 @@ type TicketListItem = {
   chatId: string | null;
   reporter: { onixId: string; username?: string | null } | null;
   reportedUser: { onixId: string; username?: string | null; caseId?: string | null; lockLevel?: string | null } | null;
+  claimedBy?: string | null;
 };
 
 type TicketCard = TicketListItem & {
@@ -60,6 +61,41 @@ const CATEGORY_FILTERS = [
   { id: 'BUG', label: 'Ошибка' },
   { id: 'OTHER', label: 'Другое' },
 ];
+
+/** Canned resolution macros — quick-insert into the comment box, editable before sending. */
+const CANNED_MACROS: Array<{ id: string; label: string; text: string }> = [
+  {
+    id: 'need-evidence',
+    label: 'Запросить доказательства',
+    text: 'Пожалуйста, приложите скриншоты переписки/оплаты и опишите, что произошло, по шагам.',
+  },
+  {
+    id: 'reviewing',
+    label: 'Взяли в работу',
+    text: 'Спор/апелляция взяты в работу, изучаем детали. Ответим с решением в ближайшее время.',
+  },
+  {
+    id: 'refund-buyer',
+    label: 'Решено в пользу покупателя',
+    text: 'Рассмотрели обращение: возвращаем средства покупателю. Продавцу отправлено пояснение отдельно.',
+  },
+  {
+    id: 'side-seller',
+    label: 'Решено в пользу продавца',
+    text: 'Рассмотрели обращение: доказательств в пользу возврата недостаточно, сделка завершается в пользу продавца.',
+  },
+  {
+    id: 'unlock-apology',
+    label: 'Снятие ограничения (извинение)',
+    text: 'Извините за неудобства — ограничение снято по итогам проверки, ложное срабатывание автоматики.',
+  },
+];
+
+function appealAgeHours(createdAt: string): number {
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 3_600_000);
+}
+
+const APPEAL_CATEGORIES = new Set(['BAN_APPEAL', 'SELL_BAN_APPEAL']);
 
 export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => void }) {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
@@ -117,15 +153,18 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
     </div>
     {error && <p className="error">{error}</p>}
     <table>
-      <thead><tr><th>Тикет</th><th>Категория</th><th>Статус</th><th>Приоритет</th><th>Кто / на кого</th></tr></thead>
+      <thead><tr><th>Тикет</th><th>Категория</th><th>Статус</th><th>Приоритет</th><th>Кто / на кого</th><th>В работе у</th></tr></thead>
       <tbody>
         {tickets.map((t) => (
           <tr key={t.id} className="click-row" onClick={() => void openCard(t.id)}>
             <td><strong>{t.publicId}</strong><br /><span className="muted">{t.subject || '—'}</span></td>
-            <td>{ruTicketCategory(t.category)}</td>
+            <td>{ruTicketCategory(t.category)}
+              {APPEAL_CATEGORIES.has(t.category) && <><br /><span className="muted">{appealAgeHours(t.createdAt)} ч (SLA 24 ч)</span></>}
+            </td>
             <td>{ruTicketStatus(t.status)}</td>
             <td>{ruPriority(t.priority)}</td>
             <td>{t.reporter?.onixId || 'система'} → {t.reportedUser?.onixId || '—'}</td>
+            <td>{t.claimedBy ? `#${t.claimedBy}` : <span className="muted">свободен</span>}</td>
           </tr>
         ))}
       </tbody>
@@ -135,6 +174,12 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
         <h2>{selected.publicId}</h2>
         <p>Категория: {ruTicketCategory(selected.category)} · Статус: {ruTicketStatus(selected.status)} · Приоритет: {ruPriority(selected.priority)}</p>
         {selected.reportedUser?.caseId && <p>Дело: {selected.reportedUser.caseId}</p>}
+        {APPEAL_CATEGORIES.has(selected.category) && (
+          <p className={appealAgeHours(selected.createdAt) >= 24 ? 'error' : 'muted'}>
+            Апелляция открыта {appealAgeHours(selected.createdAt)} ч (SLA 24 ч — честного продавца нельзя держать в подвешенном состоянии).
+          </p>
+        )}
+        <p>В работе у: {selected.claimedBy ? `#${selected.claimedBy}` : 'никого — возьмите в работу'}</p>
         <p className="muted">{selected.body || '—'}</p>
         <h3>Связанные сущности</h3>
         <ul className="muted">
@@ -163,9 +208,17 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
             <li key={row.id}><span className="muted">{new Date(row.at).toLocaleString()}</span> {row.message}</li>
           ))}
         </ol>
+        <div className="row">
+          {CANNED_MACROS.map((m) => (
+            <button key={m.id} className="ghost" type="button" onClick={() => setComment(m.text)}>{m.label}</button>
+          ))}
+        </div>
         <label>Комментарий / причина<textarea value={comment} onChange={(e) => setComment(e.target.value)} /></label>
         <div className="actions-cell">
           {selected.chatId && <button className="ghost" type="button" onClick={() => onOpenChat(selected.chatId!)}>Чат</button>}
+          {selected.claimedBy
+            ? <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/release`, {})}>Освободить</button>
+            : <button className="primary" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/claim`, {})}>Взять в работу</button>}
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/status`, { status: 'IN_REVIEW', comment })}>В работу</button>
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/status`, { status: 'WAITING_USER', comment })}>Ждать пользователя</button>
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/comment`, { text: comment })}>Комментарий</button>

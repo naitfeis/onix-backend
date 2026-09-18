@@ -270,7 +270,9 @@ export function LotSheet({
             </Button>
           </div>
           <p className="lot-sheet__legal">
-            Нажимая «Купить», вы соглашаетесь с правилами площадки и политикой возвратов.
+            Нажимая «Купить», вы соглашаетесь с{' '}
+            <a href="/rules.html">правилами площадки</a> и{' '}
+            <a href="/rules.html#refund-policy">политикой возвратов</a>.
           </p>
           <p className="lot-sheet__warn">{PAYMENT_WARNING}</p>
           <p className="lot-sheet__warn">{SAFE_NOTE}</p>

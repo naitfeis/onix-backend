@@ -12,6 +12,7 @@ export type ApplyLockInput = {
   level: SecurityLockLevel;
   eventType: string;
   reasons: string[];
+  score?: number;
   related?: {
     orderId?: bigint | null;
     listingId?: string | null;
@@ -129,6 +130,7 @@ export class SecurityLockService {
             kind: 'SECURITY_LOCK',
             level: input.level,
             eventType: input.eventType,
+            score: input.score ?? null,
             reasons: input.reasons,
             related: input.related
               ? {

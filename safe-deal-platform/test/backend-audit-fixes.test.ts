@@ -389,6 +389,7 @@ test('transactional idempotency commits mutation and replay record together', as
   };
   const tx = {
     $queryRaw: async () => [{ pg_advisory_xact_lock: null }],
+    $executeRaw: async () => 1,
     idempotencyRecord: records,
   };
   const prisma = {

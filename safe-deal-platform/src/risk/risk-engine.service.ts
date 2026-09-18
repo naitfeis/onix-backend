@@ -27,11 +27,24 @@ import {
   strongerHit,
 } from './moderation-engine';
 import { SecurityLockService } from './security-lock.service';
+import { appealSlaHours, appealSlaMessage } from '../support-sla.config';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
 const HIGH_SESSION_RISK = 40;
 const HISTORY_LIMIT = 30;
+
+export type RiskEnforcementMode = 'live' | 'shadow';
+
+/**
+ * Fail closed on missing/invalid values so existing production behavior is
+ * preserved. Only an explicit "shadow" disables newly proposed locks.
+ */
+export function riskEnforcementMode(
+  value = process.env.RISK_ENFORCEMENT_MODE,
+): RiskEnforcementMode {
+  return value?.trim().toLowerCase() === 'shadow' ? 'shadow' : 'live';
+}
 
 /**
  * Risk Engine — withdraw + new device/IP (Slice 2) + Telegram MFA step-up (Slice 3).
@@ -358,7 +371,21 @@ export class RiskEngineService {
       await this.writeEvents(db, input.userId, input.sessionId, result.events);
     }
     if (result.action === 'BLOCK') {
-      await this.enforceBlockLock(input.userId, result.factors, result.score, 'WITHDRAW');
+      const enforced = await this.enforceBlockLock(
+        input.userId,
+        result.factors,
+        result.score,
+        'WITHDRAW',
+      );
+      if (!enforced) {
+        return {
+          action: 'MONITOR',
+          score: result.score,
+          factors: result.factors,
+          reason: 'shadow_would_block',
+          level: riskLevel(result.score, result.factors),
+        };
+      }
     }
     if (result.action === 'STEP_UP') {
       if (input.stepUpChallengeId?.trim() && this.mfa) {
@@ -412,8 +439,8 @@ export class RiskEngineService {
     if (result.action === 'BLOCK') {
       throw new AuthPlatformError(
         'AUTH_SECURITY_LOCK',
-        'Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение.',
-        { factors: result.factors, score: result.score },
+        `Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение. ${appealSlaMessage()}`,
+        { factors: result.factors, score: result.score, caseAppeal: true, appealSlaHours: appealSlaHours() },
       );
     }
     return {
@@ -487,8 +514,12 @@ export class RiskEngineService {
     }
     const hit = strongerHit(textHit, spamHit);
     if (!hit) return;
-    await this.applyModerationHit(input.userId, hit, { chatId: input.chatId, textPreview: input.text.slice(0, 180) });
-    if (hit.action === 'BLOCK') {
+    const enforced = await this.applyModerationHit(
+      input.userId,
+      hit,
+      { chatId: input.chatId, textPreview: input.text.slice(0, 180) },
+    );
+    if (hit.action === 'BLOCK' && enforced) {
       throw new AuthPlatformError(
         'AUTH_SECURITY_LOCK',
         'Сообщение заблокировано системой модерации.',
@@ -509,6 +540,7 @@ export class RiskEngineService {
       'LOGIN',
       (decision.events?.[0]?.payload as { reasons?: string[] } | undefined)?.reasons,
       true,
+      decision.factors.includes('SECURITY_LOCK_ACTIVE'),
     );
   }
 
@@ -516,15 +548,22 @@ export class RiskEngineService {
     userId: bigint,
     hit: { type: RiskEventDraft['type']; action: string; reasons: string[] },
     extra: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<boolean> {
     await this.writeEvents(this.prisma, userId, null, [{
       type: hit.type,
       severity: hit.action === 'SECURITY_LOCK' || hit.action === 'BLOCK' ? 90 : 55,
       payload: { kind: 'MODERATION', ...hit, ...extra },
     }]);
     if (hit.action === 'SECURITY_LOCK' || hit.action === 'BLOCK') {
-      await this.enforceBlockLock(userId, ['SUSPICIOUS_FUNDS'], 90, hit.type, hit.reasons);
+      return this.enforceBlockLock(
+        userId,
+        ['SUSPICIOUS_FUNDS'],
+        90,
+        hit.type,
+        hit.reasons,
+      );
     }
+    return false;
   }
 
   private async enforceBlockLock(
@@ -534,26 +573,46 @@ export class RiskEngineService {
     eventType: string,
     extraReasons: string[] = [],
     silent = false,
-  ): Promise<void> {
+    preExistingLock = false,
+  ): Promise<boolean> {
     const reasons = [
       ...extraReasons,
       ...factors.map(String),
       `score=${score}`,
     ];
     const level = score >= 85 || factors.includes('BAN_EVASION' as RiskFactor) ? 'CRITICAL' : 'HIGH';
+    if (riskEnforcementMode() === 'shadow' && !preExistingLock) {
+      await this.writeEvents(this.prisma, userId, null, [{
+        type: factors.includes('BAN_EVASION' as RiskFactor) ? 'BAN_EVASION' : 'SECURITY_LOCK',
+        severity: level === 'CRITICAL' ? 95 : 80,
+        payload: {
+          kind: 'RISK_ENFORCEMENT_SHADOW',
+          enforcementMode: 'shadow',
+          shadowMode: true,
+          wouldHaveLocked: true,
+          wouldHaveLockedLevel: level,
+          score,
+          factors: factors.map(String),
+          eventType,
+          reasons,
+        },
+      }]);
+      return false;
+    }
     if (this.locks) {
       await this.locks.applyLock({
         userId,
         level,
         eventType,
         reasons,
+        score,
       });
     }
-    if (silent) return;
+    if (silent) return true;
     throw new AuthPlatformError(
       'AUTH_SECURITY_LOCK',
-      'Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение.',
-      { factors, score, caseAppeal: true },
+      `Аккаунт временно ограничен из‑за подозрительной активности. Вы можете обжаловать решение. ${appealSlaMessage()}`,
+      { factors, score, caseAppeal: true, appealSlaHours: appealSlaHours() },
     );
   }
 

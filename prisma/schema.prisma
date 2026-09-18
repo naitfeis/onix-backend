@@ -8,64 +8,79 @@ datasource db {
 }
 
 model User {
-  id                BigInt    @id @default(autoincrement())
-  telegramId        BigInt?   @unique
-  onixId            String    @unique @db.VarChar(20)
-  telegramNick      String?   @db.VarChar(64)
-  firstName         String?   @db.VarChar(120)
-  lastName          String?   @db.VarChar(120)
-  languageCode      String?   @db.VarChar(16)
-  displayName       String?   @db.VarChar(120)
-  avatarUrl         String?   @db.VarChar(500)
-  bio               String?   @db.VarChar(500)
-  balanceCents           BigInt    @default(0)
-  /** Deposit wallet — available to withdraw (not usable for purchases). */
-  depositAvailableCents  BigInt    @default(0)
-  /** Deposit wallet — frozen after sales / disputes. */
-  depositLockedCents     BigInt    @default(0)
-  /** Internal Trust Score 0..1000 — never expose on public seller DTOs. */
-  trustScore             Int       @default(0)
-  /** Cached public trust level 1..5 derived from trustScore. */
-  trustLevel             Int       @default(1) @db.SmallInt
-  trustScoreVersion      Int       @default(2)
-  trustComputedAt        DateTime?
-  trustDirty             Boolean   @default(true)
-  ratingAverage          Decimal   @default(0) @db.Decimal(3, 2)
-  ratingCount            Int       @default(0)
-  completedSales         Int       @default(0)
-  sessionVersion         Int       @default(0)
-  permissionVersion      Int       @default(0)
-  securityScore          Int       @default(0)
-  securityScoreAt        DateTime?
-  lastSeenAt             DateTime  @default(now())
-  lastLoginAt            DateTime?
-  isAdmin                Boolean   @default(false)
-  isSupport              Boolean   @default(false)
-  /** Public platform status — default USER; admin assigns others. Syncs isAdmin/isSupport. */
-  platformStatus         PlatformStatus @default(USER)
-  deletedAt              DateTime?
-  banReason              BanReason?
-  banComment             String?   @db.VarChar(1000)
-  bannedAt               DateTime?
-  bannedUntil            DateTime?
-  /** When set, user cannot create/update listings (account still works). */
-  sellBannedAt           DateTime?
-  /** Automatic Risk Engine lock — never deletes the account. */
-  securityLockedAt       DateTime?
-  securityLockLevel      String?   @db.VarChar(16)
-  securityLockReason     String?   @db.VarChar(500)
-  securityCasePublicId   String?   @db.VarChar(32)
-  withdrawBlockedAt      DateTime?
-  suspiciousFundsHoldAt  DateTime?
-  mergedIntoUserId       BigInt?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  id                    BigInt         @id @default(autoincrement())
+  telegramId            BigInt?        @unique
+  onixId                String         @unique @db.VarChar(20)
+  telegramNick          String?        @db.VarChar(64)
+  firstName             String?        @db.VarChar(120)
+  lastName              String?        @db.VarChar(120)
+  languageCode          String?        @db.VarChar(16)
+  displayName           String?        @db.VarChar(120)
+  avatarUrl             String?        @db.VarChar(500)
+  bio                   String?        @db.VarChar(500)
+  balanceCents          BigInt         @default(0)
+  /**
+   * Deposit wallet — available to withdraw (not usable for purchases).
+   */
+  depositAvailableCents BigInt         @default(0)
+  /**
+   * Deposit wallet — frozen after sales / disputes.
+   */
+  depositLockedCents    BigInt         @default(0)
+  /**
+   * Internal Trust Score 0..1000 — never expose on public seller DTOs.
+   */
+  trustScore            Int            @default(0)
+  /**
+   * Cached public trust level 1..5 derived from trustScore.
+   */
+  trustLevel            Int            @default(1) @db.SmallInt
+  trustScoreVersion     Int            @default(2)
+  trustComputedAt       DateTime?
+  trustDirty            Boolean        @default(true)
+  ratingAverage         Decimal        @default(0) @db.Decimal(3, 2)
+  ratingCount           Int            @default(0)
+  completedSales        Int            @default(0)
+  sessionVersion        Int            @default(0)
+  permissionVersion     Int            @default(0)
+  securityScore         Int            @default(0)
+  securityScoreAt       DateTime?
+  lastSeenAt            DateTime       @default(now())
+  lastLoginAt           DateTime?
+  isAdmin               Boolean        @default(false)
+  isSupport             Boolean        @default(false)
+  /**
+   * Public platform status — default USER; admin assigns others. Syncs isAdmin/isSupport.
+   */
+  platformStatus        PlatformStatus @default(USER)
+  deletedAt             DateTime?
+  banReason             BanReason?
+  banComment            String?        @db.VarChar(1000)
+  bannedAt              DateTime?
+  bannedUntil           DateTime?
+  /**
+   * When set, user cannot create/update listings (account still works).
+   */
+  sellBannedAt          DateTime?
+  /**
+   * Automatic Risk Engine lock — never deletes the account.
+   */
+  securityLockedAt      DateTime?
+  securityLockLevel     String?        @db.VarChar(16)
+  securityLockReason    String?        @db.VarChar(500)
+  securityCasePublicId  String?        @db.VarChar(32)
+  withdrawBlockedAt     DateTime?
+  suspiciousFundsHoldAt DateTime?
+  mergedIntoUserId      BigInt?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   products              Product[]
-  buyerOrders           Order[]              @relation("Buyer")
-  sellerOrders          Order[]              @relation("Seller")
+  buyerOrders           Order[]                @relation("Buyer")
+  sellerOrders          Order[]                @relation("Seller")
   ledgerEntries         LedgerEntry[]
-  ledgerEntriesAsActor  LedgerEntry[]        @relation("LedgerActor")
+  ledgerEntriesAsActor  LedgerEntry[]          @relation("LedgerActor")
+  payoutRequests        PayoutRequest[]
   depositLedgerEntries  DepositLedgerEntry[]
   depositLocks          DepositLock[]
   orderClawbacks        OrderClawback[]
@@ -73,27 +88,27 @@ model User {
   trustHistory          TrustHistoryEvent[]
   sellerSubscription    SellerSubscription?
   sellerAnalyticsDaily  SellerAnalyticsDaily[]
-  productViewUniques    ProductViewUnique[]  @relation("ViewViewer")
+  productViewUniques    ProductViewUnique[]    @relation("ViewViewer")
   favorites             Favorite[]
-  userFavoritesMade     UserFavorite[]       @relation("UserFavoritesMade")
-  userFavoritesReceived UserFavorite[]       @relation("UserFavoritesReceived")
-  following             Follow[]             @relation("Following")
-  followers             Follow[]             @relation("Followers")
+  userFavoritesMade     UserFavorite[]         @relation("UserFavoritesMade")
+  userFavoritesReceived UserFavorite[]         @relation("UserFavoritesReceived")
+  following             Follow[]               @relation("Following")
+  followers             Follow[]               @relation("Followers")
   chatMembers           ChatMember[]
   sentMessages          Message[]
-  visibleMessages       Message[]            @relation("MessageVisibleTo")
-  deletedMessages       Message[]            @relation("MessageDeletedBy")
+  visibleMessages       Message[]              @relation("MessageVisibleTo")
+  deletedMessages       Message[]              @relation("MessageDeletedBy")
   messageHides          MessageHide[]
-  blocksMade            UserBlock[]          @relation("Blocker")
-  blocksReceived        UserBlock[]          @relation("Blocked")
+  blocksMade            UserBlock[]            @relation("Blocker")
+  blocksReceived        UserBlock[]            @relation("Blocked")
   notifications         Notification[]
-  reviewsAuthored       Review[]             @relation("ReviewAuthor")
-  reviewsReceived       Review[]             @relation("ReviewSubject")
-  reportsMade           UserReport[]         @relation("ReportAuthor")
-  reportsReceived       UserReport[]         @relation("ReportTarget")
-  auditLogs             AuditLog[]           @relation("AuditActor")
-  supportTickets        SupportTicket[] @relation("TicketOpener")
-  ticketsReported       SupportTicket[] @relation("TicketReported")
+  reviewsAuthored       Review[]               @relation("ReviewAuthor")
+  reviewsReceived       Review[]               @relation("ReviewSubject")
+  reportsMade           UserReport[]           @relation("ReportAuthor")
+  reportsReceived       UserReport[]           @relation("ReportTarget")
+  auditLogs             AuditLog[]             @relation("AuditActor")
+  supportTickets        SupportTicket[]        @relation("TicketOpener")
+  ticketsReported       SupportTicket[]        @relation("TicketReported")
   ticketEvents          SupportTicketEvent[]
   identityLinks         IdentityLink[]
   sessions              Session[]
@@ -109,7 +124,9 @@ model User {
 
 model Product {
   id                 String              @id @default(cuid())
-  /** Public short code ONIXLOT-{lotNumber}. */
+  /**
+   * Public short code ONIXLOT-{lotNumber}.
+   */
   lotNumber          Int                 @unique @default(autoincrement())
   title              String              @db.VarChar(255)
   description        String?             @db.Text
@@ -118,21 +135,25 @@ model Product {
   subcategory        ProductSubcategory?
   quantity           Int                 @default(1)
   status             ProductStatus       @default(ACTIVE)
-  autoDeliver         Boolean             @default(false)
+  autoDeliver        Boolean             @default(false)
   deliveryCiphertext String?             @db.Text
   deliveryIv         String?             @db.VarChar(64)
   deliveryConsumedAt DateTime?
   sellerId           BigInt
   publishedAt        DateTime            @default(now())
   expiresAt          DateTime
-  /** Escrow hold after completion, hours. Default 10. Range 5..720 (30 days). */
+  /**
+   * Escrow hold after completion, hours. Default 10. Range 5..720 (30 days).
+   */
   warrantyHours      Int                 @default(10)
-  /** Hidden from catalog while seller is offline 3+ days. Not a public ban. */
+  /**
+   * Hidden from catalog while seller is offline 3+ days. Not a public ban.
+   */
   shadowBannedAt     DateTime?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  seller      User               @relation(fields: [sellerId], references: [id])
+  seller      User                @relation(fields: [sellerId], references: [id])
   orders      Order[]
   favorites   Favorite[]
   viewUniques ProductViewUnique[]
@@ -171,7 +192,9 @@ model Follow {
   @@index([sellerId])
 }
 
-/** Favorite person (not product) — used by chat «Избранное». */
+/**
+ * Favorite person (not product) — used by chat «Избранное».
+ */
 model UserFavorite {
   userId    BigInt
   targetId  BigInt
@@ -200,16 +223,18 @@ model Order {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  buyer          User               @relation("Buyer", fields: [buyerId], references: [id])
-  seller         User               @relation("Seller", fields: [sellerId], references: [id])
-  product        Product            @relation(fields: [productId], references: [id])
+  buyer          User              @relation("Buyer", fields: [buyerId], references: [id])
+  seller         User              @relation("Seller", fields: [sellerId], references: [id])
+  product        Product           @relation(fields: [productId], references: [id])
   transitions    OrderTransition[]
   ledgerEntries  LedgerEntry[]
   depositLocks   DepositLock[]
   clawback       OrderClawback?
-  /** Personal pair chat shared across all deals between buyer and seller. */
+  /**
+   * Personal pair chat shared across all deals between buyer and seller.
+   */
   chatId         String?
-  chat           Chat?              @relation(fields: [chatId], references: [id])
+  chat           Chat?             @relation(fields: [chatId], references: [id])
   reviews        Review[]
   supportTickets SupportTicket[]
 
@@ -227,17 +252,21 @@ model Order {
  * Ledger never goes negative — remaining debt lives here until recovered/waived.
  */
 model OrderClawback {
-  id              String         @id @default(cuid())
-  orderId         BigInt         @unique
-  sellerId        BigInt
-  /** Total payout that must be recovered from seller. */
-  amountCents     BigInt
-  /** Already recovered via ledger CLAWBACK debits. */
-  recoveredCents  BigInt         @default(0)
-  status          ClawbackStatus @default(OPEN)
-  reason          String?        @db.VarChar(1000)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  orderId        BigInt         @unique
+  sellerId       BigInt
+  /**
+   * Total payout that must be recovered from seller.
+   */
+  amountCents    BigInt
+  /**
+   * Already recovered via ledger CLAWBACK debits.
+   */
+  recoveredCents BigInt         @default(0)
+  status         ClawbackStatus @default(OPEN)
+  reason         String?        @db.VarChar(1000)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   seller User  @relation(fields: [sellerId], references: [id])
@@ -246,7 +275,9 @@ model OrderClawback {
   @@index([status, updatedAt])
 }
 
-/** Pool-safe job lease (advisory-lock equivalent under Prisma connection pooling). */
+/**
+ * Pool-safe job lease (advisory-lock equivalent under Prisma connection pooling).
+ */
 model WorkerJobLease {
   jobName     String   @id @db.VarChar(64)
   holderId    String   @db.VarChar(64)
@@ -277,29 +308,114 @@ model LedgerEntry {
   balanceAfterCents BigInt
   idempotencyKey    String          @unique @db.VarChar(120)
   description       String?         @db.VarChar(500)
-  /** Who initiated the mutation (self, admin, or null for pure system/provider). */
+  /**
+   * Who initiated the mutation (self, admin, or null for pure system/provider).
+   */
   actorUserId       BigInt?
-  /** Origin of the money movement (Slice 4 Financial Controls). */
+  /**
+   * Origin of the money movement (Slice 4 Financial Controls).
+   */
   source            LedgerSource    @default(SYSTEM)
-  /** X-Request-Id or worker-generated correlation id — never tokens. */
+  /**
+   * X-Request-Id or worker-generated correlation id — never tokens.
+   */
   correlationId     String?         @db.VarChar(64)
-  /** Slice 4.1 — economic provenance for withdraw rules. */
+  /**
+   * Slice 4.1 — economic provenance for withdraw rules.
+   */
   fundKind          LedgerFundKind  @default(SYSTEM)
-  /** Set when fundKind = SALE_PROCEEDS (ACCOUNT vs OTHER digital goods). */
+  /**
+   * Set when fundKind = SALE_PROCEEDS (ACCOUNT vs OTHER digital goods).
+   */
   saleKind          LedgerSaleKind?
   createdAt         DateTime        @default(now())
   user              User            @relation(fields: [userId], references: [id])
   order             Order?          @relation(fields: [orderId], references: [id])
   actor             User?           @relation("LedgerActor", fields: [actorUserId], references: [id])
+  payoutWithdrawal  PayoutRequest?  @relation("PayoutWithdrawal")
+  payoutRefundFor   PayoutRequest?  @relation("PayoutRefund")
 
   @@index([userId, createdAt])
   @@index([userId, type, createdAt])
   @@index([userId, fundKind, createdAt])
 }
 
+enum PayoutRequestStatus {
+  REQUESTED
+  RISK_REVIEW
+  APPROVED
+  PROCESSING
+  PAID
+  FAILED
+  REJECTED
+  MANUAL_REVIEW
+}
+
+enum PayoutAttemptStatus {
+  STARTED
+  SUBMITTED
+  FAILED
+  MANUAL_REVIEW
+}
+
+enum PayoutProviderCode {
+  MANUAL
+}
+
+model PayoutRequest {
+  id                      String              @id @default(cuid())
+  userId                  BigInt
+  withdrawalLedgerEntryId BigInt              @unique
+  refundLedgerEntryId     BigInt?             @unique
+  requestKey              String              @unique @db.VarChar(120)
+  status                  PayoutRequestStatus @default(REQUESTED)
+  provider                PayoutProviderCode  @default(MANUAL)
+  amountCents             BigInt
+  currency                String              @default("RUB") @db.VarChar(8)
+  /**
+   * One-way identifier only. Never store raw card/bank destination details.
+   */
+  destinationFingerprint  String?             @db.VarChar(128)
+  riskReasons             Json?
+  reviewReason            String?             @db.VarChar(1000)
+  requestedAt             DateTime            @default(now())
+  reviewedAt              DateTime?
+  processingStartedAt     DateTime?
+  paidAt                  DateTime?
+  failedAt                DateTime?
+  rejectedAt              DateTime?
+  updatedAt               DateTime            @updatedAt
+  user                    User                @relation(fields: [userId], references: [id])
+  withdrawalLedgerEntry   LedgerEntry         @relation("PayoutWithdrawal", fields: [withdrawalLedgerEntryId], references: [id])
+  refundLedgerEntry       LedgerEntry?        @relation("PayoutRefund", fields: [refundLedgerEntryId], references: [id])
+  attempts                PayoutAttempt[]
+
+  @@index([status, requestedAt])
+  @@index([userId, requestedAt])
+}
+
+model PayoutAttempt {
+  id                String              @id @default(cuid())
+  payoutRequestId   String
+  provider          PayoutProviderCode
+  status            PayoutAttemptStatus @default(STARTED)
+  attemptKey        String              @unique @db.VarChar(120)
+  providerReference String?             @db.VarChar(191)
+  errorCode         String?             @db.VarChar(64)
+  errorMessage      String?             @db.VarChar(1000)
+  startedAt         DateTime            @default(now())
+  finishedAt        DateTime?
+  payoutRequest     PayoutRequest       @relation(fields: [payoutRequestId], references: [id], onDelete: Cascade)
+
+  @@index([payoutRequestId, startedAt])
+  @@index([status, startedAt])
+}
+
 model Chat {
   id        String          @id @default(cuid())
-  /** Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. `ai:{userId}` for ONIX AI. */
+  /**
+   * Stable pair key `d:{minUserId}:{maxUserId}` — one personal chat per user pair. `ai:{userId}` for ONIX AI.
+   */
   pairKey   String?         @unique @db.VarChar(64)
   kind      ChatKind        @default(DIRECT)
   title     String?         @db.VarChar(120)
@@ -323,29 +439,37 @@ model ChatMember {
 
   @@id([chatId, userId])
   @@index([userId])
-  /** Chat list: memberships by user ordered via Chat.updatedAt join. */
+  /**
+   * Chat list: memberships by user ordered via Chat.updatedAt join.
+   */
   @@index([userId, createdAt])
 }
 
 model Message {
-  id              BigInt      @id @default(autoincrement())
+  id              BigInt        @id @default(autoincrement())
   chatId          String
   senderId        BigInt?
-  /** When set, only this user (buyer) can read the message — used for auto-delivery secrets. */
+  /**
+   * When set, only this user (buyer) can read the message — used for auto-delivery secrets.
+   */
   visibleToUserId BigInt?
-  kind            MessageKind @default(USER)
-  text            String      @db.VarChar(4500)
-  createdAt       DateTime    @default(now())
-  /** Soft global delete — row kept for admin audit. */
+  kind            MessageKind   @default(USER)
+  text            String        @db.VarChar(4500)
+  createdAt       DateTime      @default(now())
+  /**
+   * Soft global delete — row kept for admin audit.
+   */
   deletedAt       DateTime?
   deletedById     BigInt?
-  deletedReason   String?     @db.VarChar(500)
-  /** True when removed for everyone (not just MessageHide for one user). */
-  deletedForAll   Boolean     @default(false)
-  chat            Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender          User?       @relation(fields: [senderId], references: [id])
-  deletedBy       User?       @relation("MessageDeletedBy", fields: [deletedById], references: [id])
-  visibleTo       User?       @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
+  deletedReason   String?       @db.VarChar(500)
+  /**
+   * True when removed for everyone (not just MessageHide for one user).
+   */
+  deletedForAll   Boolean       @default(false)
+  chat            Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender          User?         @relation(fields: [senderId], references: [id])
+  deletedBy       User?         @relation("MessageDeletedBy", fields: [deletedById], references: [id])
+  visibleTo       User?         @relation("MessageVisibleTo", fields: [visibleToUserId], references: [id])
   hides           MessageHide[]
 
   @@index([chatId, createdAt]) // history: WHERE chatId ORDER BY createdAt
@@ -354,7 +478,9 @@ model Message {
   @@index([deletedAt])
 }
 
-/** Per-user hide ("удалить у себя") — message stays for peers / admin. */
+/**
+ * Per-user hide ("удалить у себя") — message stays for peers / admin.
+ */
 model MessageHide {
   messageId BigInt
   userId    BigInt
@@ -372,7 +498,9 @@ model UserReport {
   targetId   BigInt
   reason     BanReason
   comment    String    @db.VarChar(1000)
-  /** USER = complaint about a person; AI_SUPPORT = message from ONIX AI support widget. */
+  /**
+   * USER = complaint about a person; AI_SUPPORT = message from ONIX AI support widget.
+   */
   kind       String    @default("USER") @db.VarChar(20)
   adminReply String?   @db.VarChar(2000)
   repliedAt  DateTime?
@@ -392,8 +520,8 @@ model UserReport {
 }
 
 model SupportTicket {
-  id                     String                 @id @default(cuid())
-  publicNumber           Int                    @unique @default(autoincrement())
+  id                     String                @id @default(cuid())
+  publicNumber           Int                   @unique @default(autoincrement())
   orderId                BigInt?
   chatId                 String?
   openedById             BigInt?
@@ -401,18 +529,18 @@ model SupportTicket {
   relatedListingId       String?
   relatedRiskEventId     BigInt?
   relatedSecurityEventId BigInt?
-  status                 SupportTicketStatus    @default(OPEN)
-  category               SupportTicketCategory  @default(OTHER)
-  priority               SupportTicketPriority  @default(MEDIUM)
-  subject                String?                @db.VarChar(240)
-  body                   String?                @db.Text
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
+  status                 SupportTicketStatus   @default(OPEN)
+  category               SupportTicketCategory @default(OTHER)
+  priority               SupportTicketPriority @default(MEDIUM)
+  subject                String?               @db.VarChar(240)
+  body                   String?               @db.Text
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
   closedAt               DateTime?
-  order                  Order?                 @relation(fields: [orderId], references: [id])
-  chat                   Chat?                  @relation(fields: [chatId], references: [id])
-  openedBy               User?                  @relation("TicketOpener", fields: [openedById], references: [id])
-  reportedUser           User?                  @relation("TicketReported", fields: [reportedUserId], references: [id])
+  order                  Order?                @relation(fields: [orderId], references: [id])
+  chat                   Chat?                 @relation(fields: [chatId], references: [id])
+  openedBy               User?                 @relation("TicketOpener", fields: [openedById], references: [id])
+  reportedUser           User?                 @relation("TicketReported", fields: [reportedUserId], references: [id])
   events                 SupportTicketEvent[]
 
   @@index([orderId, status])
@@ -424,16 +552,16 @@ model SupportTicket {
 }
 
 model SupportTicketEvent {
-  id          String        @id @default(cuid())
-  ticketId    String
-  kind        String        @db.VarChar(64)
-  message     String        @db.VarChar(1000)
-  actorUserId BigInt?
+  id           String        @id @default(cuid())
+  ticketId     String
+  kind         String        @db.VarChar(64)
+  message      String        @db.VarChar(1000)
+  actorUserId  BigInt?
   actorAdminId BigInt?
-  payload     Json?
-  createdAt   DateTime      @default(now())
-  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  actorUser   User?         @relation(fields: [actorUserId], references: [id])
+  payload      Json?
+  createdAt    DateTime      @default(now())
+  ticket       SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorUser    User?         @relation(fields: [actorUserId], references: [id])
 
   @@index([ticketId, createdAt])
 }
@@ -451,35 +579,37 @@ model UserBlock {
 }
 
 model Notification {
-  id        BigInt           @id @default(autoincrement())
-  userId    BigInt
-  type      NotificationType
-  title     String           @db.VarChar(160)
-  body      String           @db.VarChar(500)
-  data      Json?
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
-  /** Null = Telegram outbox pending. Set after Bot API success or when user has no telegramId. */
+  id               BigInt           @id @default(autoincrement())
+  userId           BigInt
+  type             NotificationType
+  title            String           @db.VarChar(160)
+  body             String           @db.VarChar(500)
+  data             Json?
+  readAt           DateTime?
+  createdAt        DateTime         @default(now())
+  /**
+   * Null = Telegram outbox pending. Set after Bot API success or when user has no telegramId.
+   */
   telegramPushedAt DateTime?
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
   @@index([telegramPushedAt, createdAt])
 }
 
 model Review {
-  id           BigInt    @id @default(autoincrement())
+  id           BigInt       @id @default(autoincrement())
   orderId      BigInt
   authorId     BigInt
   subjectId    BigInt
   rating       Int
-  text         String?   @db.VarChar(1000)
+  text         String?      @db.VarChar(1000)
   hiddenAt     DateTime?
-  hiddenReason String?   @db.VarChar(20)
-  createdAt    DateTime  @default(now())
-  order        Order     @relation(fields: [orderId], references: [id])
-  author       User      @relation("ReviewAuthor", fields: [authorId], references: [id])
-  subject      User      @relation("ReviewSubject", fields: [subjectId], references: [id])
+  hiddenReason String?      @db.VarChar(20)
+  createdAt    DateTime     @default(now())
+  order        Order        @relation(fields: [orderId], references: [id])
+  author       User         @relation("ReviewAuthor", fields: [authorId], references: [id])
+  subject      User         @relation("ReviewSubject", fields: [subjectId], references: [id])
   reports      UserReport[]
 
   @@unique([orderId, authorId])
@@ -584,21 +714,23 @@ enum SellerSubscriptionStatus {
 
 /// Provider-agnostic top-up intent. Business code never talks to PSP SDKs directly.
 model PaymentIntent {
-  id             String               @id @default(cuid())
+  id             String              @id @default(cuid())
   userId         BigInt
   wallet         PaymentWallet
   provider       PaymentProviderCode
   amountCents    BigInt
-  currency       String               @default("RUB") @db.VarChar(8)
-  status         PaymentIntentStatus  @default(CREATED)
-  idempotencyKey String               @unique @db.VarChar(120)
-  /** PSP payment id — unique per provider when set (webhook correlation). */
-  providerRef    String?              @db.VarChar(191)
+  currency       String              @default("RUB") @db.VarChar(8)
+  status         PaymentIntentStatus @default(CREATED)
+  idempotencyKey String              @unique @db.VarChar(120)
+  /**
+   * PSP payment id — unique per provider when set (webhook correlation).
+   */
+  providerRef    String?             @db.VarChar(191)
   metadata       Json?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
   succeededAt    DateTime?
-  user           User                 @relation(fields: [userId], references: [id])
+  user           User                @relation(fields: [userId], references: [id])
 
   @@unique([provider, providerRef])
   @@index([userId, status, createdAt])
@@ -606,19 +738,19 @@ model PaymentIntent {
 }
 
 model DepositLedgerEntry {
-  id                 BigInt            @id @default(autoincrement())
-  userId             BigInt
-  type               DepositLedgerType
-  amountCents        BigInt
+  id                  BigInt            @id @default(autoincrement())
+  userId              BigInt
+  type                DepositLedgerType
+  amountCents         BigInt
   availableAfterCents BigInt
-  lockedAfterCents   BigInt
-  orderId            BigInt?
-  lockId             String?
-  paymentIntentId    String?           @db.VarChar(64)
-  idempotencyKey     String            @unique @db.VarChar(120)
-  description        String?           @db.VarChar(500)
-  createdAt          DateTime          @default(now())
-  user               User              @relation(fields: [userId], references: [id])
+  lockedAfterCents    BigInt
+  orderId             BigInt?
+  lockId              String?
+  paymentIntentId     String?           @db.VarChar(64)
+  idempotencyKey      String            @unique @db.VarChar(120)
+  description         String?           @db.VarChar(500)
+  createdAt           DateTime          @default(now())
+  user                User              @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
   @@index([orderId])
@@ -672,15 +804,15 @@ model SellerSubscription {
 
 /// Unique product view — one row per (product, viewerKey). Foundation for Stage 2 analytics.
 model ProductViewUnique {
-  id         String   @id @default(cuid())
-  productId  String
-  sellerId   BigInt
-  viewerKey  String   @db.VarChar(96)
+  id           String   @id @default(cuid())
+  productId    String
+  sellerId     BigInt
+  viewerKey    String   @db.VarChar(96)
   viewerUserId BigInt?
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  viewer     User?    @relation("ViewViewer", fields: [viewerUserId], references: [id], onDelete: SetNull)
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewer       User?    @relation("ViewViewer", fields: [viewerUserId], references: [id], onDelete: SetNull)
 
   @@unique([productId, viewerKey])
   @@index([sellerId, firstSeenAt])
@@ -689,21 +821,21 @@ model ProductViewUnique {
 
 /// Daily seller analytics rollup (Stage 2 UI reads this; Stage 1 creates schema only).
 model SellerAnalyticsDaily {
-  id                 String   @id @default(cuid())
-  sellerId           BigInt
-  day                DateTime @db.Date
-  revenueCents       BigInt   @default(0)
-  profitCents        BigInt   @default(0)
-  ordersCount        Int      @default(0)
-  completedCount     Int      @default(0)
-  uniqueViews        Int      @default(0)
-  favoritesAdded     Int      @default(0)
-  repeatBuyers       Int      @default(0)
-  impressions        Int      @default(0)
-  clicks             Int      @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  seller             User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  sellerId       BigInt
+  day            DateTime @db.Date
+  revenueCents   BigInt   @default(0)
+  profitCents    BigInt   @default(0)
+  ordersCount    Int      @default(0)
+  completedCount Int      @default(0)
+  uniqueViews    Int      @default(0)
+  favoritesAdded Int      @default(0)
+  repeatBuyers   Int      @default(0)
+  impressions    Int      @default(0)
+  clicks         Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  seller         User     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
   @@unique([sellerId, day])
   @@index([sellerId, day])
@@ -779,6 +911,7 @@ enum SecurityEventType {
   HIGH_RISK_THRESHOLD
   CLAWBACK_DEBT
   DISPUTE_SLA_BREACH
+  APPEAL_SLA_BREACH
 }
 
 enum AbuseMarkerKind {
@@ -851,7 +984,7 @@ model Session {
   id                  String               @id @default(cuid())
   userId              BigInt
   familyId            String               @db.VarChar(64)
-  clientType          String               @db.VarChar(32) @default("WEB")
+  clientType          String               @default("WEB") @db.VarChar(32)
   refreshGeneration   Int                  @default(0)
   refreshTokenHash    String               @unique @db.VarChar(64)
   previousRefreshHash String?              @db.VarChar(64)
@@ -1026,11 +1159,17 @@ model MfaChallenge {
   userId    BigInt
   sessionId String?
   method    MfaMethod
-  /** PENDING | CONFIRMED | CONSUMED | CANCELED | EXPIRED | FAILED */
+  /**
+   * PENDING | CONFIRMED | CONSUMED | CANCELED | EXPIRED | FAILED
+   */
   status    String    @db.VarChar(32)
-  /** e.g. WITHDRAW — binds challenge to a high-risk action */
+  /**
+   * e.g. WITHDRAW — binds challenge to a high-risk action
+   */
   purpose   String    @default("WITHDRAW") @db.VarChar(64)
-  /** Non-secret context (amountCents, score) — never tokens */
+  /**
+   * Non-secret context (amountCents, score) — never tokens
+   */
   metadata  Json?
   expiresAt DateTime
   createdAt DateTime  @default(now())
@@ -1041,14 +1180,14 @@ model MfaChallenge {
 }
 
 model SigningKey {
-  id           String           @id @default(cuid())
-  kid          String           @unique @db.VarChar(64)
-  algorithm    String           @db.VarChar(32) @default("EdDSA")
-  publicKey    String           @db.Text
-  privateKeyRef String          @db.VarChar(255)
-  status       SigningKeyStatus @default(CURRENT)
-  activatedAt  DateTime         @default(now())
-  retiredAt    DateTime?
+  id            String           @id @default(cuid())
+  kid           String           @unique @db.VarChar(64)
+  algorithm     String           @default("EdDSA") @db.VarChar(32)
+  publicKey     String           @db.Text
+  privateKeyRef String           @db.VarChar(255)
+  status        SigningKeyStatus @default(CURRENT)
+  activatedAt   DateTime         @default(now())
+  retiredAt     DateTime?
 }
 
 model AccountMergeRequest {
@@ -1082,26 +1221,26 @@ model IdempotencyRecord {
 
 /// Ephemeral Website Telegram bot-login challenge (not a Session; not an ONIX User).
 model LoginChallenge {
-  id                      String               @id @default(cuid())
-  nonce                   String               @unique @db.VarChar(64)
-  browserFingerprintHash  String?              @db.VarChar(64)
-  loginSessionId          String               @db.VarChar(64)
-  status                  LoginChallengeStatus @default(CREATED)
-  expiresAt               DateTime
-  telegramId              BigInt?
-  telegramUsername        String?              @db.VarChar(64)
-  telegramFirstName       String?              @db.VarChar(120)
-  telegramLastName        String?              @db.VarChar(120)
-  telegramPhotoUrl        String?              @db.VarChar(500)
-  confirmedAt             DateTime?
-  consumedAt              DateTime?
-  exchangeCodeHash        String?              @unique @db.VarChar(64)
-  exchangeExpiresAt       DateTime?
-  createdIp               String?              @db.VarChar(64)
-  createdUserAgent        String?              @db.VarChar(512)
-  telegramChatId          BigInt?
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
+  id                     String               @id @default(cuid())
+  nonce                  String               @unique @db.VarChar(64)
+  browserFingerprintHash String?              @db.VarChar(64)
+  loginSessionId         String               @db.VarChar(64)
+  status                 LoginChallengeStatus @default(CREATED)
+  expiresAt              DateTime
+  telegramId             BigInt?
+  telegramUsername       String?              @db.VarChar(64)
+  telegramFirstName      String?              @db.VarChar(120)
+  telegramLastName       String?              @db.VarChar(120)
+  telegramPhotoUrl       String?              @db.VarChar(500)
+  confirmedAt            DateTime?
+  consumedAt             DateTime?
+  exchangeCodeHash       String?              @unique @db.VarChar(64)
+  exchangeExpiresAt      DateTime?
+  createdIp              String?              @db.VarChar(64)
+  createdUserAgent       String?              @db.VarChar(512)
+  telegramChatId         BigInt?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
 
   @@index([loginSessionId, status])
   @@index([status, expiresAt])
@@ -1270,13 +1409,17 @@ enum SupportTicketPriority {
   CRITICAL
 }
 
-/** Public account status (everyone starts as USER). */
+/**
+ * Public account status (everyone starts as USER).
+ */
 enum PlatformStatus {
   USER
   VERIFIED_SELLER
   MODERATOR
   ADMIN
-  /** Bootstrap / root admin — only this role may grant or revoke ADMIN. */
+  /**
+   * Bootstrap / root admin — only this role may grant or revoke ADMIN.
+   */
   SUPER_ADMIN
   VIP
 }
@@ -1314,16 +1457,25 @@ enum LedgerEntryType {
   REFUND
   SALE_PAYOUT
   ADMIN_ADJUSTMENT
-  /** Post-COMPLETED seller recovery (OrderClawback). */
+  /**
+   * Post-COMPLETED seller recovery (OrderClawback).
+   */
   CLAWBACK
   WITHDRAWAL
-  /** Main balance → deposit wallet */
+  WITHDRAWAL_REVERSAL
+  /**
+   * Main balance → deposit wallet
+   */
   DEPOSIT_FUND
-  /** Deposit wallet → main balance */
+  /**
+   * Deposit wallet → main balance
+   */
   DEPOSIT_RETURN
 }
 
-/** Slice 4 — who/what originated a ledger write. */
+/**
+ * Slice 4 — who/what originated a ledger write.
+ */
 enum LedgerSource {
   USER
   ADMIN
@@ -1333,14 +1485,18 @@ enum LedgerSource {
   AI
 }
 
-/** Slice 4.1 — economic provenance of credited funds. */
+/**
+ * Slice 4.1 — economic provenance of credited funds.
+ */
 enum LedgerFundKind {
   USER_OWNED
   SALE_PROCEEDS
   SYSTEM
 }
 
-/** Slice 4.1 — sale subcategory class for SALE_PROCEEDS. */
+/**
+ * Slice 4.1 — sale subcategory class for SALE_PROCEEDS.
+ */
 enum LedgerSaleKind {
   ACCOUNT
   OTHER
@@ -1354,7 +1510,9 @@ enum NotificationType {
   SYSTEM
 }
 
-/** Slice 6 — separate admin plane roles (not customer PlatformStatus). */
+/**
+ * Slice 6 — separate admin plane roles (not customer PlatformStatus).
+ */
 enum AdminRole {
   SUPER_ADMIN
   SECURITY_ADMIN
@@ -1363,14 +1521,16 @@ enum AdminRole {
 }
 
 model AdminUser {
-  id            BigInt             @id @default(autoincrement())
-  email         String             @unique @db.VarChar(191)
-  passwordHash  String             @db.VarChar(255)
+  id            BigInt              @id @default(autoincrement())
+  email         String              @unique @db.VarChar(191)
+  passwordHash  String              @db.VarChar(255)
   role          AdminRole
-  /** Optional Telegram id for MFA code delivery via bot. */
-  telegramId    BigInt?            @unique
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  /**
+   * Optional Telegram id for MFA code delivery via bot.
+   */
+  telegramId    BigInt?             @unique
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   lastLoginAt   DateTime?
   sessions      AdminSession[]
   mfaChallenges AdminMfaChallenge[]
@@ -1392,28 +1552,28 @@ model AdminTrustedIp {
 }
 
 model AdminSession {
-  id               String     @id @default(cuid())
+  id               String    @id @default(cuid())
   adminUserId      BigInt
-  refreshTokenHash String     @unique @db.VarChar(64)
-  ipHash           String?    @db.VarChar(64)
-  userAgent        String?    @db.VarChar(512)
-  createdAt        DateTime   @default(now())
+  refreshTokenHash String    @unique @db.VarChar(64)
+  ipHash           String?   @db.VarChar(64)
+  userAgent        String?   @db.VarChar(512)
+  createdAt        DateTime  @default(now())
   expiresAt        DateTime
   revokedAt        DateTime?
-  adminUser        AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUser        AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([adminUserId, revokedAt])
   @@index([expiresAt])
 }
 
 model AdminMfaChallenge {
-  id          String     @id @default(cuid())
+  id          String    @id @default(cuid())
   adminUserId BigInt
-  codeHash    String     @db.VarChar(64)
+  codeHash    String    @db.VarChar(64)
   expiresAt   DateTime
   consumedAt  DateTime?
-  createdAt   DateTime   @default(now())
-  adminUser   AdminUser  @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
 
   @@index([adminUserId, expiresAt])
 }
@@ -1424,7 +1584,9 @@ model AdminActionLog {
   action       String    @db.VarChar(64)
   targetType   String?   @db.VarChar(64)
   targetId     String?   @db.VarChar(64)
-  /** Non-secret context only — never passwords/tokens/PEM. */
+  /**
+   * Non-secret context only — never passwords/tokens/PEM.
+   */
   metadataJson Json?
   createdAt    DateTime  @default(now())
   adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)

@@ -8,7 +8,7 @@ import {
   RISK_WEIGHT,
   scoreFactors,
 } from '../src/risk/risk-engine.scoring';
-import { RiskEngineService } from '../src/risk/risk-engine.service';
+import { RiskEngineService, riskEnforcementMode } from '../src/risk/risk-engine.service';
 import type { RiskFactor } from '../src/risk/risk-engine.types';
 
 test('scoreFactors sums unique weights and caps at 100', () => {
@@ -158,4 +158,153 @@ test('assertWithdrawAllowed: STEP_UP throws AUTH_STEP_UP_REQUIRED', async () => 
 test('locale/timezone change does not change withdraw score without other factors', async () => {
   // Scoring unit: CONTEXT_SHIFT weight alone is below MONITOR
   assert.ok(RISK_WEIGHT.CONTEXT_SHIFT < 25);
+});
+
+test('RISK_ENFORCEMENT_MODE defaults invalid values to live', () => {
+  assert.equal(riskEnforcementMode(undefined), 'live');
+  assert.equal(riskEnforcementMode('unexpected'), 'live');
+  assert.equal(riskEnforcementMode(' SHADOW '), 'shadow');
+});
+
+test('shadow lock writes queryable event without applyLock or user-facing throw', async () => {
+  const previous = process.env.RISK_ENFORCEMENT_MODE;
+  process.env.RISK_ENFORCEMENT_MODE = 'shadow';
+  const events: any[] = [];
+  let applyCalls = 0;
+  const prisma = {
+    securityEvent: {
+      create: async ({ data }: { data: unknown }) => {
+        events.push(data);
+        return data;
+      },
+    },
+  };
+  const locks = {
+    applyLock: async () => { applyCalls += 1; },
+  };
+  const engine = new RiskEngineService(prisma as never, undefined, locks as never);
+  const enforce = engine as unknown as {
+    enforceBlockLock(
+      userId: bigint,
+      factors: RiskFactor[],
+      score: number,
+      eventType: string,
+    ): Promise<boolean>;
+  };
+  try {
+    assert.equal(await enforce.enforceBlockLock(1n, ['BAN_EVASION'], 95, 'LOGIN'), false);
+    assert.equal(applyCalls, 0);
+    assert.equal(events.length, 1);
+    assert.deepEqual(events[0].payload, {
+      kind: 'RISK_ENFORCEMENT_SHADOW',
+      enforcementMode: 'shadow',
+      shadowMode: true,
+      wouldHaveLocked: true,
+      wouldHaveLockedLevel: 'CRITICAL',
+      score: 95,
+      factors: ['BAN_EVASION'],
+      eventType: 'LOGIN',
+      reasons: ['BAN_EVASION', 'score=95'],
+    });
+  } finally {
+    if (previous === undefined) delete process.env.RISK_ENFORCEMENT_MODE;
+    else process.env.RISK_ENFORCEMENT_MODE = previous;
+  }
+});
+
+test('live lock calls applyLock and throws user-facing block', async () => {
+  const previous = process.env.RISK_ENFORCEMENT_MODE;
+  process.env.RISK_ENFORCEMENT_MODE = 'live';
+  let applyCalls = 0;
+  const locks = {
+    applyLock: async () => {
+      applyCalls += 1;
+      return { locked: true };
+    },
+  };
+  const engine = new RiskEngineService({} as never, undefined, locks as never);
+  const enforce = engine as unknown as {
+    enforceBlockLock(
+      userId: bigint,
+      factors: RiskFactor[],
+      score: number,
+      eventType: string,
+    ): Promise<boolean>;
+  };
+  try {
+    await assert.rejects(
+      () => enforce.enforceBlockLock(1n, ['BAN_EVASION'], 95, 'LOGIN'),
+      (error: unknown) => error instanceof AuthPlatformError && error.code === 'AUTH_SECURITY_LOCK',
+    );
+    assert.equal(applyCalls, 1);
+  } finally {
+    if (previous === undefined) delete process.env.RISK_ENFORCEMENT_MODE;
+    else process.env.RISK_ENFORCEMENT_MODE = previous;
+  }
+});
+
+test('shadow mode still enforces a pre-existing security lock before evaluation', async () => {
+  const previous = process.env.RISK_ENFORCEMENT_MODE;
+  process.env.RISK_ENFORCEMENT_MODE = 'shadow';
+  let evaluated = false;
+  const existingLock = new AuthPlatformError('AUTH_SECURITY_LOCK', 'already locked');
+  const engine = new RiskEngineService(
+    {} as never,
+    undefined,
+    {
+      assertNotLocked: async () => { throw existingLock; },
+    } as never,
+  );
+  const original = engine.evaluateWithdraw.bind(engine);
+  engine.evaluateWithdraw = async (...args) => {
+    evaluated = true;
+    return original(...args);
+  };
+  try {
+    await assert.rejects(
+      () => engine.assertWithdrawAllowed({ userId: 1n, amountCents: 100n }),
+      (error: unknown) => error === existingLock,
+    );
+    assert.equal(evaluated, false);
+  } finally {
+    if (previous === undefined) delete process.env.RISK_ENFORCEMENT_MODE;
+    else process.env.RISK_ENFORCEMENT_MODE = previous;
+  }
+});
+
+test('shadow login re-applies an already-active lock instead of shadowing it', async () => {
+  const previous = process.env.RISK_ENFORCEMENT_MODE;
+  process.env.RISK_ENFORCEMENT_MODE = 'shadow';
+  let applyCalls = 0;
+  let eventCalls = 0;
+  const engine = new RiskEngineService(
+    {
+      securityEvent: {
+        create: async () => {
+          eventCalls += 1;
+          return {};
+        },
+      },
+    } as never,
+    undefined,
+    {
+      applyLock: async () => {
+        applyCalls += 1;
+        return { locked: true };
+      },
+    } as never,
+  );
+  try {
+    await engine.maybeLockAfterLogin(1n, {
+      action: 'BLOCK',
+      score: 90,
+      factors: ['SECURITY_LOCK_ACTIVE'],
+      reason: 'already_locked',
+    });
+    assert.equal(applyCalls, 1);
+    assert.equal(eventCalls, 0);
+  } finally {
+    if (previous === undefined) delete process.env.RISK_ENFORCEMENT_MODE;
+    else process.env.RISK_ENFORCEMENT_MODE = previous;
+  }
 });

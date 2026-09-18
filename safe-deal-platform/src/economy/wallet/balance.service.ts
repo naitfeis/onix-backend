@@ -53,7 +53,7 @@ export class BalanceService {
     tx: Tx,
     userId: bigint,
     amountCents: bigint,
-    type: 'DEPOSIT' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_RETURN',
+    type: 'DEPOSIT' | 'REFUND' | 'SALE_PAYOUT' | 'ADMIN_ADJUSTMENT' | 'DEPOSIT_RETURN' | 'WITHDRAWAL_REVERSAL',
     opts: LedgerWriteMeta,
   ) {
     if (amountCents <= 0n) throw new BadRequestException('Сумма зачисления должна быть положительной.');

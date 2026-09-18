@@ -24,6 +24,23 @@ export function isRetryableTransactionConflict(error: unknown): boolean {
   return false;
 }
 
+// Prisma's built-in defaults (maxWait=2000ms to acquire a connection/BEGIN, timeout=5000ms
+// for the whole interactive transaction) assume a low-latency, co-located database. Against a
+// remote serverless Postgres (Neon: pooler cold starts, cross-region round trips, or a burst of
+// concurrent requests serializing on the same advisory lock/row) that budget is routinely too
+// tight and surfaces as "Transaction API error: Unable to start a transaction in the given
+// time." even though nothing is actually deadlocked — only found by testing real concurrency
+// against a real network-attached Postgres instead of an in-memory/mocked client.
+function maxWaitMs(): number {
+  const v = Number(process.env.DB_TX_MAX_WAIT_MS ?? 8_000);
+  return Number.isFinite(v) && v > 0 ? v : 8_000;
+}
+
+function timeoutMs(): number {
+  const v = Number(process.env.DB_TX_TIMEOUT_MS ?? 10_000);
+  return Number.isFinite(v) && v > 0 ? v : 10_000;
+}
+
 export async function withSerializableTransaction<T>(
   prisma: Pick<PrismaService, '$transaction'>,
   execute: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -34,6 +51,8 @@ export async function withSerializableTransaction<T>(
     try {
       return await prisma.$transaction(execute, {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: maxWaitMs(),
+        timeout: timeoutMs(),
       });
     } catch (error) {
       if (attempt >= attempts || !isRetryableTransactionConflict(error)) throw error;

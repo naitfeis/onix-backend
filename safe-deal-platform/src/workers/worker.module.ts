@@ -14,8 +14,11 @@ import { SecurityIpRetentionJob } from './jobs/security-ip-retention.job';
 import { ShadowListingJob } from './jobs/shadow-listing.job';
 import { TelegramOutboxJob } from './jobs/telegram-outbox.job';
 import { DisputeSlaJob } from './jobs/dispute-sla.job';
+import { AppealSlaJob } from './jobs/appeal-sla.job';
+import { DisputeDigestJob } from './jobs/dispute-digest.job';
 import { WorkerLockService } from './worker-lock.service';
 import { WorkerRunnerService } from './worker-runner.service';
+import { PayoutProcessingJob } from './jobs/payout-processing.job';
 
 /**
  * Background worker process — no HTTP controllers, no AuthGuard.
@@ -36,6 +39,9 @@ import { WorkerRunnerService } from './worker-runner.service';
     ShadowListingJob,
     TelegramOutboxJob,
     DisputeSlaJob,
+    AppealSlaJob,
+    DisputeDigestJob,
+    PayoutProcessingJob,
     WorkerRunnerService,
   ],
 })

@@ -1,6 +1,6 @@
 /**
  * Realtime event contracts — HTTP remains source of truth; WS only fans out.
- * Single-node in-memory bus (Render WEB_CONCURRENCY=1).
+ * Local delivery uses the in-process bus; Redis coordinates cross-instance delivery.
  */
 
 export type RealtimeClientMessage =

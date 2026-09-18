@@ -14,6 +14,9 @@ import { DepositService } from './wallet/deposit.service';
 import { LockService } from './wallet/lock.service';
 import { WalletEconomyService } from './wallet/wallet-economy.service';
 import { WithdrawVelocityService } from './wallet/withdraw-velocity';
+import { ManualPayoutProvider } from './payouts/manual-payout.provider';
+import { PayoutService } from './payouts/payout.service';
+import { PAYOUT_PROVIDER } from './payouts/payout-provider';
 
 @Module({
   imports: [forwardRef(() => EscrowModule)],
@@ -32,6 +35,9 @@ import { WithdrawVelocityService } from './wallet/withdraw-velocity';
     ProSubscriptionService,
     AnalyticsFoundationService,
     SellerAnalyticsService,
+    ManualPayoutProvider,
+    { provide: PAYOUT_PROVIDER, useExisting: ManualPayoutProvider },
+    PayoutService,
   ],
   exports: [
     BalanceService,
@@ -44,6 +50,9 @@ import { WithdrawVelocityService } from './wallet/withdraw-velocity';
     AnalyticsFoundationService,
     SellerAnalyticsService,
     WithdrawVelocityService,
+    ManualPayoutProvider,
+    PAYOUT_PROVIDER,
+    PayoutService,
   ],
 })
 export class EconomyModule {}

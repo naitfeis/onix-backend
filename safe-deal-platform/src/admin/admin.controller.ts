@@ -54,6 +54,10 @@ class AdminChatReplyDto {
   @IsString() @Length(1, 4000) text!: string;
 }
 
+class PayoutDecisionDto {
+  @IsString() @Length(1, 1000) reason!: string;
+}
+
 /**
  * Slice 6 Security Operations Console APIs.
  * Customer JWT rejected by AdminAccessGuard (typ must be admin_access).
@@ -495,6 +499,32 @@ export class AdminPlaneController {
     return { withdrawals: rows };
   }
 
+  @Post('withdrawals/:id/approve')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  approveWithdrawal(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: PayoutDecisionDto,
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
+    return this.security.approvePayout(admin, id, body.reason);
+  }
+
+  @Post('withdrawals/:id/reject')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.FINANCE_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  rejectWithdrawal(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: PayoutDecisionDto,
+    @Req() req: Request,
+  ) {
+    assertDangerousAdminIp(req);
+    return this.security.rejectPayout(admin, id, body.reason);
+  }
+
   @Get('risk/events')
   @Header('Cache-Control', 'no-store')
   @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
@@ -510,6 +540,26 @@ export class AdminPlaneController {
       metadata: { count: events.length },
     });
     return { events };
+  }
+
+  @Get('risk/analytics')
+  @Header('Cache-Control', 'no-store')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  async riskAnalytics(
+    @CurrentAdmin() admin: AdminActor,
+    @Query('windowHours') windowHours?: string,
+  ) {
+    const data = await this.security.riskAnalytics({
+      windowHours: windowHours ? Number(windowHours) : 168,
+    });
+    await this.security.logAction(admin, 'ADMIN_RISK_ANALYTICS', {
+      metadata: {
+        windowHours: data.windowHours,
+        eventDenominator: data.eventDenominator,
+      },
+    });
+    return data;
   }
 
   @Get('risk/center')
@@ -577,5 +627,24 @@ export class AdminPlaneController {
     @Body() body: { decision: 'KEEP_LOCK' | 'UNLOCK' | 'REDUCE_RESTRICTIONS' | 'PERMANENT_BAN'; reason?: string },
   ) {
     return this.tickets.decideLock(admin, id, body.decision, body.reason);
+  }
+
+  /**
+   * "Взять в работу" — prevents two admins from duplicating effort on the same
+   * ticket once a second reviewer exists. Logged as a SupportTicketEvent, no
+   * schema change: current owner = latest CLAIMED/UNCLAIMED event.
+   */
+  @Post('support/tickets/:id/claim')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  claimTicket(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    return this.tickets.claimTicket(admin, id);
+  }
+
+  @Post('support/tickets/:id/release')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SUPPORT_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  releaseTicket(@CurrentAdmin() admin: AdminActor, @Param('id') id: string) {
+    return this.tickets.releaseTicket(admin, id);
   }
 }

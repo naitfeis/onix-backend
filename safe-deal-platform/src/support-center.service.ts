@@ -5,8 +5,10 @@ import { assertOrderResolvedForTicketClose } from './support-ticket-guard';
 import { formatTicketPublicId, SecurityLockService } from './risk/security-lock.service';
 import type { AdminActor } from './admin/admin-session.service';
 import { formatOnixId } from './onix-id';
+import { appealSlaHours } from './support-sla.config';
 
 const TICKET_STATUSES: SupportTicketStatus[] = ['OPEN', 'IN_REVIEW', 'WAITING_USER', 'RESOLVED', 'CLOSED'];
+type SupportTicketDb = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class SupportCenterService {
@@ -96,6 +98,7 @@ export class SupportCenterService {
         publicId: formatTicketPublicId(existing.publicNumber),
         caseId: user.securityCasePublicId,
         status: 'IN_REVIEW' as const,
+        slaHours: appealSlaHours(),
       };
     }
     const ticket = await this.createTicket({
@@ -114,7 +117,67 @@ export class SupportCenterService {
       publicId: formatTicketPublicId(ticket.publicNumber),
       caseId: user.securityCasePublicId,
       status: ticket.status,
+      slaHours: appealSlaHours(),
     };
+  }
+
+  /** "Take ticket" for a shared queue — logged as an event, no schema change needed. */
+  async claimTicket(actor: AdminActor, ticketId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "SupportTicket" WHERE "id" = ${ticketId} FOR UPDATE`;
+      const ticket = await tx.supportTicket.findUnique({ where: { id: ticketId } });
+      if (!ticket) throw new NotFoundException('Тикет не найден.');
+      const current = await this.currentClaim(tx, ticketId);
+      if (current && current.adminId !== actor.id.toString()) {
+        throw new BadRequestException(`Тикет уже взят в работу (${current.adminId}).`);
+      }
+      await tx.supportTicketEvent.create({
+        data: { ticketId, kind: 'CLAIMED', actorAdminId: actor.id, message: 'Взято в работу' },
+      });
+      return { ticketId, claimedBy: actor.id.toString() };
+    });
+  }
+
+  async releaseTicket(actor: AdminActor, ticketId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "SupportTicket" WHERE "id" = ${ticketId} FOR UPDATE`;
+      const ticket = await tx.supportTicket.findUnique({ where: { id: ticketId } });
+      if (!ticket) throw new NotFoundException('Тикет не найден.');
+      await tx.supportTicketEvent.create({
+        data: { ticketId, kind: 'UNCLAIMED', actorAdminId: actor.id, message: 'Возвращено в очередь' },
+      });
+      return { ticketId, claimedBy: null };
+    });
+  }
+
+  /** Latest CLAIMED/UNCLAIMED event decides current owner — null once UNCLAIMED. */
+  private async currentClaim(db: SupportTicketDb, ticketId: string): Promise<{ adminId: string } | null> {
+    const last = await db.supportTicketEvent.findFirst({
+      where: { ticketId, kind: { in: ['CLAIMED', 'UNCLAIMED'] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { kind: true, actorAdminId: true },
+    });
+    if (!last || last.kind !== 'CLAIMED' || !last.actorAdminId) return null;
+    return { adminId: last.actorAdminId.toString() };
+  }
+
+  private async claimsFor(ticketIds: string[]): Promise<Map<string, string>> {
+    if (ticketIds.length === 0) return new Map();
+    const events = await this.prisma.supportTicketEvent.findMany({
+      where: { ticketId: { in: ticketIds }, kind: { in: ['CLAIMED', 'UNCLAIMED'] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { ticketId: true, kind: true, actorAdminId: true },
+    });
+    const claims = new Map<string, string>();
+    const seen = new Set<string>();
+    for (const event of events) {
+      if (seen.has(event.ticketId)) continue;
+      seen.add(event.ticketId);
+      if (event.kind === 'CLAIMED' && event.actorAdminId) {
+        claims.set(event.ticketId, event.actorAdminId.toString());
+      }
+    }
+    return claims;
   }
 
   async listTickets(opts: {
@@ -142,7 +205,8 @@ export class SupportCenterService {
         order: { select: { id: true, status: true } },
       },
     });
-    return rows.map((row) => serializeTicketListItem(row));
+    const claims = await this.claimsFor(rows.map((row) => row.id));
+    return rows.map((row) => ({ ...serializeTicketListItem(row), claimedBy: claims.get(row.id) ?? null }));
   }
 
   async listMine(userId: bigint) {
@@ -176,6 +240,7 @@ export class SupportCenterService {
       },
     });
     if (!ticket) throw new NotFoundException('Тикет не найден.');
+    const claim = await this.currentClaim(this.prisma, id);
 
     const userId = ticket.reportedUserId ?? ticket.openedById;
     const [riskEvents, ledger, identities, sessions] = userId
@@ -210,6 +275,7 @@ export class SupportCenterService {
     return {
       ...serializeTicketListItem(ticket),
       body: ticket.body,
+      claimedBy: claim?.adminId ?? null,
       related: {
         order: ticket.order
           ? { id: ticket.order.id.toString(), status: ticket.order.status, listingId: ticket.order.product?.id, listingTitle: ticket.order.product?.title }

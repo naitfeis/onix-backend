@@ -35,6 +35,7 @@ import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
 import { CoordinationModule } from './coordination/coordination.module';
 import { SharedCoordinationService } from './coordination/shared-coordination.service';
+import { PayoutService } from './economy/payouts/payout.service';
 
 class BalanceDto {
   @IsString() @Matches(/^-?[1-9]\d*$/) amountCents!: string;
@@ -64,6 +65,7 @@ class OperationsService {
     private readonly clawbacks: ClawbackService,
     private readonly idempotency: IdempotencyService,
     private readonly withdrawVelocity: WithdrawVelocityService,
+    private readonly payouts: PayoutService,
   ) {}
 
   async adjust(actor: AuthUser, onixId: string, dto: BalanceDto, correlationId?: string) {
@@ -407,14 +409,16 @@ class OperationsService {
     // Idempotency claim + debit are one Serializable TX.
     // Concurrent withdraws with *different* keys still serialize on the same user via
     // pg_advisory_xact_lock(wallet.user:{id}) + User FOR UPDATE + balanceCents >= amount.
-    const ledgerKey = `wallet.withdraw:${user.id}:${dto.idempotencyKey}`.slice(0, 128);
+    const ledgerKey = `wallet.withdraw:${user.id}:${dto.idempotencyKey}`.slice(0, 120);
     const result = await this.idempotency.runTransactional(
       'wallet.withdraw',
       dto.idempotencyKey,
       { userId: user.id.toString(), amountCents: dto.amountCents },
       async (tx) => {
         // Serialize all wallet.withdraw money ops for this user (not just same idempotency key).
-        await tx.$queryRaw`
+        // pg_advisory_xact_lock returns void — must use $executeRaw, not $queryRaw, or Prisma
+        // throws "Failed to deserialize column of type 'void'" on a real Postgres connection.
+        await tx.$executeRaw`
           SELECT pg_advisory_xact_lock(hashtextextended(${`wallet.user:${user.id}`}, 0))
         `;
         await lockUsersInIdOrder(tx, [user.id]);
@@ -426,6 +430,8 @@ class OperationsService {
             withdrawBlockedAt: true,
             securityLockedAt: true,
             suspiciousFundsHoldAt: true,
+            securityScore: true,
+            createdAt: true,
           },
         });
         if (live.deletedAt) {
@@ -471,6 +477,17 @@ class OperationsService {
           source: 'USER',
           correlationId: corr,
         });
+        const payout = await this.payouts.createForWithdrawal(tx, {
+          userId: user.id,
+          amountCents: amount,
+          withdrawalLedgerEntryId: entry.id,
+          requestKey: ledgerKey,
+          accountCreatedAt: live.createdAt,
+          securityScore: live.securityScore,
+          withdrawBlocked: Boolean(live.withdrawBlockedAt),
+          securityLocked: Boolean(live.securityLockedAt),
+          suspiciousFundsHold: Boolean(live.suspiciousFundsHoldAt),
+        });
         await tx.auditLog.create({
           data: {
             actorId: user.id,
@@ -481,6 +498,9 @@ class OperationsService {
               amountCents: dto.amountCents,
               idempotencyKey: dto.idempotencyKey,
               ledgerIdempotencyKey: ledgerKey,
+              payoutRequestId: payout.id,
+              payoutStatus: payout.status,
+              payoutRiskReasons: payout.riskReasons,
               correlationId: corr,
             },
           },
@@ -490,6 +510,9 @@ class OperationsService {
           amountCents: entry.amountCents.toString(),
           balanceAfterCents: entry.balanceAfterCents.toString(),
           type: entry.type,
+          payoutRequestId: payout.id,
+          payoutStatus: payout.status,
+          payoutRiskReasons: payout.riskReasons,
         };
       },
       { userId: user.id },

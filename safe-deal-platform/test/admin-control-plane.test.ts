@@ -1,6 +1,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AdminSecurityService } from '../src/admin/admin-security.service';
+import {
+  AdminSecurityService,
+  aggregateRiskAnalytics,
+} from '../src/admin/admin-security.service';
+
+test('risk analytics reports buckets, factors, shadow locks, and proxy denominator', () => {
+  const analytics = aggregateRiskAnalytics([
+    { payload: { score: 10, factors: ['NEW_IP'] } },
+    {
+      payload: {
+        score: 90,
+        factors: ['BAN_EVASION', 'NEW_IP'],
+        enforcementMode: 'shadow',
+        wouldHaveLocked: true,
+        wouldHaveLockedLevel: 'CRITICAL',
+      },
+    },
+    { payload: { factors: ['NEW_DEVICE'] } },
+  ], [
+    { action: 'SECURITY_UNLOCK' },
+    { action: 'SECURITY_REDUCE_RESTRICTIONS' },
+    { action: 'SECURITY_KEEP_LOCK' },
+    { action: 'SECURITY_PERMANENT_BAN' },
+  ]);
+
+  assert.equal(analytics.eventDenominator, 3);
+  assert.equal(analytics.scoreDenominator, 2);
+  assert.equal(analytics.scoreBuckets.find((bucket) => bucket.label === '0-24')?.count, 1);
+  assert.equal(analytics.scoreBuckets.find((bucket) => bucket.label === '85-100')?.count, 1);
+  assert.deepEqual(analytics.factorCounts, { NEW_IP: 2, BAN_EVASION: 1, NEW_DEVICE: 1 });
+  assert.deepEqual(analytics.wouldLock, { count: 1, byLevel: { CRITICAL: 1 } });
+  assert.equal(analytics.falsePositiveProxy.label, 'falsePositiveProxy');
+  assert.equal(analytics.falsePositiveProxy.numerator, 2);
+  assert.equal(analytics.falsePositiveProxy.denominator, 4);
+  assert.equal(analytics.falsePositiveProxy.rate, 0.5);
+  assert.match(analytics.falsePositiveProxy.definition, /not an actual false-positive rate/i);
+});
 
 test('global message moderation writes immutable admin audit entry', async () => {
   let updated: unknown;

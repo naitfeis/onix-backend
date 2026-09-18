@@ -35,6 +35,20 @@ function toJsonValue(value: unknown): Prisma.InputJsonValue {
 }
 
 /**
+ * Deterministic signed 64-bit advisory-lock id for pg_advisory_xact_lock(bigint).
+ *
+ * Hashed entirely in JS (never sent to Postgres as a text parameter) so the lock id
+ * can never trip PostgreSQL's UTF8 validation — unlike joining route+key with a
+ * literal separator character and hashing server-side via hashtextextended(text, ...),
+ * which fails with "invalid byte sequence for encoding UTF8: 0x00" the moment any
+ * separator collides with byte 0x00, or any route/key legitimately contains one.
+ */
+function lockIdFor(route: string, idKey: string): bigint {
+  const digest = createHash('sha256').update(`${route}\u0001${idKey}`, 'utf8').digest();
+  return digest.readBigInt64BE(0);
+}
+
+/**
  * Generic idempotency for external side-effects (PSP webhooks, payouts, Telegram callbacks).
  * Uses existing IdempotencyRecord (unique key+route). scope maps to `route`.
  */
@@ -163,10 +177,13 @@ export class IdempotencyService {
     const idKey = opts?.userId
       ? `${opts.userId.toString()}:${rawKey}`.slice(0, 128)
       : rawKey;
-    const lockKey = `${route}\u0000${idKey}`;
+    const lockId = lockIdFor(route, idKey);
 
     const result = await withSerializableTransaction(this.prisma, async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      // pg_advisory_xact_lock returns void; $executeRaw skips Prisma's row deserialization,
+      // which otherwise fails on real Postgres with "Failed to deserialize column of type
+      // 'void'" (only surfaced by real-DB tests — in-memory/mocked Prisma never executes this).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockId})`;
       const existing = await tx.idempotencyRecord.findUnique({
         where: { key_route: { key: idKey, route } },
       });
