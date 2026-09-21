@@ -156,7 +156,7 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
       <thead><tr><th>Тикет</th><th>Категория</th><th>Статус</th><th>Приоритет</th><th>Кто / на кого</th><th>В работе у</th></tr></thead>
       <tbody>
         {tickets.map((t) => (
-          <tr key={t.id} className="click-row" onClick={() => void openCard(t.id)}>
+          <tr key={t.id} className="click-row" tabIndex={0} role="button" onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') void openCard(t.id); }} onClick={() => void openCard(t.id)}>
             <td><strong>{t.publicId}</strong><br /><span className="muted">{t.subject || '—'}</span></td>
             <td>{ruTicketCategory(t.category)}
               {APPEAL_CATEGORIES.has(t.category) && <><br /><span className="muted">{appealAgeHours(t.createdAt)} ч (SLA 24 ч)</span></>}

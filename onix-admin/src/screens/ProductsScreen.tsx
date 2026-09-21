@@ -131,7 +131,7 @@ export function ProductsScreen({
         </thead>
         <tbody>
           {products.map((product) => (
-            <tr key={product.id} className="click-row" onClick={() => void openLot(product.id)}>
+            <tr key={product.id} className="click-row" tabIndex={0} role="button" onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') void openLot(product.id); }} onClick={() => void openLot(product.id)}>
               <td>
                 <button className="link-button" type="button" onClick={(ev) => { ev.stopPropagation(); void openLot(product.id); }}>
                   ONIXLOT-{product.lotNumber}

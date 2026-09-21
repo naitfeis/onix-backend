@@ -128,7 +128,7 @@ export function RiskEventsScreen({ onOpenUser }: { onOpenUser?: (onixId: string)
         </thead>
         <tbody>
           {(data?.events ?? []).map((e) => (
-            <tr key={e.id} className="click-row" onClick={() => setOpenId(e.id)}>
+            <tr key={e.id} className="click-row" tabIndex={0} role="button" onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') setOpenId(e.id); }} onClick={() => setOpenId(e.id)}>
               <td>{e.user?.onixId || '—'}</td>
               <td>{ruRiskLevel(e.level)} ({e.severity})</td>
               <td>{ruRiskType(e.type)}</td>

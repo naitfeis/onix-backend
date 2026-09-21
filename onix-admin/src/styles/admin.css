@@ -78,3 +78,18 @@ button.danger { background: var(--danger); color: #fff; border: 0; border-radius
 }
 .chat-bubble.system { opacity: 0.85; }
 .chat-bubble p { margin: 0.2rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+
+/* Consistent keyboard focus and touch-friendly controls. */
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+.link-button:focus-visible, .click-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+button:disabled { cursor: not-allowed; opacity: 0.62; }
+@media (max-width: 760px) {
+  .admin-main { min-width: 0; }
+  input, select, textarea { min-width: 0; width: 100%; }
+  .row > label { flex: 1 1 180px; }
+  .actions-cell { min-width: 0; }
+}

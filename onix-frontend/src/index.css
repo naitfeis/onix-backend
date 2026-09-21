@@ -47,19 +47,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
   outline-offset: 3px;
 }
 
-/* No purple ring while typing — text fields keep native caret only. */
-input:focus,
+/* Keep a clear focus indicator for keyboard and switch-device users. */
 input:focus-visible,
-textarea:focus,
 textarea:focus-visible,
-select:focus,
 select:focus-visible,
-.control:focus,
 .control:focus-visible,
-[contenteditable="true"]:focus,
 [contenteditable="true"]:focus-visible {
-  outline: none !important;
-  outline-offset: 0 !important;
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }

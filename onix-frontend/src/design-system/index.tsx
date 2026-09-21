@@ -86,6 +86,7 @@ export function Select({
   const selected = options.find((o) => o.value === current) ?? options[0];
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export function Select({
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
     };
     document.addEventListener('pointerdown', onPointer);
     document.addEventListener('keydown', onKey);
@@ -172,6 +173,8 @@ export function Modal({ open, title, children, onClose, size = 'default' }: {
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const panelRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
   // Stack modals via --z-modal + depth (no magic 2100).
   const [zIndex, setZIndex] = useState(() => {
     const base = Number.parseInt(
@@ -186,13 +189,20 @@ export function Modal({ open, title, children, onClose, size = 'default' }: {
 
   useEffect(() => {
     if (!open) return;
+    restoreFocusRef.current = document.activeElement as HTMLElement;
     const { id, depth } = pushModal(() => onCloseRef.current());
     const base = Number.parseInt(
       getComputedStyle(document.documentElement).getPropertyValue('--z-modal').trim(),
       10,
     ) || 1100;
     setZIndex(base + depth * 10);
-    return () => popModal(id);
+    return () => { popModal(id); restoreFocusRef.current?.focus(); restoreFocusRef.current = null; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => panelRef.current?.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus(), 0);
+    return () => window.clearTimeout(timer);
   }, [open]);
 
   if (!open || typeof document === 'undefined') return null;
@@ -213,6 +223,7 @@ export function Modal({ open, title, children, onClose, size = 'default' }: {
     >
       <div
         className={`modal__panel${size === 'wide' ? ' modal__panel--wide' : ''}`}
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
