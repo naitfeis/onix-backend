@@ -8,15 +8,40 @@ export const LOT_PAY_FEE_BPS: Record<LotPayMethod, number> = {
 
 export const LOT_PAY_METHODS: LotPayMethod[] = ['BALANCE', 'SBP', 'CARD'];
 
-export function lotPayMethodMeta(method: LotPayMethod): {
+/**
+ * Availability comes from GET /api/payments/methods — see api/paymentMethods.ts.
+ * Balance is always live: it never touches a PSP.
+ */
+export type LotPayAvailability = { sbp: boolean; card: boolean };
+
+export const BALANCE_ONLY_AVAILABILITY: LotPayAvailability = { sbp: false, card: false };
+
+export function isPayMethodLive(
+  method: LotPayMethod,
+  availability: LotPayAvailability,
+): boolean {
+  if (method === 'SBP') return availability.sbp === true;
+  if (method === 'CARD') return availability.card === true;
+  return true;
+}
+
+export function lotPayMethodMeta(
+  method: LotPayMethod,
+  availability: LotPayAvailability = BALANCE_ONLY_AVAILABILITY,
+): {
   title: string;
   hint: string;
   icon: 'onix' | 'sbp' | 'card';
   live: boolean;
 } {
-  if (method === 'SBP') return { title: 'СБП', hint: 'Сбор 1% с остатка', icon: 'sbp', live: true };
-  if (method === 'CARD') return { title: 'Банковская карта', hint: 'Сбор 4% с остатка', icon: 'card', live: true };
-  return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: 'onix', live: true };
+  const live = isPayMethodLive(method, availability);
+  if (method === 'SBP') {
+    return { title: 'СБП', hint: live ? 'Сбор 1% с остатка' : 'Скоро', icon: 'sbp', live };
+  }
+  if (method === 'CARD') {
+    return { title: 'Банковская карта', hint: live ? 'Сбор 4% с остатка' : 'Скоро', icon: 'card', live };
+  }
+  return { title: 'Баланс ONIX', hint: 'Рекомендуемый способ', icon: 'onix', live };
 }
 
 export function parseCents(value: string | number | null | undefined): number {
@@ -46,21 +71,28 @@ export function quoteLotCheckout(priceCents: number, balanceCents: number, metho
   };
 }
 
-export function lotPayMethodLabel(method: LotPayMethod): string {
-  return lotPayMethodMeta(method).title;
+export function lotPayMethodLabel(
+  method: LotPayMethod,
+  availability: LotPayAvailability = BALANCE_ONLY_AVAILABILITY,
+): string {
+  return lotPayMethodMeta(method, availability).title;
 }
 
 /** Lot name for checkout. Empty title falls back to the short description. */
 export function lotDisplayTitle(product: { title?: string | null; description?: string | null }): string {
   const title = product.title?.trim();
   if (title) return title;
-  const plain = (product.description ?? '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const line = plain.split(/\n/)[0]?.trim();
-  if (line) return line.slice(0, 80);
-  return 'Лот';
+  // Take the first LINE before collapsing whitespace — descriptions often read
+  // «1000 рублей по логину стим\nдетали», and the checkout header must show
+  // only the price line, not the whole blurb.
+  const plain = (product.description ?? '').replace(/<[^>]+>/g, ' ');
+  const firstLine = plain
+    .split(/\r?\n/)
+    .map((row) => row.replace(/\s+/g, ' ').trim())
+    .find((row) => row.length > 0);
+  if (firstLine) return firstLine.slice(0, 80);
+  const collapsed = plain.replace(/\s+/g, ' ').trim();
+  return collapsed ? collapsed.slice(0, 80) : 'Лот';
 }
 
 /** Short blurb under the title — never an empty field. */

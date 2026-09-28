@@ -35,7 +35,7 @@ export function matchCategorySearch(raw: string): Cat | undefined {
   }
   const norm = text.toLowerCase().replace(/\s+/g, ' ');
   for (const key of CATEGORIES) {
-    const label = CATEGORY_LABELS[key].toLowerCase();
+    const label = (CATEGORY_LABELS[key] ?? key).toLowerCase();
     const keyWords = key.toLowerCase().replace(/_/g, ' ');
     if (
       label === norm

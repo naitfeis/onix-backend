@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
-import { api, ApiError, friendlyError, money } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
-  API_PATHS, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
+  API_PATHS, formatLastSeen, formatLedgerAmount, ledgerTypeLabel, sellerIsPresent,
   type Product, type ProductDraft, type PublicProfile, type WalletOperation,
 } from '../api/contracts';
 import { isTelegramMiniApp } from '../auth/telegramEnv';
@@ -21,6 +21,8 @@ import { publicAt } from '../utils/publicAt';
 import { validateDraft } from '../utils/productValidation';
 import { parseRublesToCents } from '../utils/moneyCents';
 import type { Core, Screen } from './types';
+import { mfaModalHint, mfaStatusLabel, pollMfaStatus } from './withdrawFlow';
+import { mfaCanRetryWithdraw, type MfaChallengeStatus } from '../api/contracts';
 import PaymentCheckout from './PaymentCheckout';
 import { ProductLotCard } from './ProductLotCard';
 import { PublicProfileModal, StaffBadge, emptyDraft, staffBadgeFromRoles } from './shared';
@@ -44,6 +46,8 @@ type StepUpState = {
   webDeepLink?: string;
   expiresAt?: string;
   amountCents: number;
+  /** Snapshot: the retry must reuse the exact key of the attempt that asked for MFA. */
+  idempotencyKey: string;
 };
 
 function rublesToCents(rubles: string | number): number {
@@ -253,9 +257,9 @@ export function EditProduct({ product, core, onClose, setToast }: { product: Pro
     {draft.autoDeliver && <Field label="Текст товара" hint={editing?.autoDeliver ? 'Оставьте пустым, чтобы сохранить текущий секрет. Новый текст заменит старый.' : 'login / password / код — выдаётся один раз после оплаты'}>
       <Textarea maxLength={4000} value={draft.deliveryText || ''} onChange={event => setDraft({ ...draft, deliveryText: event.target.value })} />
     </Field>}
-    <div className="modal__actions"><Button type="button" variant="danger" busy={core.actionBusy === `archive-${editing?.id}`} onClick={async () => {
+    <div className="modal__actions"><Button type="button" variant="danger" busy={core.isBusy(`archive-${editing?.id}`)} onClick={async () => {
       if (editing && await core.archiveProduct(editing.id)) { setToast('Лот снят с публикации.'); onClose(); }
-    }}>Снять</Button><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.actionBusy === 'product-form'}>Сохранить</Button></div>
+    }}>Снять</Button><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.isBusy('product-form')}>Сохранить</Button></div>
   </form></Modal>;
 }
 
@@ -308,19 +312,33 @@ export function Profile({
   const [appealText, setAppealText] = useState('');
   const [appealBusy, setAppealBusy] = useState(false);
   const [stepUp, setStepUp] = useState<StepUpState | null>(null);
-  const [stepUpStatus, setStepUpStatus] = useState<string>('PENDING');
+  const [stepUpStatus, setStepUpStatus] = useState<MfaChallengeStatus | null>('PENDING');
   const showWebsiteLogout = useMemo(() => !isTelegramMiniApp(), []);
   const PAGE = 15;
   const profile = core.profile;
   const deposit = profile?.deposit ?? null;
   const ownerTrust = profile?.trustCard ?? null;
+  /**
+   * Own presence is derived like everyone else's — the hardcoded "Online"
+   * stayed visible even when the realtime socket was down.
+   */
+  const ownPresenceLabel = profile
+    ? (core.presenceOf(profile.onixId)?.online ? 'Online' : formatLastSeen(core.presenceOf(profile.onixId)?.lastOnline ?? profile.lastOnline))
+    : '';
 
+  // Seed the ledger from the embedded walletHistory only when that array itself
+  // changes. Depending on the whole `profile` object reset the paged history on
+  // every loadProfile() (presence beat, withdraw, top-up), collapsing the list
+  // back to page 1 while the user was scrolling.
+  const seededHistoryRef = useRef<WalletOperation[] | null>(null);
+  const embeddedHistory = profile?.walletHistory ?? null;
   useEffect(() => {
-    if (section !== 'overview' || !profile) return;
-    const first = profile.walletHistory ?? [];
-    setWalletHistory(first);
-    setHistoryHasMore(first.length >= PAGE);
-  }, [section, profile]);
+    if (section !== 'overview' || !embeddedHistory) return;
+    if (seededHistoryRef.current === embeddedHistory) return;
+    seededHistoryRef.current = embeddedHistory;
+    setWalletHistory(embeddedHistory);
+    setHistoryHasMore(embeddedHistory.length >= PAGE);
+  }, [section, embeddedHistory]);
 
   useEffect(() => {
     if (section !== 'listings' || !core.profile) return;
@@ -382,11 +400,13 @@ export function Profile({
     }
   };
 
+  const { listFavorites } = core;
+  const hasProfile = profile !== null;
   useEffect(() => {
-    if (section !== 'favorites' || !core.profile) return;
+    if (section !== 'favorites' || !hasProfile) return;
     let cancelled = false;
     setFavoritesState('loading');
-    void core.listFavorites().then((rows) => {
+    void listFavorites().then((rows) => {
       if (cancelled) return;
       setFavoriteProducts(rows);
       setFavoritesState('success');
@@ -396,7 +416,7 @@ export function Profile({
       setFavoritesState('error');
     });
     return () => { cancelled = true; };
-  }, [core.listFavorites, core.profile, section]);
+  }, [listFavorites, hasProfile, section]);
 
   const openMoney = (kind: Exclude<MoneyModal, null>) => {
     setAmount('');
@@ -411,45 +431,62 @@ export function Profile({
     onTopupConsumed?.();
   }, [openTopup, core.profile, onTopupConsumed]);
 
+  // Step-up polling: stops on every backend-terminal status (CONFIRMED,
+  // CONSUMED, CANCELED, EXPIRED, FAILED) — see screens/withdrawFlow.ts.
   useEffect(() => {
     if (!stepUp) return;
-    let cancelled = false;
-    let intervalId = 0;
-    const stop = () => {
-      if (intervalId) window.clearInterval(intervalId);
-      intervalId = 0;
-    };
-    const tick = async () => {
-      try {
-        const row = await api.get<{ status: string }>(API_PATHS.mfaStatus(stepUp.challengeId));
-        if (cancelled) return;
-        setStepUpStatus(row.status);
-        if (row.status === 'VERIFIED' || row.status === 'EXPIRED' || row.status === 'CANCELED' || row.status === 'FAILED') {
-          stop();
-        }
-      } catch {
-        /* keep polling */
-      }
-    };
-    void tick();
-    intervalId = window.setInterval(() => void tick(), 2500);
-    return () => {
-      cancelled = true;
-      stop();
-    };
+    const controller = new AbortController();
+    void pollMfaStatus(
+      stepUp.challengeId,
+      (challengeId) => api.get<{ status: string }>(API_PATHS.mfaStatus(challengeId)),
+      { signal: controller.signal, intervalMs: 2_500 },
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.status) setStepUpStatus(result.status);
+    });
+    return () => controller.abort();
   }, [stepUp]);
 
-  const completeWithdraw = async (amountCents: number, stepUpChallengeId?: string) => {
-    await api.post(API_PATHS.walletWithdraw, {
-      amountCents: String(amountCents),
-      idempotencyKey: moneyKeyRef.current,
-      ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
+  /**
+   * Single withdrawal path — core.withdraw owns the HTTP call, busy lock and
+   * profile refresh. The idempotency key is generated once per money modal
+   * (openMoney) and must be reused by the post-step-up retry, otherwise the
+   * backend could create two payouts.
+   */
+  const completeWithdraw = async (input: {
+    amountCents: number;
+    idempotencyKey: string;
+    stepUpChallengeId?: string;
+  }) => {
+    const result = await core.withdraw({
+      amountCents: input.amountCents,
+      idempotencyKey: input.idempotencyKey,
+      ...(input.stepUpChallengeId ? { stepUpChallengeId: input.stepUpChallengeId } : {}),
     });
-    await core.loadProfile();
-    setToast('Заявка на вывод создана.');
-    setMoneyModal(null);
-    setAmount('');
-    setStepUp(null);
+    if (result.ok) {
+      setToast('Заявка на вывод создана.');
+      setMoneyModal(null);
+      setAmount('');
+      setStepUp(null);
+      setStepUpStatus('PENDING');
+      return;
+    }
+    if (result.reason === 'busy') {
+      setToast('Вывод уже выполняется. Дождитесь завершения.');
+      return;
+    }
+    if (result.reason === 'step-up') {
+      setStepUp({
+        ...result.stepUp,
+        amountCents: input.amountCents,
+        idempotencyKey: input.idempotencyKey,
+      });
+      setStepUpStatus('PENDING');
+      setToast('Подтвердите вывод в Telegram.');
+      return;
+    }
+    // Keep the same key so the user can retry safely.
+    setToast(friendlyError(result.error));
   };
 
   const submitMoney = async () => {
@@ -461,31 +498,15 @@ export function Profile({
     try {
       const key = moneyKeyRef.current;
       if (moneyModal === 'MAIN_WITHDRAW') {
-        try {
-          await completeWithdraw(amountCents);
-        } catch (error) {
-          if (error instanceof ApiError && error.code === 'AUTH_STEP_UP_REQUIRED') {
-            const details = error.details as {
-              challengeId?: string;
-              webDeepLink?: string;
-              expiresAt?: string;
-            } | undefined;
-            if (details?.challengeId) {
-              setStepUp({
-                challengeId: details.challengeId,
-                webDeepLink: details.webDeepLink,
-                expiresAt: details.expiresAt,
-                amountCents,
-              });
-              setStepUpStatus('PENDING');
-              setToast('Подтвердите вывод в Telegram.');
-              return;
-            }
-          }
-          throw error;
-        }
+        await completeWithdraw({ amountCents, idempotencyKey: key });
         return;
       } else if (moneyModal === 'MAIN_TOPUP') {
+        const pspLive = payMethod === 'CARD' ? core.paymentMethods.card : core.paymentMethods.sbp;
+        if (!pspLive) {
+          setToast('Этот способ оплаты пока недоступен. Выберите другой или попробуйте позже.');
+          void core.loadPaymentMethods();
+          return;
+        }
         const intent = await api.post<{ id: string }>(API_PATHS.paymentsIntents, {
           wallet: 'MAIN',
           amountCents,
@@ -509,12 +530,11 @@ export function Profile({
       setMoneyModal(null);
       setAmount('');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Операция недоступна.';
-      if (moneyModal === 'MAIN_TOPUP' && (message.includes('не подключ') || message.includes('отключено') || message.includes('Manual'))) {
-        setToast(message.includes('TINKOFF') ? message : 'Скоро: Telegram Wallet / ЮKassa. Manual-пополнение пока отключено.');
-      } else {
-        setToast(message);
-      }
+      // Provider availability is already gated by /api/payments/methods, so a
+      // PAYMENT_METHOD_UNAVAILABLE here is a config race, not something the
+      // buyer can act on — keep the copy generic, never echo server internals.
+      setToast(friendlyError(error));
+      if (moneyModal === 'MAIN_TOPUP') void core.loadPaymentMethods();
     } finally {
       moneyLockRef.current = false;
       setMoneyBusy(false);
@@ -526,9 +546,11 @@ export function Profile({
     moneyLockRef.current = true;
     setMoneyBusy(true);
     try {
-      await completeWithdraw(stepUp.amountCents, stepUp.challengeId);
-    } catch (error) {
-      setToast(error instanceof Error ? error.message : 'Не удалось завершить вывод.');
+      await completeWithdraw({
+        amountCents: stepUp.amountCents,
+        idempotencyKey: stepUp.idempotencyKey,
+        stepUpChallengeId: stepUp.challengeId,
+      });
     } finally {
       moneyLockRef.current = false;
       setMoneyBusy(false);
@@ -584,10 +606,18 @@ export function Profile({
           <IconSettings size={18} />
         </button>
       ) : null}
-      <UserAvatar userId={profile.id} avatarUrl={profile.avatarUrl} name={profile.username} size="medium" online />
+      <UserAvatar
+        userId={profile.id}
+        avatarUrl={profile.avatarUrl}
+        name={profile.username}
+        size="medium"
+        online={Boolean(core.presenceOf(profile.onixId)?.online)}
+      />
       <div className="profile-main">
         <h1>{publicAt(profile.username)} <StaffBadge badge={profile.badge ?? staffBadgeFromRoles(profile.roles)} /></h1>
-        <p className="profile-main__meta">{formatOnixId(profile.onixId)} · Online</p>
+        <p className="profile-main__meta">
+          {formatOnixId(profile.onixId)} · {ownPresenceLabel}
+        </p>
         <div className="stats stats--inline">
           <span><b>★ {profile.rating.toFixed(1)}</b> рейтинг</span>
           <span><b>{profile.salesCount}</b> сделок</span>
@@ -816,21 +846,30 @@ export function Profile({
           <Field label={moneyModal === 'MAIN_WITHDRAW' ? 'Куда вывести' : 'Способ оплаты'}>
             <div className="pay-methods" role="radiogroup" aria-label={moneyModal === 'MAIN_WITHDRAW' ? 'Куда вывести' : 'Способ оплаты'}>
               {([
-                { id: 'SBP' as const, label: 'СБП', icon: <SbpLogo size={22} /> },
-                { id: 'CARD' as const, label: 'Банковская карта', icon: <CardLogo size={22} /> },
-              ]).map((method) => (
-                <button
-                  key={method.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={payMethod === method.id}
-                  className={`pay-methods__btn${payMethod === method.id ? ' is-active' : ''}`}
-                  onClick={() => setPayMethod(method.id)}
-                >
-                  <span className="pay-methods__icon" aria-hidden="true">{method.icon}</span>
-                  {method.label}
-                </button>
-              ))}
+                { id: 'SBP' as const, label: 'СБП', icon: <SbpLogo size={22} />, live: core.paymentMethods.sbp },
+                { id: 'CARD' as const, label: 'Банковская карта', icon: <CardLogo size={22} />, live: core.paymentMethods.card },
+              ]).map((method) => {
+                // Availability comes from GET /api/payments/methods. An
+                // unavailable PSP is shown disabled instead of leading the user
+                // into a provider error at submit time.
+                const selectable = moneyModal === 'MAIN_WITHDRAW' || method.live;
+                return (
+                  <button
+                    key={method.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={payMethod === method.id}
+                    aria-disabled={!selectable}
+                    disabled={!selectable}
+                    className={`pay-methods__btn${payMethod === method.id ? ' is-active' : ''}${selectable ? '' : ' is-unavailable'}`}
+                    onClick={() => { if (selectable) setPayMethod(method.id); }}
+                  >
+                    <span className="pay-methods__icon" aria-hidden="true">{method.icon}</span>
+                    {method.label}
+                    {!selectable && <small className="pay-methods__soon">Скоро</small>}
+                  </button>
+                );
+              })}
             </div>
           </Field>
         )}
@@ -838,7 +877,7 @@ export function Profile({
           <Button variant="secondary" onClick={() => setMoneyModal(null)}>{t('common.cancel')}</Button>
           <Button
             variant="violet"
-            busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.actionBusy === 'withdraw')}
+            busy={moneyBusy || (moneyModal === 'MAIN_WITHDRAW' && core.isBusy('withdraw'))}
             disabled={!Number.isSafeInteger(rublesToCents(amount)) || rublesToCents(amount) < 100}
             onClick={() => void submitMoney()}
           >Продолжить</Button>
@@ -851,25 +890,20 @@ export function Profile({
       onClose={() => { setStepUp(null); setStepUpStatus('PENDING'); }}
     >
       <div className="stack compact">
-        <p className="muted">
-          Для этого вывода нужно подтверждение в Telegram.
-          {stepUpStatus === 'CONFIRMED'
-            ? ' Подтверждение получено — нажмите «Повторить вывод».'
-            : ' Откройте бота и нажмите «Подтвердить».'}
-        </p>
-        {stepUp?.webDeepLink && stepUpStatus !== 'CONFIRMED' && (
+        <p className="muted">{mfaModalHint(stepUpStatus)}</p>
+        {stepUp?.webDeepLink && !mfaCanRetryWithdraw(stepUpStatus) && (
           <Button
             variant="secondary"
             onClick={() => window.open(stepUp.webDeepLink, '_blank', 'noopener,noreferrer')}
           >Открыть Telegram</Button>
         )}
-        <p className="muted">Статус: {stepUpStatus}</p>
+        <p className="muted">Статус: {mfaStatusLabel(stepUpStatus)}</p>
         <div className="modal__actions">
           <Button variant="secondary" onClick={() => setStepUp(null)}>Отмена</Button>
           <Button
             variant="violet"
             busy={moneyBusy}
-            disabled={stepUpStatus !== 'CONFIRMED'}
+            disabled={!mfaCanRetryWithdraw(stepUpStatus)}
             onClick={() => void retryWithdrawAfterStepUp()}
           >Повторить вывод</Button>
         </div>

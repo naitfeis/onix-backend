@@ -197,6 +197,50 @@ function runNodeTest(globs: string[]): boolean {
   else fail('production configuration: non-MANUAL PSP blocked until wired');
 }
 
+// --- 11. Acquiring contour is explicit before real money moves ---
+{
+  // The sandbox flag only drives a buyer-facing "no real money is charged"
+  // notice, so shipping live terminal keys with the flag left unset would show
+  // that notice while charging real cards. Require an explicit choice.
+  const creds = (process.env.TINKOFF_TERMINAL_KEY ?? '').trim()
+    || (process.env.TBANK_TERMINAL_KEY ?? '').trim();
+  const password = (process.env.TINKOFF_PASSWORD ?? '').trim()
+    || (process.env.TBANK_PASSWORD ?? '').trim();
+  const flagRaw = process.env.TINKOFF_SANDBOX;
+  const configured = Boolean(creds && password);
+
+  if (!configured) {
+    pass('acquiring contour: credentials not configured, nothing to verify');
+  } else if (flagRaw === undefined || flagRaw.trim() === '') {
+    fail(
+      'acquiring contour: TINKOFF_SANDBOX must be set explicitly',
+      'acquiring credentials are present; set TINKOFF_SANDBOX=false for live or =true for the test contour',
+    );
+  } else {
+    const sandbox = ['1', 'true', 'yes'].includes(flagRaw.trim().toLowerCase());
+    const apiBase = (process.env.TINKOFF_API_URL ?? '').trim()
+      || 'https://securepay.tinkoff.ru/v2';
+    const pointsAtLiveHost = apiBase.includes('securepay.tinkoff.ru');
+    // Catch the mirror-image mistake: flag says live, URL says test contour.
+    if (!sandbox && !pointsAtLiveHost) {
+      fail(
+        'acquiring contour: TINKOFF_SANDBOX=false but TINKOFF_API_URL is not the live host',
+        `TINKOFF_API_URL=${apiBase}`,
+      );
+    } else if (sandbox && pointsAtLiveHost && !process.env.TINKOFF_API_URL) {
+      fail(
+        'acquiring contour: sandbox flag set but TINKOFF_API_URL defaults to the live host',
+        'set TINKOFF_API_URL to the test contour endpoint when TINKOFF_SANDBOX=true',
+      );
+    } else {
+      pass(
+        'acquiring contour: TINKOFF_SANDBOX explicitly set',
+        sandbox ? 'test contour' : `live (${apiBase})`,
+      );
+    }
+  }
+}
+
 const failed = checks.filter((c) => !c.pass);
 console.log('');
 if (failed.length === 0) {

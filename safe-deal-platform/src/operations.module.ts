@@ -29,6 +29,7 @@ import { debugEndpointsEnabled } from './debug-endpoints';
 import { buildInfo } from './build-info';
 import { PrismaService } from './prisma.service';
 import { lockUsersInIdOrder } from './database/money-locks';
+import { DistributedRateLimiter } from './rate-limit';
 import { withSerializableTransaction } from './database/transaction-retry';
 import { RiskScoreService } from './risk-score.service';
 import { RiskEngineService } from './risk/risk-engine.service';
@@ -523,9 +524,17 @@ class OperationsService {
 
 @Controller('wallet')
 class WalletController {
-  constructor(private readonly service: OperationsService) {}
+  constructor(
+    private readonly service: OperationsService,
+    private readonly rateLimit: DistributedRateLimiter,
+  ) {}
   @Post('withdrawals')
-  withdraw(@CurrentUser() user: AuthUser, @Body() dto: WithdrawalDto, @Req() req: Request) {
+  async withdraw(@CurrentUser() user: AuthUser, @Body() dto: WithdrawalDto, @Req() req: Request) {
+    // Money egress needs a throttle: every attempt takes a per-user advisory lock
+    // and runs risk + MFA + ledger work, so unbounded retries are both a DoS lever
+    // and an oracle for probing step-up/balance state. Distributed so the budget
+    // does not multiply by the number of API instances behind the load balancer.
+    await this.rateLimit.assert(`wallet:withdraw:${user.id}`, 10, 60_000);
     return this.service.withdraw(user, dto, resolveCorrelationId(req));
   }
 }

@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import { api, friendlyError, money } from '../api/client';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api, ApiError, friendlyError, money } from '../api/client';
 import {
   API_PATHS, SUBCATEGORY_LABELS, type Product, type TrustCard,
 } from '../api/contracts';
 import { Button } from '../design-system';
+import { popModal, pushModal } from '../design-system/modalStack';
 import {
-  LOT_PAY_METHODS, lotDisplayTitle, lotPayMethodLabel, lotPayMethodMeta, parseCents, quoteLotCheckout,
-  type LotPayMethod,
+  BALANCE_ONLY_AVAILABILITY, LOT_PAY_METHODS, isPayMethodLive, lotDisplayTitle, lotPayMethodLabel,
+  lotPayMethodMeta, parseCents, quoteLotCheckout, type LotPayAvailability, type LotPayMethod,
 } from '../utils/lotCheckout';
 import PaymentCheckout from './PaymentCheckout';
 import type { Core } from './types';
@@ -32,17 +33,26 @@ function PayMethodRow({
   value,
   open,
   active,
+  availability,
   onClick,
 }: {
   method: LotPayMethod;
   value: string;
   open?: boolean;
   active?: boolean;
+  availability?: LotPayAvailability;
   onClick: () => void;
 }) {
-  const meta = lotPayMethodMeta(method);
+  const meta = lotPayMethodMeta(method, availability ?? BALANCE_ONLY_AVAILABILITY);
+  const disabled = !meta.live;
   return (
-    <button type="button" className={`lot-pay-option${open ? ' is-open' : ''}${active ? ' is-active' : ''}`} onClick={onClick}>
+    <button
+      type="button"
+      className={`lot-pay-option${open ? ' is-open' : ''}${active ? ' is-active' : ''}${disabled ? ' is-unavailable' : ''}`}
+      disabled={disabled}
+      aria-disabled={disabled}
+      onClick={onClick}
+    >
       <span className="lot-pay-option__icon" aria-hidden="true">
         <PayMethodIcon kind={meta.icon} />
       </span>
@@ -101,25 +111,45 @@ export function LotSheet({
   const subLabel = product.subcategory
     ? (SUBCATEGORY_LABELS[product.subcategory] ?? product.subcategory)
     : '';
-  const activeMethod = LOT_PAY_METHODS.includes(method) ? method : 'BALANCE';
+  const availability = useMemo(
+    () => ({ sbp: core.paymentMethods.sbp, card: core.paymentMethods.card }),
+    [core.paymentMethods],
+  );
+  const requestedMethod = LOT_PAY_METHODS.includes(method) ? method : 'BALANCE';
+  /**
+   * An unavailable PSP must not stay selected: if acquiring is not configured
+   * (or just went down) fall back to balance instead of letting the buyer hit
+   * a provider 403 at the very end of checkout.
+   */
+  const activeMethod: LotPayMethod = isPayMethodLive(requestedMethod, availability)
+    ? requestedMethod
+    : 'BALANCE';
   const activeQuote = quoteLotCheckout(priceCents, balanceCents, activeMethod);
   const title = lotDisplayTitle(product);
   const detail = !detailReady
     ? 'Загрузка описания…'
     : (product.description?.trim() || 'Продавец не добавил описание.');
-  const activeMeta = lotPayMethodMeta(activeMethod);
-  const pickerValue = activeMethod === 'BALANCE'
-    ? money(String(balanceCents))
-    : activeMeta.live
-      ? (activeQuote.remainingCents > 0 ? `Сбор ${activeQuote.feeBps / 100}%` : 'Без сбора')
-      : 'Тест';
+  const activeMeta = lotPayMethodMeta(activeMethod, availability);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onBackRef.current();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    if (requestedMethod === activeMethod) return;
+    setMethod(activeMethod);
+  }, [activeMethod, requestedMethod]);
+
+  const pickerValue = activeMethod === 'BALANCE'
+    ? money(String(balanceCents))
+    : activeQuote.remainingCents > 0 ? `Сбор ${activeQuote.feeBps / 100}%` : 'Без сбора';
+
+  /**
+   * Escape / Telegram BackButton / body-lock go through the shared modal stack
+   * so the sheet behaves like every other dialog. Without it the hardware back
+   * gesture closed the whole Mini App mid-checkout and lost the purchase.
+   */
+  useEffect(() => {
+    // lockBody: false — the sheet replaces the catalog and scrolls with the
+    // page, so a body overflow lock would freeze it.
+    const { id } = pushModal(() => onBackRef.current(), { lockBody: false });
+    return () => popModal(id);
   }, []);
 
   const submit = async () => {
@@ -130,7 +160,9 @@ export function LotSheet({
       return;
     }
     if (!activeMeta.live && !activeQuote.coveredByBalance) {
-      onToast('Этот способ пока тестовый. Выберите баланс, СБП или карту.');
+      // PSP went unavailable after the sheet rendered — refresh and ask again.
+      void core.loadPaymentMethods();
+      onToast('Этот способ оплаты сейчас недоступен. Выберите баланс или другой способ.');
       return;
     }
     payLockRef.current = true;
@@ -153,11 +185,38 @@ export function LotSheet({
       }
       await onBuy(purchaseKeyRef.current);
     } catch (error) {
+      if (await handleQuoteStale(error)) return;
       onToast(friendlyError(error));
     } finally {
       payLockRef.current = false;
       setBusy(false);
     }
+  };
+
+  /**
+   * CHECKOUT_QUOTE_STALE / CHECKOUT_BALANCE_SUFFICIENT: the balance or price
+   * moved after the sheet rendered. Re-quote from a fresh profile and tell the
+   * buyer what changed instead of making them reload the whole screen.
+   * Returns true when the error was consumed.
+   */
+  const handleQuoteStale = async (error: unknown): Promise<boolean> => {
+    if (!(error instanceof ApiError)) return false;
+    const details = error.details as { code?: string; expectedExternalCents?: string } | undefined;
+    const code = details?.code;
+    if (code !== 'CHECKOUT_QUOTE_STALE' && code !== 'CHECKOUT_BALANCE_SUFFICIENT') return false;
+    // loadProfile resolves with the fresh profile — reading core.profile here
+    // would see the pre-refresh closure value.
+    const fresh = await core.loadProfile();
+    const freshBalance = parseCents(fresh?.balanceCents ?? '0');
+    const freshQuote = quoteLotCheckout(priceCents, freshBalance, activeMethod);
+    if (code === 'CHECKOUT_BALANCE_SUFFICIENT' || freshQuote.coveredByBalance) {
+      onToast('Баланс обновился — теперь лот оплачивается полностью с баланса. Нажмите «Купить» ещё раз.');
+      return true;
+    }
+    // New external amount: a brand-new intent key so the stale claim is not reused.
+    intentKeyRef.current = crypto.randomUUID();
+    onToast(`Сумма к оплате изменилась: ${money(String(freshQuote.externalCents))}. Нажмите «Оплатить» ещё раз.`);
+    return true;
   };
 
   return (
@@ -231,23 +290,26 @@ export function LotSheet({
               method={activeMethod}
               value={pickerValue}
               open={methodsOpen}
+              availability={availability}
               onClick={() => setMethodsOpen((open) => !open)}
             />
             {methodsOpen && (
               <div className="lot-pay-picker__list" role="list">
                 {LOT_PAY_METHODS.filter((item) => item !== activeMethod).map((item) => {
-                  const meta = lotPayMethodMeta(item);
+                  const meta = lotPayMethodMeta(item, availability);
                   const value = item === 'BALANCE'
                     ? money(String(balanceCents))
                     : meta.live
                       ? `Сбор ${quoteLotCheckout(priceCents, balanceCents, item).feeBps / 100}%`
-                      : 'Тест';
+                      : 'Недоступно';
                   return (
                     <PayMethodRow
                       key={item}
                       method={item}
                       value={value}
+                      availability={availability}
                       onClick={() => {
+                        if (!meta.live) return;
                         setMethod(item);
                         setMethodsOpen(false);
                       }}

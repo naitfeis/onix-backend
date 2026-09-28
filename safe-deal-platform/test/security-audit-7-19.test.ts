@@ -87,7 +87,10 @@ test('§15 support: ticket close blocked while order open; dispute from DISPUTE_
   const support = repoFile('safe-deal-platform/src/support.module.ts');
   assert.match(guard, /OPEN_ORDER_STATUSES/);
   assert.match(support, /DISPUTE_FROM/);
-  assert.match(support, /assertRateLimit\(`order:support:/);
+  // Distributed limiter: this budget key is shared with the escrow dispute route,
+  // so both sides must hit the same backend.
+  assert.match(support, /rateLimit\.assert\(`order:support:/);
+  assert.doesNotMatch(support, /assertRateLimit\(`order:support:/);
 });
 
 test('§16 notify after commit (telegram); money mutations in Serializable TX', () => {

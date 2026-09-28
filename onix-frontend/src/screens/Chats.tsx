@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import {
+  useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type CSSProperties, type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { api, friendlyError } from '../api/client';
 import { API_PATHS, formatLastSeen, sellerIsPresent, type Product, type PublicProfile, type Seller } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -14,6 +17,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { t } from '../i18n';
 
 const NEAR_BOTTOM_PX = 96;
+/** Distance from the top that triggers loading an older page. */
+const OLDER_TRIGGER_PX = 80;
 const LONG_PRESS_MS = 480;
 const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_LIST_DEFAULT = 320;
@@ -64,6 +69,8 @@ export function Chats({
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const lastSeenMsgIdRef = useRef<string | null>(null);
+  /** Scroll state to restore after an older history page is prepended. */
+  const olderAnchorRef = useRef<{ anchorId: string; prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const visibleChats = useMemo(
     () => core.chats.filter((chat) => chat.kind !== 'GROUP'),
@@ -123,7 +130,21 @@ export function Chats({
     [favoriteUsers, chatPeerIds],
   );
   const thread = visibleChats.find(item => item.id === threadId);
-  const rawMessages = threadId ? core.messages[threadId] || [] : [];
+  // useMemo (not a per-render conditional array) so the dedupe memo below has
+  // a stable dependency identity.
+  const threadMessages = core.messages;
+  const rawMessages = useMemo(
+    () => (threadId ? threadMessages[threadId] || [] : []),
+    [threadId, threadMessages],
+  );
+  /**
+   * Render history deduplicated by real message id only.
+   *
+   * A fuzzy "same text within 4s" rule used to drop legitimate repeats (two
+   * quick «да» in a deal chat), and a deal confirmation can be evidence in a
+   * dispute. Optimistic echo collapsing stays in appendUniqueMessage, where it
+   * belongs — that path knows which row is the client's own placeholder.
+   */
   const messages = useMemo(() => {
     const seenIds = new Set<string>();
     const out: typeof rawMessages = [];
@@ -131,18 +152,6 @@ export function Chats({
       const id = String(row.id);
       if (!id || seenIds.has(id)) continue;
       if (row.kind !== 'SYSTEM' && !row.text?.trim() && !row.attachment) continue;
-      const prev = out[out.length - 1];
-      if (
-        prev
-        && prev.kind !== 'SYSTEM'
-        && row.kind !== 'SYSTEM'
-        && prev.mine === row.mine
-        && prev.sender.id === row.sender.id
-        && prev.text === row.text
-        && Math.abs(new Date(prev.createdAt).getTime() - new Date(row.createdAt).getTime()) < 4000
-      ) {
-        continue;
-      }
       seenIds.add(id);
       out.push({ ...row, id });
     }
@@ -155,7 +164,18 @@ export function Chats({
     overscan: 10,
     getItemKey: (index) => messages[index]?.id ?? index,
   });
-  const { loadMessages, refreshChats, sendMessage } = core;
+  // Destructured (not `core.x`) so effects can list stable identities in deps:
+  // referencing `core.listFavoriteUsers` inside a body but omitting `core`
+  // itself is exactly the stale-closure shape exhaustive-deps guards against.
+  const {
+    loadMessages, refreshChats, sendMessage,
+    subscribeRealtimeChat, unsubscribeRealtimeChat,
+    listFavoriteUsers, listBlockedUsers, setActiveChatId,
+    sendRealtimeTyping,
+    messagesHasOlder, messagesOlderLoading, notifications,
+    // Renamed: the local scroll handler below owns the name loadOlderMessages.
+    loadOlderMessages: fetchOlderMessages,
+  } = core;
   const [typingLabel, setTypingLabel] = useState<string | null>(null);
   const typingClearRef = useRef<number | null>(null);
   const lastTypingSentRef = useRef(0);
@@ -220,15 +240,15 @@ export function Chats({
     void api.get<{ id: string; faqs?: Array<{ id: string; title: string }> }>(API_PATHS.aiChat)
       .then((chat) => {
         if (chat.faqs) setAiFaqs(chat.faqs);
-        if (chat.id) core.subscribeRealtimeChat(chat.id);
+        if (chat.id) subscribeRealtimeChat(chat.id);
         void refreshChats();
       })
       .catch(() => { /* AI optional */ });
-  }, [refreshChats, core.subscribeRealtimeChat]);
+  }, [refreshChats, subscribeRealtimeChat]);
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+    void Promise.all([listFavoriteUsers(), listBlockedUsers()])
       .then(([favs, blocks]) => {
         if (!cancelled) {
           setFavoriteUsers(favs);
@@ -237,12 +257,12 @@ export function Chats({
       })
       .catch(() => { /* optional social lists */ });
     return () => { cancelled = true; };
-  }, [core.listFavoriteUsers, core.listBlockedUsers]);
+  }, [listFavoriteUsers, listBlockedUsers]);
 
   useEffect(() => {
     if (filter !== 'favorites' && filter !== 'blacklist') return;
     let cancelled = false;
-    void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+    void Promise.all([listFavoriteUsers(), listBlockedUsers()])
       .then(([favs, blocks]) => {
         if (!cancelled) {
           setFavoriteUsers(favs);
@@ -251,7 +271,7 @@ export function Chats({
       })
       .catch(() => { /* optional social lists */ });
     return () => { cancelled = true; };
-  }, [filter, core.listFavoriteUsers, core.listBlockedUsers]);
+  }, [filter, listFavoriteUsers, listBlockedUsers]);
 
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
@@ -259,23 +279,23 @@ export function Chats({
 
   useEffect(() => {
     if (!active) {
-      core.setActiveChatId(null);
+      setActiveChatId(null);
       return;
     }
-    core.setActiveChatId(threadId || null);
-    return () => core.setActiveChatId(null);
-  }, [active, threadId, core.setActiveChatId]);
+    setActiveChatId(threadId || null);
+    return () => setActiveChatId(null);
+  }, [active, threadId, setActiveChatId]);
 
   useEffect(() => {
     if (!active || !threadId) return;
-    core.setActiveChatId(threadId);
-  }, [active, threadId, core.notifications, core.setActiveChatId]);
+    setActiveChatId(threadId);
+  }, [active, threadId, notifications, setActiveChatId]);
 
   useEffect(() => {
     if (!active || !threadId) return;
-    core.subscribeRealtimeChat(threadId);
-    return () => core.unsubscribeRealtimeChat(threadId);
-  }, [active, threadId, core.subscribeRealtimeChat, core.unsubscribeRealtimeChat]);
+    subscribeRealtimeChat(threadId);
+    return () => unsubscribeRealtimeChat(threadId);
+  }, [active, threadId, subscribeRealtimeChat, unsubscribeRealtimeChat]);
 
   // HTTP fallback only when the socket is down — WS is the live path.
   useEffect(() => {
@@ -326,14 +346,17 @@ export function Chats({
     setMenuMessageId(null);
   }, [threadId]);
 
+  // Extracted so the deps array stays statically checkable.
+  const lastMessageId = messages[messages.length - 1]?.id ?? null;
+  const lastMessageIndex = messages.length - 1;
   useEffect(() => {
     const el = messagesRef.current;
     if (!el || !threadId) return;
-    const lastId = messages[messages.length - 1]?.id ?? null;
+    const lastId = lastMessageId;
     if (stickToBottomRef.current) {
       el.scrollTop = el.scrollHeight;
       if (lastId) {
-        requestAnimationFrame(() => messageVirtualizer.scrollToIndex(messages.length - 1, { align: 'end' }));
+        requestAnimationFrame(() => messageVirtualizer.scrollToIndex(lastMessageIndex, { align: 'end' }));
       }
       lastSeenMsgIdRef.current = lastId;
       setPendingNewCount(0);
@@ -344,7 +367,7 @@ export function Chats({
       const grown = prevIdx >= 0 ? messages.length - 1 - prevIdx : 1;
       if (grown > 0) setPendingNewCount((n) => n + grown);
     }
-  }, [threadId, messages.length, messages[messages.length - 1]?.id]);
+  }, [threadId, messages, lastMessageId, lastMessageIndex, messageVirtualizer]);
 
   useEffect(() => () => {
     if (longPressTimerRef.current) window.clearTimeout(longPressTimerRef.current);
@@ -360,6 +383,48 @@ export function Chats({
       setToast(error instanceof Error ? error.message : 'Не удалось удалить.');
     }
   };
+
+  /**
+   * Prepend an older history page and keep the viewport anchored on the message
+   * that was previously at the top.
+   *
+   * Compensation runs in a layout effect after React commits the new rows —
+   * reading scrollHeight right after the await would measure the pre-update DOM.
+   * `lastSeenMsgIdRef` is kept on the newest message so the growth is not
+   * misread as "N new messages" (that counter is for live incoming traffic).
+   */
+  const loadOlderMessages = async () => {
+    if (!threadId) return;
+    if (!messagesHasOlder[threadId]) return;
+    if (messagesOlderLoading[threadId]) return;
+    const el = messagesRef.current;
+    if (!el) return;
+    const anchorId = messages[0]?.id ?? null;
+    if (!anchorId) return;
+    olderAnchorRef.current = {
+      anchorId,
+      prevScrollHeight: el.scrollHeight,
+      prevScrollTop: el.scrollTop,
+    };
+    // Reading history, not live messages.
+    stickToBottomRef.current = false;
+    lastSeenMsgIdRef.current = messages[messages.length - 1]?.id ?? null;
+    await fetchOlderMessages(threadId);
+  };
+
+  useLayoutEffect(() => {
+    const anchor = olderAnchorRef.current;
+    if (!anchor) return;
+    olderAnchorRef.current = null;
+    const el = messagesRef.current;
+    if (!el) return;
+    const index = messages.findIndex((row) => row.id === anchor.anchorId);
+    if (index < 0) return;
+    const offset = el.scrollHeight - anchor.prevScrollHeight;
+    el.scrollTop = offset > 0 ? anchor.prevScrollTop + offset : anchor.prevScrollTop;
+    // Virtualizer needs its internal offset synced with the container.
+    requestAnimationFrame(() => messageVirtualizer.scrollToIndex(index, { align: 'start' }));
+  }, [messages, messageVirtualizer]);
 
   const scrollToLatest = () => {
     const el = messagesRef.current;
@@ -442,7 +507,7 @@ export function Chats({
               </button>
               <Button
                 variant="ghost"
-                busy={core.actionBusy === `user-block-${user.onixId}`}
+                busy={core.isBusy(`user-block-${user.onixId}`)}
                 onClick={() => {
                   void (async () => {
                     const result = await core.toggleUserBlock(user.onixId, true);
@@ -510,7 +575,7 @@ export function Chats({
                 </button>
                 <Button
                   variant="ghost"
-                  busy={core.actionBusy === `chat-${user.onixId}`}
+                  busy={core.isBusy(`chat-${user.onixId}`)}
                   onClick={() => { void openDirectChat(user.onixId); }}
                 >Написать</Button>
               </div>
@@ -607,7 +672,7 @@ export function Chats({
             {
               id: 'favorite',
               label: favoriteIds.has(thread.peerOnixId) ? t('social.favoriteRemove') : t('social.favoriteAdd'),
-              disabled: core.actionBusy === `user-favorite-${thread.peerOnixId}`,
+              disabled: core.isBusy(`user-favorite-${thread.peerOnixId}`),
               onSelect: () => {
                 const peerId = thread.peerOnixId!;
                 const wasFavorited = favoriteIds.has(peerId);
@@ -618,7 +683,7 @@ export function Chats({
                     setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
                   } else {
                     try {
-                      setFavoriteUsers(await core.listFavoriteUsers());
+                      setFavoriteUsers(await listFavoriteUsers());
                     } catch { /* keep optimistic */ }
                   }
                 })();
@@ -627,7 +692,7 @@ export function Chats({
             {
               id: 'block',
               label: blockedIds.has(thread.peerOnixId) ? t('social.unblock') : t('social.block'),
-              disabled: core.actionBusy === `user-block-${thread.peerOnixId}`,
+              disabled: core.isBusy(`user-block-${thread.peerOnixId}`),
               onSelect: () => {
                 const peerId = thread.peerOnixId!;
                 const wasBlocked = blockedIds.has(peerId);
@@ -639,7 +704,7 @@ export function Chats({
                   } else {
                     setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
                     try {
-                      setBlockedUsers(await core.listBlockedUsers());
+                      setBlockedUsers(await listBlockedUsers());
                     } catch { /* keep local */ }
                     setToast(t('social.block'));
                   }
@@ -669,6 +734,8 @@ export function Chats({
             lastSeenMsgIdRef.current = messages[messages.length - 1]?.id ?? null;
             setPendingNewCount(0);
           }
+          // Load the previous page when the user reaches the top of history.
+          if (el.scrollTop <= OLDER_TRIGGER_PX) void loadOlderMessages();
         }}
         onClick={() => setMenuMessageId(null)}
       >{messages.length === 0 ? <StateView title="Начните разговор" text="Сообщения сделки хранятся внутри ONIX." /> :
@@ -843,14 +910,14 @@ export function Chats({
             const now = Date.now();
             if (now - lastTypingSentRef.current > 1200) {
               lastTypingSentRef.current = now;
-              core.sendRealtimeTyping(thread.id);
+              sendRealtimeTyping(thread.id);
             }
           }}
           maxLength={1000}
           placeholder={t('chat.messagePlaceholder')}
           aria-label={t('chat.messageAria')}
         />
-        <Button type="submit" disabled={!text.trim()} busy={core.actionBusy === `message-${thread.id}`}>{t('chat.send')}</Button>
+        <Button type="submit" disabled={!text.trim()} busy={core.isBusy(`message-${thread.id}`)}>{t('chat.send')}</Button>
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
@@ -858,7 +925,7 @@ export function Chats({
       profile={peerProfile}
       onClose={() => {
         setPeerProfile(null);
-        void Promise.all([core.listFavoriteUsers(), core.listBlockedUsers()])
+        void Promise.all([listFavoriteUsers(), listBlockedUsers()])
           .then(([favs, blocks]) => {
             setFavoriteUsers(favs);
             setBlockedUsers(blocks);

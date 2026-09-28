@@ -10,7 +10,7 @@ import { IdempotencyService } from '../../idempotency/idempotency.service';
 import { logMoneyEvent } from '../../observability/money-event';
 import { PrismaService } from '../../prisma.service';
 import { ManualPaymentProvider, isManualPaymentsEnabled } from './manual.provider';
-import { TinkoffAcquiringProvider, tinkoffCredentials } from './tinkoff.provider';
+import { TinkoffAcquiringProvider, tinkoffCredentials, tinkoffIsSandbox } from './tinkoff.provider';
 import type { PaymentProvider, ProviderWebhookVerification } from './payment-provider';
 import { BalanceService } from '../wallet/balance.service';
 import type { LedgerWriteMeta } from '../wallet/ledger-write.types';
@@ -40,6 +40,43 @@ const TOP_UP_CLAIM_STALE_MS = 30_000;
 const TOP_UP_CLAIM_POLL_ATTEMPTS = 20;
 const TOP_UP_CLAIM_POLL_MS = 25;
 
+/** QR image bodies are base64 — bounded so a hostile PSP reply cannot bloat the row. */
+const QR_IMAGE_MAX_BASE64_CHARS = 512_000;
+
+const PROVIDER_CHECKOUT_KEYS = [
+  'channel', 'payWay', 'paymentUrl', 'paymentId', 'qrPayload', 'qrImageBase64', 'sandbox',
+] as const;
+
+/**
+ * Allowlist of provider fields the client may see.
+ *
+ * Provider metadata is external input: copying it wholesale into the stored
+ * intent would let a misconfigured or hostile PSP response inject arbitrary
+ * keys that getIntent() then serves to the browser. Only fields the checkout
+ * modal renders are copied, each type-checked.
+ */
+export function pickProviderCheckoutMetadata(metadata: unknown): Record<string, unknown> {
+  if (!metadata || typeof metadata !== 'object') return {};
+  const source = metadata as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of PROVIDER_CHECKOUT_KEYS) {
+    const value = source[key];
+    if (typeof value === 'string') {
+      if (value.length === 0) continue;
+      if (key === 'qrImageBase64' && value.length > QR_IMAGE_MAX_BASE64_CHARS) continue;
+      picked[key] = value;
+    } else if (typeof value === 'boolean') {
+      picked[key] = value;
+    }
+  }
+  // paymentUrl becomes a window.open target — only an https URL is acceptable.
+  const paymentUrl = picked.paymentUrl;
+  if (typeof paymentUrl === 'string' && !/^https:\/\/\S+$/i.test(paymentUrl)) {
+    delete picked.paymentUrl;
+  }
+  return picked;
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly providers: Map<PaymentProviderCode, PaymentProvider>;
@@ -67,7 +104,7 @@ export class PaymentsService {
     return {
       sbp: live,
       card: live,
-      sandbox: (process.env.TINKOFF_SANDBOX ?? 'true').trim() !== 'false',
+      sandbox: tinkoffIsSandbox(),
     };
   }
 
@@ -75,11 +112,18 @@ export class PaymentsService {
     const p = this.providers.get(code);
     if (p) return p;
     if (code === 'YOOKASSA' || code === 'CARD') {
-      throw new ForbiddenException(
-        'СБП и карта: задайте TINKOFF_TERMINAL_KEY и TINKOFF_PASSWORD (sandbox Т-Банка) в переменных API.',
-      );
+      // Acquiring credentials are not configured. The client gates on
+      // GET /api/payments/methods, so this is a rare race — never leak env
+      // variable names to an end user.
+      throw new ForbiddenException({
+        code: 'PAYMENT_METHOD_UNAVAILABLE',
+        message: 'Оплата картой и СБП временно недоступна. Пополните баланс другим способом.',
+      });
     }
-    throw new ForbiddenException(`Платёжный провайдер ${code} ещё не подключён.`);
+    throw new ForbiddenException({
+      code: 'PAYMENT_METHOD_UNAVAILABLE',
+      message: `Платёжный провайдер ${code} ещё не подключён.`,
+    });
   }
 
   async createTopUp(
@@ -201,12 +245,21 @@ export class PaymentsService {
           const feeBps = checkoutAcquiringFeeBps(dto.provider);
           const quote = computeCheckoutExternalCents(totalAmountCents, spendable, feeBps);
           if (quote.externalCents < 100n) {
-            throw new BadRequestException('Внешний платёж не требуется — оплатите с баланса.');
+            // Balance now covers the lot: the client re-quotes and pays without PSP.
+            throw new BadRequestException({
+              code: 'CHECKOUT_BALANCE_SUFFICIENT',
+              message: 'Внешний платёж не требуется — оплатите с баланса.',
+              expectedExternalCents: '0',
+            });
           }
           if (amountCents !== quote.externalCents) {
-            throw new BadRequestException(
-              `Сумма оплаты устарела. Ожидается ${quote.externalCents.toString()} коп. Обновите экран покупки.`,
-            );
+            // Balance or price changed after the sheet rendered. The client re-quotes
+            // using expectedExternalCents instead of asking the user to reload.
+            throw new BadRequestException({
+              code: 'CHECKOUT_QUOTE_STALE',
+              message: 'Сумма оплаты изменилась. Проверьте обновлённый расчёт и повторите оплату.',
+              expectedExternalCents: quote.externalCents.toString(),
+            });
           }
           await reserveProductStock(tx, product.id, quantity);
           metadata = {
@@ -277,6 +330,10 @@ export class PaymentsService {
             ? claim.metadata as Prisma.InputJsonObject
             : {}),
           payWay: dto.provider === 'CARD' ? 'card' : 'sbp',
+          // The PSP redirect/QR payload must be persisted here: getIntent()
+          // returns the stored row, so anything dropped at this point never
+          // reaches the checkout modal (no QR, no «Открыть оплату»).
+          ...pickProviderCheckoutMetadata(created.metadata),
         } as Prisma.InputJsonValue,
         succeededAt: created.status === 'SUCCEEDED' ? new Date() : undefined,
       },

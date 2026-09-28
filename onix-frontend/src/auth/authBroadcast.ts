@@ -77,11 +77,12 @@ export class MemoryAuthBroadcastBus {
 
   create(name: string): AuthChannelPort {
     const listeners = new Set<(event: MessageEvent) => void>();
-    const bus = this;
+    const tabs = this.tabs;
 
     const channel: MemoryTab = {
-      postMessage(data: unknown) {
-        const peers = bus.tabs.get(name);
+      // Arrow methods keep a lexical `this` — no `const bus = this` aliasing.
+      postMessage: (data: unknown) => {
+        const peers = tabs.get(name);
         if (!peers) return;
         const message = { data } as MessageEvent;
         for (const peer of peers) {
@@ -95,11 +96,11 @@ export class MemoryAuthBroadcastBus {
       removeEventListener(_type: 'message', listener: (event: MessageEvent) => void) {
         listeners.delete(listener);
       },
-      close() {
+      close: () => {
         listeners.clear();
-        bus.tabs.get(name)?.delete(channel);
+        tabs.get(name)?.delete(channel);
       },
-      deliver(message: MessageEvent) {
+      deliver: (message: MessageEvent) => {
         for (const listener of [...listeners]) listener(message);
       },
     };

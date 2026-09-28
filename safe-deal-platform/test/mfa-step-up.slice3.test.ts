@@ -41,8 +41,8 @@ test('consumeConfirmed requires CONFIRMED status', async () => {
   );
 });
 
-test('consumeConfirmed marks CONSUMED', async () => {
-  const updates: unknown[] = [];
+test('consumeConfirmed claims CONFIRMED atomically', async () => {
+  const claims: Array<{ where: unknown; data: unknown }> = [];
   const prisma = {
     mfaChallenge: {
       findUnique: async () => ({
@@ -53,15 +53,52 @@ test('consumeConfirmed marks CONSUMED', async () => {
         expiresAt: new Date(Date.now() + 60_000),
         sessionId: 'sess',
       }),
-      update: async ({ data }: { data: unknown }) => {
-        updates.push(data);
-        return {};
+      updateMany: async ({ where, data }: { where: unknown; data: unknown }) => {
+        claims.push({ where, data });
+        return { count: 1 };
       },
     },
   };
   const mfa = new MfaStepUpService(prisma as never);
   await mfa.consumeConfirmed({ challengeId: 'ch1', userId: 1n, sessionId: 'sess' });
-  assert.deepEqual(updates[0], { status: 'CONSUMED' });
+  assert.equal(claims.length, 1);
+  assert.deepEqual(claims[0]!.data, { status: 'CONSUMED' });
+  // The status guard must live in the WHERE clause, not in a prior read.
+  assert.deepEqual((claims[0]!.where as { status: string }).status, 'CONFIRMED');
+});
+
+test('consumeConfirmed cannot be replayed by a concurrent second withdraw', async () => {
+  // Regression: the old read-then-write pair let two withdraws presenting the
+  // same challengeId both pass step-up, because neither saw the other's write
+  // (this runs outside the money transaction, so no advisory lock is held yet).
+  let rowStatus = 'CONFIRMED';
+  const prisma = {
+    mfaChallenge: {
+      findUnique: async () => ({
+        id: 'ch1',
+        userId: 1n,
+        purpose: MFA_PURPOSE_WITHDRAW,
+        status: rowStatus,
+        expiresAt: new Date(Date.now() + 60_000),
+        sessionId: 'sess',
+      }),
+      updateMany: async ({ where }: { where: { status: string } }) => {
+        if (rowStatus !== where.status) return { count: 0 };
+        rowStatus = 'CONSUMED';
+        return { count: 1 };
+      },
+    },
+  };
+  const mfa = new MfaStepUpService(prisma as never);
+  const call = () => mfa.consumeConfirmed({ challengeId: 'ch1', userId: 1n, sessionId: 'sess' });
+  const settled = await Promise.allSettled([call(), call(), call()]);
+  const passed = settled.filter((row) => row.status === 'fulfilled').length;
+  assert.equal(passed, 1, 'exactly one withdraw may spend a step-up challenge');
+  const rejected = settled.filter((row) => row.status === 'rejected') as PromiseRejectedResult[];
+  assert.equal(rejected.length, 2);
+  for (const row of rejected) {
+    assert.equal((row.reason as AuthPlatformError).code, 'AUTH_LOGIN_CHALLENGE_CONSUMED');
+  }
 });
 
 test('confirmFromBot rejects foreign telegramId', async () => {

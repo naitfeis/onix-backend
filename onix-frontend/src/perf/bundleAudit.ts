@@ -90,8 +90,7 @@ export function captureSlowResources(thresholdMs = 1_000): void {
       } catch {
         /* keep raw */
       }
-      // eslint-disable-next-line no-console
-      console.info(
+          console.info(
         `[onix-timing] slow-resource=${Math.round(entry.duration)}ms type=${entry.initiatorType || '?'} ${host}`,
       );
     }

@@ -359,6 +359,45 @@ export type OrderListQuery = {
   cursor?: string;
 };
 
+/**
+ * Mirrors backend MfaChallengeStatus (safe-deal-platform/src/mfa/mfa.types.ts).
+ * CONFIRMED = Telegram proved identity, withdraw may be retried with the same
+ * idempotency key. CONSUMED = challenge already spent by a successful retry.
+ */
+export type MfaChallengeStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'CONSUMED'
+  | 'CANCELED'
+  | 'EXPIRED'
+  | 'FAILED';
+
+/** Statuses after which polling must stop. */
+export const MFA_TERMINAL_STATUSES: ReadonlyArray<MfaChallengeStatus> = [
+  'CONFIRMED',
+  'CONSUMED',
+  'CANCELED',
+  'EXPIRED',
+  'FAILED',
+];
+
+/** Retry with the CONFIRMED challenge is allowed; CONSUMED means it already worked. */
+export function mfaCanRetryWithdraw(status: MfaChallengeStatus | null): boolean {
+  return status === 'CONFIRMED';
+}
+
+export function isMfaTerminalStatus(status: string): boolean {
+  return (MFA_TERMINAL_STATUSES as ReadonlyArray<string>).includes(status);
+}
+
+/** GET /api/payments/methods — public availability of PSP methods. */
+export interface PaymentMethodsPublic {
+  sbp: boolean;
+  card: boolean;
+  sandbox: boolean;
+}
+
+
 export function productsListPath(query: ProductListQuery = {}): string {
   const params = new URLSearchParams();
   const search = query.search?.trim();
@@ -443,6 +482,13 @@ export const API_PATHS = {
   addChatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   chatMembers: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/members`,
   messages: (threadId: string) => `/api/chats/${encodeURIComponent(threadId)}/messages`,
+  messagesPage: (threadId: string, opts: { limit?: number; before?: string }) => {
+    const params = new URLSearchParams();
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    if (opts.before) params.set('before', opts.before);
+    const qs = params.toString();
+    return `/api/chats/${encodeURIComponent(threadId)}/messages${qs ? `?${qs}` : ''}`;
+  },
   attachmentUploadIntent: (chatId: string) => `/api/chats/${encodeURIComponent(chatId)}/attachments/upload-intent`,
   attachmentComplete: (chatId: string, id: string) => `/api/chats/${encodeURIComponent(chatId)}/attachments/${encodeURIComponent(id)}/complete`,
   attachmentDownload: (id: string) => `/api/chats/attachments/${encodeURIComponent(id)}/download`,
@@ -469,6 +515,7 @@ export const API_PATHS = {
   walletDepositTopup: '/api/wallet/deposit/topup',
   walletDepositWithdraw: '/api/wallet/deposit/withdrawals',
   paymentsIntents: '/api/payments/intents',
+  paymentsMethods: '/api/payments/methods',
   paymentIntent: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}`,
   paymentIntentConfirm: (id: string) => `/api/payments/intents/${encodeURIComponent(id)}/confirm`,
   supportTickets: '/api/support/tickets',

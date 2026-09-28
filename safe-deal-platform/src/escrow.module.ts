@@ -7,7 +7,7 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, canActAsSupport, parseId } from './common';
-import { assertRateLimit } from './rate-limit';
+import { DistributedRateLimiter } from './rate-limit';
 import { assertUsersNotBlocked } from './user-block';
 import { withSerializableTransaction } from './database/transaction-retry';
 import {
@@ -25,7 +25,7 @@ import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
-import { assertSpendableBalance } from './economy/wallet/sale-proceeds-hold';
+import { assertSpendableBalance, warrantyWindowOpenForOrder } from './economy/wallet/sale-proceeds-hold';
 import { reserveProductStock } from './economy/wallet/product-stock';
 import { SupportModule, SupportService } from './support.module';
 import { saleKindFromSubcategory } from './economy/wallet/fund-provenance';
@@ -734,6 +734,15 @@ export class EscrowService {
         if (!reason?.trim()) {
           throw new BadRequestException('Укажите причину возврата после завершённой сделки.');
         }
+        // Self-service refunds are only allowed while the seller's proceeds are still
+        // held by the warranty window. Outside it the payout is withdrawable, so the
+        // clawback records uncollectable debt and the platform funds the refund —
+        // a repeatable seller+buyer drain. Support keeps the override (human call).
+        if (!support && !(await warrantyWindowOpenForOrder(tx, order))) {
+          throw new ConflictException(
+            'Гарантийное окно по сделке закрыто. Возврат после завершения возможен только через поддержку.',
+          );
+        }
       } else if (sellerInitiated && order.sellerId !== actor.id) {
         throw new BadRequestException('Возврат может инициировать только продавец.');
       }
@@ -961,38 +970,41 @@ export class EscrowService {
 
 @Controller('orders')
 export class EscrowController {
-  constructor(private readonly service: EscrowService) {}
+  constructor(
+    private readonly service: EscrowService,
+    private readonly rateLimit: DistributedRateLimiter,
+  ) {}
   @Get()
   @Header('Cache-Control', 'private, no-store')
   list(@CurrentUser() user: AuthUser, @Query() query: OrderQuery) {
     return this.service.list(user, query);
   }
-  @Post('product/:productId') purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {
-    assertRateLimit(`order:purchase:${user.id}`, 30, 60_000);
+  @Post('product/:productId') async purchase(@CurrentUser() user: AuthUser, @Param('productId') id: string, @Body() dto: PurchaseDto) {
+    await this.rateLimit.assert(`order:purchase:${user.id}`, 30, 60_000);
     return this.service.purchase(user, id, dto.idempotencyKey, dto.quantity);
   }
-  @Post(':id/deliver') deliver(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
-    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
+  @Post(':id/deliver') async deliver(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    await this.rateLimit.assert(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.deliver(user, parseId(id), dto.idempotencyKey);
   }
-  @Post(':id/complete') complete(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
-    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
+  @Post(':id/complete') async complete(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    await this.rateLimit.assert(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.complete(user, parseId(id), dto.idempotencyKey);
   }
-  @Post(':id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
-    assertRateLimit(`order:mutate:${user.id}`, 60, 60_000);
+  @Post(':id/cancel') async cancel(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    await this.rateLimit.assert(`order:mutate:${user.id}`, 60, 60_000);
     return this.service.cancel(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
-  @Post(':id/dispute') dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
-    assertRateLimit(`order:support:${user.id}`, 20, 60_000);
+  @Post(':id/dispute') async dispute(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: ReasonDto) {
+    await this.rateLimit.assert(`order:support:${user.id}`, 20, 60_000);
     return this.service.dispute(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
-  @Post(':id/refund-request') refundRequest(
+  @Post(':id/refund-request') async refundRequest(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: SellerRefundDto,
   ) {
-    assertRateLimit(`order:refund:${user.id}`, 20, 60_000);
+    await this.rateLimit.assert(`order:refund:${user.id}`, 20, 60_000);
     return this.service.refundBySeller(user, parseId(id), dto.idempotencyKey, dto.reason);
   }
 }

@@ -10,6 +10,20 @@ import { PrismaService } from '../../prisma.service';
 
 const DEFAULT_API = 'https://securepay.tinkoff.ru/v2';
 
+/**
+ * Whether acquiring is pointed at the test contour.
+ *
+ * Deliberately defaults to false (live) when TINKOFF_SANDBOX is unset: the flag
+ * only drives a buyer-facing "test mode, no real money is charged" notice, so an
+ * unset flag must never claim sandbox while live terminal keys are in play.
+ * The payment launch gate additionally requires the flag to be explicit once
+ * credentials are configured.
+ */
+export function tinkoffIsSandbox(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = (env.TINKOFF_SANDBOX ?? '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
 export function tinkoffToken(payload: Record<string, unknown>, password: string): string {
   const flat: Record<string, string> = { Password: password };
   for (const [key, value] of Object.entries(payload)) {
@@ -63,9 +77,10 @@ export class TinkoffAcquiringProvider implements PaymentProvider {
   async createIntent(input: CreatePaymentIntentInput): Promise<ProviderCreateResult> {
     const creds = tinkoffCredentials();
     if (!creds) {
-      throw new ForbiddenException(
-        'СБП и карта: задайте TINKOFF_TERMINAL_KEY и TINKOFF_PASSWORD (sandbox Т-Банка) в переменных API.',
-      );
+      throw new ForbiddenException({
+        code: 'PAYMENT_METHOD_UNAVAILABLE',
+        message: 'Оплата картой и СБП временно недоступна. Пополните баланс другим способом.',
+      });
     }
     const payWay = input.metadata?.payWay === 'card' ? 'card' : 'sbp';
     const amount = Number(input.amountCents);
@@ -83,18 +98,33 @@ export class TinkoffAcquiringProvider implements PaymentProvider {
     }
     const paymentId = String(init.PaymentId);
     let qrPayload: string | undefined;
+    let qrImageBase64: string | undefined;
     if (payWay === 'sbp') {
-      try {
+      // IMAGE gives the client a ready PNG so the buyer scans a real QR instead
+      // of reading a raw payload string; PAYLOAD stays as the copy/open fallback.
+      const getQr = async (dataType: 'IMAGE' | 'PAYLOAD') => {
         const qrReq: Record<string, unknown> = {
           TerminalKey: creds.terminalKey,
           PaymentId: paymentId,
-          DataType: 'PAYLOAD',
+          DataType: dataType,
         };
         qrReq.Token = tinkoffToken(qrReq, creds.password);
-        const qr = await this.postJson<{ Success?: boolean; Data?: string }>(`${creds.apiBase}/GetQr`, qrReq);
+        return this.postJson<{ Success?: boolean; Data?: string }>(`${creds.apiBase}/GetQr`, qrReq);
+      };
+      try {
+        const image = await getQr('IMAGE');
+        if (image.Success && image.Data) {
+          // Accept base64 body only (Tinkoff may prefix a data URL).
+          qrImageBase64 = image.Data.replace(/^data:image\/[a-z+]+;base64,/i, '');
+        }
+      } catch (error) {
+        this.log.warn(`GetQr IMAGE skipped: ${error instanceof Error ? error.message : 'error'}`);
+      }
+      try {
+        const qr = await getQr('PAYLOAD');
         if (qr.Success && qr.Data) qrPayload = qr.Data;
       } catch (error) {
-        this.log.warn(`GetQr skipped: ${error instanceof Error ? error.message : 'error'}`);
+        this.log.warn(`GetQr PAYLOAD skipped: ${error instanceof Error ? error.message : 'error'}`);
       }
     }
     return {
@@ -106,7 +136,8 @@ export class TinkoffAcquiringProvider implements PaymentProvider {
         paymentUrl: init.PaymentURL ?? null,
         paymentId,
         qrPayload: qrPayload ?? null,
-        sandbox: (process.env.TINKOFF_SANDBOX ?? 'true').trim() !== 'false',
+        qrImageBase64: qrImageBase64 ?? null,
+        sandbox: tinkoffIsSandbox(),
       },
     };
   }

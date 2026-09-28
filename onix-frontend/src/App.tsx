@@ -94,6 +94,17 @@ const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = 
   OTHER: { bg: 'linear-gradient(145deg,#8A8B96,#63646E)', glow: 'rgba(138,139,150,.28)', letter: '··' },
 };
 
+const CAT_STYLE_FALLBACK: { bg: string; glow: string; letter: string } = {
+  bg: 'linear-gradient(145deg,#8A8B96,#63646E)',
+  glow: 'rgba(138,139,150,.28)',
+  letter: '··',
+};
+
+/** Never undefined — unknown categories render the neutral emblem. */
+function catStyleOf(category: string): { bg: string; glow: string; letter: string } {
+  return CAT_STYLE[category] ?? CAT_STYLE_FALLBACK;
+}
+
 function formatLotCount(n: number): string {
   if (n <= 0) return '0';
   if (n > 99) return '99+';
@@ -430,13 +441,19 @@ export default function App() {
     if (core.banFromAuth) setBanNotice(core.banFromAuth);
   }, [core.banFromAuth]);
 
+  // Scalars, not the object: refreshBanInfo() returns a new BanInfo on every
+  // tick, so listing `banNotice` here would re-run the effect endlessly.
+  // The updater form of setBanNotice keeps the interval closure-free.
+  const hasBanNotice = banNotice !== undefined;
+  const banBannedUntil = banNotice?.bannedUntil;
+  const banPermanent = banNotice?.permanent ?? false;
   useEffect(() => {
-    if (!banNotice || banNotice.permanent) return;
+    if (!hasBanNotice || banPermanent) return;
     const tick = () => setBanNotice((prev) => (prev ? refreshBanInfo(prev) : prev));
     tick();
     const id = window.setInterval(tick, 30_000);
     return () => window.clearInterval(id);
-  }, [banNotice?.bannedUntil, banNotice?.permanent]);
+  }, [hasBanNotice, banBannedUntil, banPermanent]);
 
   useEffect(() => {
     void import('./screens/Market');
@@ -611,7 +628,7 @@ export default function App() {
       <div className="sidebar-divider" />
       <div className="sidebar-cats">
         {CATEGORIES.map((cat) => {
-          const style = CAT_STYLE[cat];
+          const style = catStyleOf(cat);
           const count = sidebarCatCounts[cat] ?? 0;
           const image = CATEGORY_IMAGES[cat];
           return (
@@ -873,7 +890,7 @@ export default function App() {
                   <p className="widget-empty">Лотов пока нет.</p>
                 ) : (
                   core.products.slice(0, 12).map((product: Product) => {
-                    const style = CAT_STYLE[product.category] ?? CAT_STYLE.OTHER;
+                    const style = catStyleOf(product.category);
                     const image = CATEGORY_IMAGES[product.category];
                     return (
                       <button

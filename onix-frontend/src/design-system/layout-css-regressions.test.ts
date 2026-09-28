@@ -56,7 +56,18 @@ describe('desktop and chat layout CSS regressions', () => {
   });
 
   it('does not force a crushed icon rail between 900px and 1099px', () => {
-    expect(appCss).not.toMatch(/@media \(min-width: 900px\) and \(max-width: 1099px\)/);
+    // The original regression was a 900–1099 block that overrode the shell grid
+    // to `84px minmax(0, 1fr)`, squeezing the icon rail. That range is also used
+    // legitimately for the category grid, so assert the actual crush instead of
+    // banning the media query outright.
+    const range = /@media \(min-width: 900px\) and \(max-width: 1099px\)\s*\{([\s\S]*?)\n\}/g;
+    const blocks = [...appCss.matchAll(range)].map((m) => m[1] ?? '');
+    for (const block of blocks) {
+      expect(block).not.toMatch(/\.app-shell\s*\{[^}]*grid-template-columns:\s*84px/s);
+      expect(block).not.toMatch(/grid-template-columns:\s*84px/);
+      expect(block).not.toMatch(/\.icon-rail\s*\{/);
+      expect(block).not.toMatch(/--rail-w|\.left-rail\s*\{/);
+    }
   });
 
   it('keeps AI helper questions as a solid overlay above messages', () => {

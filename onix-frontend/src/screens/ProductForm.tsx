@@ -99,7 +99,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   };
   const pickCategory = (category: string) => {
     const nextSubs = catalog[category] ?? catalog.OTHER ?? SUBCATEGORIES_BY_CATEGORY.OTHER;
-    setDraft({ ...draft, category, subcategory: nextSubs[0] });
+    setDraft({ ...draft, category, subcategory: nextSubs[0] ?? '' });
   };
   const showNewSellerNote = !profileReady || newSeller;
 
@@ -278,7 +278,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
             type="submit"
             variant="violet"
             className="lot-form__publish"
-            busy={core.actionBusy === 'product-form'}
+            busy={core.isBusy('product-form')}
             disabled={core.profile?.hasTelegram === false}
           >
             Опубликовать товар

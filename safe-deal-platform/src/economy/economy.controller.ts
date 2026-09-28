@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 import type { PaymentProviderCode, PaymentWallet } from '@prisma/client';
 import { AuthUser, CurrentUser, Public } from '../common';
-import { assertRateLimit } from '../rate-limit';
+import { assertRateLimit, DistributedRateLimiter } from '../rate-limit';
 import { AnalyticsFoundationService } from './analytics/analytics-foundation.service';
 import { SellerAnalyticsService } from './analytics/seller-analytics.service';
 import { PaymentsService } from './payments/payments.service';
@@ -62,11 +62,14 @@ export class EconomyController {
     private readonly analytics: AnalyticsFoundationService,
     private readonly sellerAnalytics: SellerAnalyticsService,
     private readonly trust: TrustService,
+    private readonly rateLimit: DistributedRateLimiter,
   ) {}
 
   @Post('payments/intents')
-  createIntent(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentIntentDto) {
-    assertRateLimit(`payment:create:${user.id}`, 30, 60_000);
+  async createIntent(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentIntentDto) {
+    // Distributed: each intent reserves product stock for checkout, so a
+    // per-instance budget would multiply that reservation capacity by N nodes.
+    await this.rateLimit.assert(`payment:create:${user.id}`, 30, 60_000);
     return this.payments.createTopUp(user, dto);
   }
 
@@ -110,18 +113,21 @@ export class EconomyController {
   }
 
   @Post('wallet/deposit/fund')
-  fundDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+  async fundDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+    await this.rateLimit.assert(`wallet:deposit:${user.id}`, 20, 60_000);
     return this.wallet.fundDepositFromBalance(user, dto.amountCents, dto.idempotencyKey);
   }
 
   /** Canonical Stage 1 alias — Balance → Deposit (same as /fund). */
   @Post('wallet/deposit/topup')
-  topupDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+  async topupDeposit(@CurrentUser() user: AuthUser, @Body() dto: FundDepositDto) {
+    await this.rateLimit.assert(`wallet:deposit:${user.id}`, 20, 60_000);
     return this.wallet.fundDepositFromBalance(user, dto.amountCents, dto.idempotencyKey);
   }
 
   @Post('wallet/deposit/withdrawals')
-  withdrawDeposit(@CurrentUser() user: AuthUser, @Body() dto: WithdrawDepositDto) {
+  async withdrawDeposit(@CurrentUser() user: AuthUser, @Body() dto: WithdrawDepositDto) {
+    await this.rateLimit.assert(`wallet:deposit:${user.id}`, 20, 60_000);
     return this.wallet.withdrawDeposit(user, dto.amountCents, dto.idempotencyKey);
   }
 

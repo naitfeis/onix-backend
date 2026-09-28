@@ -87,7 +87,7 @@ export function SellerIdentityCard({
           {showFollow && (
             <Button
               variant="secondary"
-              busy={core.actionBusy === `follow-${seller.onixId}`}
+              busy={core.isBusy(`follow-${seller.onixId}`)}
               onClick={onToggleFollow}
             >{seller.followed ? 'Отписаться' : 'Подписаться'}</Button>
           )}

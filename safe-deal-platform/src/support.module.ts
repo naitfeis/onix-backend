@@ -5,7 +5,7 @@ import {
 import { IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { ensurePairChat } from './chat-pair';
 import { AuthUser, CurrentUser, parseId } from './common';
-import { assertRateLimit } from './rate-limit';
+import { DistributedRateLimiter } from './rate-limit';
 import { lockOrderForUpdate, lockUsersInIdOrder } from './database/money-locks';
 import { withSerializableTransaction } from './database/transaction-retry';
 import { createDomainNotification, deliverTelegramAfterCommit, pushTelegramToChatId } from './domain-notify';
@@ -205,21 +205,25 @@ export class SupportController {
   constructor(
     private readonly support: SupportService,
     private readonly center: SupportCenterService,
+    private readonly rateLimit: DistributedRateLimiter,
   ) {}
 
   @Post('orders/:id/support')
-  open(
+  async open(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: OpenSupportDto,
   ) {
-    assertRateLimit(`order:support:${user.id}`, 20, 60_000);
+    // Same budget key as POST /api/orders/:id/dispute in escrow.module.ts, so both
+    // must share one limiter backend — otherwise a buyer gets limit×N across the
+    // in-process and distributed buckets (and the budget multiplies per instance).
+    await this.rateLimit.assert(`order:support:${user.id}`, 20, 60_000);
     return this.support.open(user, parseId(id), dto.reason, dto.idempotencyKey);
   }
 
   @Post('support/appeals')
-  appeal(@CurrentUser() user: AuthUser, @Body() dto: AppealDto) {
-    assertRateLimit(`support:appeal:${user.id}`, 8, 60_000);
+  async appeal(@CurrentUser() user: AuthUser, @Body() dto: AppealDto) {
+    await this.rateLimit.assert(`support:appeal:${user.id}`, 8, 60_000);
     const text = dto.explanation.trim();
     if (text.length < 8) throw new BadRequestException('Опишите ситуацию подробнее.');
     return this.center.createAppeal(user.id, text);

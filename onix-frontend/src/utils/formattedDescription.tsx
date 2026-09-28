@@ -9,6 +9,10 @@ const BLOCKED_TAGS = new Set([
   'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'SVG', 'MATH', 'VIDEO', 'AUDIO',
   'SOURCE', 'TRACK', 'FRAME', 'FRAMESET', 'APPLET', 'STYLE', 'TEMPLATE',
   'NOSCRIPT',
+  // Resource-loading tags: parsing innerHTML starts the fetch immediately, so
+  // an <img src="//attacker/x.png"> would leak buyer IP/UA even though the tag
+  // was later unwrapped. Blocking keeps the whole subtree out.
+  'IMG', 'PICTURE', 'PORTAL', 'AREA', 'MAP', 'CANVAS',
 ]);
 
 function isSafeStyle(declaration: string): boolean {
@@ -68,18 +72,38 @@ function sanitizeNode(node: Node, parent: Node) {
 export function sanitizeDescriptionHtml(html: string): string {
   if (!html) return '';
   if (typeof document === 'undefined') {
-    return html
-      .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-      .replace(/<\/?(?:script|iframe|object|embed|link|meta|base|form|svg|math|style|template|noscript)\b[^>]*>/gi, '')
-      .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
-      .replace(/\s(href|src|xlink:href)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, '');
+    return sanitizeWithoutDom(html);
   }
+  // DOMParser does not start resource loads (images, styles) — safer than
+  // element.innerHTML for untrusted markup.
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    const root = doc.body;
+    for (const child of Array.from(root.childNodes)) {
+      sanitizeNode(child, root);
+    }
+    return root.innerHTML;
+  }
+  // DOM present but DOMParser unavailable (exotic WebViews): parse in a
+  // detached div, then strip. Resource-loading tags are blocked outright so no
+  // fetch can start before removal.
   const root = document.createElement('div');
   root.innerHTML = html;
   for (const child of Array.from(root.childNodes)) {
     sanitizeNode(child, root);
   }
   return root.innerHTML;
+}
+
+/** Non-DOM fallback (tests / SSR): regex strip of scripts and unsafe attrs. */
+function sanitizeWithoutDom(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?(?:script|iframe|object|embed|link|meta|base|form|svg|math|style|template|noscript|img|picture|portal|area|map|canvas|video|audio|source|track|frame|frameset|applet|input|button|textarea|select)\b[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+    .replace(/\s(href|src|xlink:href|action|formaction)\s*=\s*(['"])[\s\S]*?\2/gi, '')
+    .replace(/\b(?:javascript|data|vbscript)\s*:/gi, '');
 }
 
 /** Normalize editor HTML before save/display. */

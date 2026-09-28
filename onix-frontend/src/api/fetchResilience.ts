@@ -77,7 +77,6 @@ export async function resilientFetch(
 
   let attempt = 0;
   let timeoutAttempts = 0;
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), timeoutMs);

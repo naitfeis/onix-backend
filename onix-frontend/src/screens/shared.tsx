@@ -13,9 +13,12 @@ import type { Core } from './types';
 import { ProductLotCard } from './ProductLotCard';
 import { t } from '../i18n';
 
+const DEFAULT_CATEGORY = CATEGORIES[0] ?? 'OTHER';
+
 export const emptyDraft: ProductDraft = {
   title: '', description: '', priceRubles: '', quantity: 1,
-  category: CATEGORIES[0], subcategory: SUBCATEGORIES_BY_CATEGORY[CATEGORIES[0]][0],
+  category: DEFAULT_CATEGORY,
+  subcategory: SUBCATEGORIES_BY_CATEGORY[DEFAULT_CATEGORY]?.[0] ?? '',
   autoDeliver: false, deliveryText: '', warrantyHours: 10, acceptedRules: false,
 };
 
@@ -93,10 +96,17 @@ export function dealStatusView(status: Deal['status']): {
   }
 }
 
+/**
+ * Backend supports open|active|completed|canceled|dispute|archive.
+ * Disputes and cancellations are listed separately: a user with >50 orders
+ * must be able to find them without paging through everything.
+ */
 export const DEAL_FILTERS: Array<{ id: string; label: string; status?: OrderListStatus }> = [
   { id: 'all', label: 'Все' },
   { id: 'open', label: 'Незавершённые', status: 'open' },
   { id: 'completed', label: 'Завершённые', status: 'completed' },
+  { id: 'dispute', label: 'Споры', status: 'dispute' },
+  { id: 'canceled', label: 'Отменённые', status: 'canceled' },
 ];
 
 const STATUS_LABEL: Record<PlatformStatus, string> = {
@@ -196,23 +206,30 @@ export function PublicProfileModal({
   const [socialList, setSocialList] = useState<'followers' | 'following' | null>(null);
   const [socialPeople, setSocialPeople] = useState<Seller[]>([]);
   const [trustCard, setTrustCard] = useState<TrustCard | null>(null);
+  // Scalars derived from the profile: the effect resets local state and
+  // refetches the trust card when identity or social counters change, without
+  // depending on the whole profile object (which changes on unrelated updates).
+  const peerOnixId = profile?.onixId;
+  const peerFollowed = Boolean(profile?.followed);
+  const peerFollowers = profile?.followersCount ?? 0;
+  const peerFollowing = profile?.followingCount ?? 0;
   useEffect(() => {
-    if (!profile) return;
-    setFollowed(Boolean(profile.followed));
-    setFollowersCount(profile.followersCount);
-    setFollowingCount(profile.followingCount ?? 0);
+    if (!peerOnixId) return;
+    setFollowed(peerFollowed);
+    setFollowersCount(peerFollowers);
+    setFollowingCount(peerFollowing);
     setSocialList(null);
     setSocialPeople([]);
     setSection('products');
     setTrustCard(null);
     let cancelled = false;
-    void api.get<TrustCard>(API_PATHS.userTrustCard(profile.onixId)).then((card) => {
+    void api.get<TrustCard>(API_PATHS.userTrustCard(peerOnixId)).then((card) => {
       if (!cancelled) setTrustCard(card);
     }).catch(() => {
       if (!cancelled) setTrustCard(null);
     });
     return () => { cancelled = true; };
-  }, [profile?.onixId, profile?.followed, profile?.followersCount, profile?.followingCount]);
+  }, [peerOnixId, peerFollowed, peerFollowers, peerFollowing]);
   if (!profile) return null;
   const products = profile.products ?? [];
   const reviews = profile.reviews ?? [];
@@ -291,12 +308,12 @@ export function PublicProfileModal({
         {!isSelf && core && <div className="card-actions">
           {onWrite && <Button
             variant="secondary"
-            busy={core.actionBusy === `chat-${profile.onixId}`}
+            busy={core.isBusy(`chat-${profile.onixId}`)}
             onClick={() => void onWrite(profile.onixId)}
           >Написать</Button>}
           {isSeller && <Button
             variant="secondary"
-            busy={core.actionBusy === `follow-${profile.onixId}`}
+            busy={core.isBusy(`follow-${profile.onixId}`)}
             onClick={async () => {
               const previousFollowed = followed;
               const previousCount = followersCount;
@@ -456,7 +473,7 @@ export function ReportUserModal({
       </Field>
       <div className="modal__actions">
         <Button type="button" variant="secondary" onClick={onClose}>Отмена</Button>
-        <Button type="submit" busy={core.actionBusy === `report-${onixId}`} disabled={!comment.trim()}>Отправить</Button>
+        <Button type="submit" busy={core.isBusy(`report-${onixId}`)} disabled={!comment.trim()}>Отправить</Button>
       </div>
     </form>
   </Modal>;

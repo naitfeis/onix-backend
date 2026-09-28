@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, money } from '../api/client';
 import { API_PATHS, SUBCATEGORY_LABELS, formatLastSeen, sellerIsPresent, type Deal, type OrderListQuery, type PublicProfile } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
@@ -30,7 +30,7 @@ export function ReviewForm({ deal, core, onClose, setToast }: { deal: Deal | nul
   return <Modal open={Boolean(deal)} title="Отзыв о сделке" onClose={onClose}><form className="form" onSubmit={async event => { event.preventDefault(); if (deal && text.trim() && await core.submitReview(deal.id, rating, text)) { setText(''); setToast('Спасибо, отзыв опубликован.'); onClose(); } }}>
     <Field label="Оценка"><Select value={rating} onChange={event => setRating(Number(event.target.value))}>{[5,4,3,2,1].map(value => <option key={value} value={value}>{'★'.repeat(value)}</option>)}</Select></Field>
     <Field label="Комментарий"><Textarea required minLength={5} maxLength={500} value={text} onChange={event => setText(event.target.value)} /></Field>
-    <div className="modal__actions"><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.actionBusy === 'review'}>Опубликовать</Button></div>
+    <div className="modal__actions"><Button type="button" variant="secondary" onClick={onClose}>Отмена</Button><Button type="submit" busy={core.isBusy('review')}>Опубликовать</Button></div>
   </form></Modal>;
 }
 
@@ -258,22 +258,27 @@ export function Deals({
   const [refundReason, setRefundReason] = useState('');
   const [highlightedDealId, setHighlightedDealId] = useState<string | null>(null);
   const [peerProfile, setPeerProfile] = useState<PublicProfile | null>(null);
-  const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter) ?? DEAL_FILTERS[0];
-  const listQuery: OrderListQuery = {
-    ...(activeFilter.status ? { status: activeFilter.status } : {}),
-  };
+  const activeFilter = DEAL_FILTERS.find(item => item.id === dealFilter);
+  // useMemo: this object is an effect dependency. Building it inline created a
+  // new identity every render, which either refetched on unrelated renders or
+  // (as before) silently hid the dependency from exhaustive-deps.
+  const listQuery = useMemo<OrderListQuery>(
+    () => ({ ...(activeFilter?.status ? { status: activeFilter.status } : {}) }),
+    [activeFilter?.status],
+  );
+  const { listDeals, profile } = core;
   const skipBootstrappedAll = useRef(true);
   useEffect(() => {
-    if (!core.profile) return;
+    if (!profile) return;
     if (dealFilter === 'all' && skipBootstrappedAll.current) {
       skipBootstrappedAll.current = false;
       return;
     }
     skipBootstrappedAll.current = false;
     const controller = new AbortController();
-    void core.listDeals(listQuery, controller.signal);
+    void listDeals(listQuery, controller.signal);
     return () => controller.abort();
-  }, [core.listDeals, core.profile, dealFilter]);
+  }, [listDeals, profile, dealFilter, listQuery]);
   useEffect(() => {
     if (!focusDealId) return;
     setDealFilter('all');
@@ -327,8 +332,14 @@ export function Deals({
   }
 
   return <div className="stack">
-    <div className="chips" role="list" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
-      <button role="listitem" className={dealFilter === item.id ? 'active' : ''} key={item.id} onClick={() => setDealFilter(item.id)}>{item.label.toUpperCase()}</button>)}</div>
+    <div className="chips" role="group" aria-label="Фильтры сделок">{DEAL_FILTERS.map(item =>
+      <button
+        type="button"
+        aria-pressed={dealFilter === item.id}
+        className={dealFilter === item.id ? 'active' : ''}
+        key={item.id}
+        onClick={() => setDealFilter(item.id)}
+      >{item.label.toUpperCase()}</button>)}</div>
     <div className="chips deal-role-tabs" role="tablist" aria-label="Роль в сделках">{(['buyer', 'seller'] as const).map(item => (
       <button
         type="button"
@@ -353,7 +364,7 @@ export function Deals({
             lastSeenLabel={formatLastSeen(presence?.lastOnline ?? deal.counterparty.lastOnline)}
             highlighted={highlightedDealId === deal.id}
             timersActive={active}
-            supportBusy={core.actionBusy === `support-${deal.id}`}
+            supportBusy={core.isBusy(`support-${deal.id}`)}
             onOpenPeer={openPeer}
             onGoToChat={goToChat}
             onDeliver={onDeliver}
@@ -364,9 +375,21 @@ export function Deals({
           />
         );
       })}
+    {/* Keyset paging — without it only the newest 50 orders were ever visible. */}
+    {core.dealsHasMore && deals.length > 0 && (
+      <Button
+        type="button"
+        variant="secondary"
+        busy={core.dealsLoadingMore}
+        onClick={() => void core.loadMoreDeals()}
+      >Показать ещё</Button>
+    )}
+    {core.errors.deals && deals.length > 0 && (
+      <p className="form-error" role="alert">{core.errors.deals}</p>
+    )}
     <Confirm
       open={Boolean(confirm)}
-      busy={core.actionBusy?.startsWith('deal-')}
+      busy={core.isBusyPrefix('deal-')}
       title={confirm?.action === 'complete' ? 'Подтвердить получение и выплату продавцу?' : 'Подтвердить передачу товара?'}
       text={confirm?.action === 'complete'
         ? 'Это действие необратимо. Подтверждайте только после проверки товара.'
@@ -381,7 +404,7 @@ export function Deals({
     />
     <Modal open={Boolean(refundDeal)} title="Запрос возврата" onClose={() => setRefundDeal(null)}><div className="form">
       <Field label="Причина возврата"><Textarea required maxLength={500} value={refundReason} onChange={event => setRefundReason(event.target.value)} /></Field>
-      <div className="modal__actions"><Button variant="secondary" onClick={() => setRefundDeal(null)}>Отмена</Button><Button busy={core.actionBusy === `seller-refund-${refundDeal?.id}`} disabled={!refundReason.trim()} onClick={async () => {
+      <div className="modal__actions"><Button variant="secondary" onClick={() => setRefundDeal(null)}>Отмена</Button><Button busy={core.isBusy(`seller-refund-${refundDeal?.id}`)} disabled={!refundReason.trim()} onClick={async () => {
         if (refundDeal && refundReason.trim() && await core.sellerRefund(refundDeal.id, refundReason.trim())) { setRefundDeal(null); setToast('Запрос на возврат отправлен.'); }
       }}>Отправить</Button></div>
     </div></Modal>

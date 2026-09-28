@@ -21,7 +21,6 @@ export function bootstrapStart(): void {
   bootId = `${bootAttempt}-${Math.round(bootStarted)}`;
   phases.clear();
   summaryPrinted = false;
-  // eslint-disable-next-line no-console
   console.info(`[bootstrap] START #${bootAttempt} id=${bootId}`);
 }
 

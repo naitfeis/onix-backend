@@ -11,3 +11,10 @@ node_modules
 *.tsbuildinfo
 /ops-drills
 
+# Local scratch / probe artifacts — never commit (a stale Postgres cluster and
+# build logs were committed here once and are tracked in history).
+/_tmp-*/
+/.scratch-*
+*.tmp
+*-out.txt
+

@@ -67,8 +67,20 @@ test('model: purchase then withdraw cannot overspend', () => {
 });
 
 test('FE keeps withdraw idempotency key until success (timeout→retry safe)', () => {
+  // The single withdrawal path moved from useOnixCore.withdrawKeyRef to
+  // Profile.moneyKeyRef + core.withdraw({ idempotencyKey }). The invariant:
+  // one logical withdrawal (one modal session) reuses one key — generated on
+  // open, never cleared on failure/step-up, passed verbatim to the API.
   const fe = repoFile('onix-frontend/src/hooks/useOnixCore.ts');
-  assert.match(fe, /withdrawKeyRef/);
-  assert.match(fe, /if \(!withdrawKeyRef\.current\) withdrawKeyRef\.current = crypto\.randomUUID\(\)/);
-  assert.match(fe, /withdrawKeyRef\.current = null/);
+  assert.match(fe, /idempotencyKey: input\.idempotencyKey/);
+  assert.doesNotMatch(fe, /idempotencyKey: crypto\.randomUUID\(\)/);
+
+  const profile = repoFile('onix-frontend/src/screens/Profile.tsx');
+  // Key is regenerated only when a NEW money modal opens.
+  assert.match(profile, /moneyKeyRef\.current = crypto\.randomUUID\(\);\s*\n\s*setMoneyModal\(kind\)/);
+  // Submit and the post-step-up retry both reuse the captured key.
+  assert.match(profile, /await completeWithdraw\(\{ amountCents, idempotencyKey: key \}\)/);
+  assert.match(profile, /idempotencyKey: stepUp\.idempotencyKey/);
+  // No failure path resets the key (that would break timeout→retry safety).
+  assert.doesNotMatch(profile, /moneyKeyRef\.current = null/);
 });

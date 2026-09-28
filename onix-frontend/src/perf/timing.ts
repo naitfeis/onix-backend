@@ -20,8 +20,7 @@ function push(sample: TimingSample): void {
   const failed = Boolean(sample.detail && sample.detail !== 'ok');
   const slow = sample.durationMs >= 500;
   if (import.meta.env.DEV || failed || slow) {
-    // eslint-disable-next-line no-console
-    console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
+      console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms${sample.detail ? ` ${sample.detail}` : ''}`);
   }
 }
 
@@ -84,6 +83,5 @@ export function markAppReady(label = 'app-ready'): void {
   samples.push(sample);
   if (samples.length > MAX_SAMPLES) samples.shift();
   // Milestones always visible once — complements [bootstrap] summary.
-  // eslint-disable-next-line no-console
   console.info(`[onix-timing] ${sample.name}=${Math.round(sample.durationMs)}ms`);
 }

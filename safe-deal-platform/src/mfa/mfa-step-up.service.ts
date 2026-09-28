@@ -290,10 +290,17 @@ export class MfaStepUpService {
         currentSession: input.sessionId,
       }));
     }
-    await db.mfaChallenge.update({
-      where: { id: row.id },
+    // Conditional claim: two concurrent withdraws presenting the same challengeId
+    // must not both pass. A read-then-write pair is not atomic here because this
+    // runs outside the money transaction (no advisory lock is held yet), so the
+    // status guard itself has to win the race.
+    const consumed = await db.mfaChallenge.updateMany({
+      where: { id: row.id, status: 'CONFIRMED' },
       data: { status: 'CONSUMED' },
     });
+    if (consumed.count !== 1) {
+      throw new AuthPlatformError('AUTH_LOGIN_CHALLENGE_CONSUMED', 'Step-up already used.');
+    }
   }
 
   private async normalizeExpiry(row: {

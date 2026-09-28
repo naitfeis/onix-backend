@@ -74,8 +74,7 @@ export function logTelegramDetect(label: string, detectResult?: boolean): void {
     lastDetectLogKey = key;
     // Dev-only — production console stays clean (bootstrap timing is enough).
     if (!import.meta.env.DEV) return;
-    // eslint-disable-next-line no-console
-    console.info('[tg-detect]', {
+      console.info('[tg-detect]', {
       label,
       now: Date.now(),
       initDataLength: initData.length,

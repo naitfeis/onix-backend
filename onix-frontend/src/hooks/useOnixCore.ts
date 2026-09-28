@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { api, bootstrapAuth, friendlyError, getAccessToken, clearAccessToken, ApiError } from '../api/client';
 import {
+  PAYMENT_METHODS_UNKNOWN,
+  fetchPaymentMethods,
+  type PaymentMethodsAvailability,
+} from '../api/paymentMethods';
+import {
   consumeGoogleOAuthIntent,
   consumeGoogleOAuthRedirect,
   confirmWebsiteLoginFromMiniAppIfNeeded,
@@ -37,6 +42,7 @@ import {
   visibleProducts,
 } from '../catalogVisibility';
 import { rublesToCentsString } from '../utils/moneyCents';
+import { encodeOrderListCursor, isValidOrderCursor } from '../utils/orderListCursor';
 type CollectionKey = 'products' | 'deals' | 'chats' | 'notifications' | 'reviews';
 type AuthMode = 'mini' | 'website' | 'legacy';
 type AuthBootstrap =
@@ -102,6 +108,31 @@ function uniqueMessages(list: Message[]): Message[] {
   }
   return out;
 }
+/** Withdrawal outcome: step-up challenge must be distinguishable from a failure. */
+export type WithdrawResult =
+  | { ok: true }
+  | { ok: false; reason: 'busy' }
+  | { ok: false; reason: 'error'; error: unknown }
+  | {
+      ok: false;
+      reason: 'step-up';
+      stepUp: { challengeId: string; webDeepLink?: string; expiresAt?: string };
+    };
+
+/** Page size for GET /api/orders (backend caps limit at 100). */
+const DEALS_PAGE = 50;
+
+/** Page size for GET /api/chats/:id/messages (backend default 50, max 100). */
+const MESSAGES_PAGE = 50;
+
+/** Money mutations serialize against each other; everything else is per-key. */
+const MONEY_ACTION_PREFIXES = ['purchase-', 'withdraw', 'deal-', 'seller-refund-', 'support-'] as const;
+
+/** Module scope: a stable reference keeps run() memoization honest. */
+function isMoneyAction(key: string): boolean {
+  return MONEY_ACTION_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
 /** Presence HTTP beat — not per click/route. 45s is within the 30–60s TZ window. */
 const PRESENCE_MIN_MS = 45_000;
 let lastPresenceBeatAt = 0;
@@ -302,14 +333,27 @@ export function useOnixCore() {
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [presenceByOnixId, setPresenceByOnixId] = useState<Record<string, { online: boolean; lastOnline: string }>>({});
-  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [busyKeys, setBusyKeys] = useState<string[]>([]);
+  const [dealsHasMore, setDealsHasMore] = useState(false);
+  const [dealsLoadingMore, setDealsLoadingMore] = useState(false);
+  const [messagesHasOlder, setMessagesHasOlder] = useState<Record<string, boolean>>({});
+  const [messagesOlderLoading, setMessagesOlderLoading] = useState<Record<string, boolean>>({});
+  /** Set when a mutation is rejected because the same action is in flight. */
+  const [busyNotice, setBusyNotice] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodsAvailability>(PAYMENT_METHODS_UNKNOWN);
   const [banFromAuth, setBanFromAuth] = useState<BanInfo | undefined>();
   const chatsRef = useRef(store.chats);
   chatsRef.current = store.chats;
+  const notificationsRef = useRef(store.notifications);
+  notificationsRef.current = store.notifications;
+  const dealsRef = useRef(store.deals);
+  dealsRef.current = store.deals;
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const activeChatIdRef = useRef<string | null>(null);
   const actionBusyRef = useRef<string | null>(null);
+  /** Per-action locks: one slow request must not silently swallow unrelated ones. */
+  const busyKeysRef = useRef(new Set<string>());
   const purchaseLockRef = useRef(new Set<string>());
   const purchaseKeyRef = useRef(new Map<string, string>());
 
@@ -353,6 +397,17 @@ export function useOnixCore() {
     } catch {
       /* catalog rings fall back to loaded products */
     }
+  }, []);
+
+  /**
+   * GET /api/payments/methods is public, so availability is loaded once at boot
+   * regardless of session state. Until it resolves the UI offers balance only,
+   * which keeps СБП/card from leading a buyer into a provider 403.
+   */
+  const loadPaymentMethods = useCallback(async () => {
+    const next = await fetchPaymentMethods(<T,>(path: string) => api.get<T>(path));
+    setPaymentMethods(next);
+    return next;
   }, []);
 
   const loadProfile = useCallback(async (opts?: { keepOnTransient?: boolean }) => {
@@ -575,6 +630,10 @@ export function useOnixCore() {
   }, [load, loadCatalog, loadProfile]);
 
   useEffect(() => {
+    void loadPaymentMethods();
+  }, [loadPaymentMethods]);
+
+  useEffect(() => {
     // Ordinary www: zero Telegram SDK / ready / expand (required for RU cookie path).
     // Mini App only: signal ready after real initData / tgWebAppData detection.
     if (isTelegramMiniApp()) {
@@ -637,8 +696,12 @@ export function useOnixCore() {
 
   // Keep lastSeenAt fresh on a timer — not on every click, focus, or screen switch.
   // getMe() already writes lastSeenAt; WS auth also announces online.
+  /** Signed-in flag: effects gate on presence, not on the profile object. */
+  const isAuthenticated = profile !== null;
+  const ownOnixId = profile?.onixId ?? null;
+
   useEffect(() => {
-    if (!profile) return;
+    if (!isAuthenticated) return;
     let cancelled = false;
     let beating = false;
     if (lastPresenceBeatAt === 0) lastPresenceBeatAt = Date.now();
@@ -681,11 +744,11 @@ export function useOnixCore() {
       window.clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [profile?.onixId]);
+  }, [isAuthenticated, ownOnixId]);
 
   // Stage 5.6 — realtime fan-out (chat / presence / order / notifications).
   useEffect(() => {
-    if (!profile) {
+    if (!isAuthenticated) {
       getRealtimeClient().disconnect();
       return;
     }
@@ -842,7 +905,7 @@ export function useOnixCore() {
       off();
       window.clearInterval(tokenRefresh);
     };
-  }, [profile?.onixId, load]);
+  }, [isAuthenticated, ownOnixId, load]);
 
   const subscribeRealtimeChat = useCallback((chatId: string) => {
     getRealtimeClient().subscribeChat(chatId);
@@ -856,24 +919,66 @@ export function useOnixCore() {
     getRealtimeClient().typing(chatId);
   }, []);
 
-  const run = useCallback(async <T,>(key: string, request: () => Promise<T>, after?: () => void): Promise<T | null> => {
-    if (actionBusyRef.current) return null;
-    actionBusyRef.current = key;
-    setActionBusy(key);
+  /**
+   * Run a mutation with per-action locking.
+   *
+   * Locking model:
+   * - the same key twice → second caller is rejected as busy (never duplicated);
+   * - money keys also take a shared mutex so two balance mutations cannot interleave;
+   * - unrelated keys (chat, favorites, follow, reports) run in parallel.
+   *
+   * `null` means "did not run" — either busy or failed. Busy raises a visible
+   * notice via busyNotice so the user is never left guessing after a silent no-op.
+   */
+  const run = useCallback(async <T,>(
+    key: string,
+    request: () => Promise<T>,
+    after?: () => void,
+    opts?: { rethrow?: boolean },
+  ): Promise<T | null> => {
+    const money = isMoneyAction(key);
+    if (busyKeysRef.current.has(key) || (money && actionBusyRef.current)) {
+      notify('error');
+      setBusyNotice('Предыдущее действие ещё выполняется. Подождите пару секунд и повторите.');
+      return null;
+    }
+    busyKeysRef.current.add(key);
+    if (money) actionBusyRef.current = key;
+    setBusyKeys((previous) => (previous.includes(key) ? previous : [...previous, key]));
     try {
       const result = await request();
       notify('success');
+      // Clear a previous failure for this action — a stale error next to a
+      // successful submit reads as "the form is still broken".
+      setErrors((previous) => (previous[key] === undefined ? previous : { ...previous, [key]: undefined }));
       after?.();
       return result;
     } catch (error) {
       notify('error');
-      setErrors(previous => ({ ...previous, [key]: friendlyError(error) }));
+      // Callers that inspect ApiError.code (withdraw step-up) opt out of the
+      // friendly-message mapping; they still record nothing user-facing.
+      if (!opts?.rethrow) {
+        setErrors(previous => ({ ...previous, [key]: friendlyError(error) }));
+      }
+      if (opts?.rethrow) throw error;
       return null;
     } finally {
-      actionBusyRef.current = null;
-      setActionBusy(null);
+      busyKeysRef.current.delete(key);
+      if (money && actionBusyRef.current === key) actionBusyRef.current = null;
+      setBusyKeys((previous) => previous.filter((item) => item !== key));
     }
   }, []);
+
+  /** Exact-match busy state for buttons (chat, follow, favorite, report…). */
+  const isBusy = useCallback((key: string) => busyKeys.includes(key), [busyKeys]);
+
+  /** Prefix-match busy state for groups ("is any deal action running?"). */
+  const isBusyPrefix = useCallback(
+    (prefix: string) => busyKeys.some((key) => key.startsWith(prefix)),
+    [busyKeys],
+  );
+
+  const clearBusyNotice = useCallback(() => setBusyNotice(''), []);
 
   const cents = (rubles: string | number) => rublesToCentsString(rubles);
 
@@ -885,7 +990,7 @@ export function useOnixCore() {
 
   const reportUser = useCallback((onixId: string, reason: BanReasonCode, comment: string) =>
     run(`report-${onixId}`, () =>
-      api.post(API_PATHS.userReport(onixId), { reason, comment })), []);
+      api.post(API_PATHS.userReport(onixId), { reason, comment })), [run]);
 
   const createProduct = useCallback((draft: ProductDraft) => run('product-form', () =>
     api.post<Product>(API_PATHS.productCreate, {
@@ -1018,7 +1123,14 @@ export function useOnixCore() {
   const listFollowing = useCallback((onixId: string) => api.get<Seller[]>(API_PATHS.userFollowing(onixId)), []);
 
   const purchase = useCallback(async (productId: string, idempotencyKey?: string) => {
-    if (!productId || purchaseLockRef.current.has(productId) || actionBusyRef.current) return null;
+    if (!productId) return null;
+    // A purchase already in flight (double click) or another money mutation
+    // running — surface why nothing happened instead of failing silently.
+    if (purchaseLockRef.current.has(productId) || actionBusyRef.current) {
+      notify('error');
+      setBusyNotice('Оплата уже выполняется. Дождитесь завершения, чтобы не купить лот дважды.');
+      return null;
+    }
     purchaseLockRef.current.add(productId);
     hideCatalogProduct(productId);
     setStore((previous) => ({
@@ -1056,6 +1168,11 @@ export function useOnixCore() {
   const loadMessages = useCallback(async (threadId: string) => {
     try {
       const data = await api.get<Message[]>(API_PATHS.messages(threadId));
+      const rows = data ?? [];
+      // A full page means there may be more history above the first message.
+      setMessagesHasOlder((previous) => (
+        previous[threadId] === rows.length >= MESSAGES_PAGE ? previous : { ...previous, [threadId]: rows.length >= MESSAGES_PAGE }
+      ));
       setMessages((previous) => {
         const existing = previous[threadId] ?? [];
         const server = uniqueMessages(data);
@@ -1077,15 +1194,57 @@ export function useOnixCore() {
     }
   }, []);
 
+  /**
+   * Prepend an older page of a thread.
+   *
+   * Backend keyset: `before` = load messages with id strictly less than cursor,
+   * newest-first in the response. The client keeps ascending order, so the page
+   * is reversed and deduped by id against what is already rendered.
+   */
+  const loadOlderMessages = useCallback(async (threadId: string): Promise<number> => {
+    const lockKey = `messages-older-${threadId}`;
+    if (messagesOlderLockRef.current.has(lockKey)) return 0;
+    const existing = messagesRef.current[threadId] ?? [];
+    const oldest = existing[0];
+    if (!oldest) return 0;
+    messagesOlderLockRef.current.add(lockKey);
+    setMessagesOlderLoading((previous) => ({ ...previous, [threadId]: true }));
+    try {
+      const data = await api.get<Message[]>(API_PATHS.messagesPage(threadId, {
+        limit: MESSAGES_PAGE,
+        before: oldest.id,
+      }));
+      const rows = data ?? [];
+      if (rows.length > 0) {
+        setMessages((previous) => {
+          const list = previous[threadId] ?? [];
+          const seen = new Set(list.map((row) => row.id));
+          const older = rows
+            .slice()
+            .sort((a, b) => Number(a.id) - Number(b.id))
+            .filter((row) => !seen.has(row.id));
+          if (older.length === 0) return previous;
+          return { ...previous, [threadId]: [...older, ...list] };
+        });
+      }
+      setMessagesHasOlder((previous) => ({ ...previous, [threadId]: rows.length >= MESSAGES_PAGE }));
+      return rows.length;
+    } catch (error) {
+      setErrors((previous) => ({ ...previous, [`messages-${threadId}`]: friendlyError(error) }));
+      return 0;
+    } finally {
+      messagesOlderLockRef.current.delete(lockKey);
+      setMessagesOlderLoading((previous) => ({ ...previous, [threadId]: false }));
+    }
+  }, []);
+
   const refreshChats = useCallback(async () => {
     await load('chats', API_PATHS.chats, { silent: true });
   }, [load]);
 
-  const searchChats = useCallback(async (q: string) => {
-    const trimmed = q.trim();
-    await load('chats', trimmed ? API_PATHS.chatsSearch(trimmed) : API_PATHS.chats, { silent: true });
-  }, [load]);
-
+  const messagesRef = useRef<Record<string, Message[]>>({});
+  messagesRef.current = messages;
+  const messagesOlderLockRef = useRef(new Set<string>());
   const sendLock = useRef(new Set<string>());
   const sendMessage = useCallback(async (threadId: string, text: string) => {
     const trimmed = text.trim();
@@ -1109,18 +1268,6 @@ export function useOnixCore() {
       sendLock.current.delete(lockKey);
     }
   }, [run]);
-
-  const sendChatAttachment = useCallback(async (
-    threadId: string,
-    _file: File,
-    _caption?: string,
-  ) => {
-    setErrors((previous) => ({
-      ...previous,
-      [`message-${threadId}`]: 'Вложения в чате временно отключены. Отправьте текстовое сообщение.',
-    }));
-    return false;
-  }, []);
 
   const startChat = useCallback((onixId: string) => run(`chat-${onixId}`, () =>
     api.post<ChatThread>(API_PATHS.directChat, { onixId }),
@@ -1174,19 +1321,49 @@ export function useOnixCore() {
     }), () => void load('deals', API_PATHS.orders, { silent: true, fresh: true }));
   }, [load, openSupport, run]);
 
-  const withdrawKeyRef = useRef<string | null>(null);
-  const withdraw = useCallback((amountRubles: number, stepUpChallengeId?: string) => {
-    if (!withdrawKeyRef.current) withdrawKeyRef.current = crypto.randomUUID();
-    const key = withdrawKeyRef.current;
-    return run('withdraw', () =>
-      api.post(API_PATHS.walletWithdraw, {
-        amountCents: rublesToCentsString(amountRubles),
-        idempotencyKey: key,
-        ...(stepUpChallengeId ? { stepUpChallengeId } : {}),
-      }), async () => {
-        withdrawKeyRef.current = null;
-        await loadProfile();
-      });
+  /**
+   * Single withdrawal path (Profile used to keep a second implementation).
+   *
+   * `idempotencyKey` must stay stable across the whole logical withdrawal:
+   * the first attempt can come back AUTH_STEP_UP_REQUIRED, and the retry that
+   * carries the CONFIRMED challengeId must reuse the same key so the backend
+   * cannot create two payouts. Callers pass the key they already generated.
+   */
+  const withdraw = useCallback(async (
+    input: { amountCents: number; idempotencyKey: string; stepUpChallengeId?: string },
+  ): Promise<WithdrawResult> => {
+    try {
+      const ok = await run('withdraw', () =>
+        api.post(API_PATHS.walletWithdraw, {
+          amountCents: String(input.amountCents),
+          idempotencyKey: input.idempotencyKey,
+          ...(input.stepUpChallengeId ? { stepUpChallengeId: input.stepUpChallengeId } : {}),
+        }), async () => {
+          await loadProfile();
+        }, { rethrow: true });
+      if (ok === null) return { ok: false, reason: 'busy' };
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'AUTH_STEP_UP_REQUIRED') {
+        const details = error.details as {
+          challengeId?: string;
+          webDeepLink?: string;
+          expiresAt?: string;
+        } | undefined;
+        if (details?.challengeId) {
+          return {
+            ok: false,
+            reason: 'step-up',
+            stepUp: {
+              challengeId: details.challengeId,
+              ...(details.webDeepLink ? { webDeepLink: details.webDeepLink } : {}),
+              ...(details.expiresAt ? { expiresAt: details.expiresAt } : {}),
+            },
+          };
+        }
+      }
+      return { ok: false, reason: 'error', error };
+    }
   }, [loadProfile, run]);
 
   const submitReview = useCallback((dealId: string, rating: number, text: string) => run('review', () =>
@@ -1194,28 +1371,23 @@ export function useOnixCore() {
       if (profile) void load('reviews', API_PATHS.reviews(profile.onixId));
     }), [load, profile, run]);
 
-  const markNotificationRead = useCallback(async (id: string) => {
-    await api.patch(API_PATHS.notificationRead(id), {});
-    setStore(previous => ({
-      ...previous,
-      notifications: previous.notifications.map((item) => item.id === id ? { ...item, read: true } : item),
-    }));
-  }, []);
-
+  /**
+   * Mark chat notifications read.
+   *
+   * Reads the snapshot from a ref instead of assigning inside the state updater:
+   * StrictMode invokes updaters twice, which used to send duplicate PATCHes.
+   */
   const markChatNotificationsRead = useCallback(async (chatId: string) => {
-    let ids: string[] = [];
-    setStore((previous) => {
-      ids = previous.notifications
-        .filter((item) => !item.read && item.chatId === chatId && /^\d+$/.test(item.id))
-        .map((item) => item.id);
-      if (ids.length === 0) return previous;
-      return {
-        ...previous,
-        notifications: previous.notifications.map((item) => (
-          item.chatId === chatId ? { ...item, read: true } : item
-        )),
-      };
-    });
+    const ids = notificationsRef.current
+      .filter((item) => !item.read && item.chatId === chatId && /^\d+$/.test(item.id))
+      .map((item) => item.id);
+    if (ids.length === 0) return;
+    setStore((previous) => ({
+      ...previous,
+      notifications: previous.notifications.map((item) => (
+        item.chatId === chatId ? { ...item, read: true } : item
+      )),
+    }));
     await Promise.all(ids.map((id) => api.patch(API_PATHS.notificationRead(id), {}).catch(() => undefined)));
   }, []);
 
@@ -1227,14 +1399,21 @@ export function useOnixCore() {
     }
   }, [markChatNotificationsRead]);
 
+  const dealsQueryRef = useRef<OrderListQuery>({});
+  const dealsLoadingMoreRef = useRef(false);
+  const dealsHasMoreRef = useRef(false);
+  dealsHasMoreRef.current = dealsHasMore;
+
   const listDeals = useCallback(async (query: OrderListQuery = {}, signal?: AbortSignal) => {
+    dealsQueryRef.current = query;
     setStates((previous) => (
       previous.deals === 'success' ? previous : { ...previous, deals: 'loading' }
     ));
     try {
-      const data = await api.get<Deal[]>(API_PATHS.ordersList(query), signal);
+      const data = await api.get<Deal[]>(API_PATHS.ordersList({ limit: DEALS_PAGE, ...query }), signal);
       if (signal?.aborted) return null;
-      setStore(previous => ({ ...previous, deals: data }));
+      setStore(previous => ({ ...previous, deals: data ?? [] }));
+      setDealsHasMore((data?.length ?? 0) >= DEALS_PAGE);
       setErrors(previous => ({ ...previous, deals: undefined }));
       setStates(previous => ({ ...previous, deals: 'success' }));
       return data;
@@ -1243,6 +1422,56 @@ export function useOnixCore() {
       setErrors(previous => ({ ...previous, deals: friendlyError(error) }));
       setStates(previous => ({ ...previous, deals: 'error' }));
       return null;
+    }
+  }, []);
+
+  /**
+   * Append the next keyset page of orders using the same filter/sort.
+   * Guards: in-flight lock, filter-change signature check, id dedupe.
+   */
+  const loadMoreDeals = useCallback(async (): Promise<number> => {
+    if (dealsLoadingMoreRef.current || !dealsHasMoreRef.current) return 0;
+    const deals = dealsRef.current;
+    if (deals.length === 0) return 0;
+    dealsLoadingMoreRef.current = true;
+    setDealsLoadingMore(true);
+    const signature = JSON.stringify(dealsQueryRef.current);
+    try {
+      const query = dealsQueryRef.current;
+      const sort = query.sort ?? 'newest';
+      const last = deals[deals.length - 1];
+      if (!last) return 0;
+      const cursor = encodeOrderListCursor(sort, last);
+      // A malformed cursor is ignored by the backend, which would return page 1
+      // again: dedupe hides it and hasMore stays true, so paging never ends.
+      if (!isValidOrderCursor(cursor, sort)) {
+        setDealsHasMore(false);
+        return 0;
+      }
+      const data = await api.get<Deal[]>(API_PATHS.ordersList({
+        limit: DEALS_PAGE,
+        ...query,
+        cursor,
+      }));
+      // Filter changed while the page was in flight — drop the stale result.
+      if (JSON.stringify(dealsQueryRef.current) !== signature) return 0;
+      const rows = data ?? [];
+      if (rows.length > 0) {
+        setStore((previous) => {
+          const seen = new Set(previous.deals.map((row) => row.id));
+          return { ...previous, deals: [...previous.deals, ...rows.filter((row) => !seen.has(row.id))] };
+        });
+      }
+      setDealsHasMore(rows.length >= DEALS_PAGE);
+      return rows.length;
+    } catch (error) {
+      if (JSON.stringify(dealsQueryRef.current) === signature) {
+        setErrors((previous) => ({ ...previous, deals: friendlyError(error) }));
+      }
+      return 0;
+    } finally {
+      dealsLoadingMoreRef.current = false;
+      setDealsLoadingMore(false);
     }
   }, []);
 
@@ -1298,21 +1527,29 @@ export function useOnixCore() {
   const unread = useMemo(() => store.chats.reduce((total, chat) => total + chat.unreadCount, 0), [store.chats]);
 
   return useMemo(() => ({
-    profile, catalogSubcategories, categoryLotCounts, ...store, states, errors, messages, actionBusy, unread, banFromAuth,
+    profile, catalogSubcategories, categoryLotCounts, ...store, states, errors, messages,
+    busyKeys, isBusy, isBusyPrefix, busyNotice, clearBusyNotice, paymentMethods,
+    dealsHasMore, dealsLoadingMore, loadMoreDeals,
+    messagesHasOlder, messagesOlderLoading, loadOlderMessages,
+    unread, banFromAuth,
     sessionRestore,
     presenceByOnixId, presenceOf,
-    refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    refreshAll, loadProfile, loadPaymentMethods, loadMessages, refreshChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
-    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
-    markNotificationRead, reportUser, signOut,
+    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, withdraw, submitReview,
+    reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
   }), [
-    profile, catalogSubcategories, categoryLotCounts, store, states, errors, messages, actionBusy, unread, banFromAuth,
+    profile, catalogSubcategories, categoryLotCounts, store, states, errors, messages,
+    busyKeys, isBusy, isBusyPrefix, busyNotice, clearBusyNotice, paymentMethods,
+    dealsHasMore, dealsLoadingMore, loadMoreDeals,
+    messagesHasOlder, messagesOlderLoading, loadOlderMessages,
+    unread, banFromAuth,
     sessionRestore, presenceByOnixId, presenceOf,
-    refreshAll, loadProfile, loadMessages, refreshChats, searchChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
+    refreshAll, loadProfile, loadPaymentMethods, loadMessages, refreshChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
     toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
-    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, sendChatAttachment, withdraw, submitReview,
-    markNotificationRead, reportUser, signOut,
+    purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, withdraw, submitReview,
+    reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
   ]);
 }

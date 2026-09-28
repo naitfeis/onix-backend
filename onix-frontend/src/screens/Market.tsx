@@ -19,6 +19,9 @@ import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalog
 import { AllGridIcon } from '../components/BrandLogos';
 import { encodeProductListCursor } from '../utils/productListCursor';
 
+/** Stable empty list so memos depending on subcategories keep identity. */
+const EMPTY_SUBCATEGORIES: string[] = [];
+
 const CAT_STYLE: Record<string, { bg: string; glow: string; letter: string }> = {
   STANDOFF_2: { bg: 'linear-gradient(145deg,#E8B93E,#C4982E)', glow: 'rgba(232,185,62,.35)', letter: 'S2' },
   STEAM: { bg: 'linear-gradient(145deg,#4A8FE0,#346FB8)', glow: 'rgba(74,143,224,.32)', letter: 'ST' },
@@ -220,6 +223,19 @@ export function Market({
   const [autoDeliverOnly, setAutoDeliverOnly] = useState(false);
   const [lotView, setLotView] = useState<'grid' | 'list'>('grid');
   const [items, setItems] = useState<Product[]>([]);
+  // Destructured members: effects list these stable identities in deps, which
+  // is what exhaustive-deps requires instead of omitting `core` altogether.
+  const {
+    listProducts, presenceOf, presenceByOnixId, purchase, products,
+  } = core;
+  // Refs keep one-shot effects (deep-link focus) off a stale closure while
+  // still firing exactly once per requested id — see the focusProductId effect.
+  const itemsRef = useRef<Product[]>(items);
+  itemsRef.current = items;
+  const coreProductsRef = useRef<Product[]>(products);
+  coreProductsRef.current = products;
+  const onFocusProductHandledRef = useRef(onFocusProductHandled);
+  onFocusProductHandledRef.current = onFocusProductHandled;
   const [marketState, setMarketState] = useState<'loading' | 'success' | 'error'>('loading');
   const [marketError, setMarketError] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
@@ -259,6 +275,9 @@ export function Market({
 
   const viewedIdsRef = useRef<Set<string>>(readViewedLots());
 
+  const openProductRef = useRef<(product: Product, origin?: 'catalog' | 'profile') => Promise<void>>(
+    async () => {},
+  );
   const openProduct = async (product: Product, origin: 'catalog' | 'profile' = 'catalog') => {
     if (origin === 'catalog') {
       catalogScrollRef.current = readCatalogScroll();
@@ -292,14 +311,22 @@ export function Market({
       setToast('Не удалось загрузить карточку товара.');
     }
   };
+  openProductRef.current = openProduct;
 
   const onixQuery = query.trim().match(/^ONIX-\d+$/i)?.[0]?.toUpperCase();
   const onixLotMatch = query.trim().match(/^ONIXLOT-(\d+)$/i);
   const onixLotNumber = onixLotMatch ? Number(onixLotMatch[1]) : null;
   const catalog = core.catalogSubcategories ?? SUBCATEGORIES_BY_CATEGORY;
-  const marketSubs = !isMarketAllCategory(category)
-    ? (catalog[category as typeof CATEGORIES[number]] ?? SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]] ?? [])
-    : [];
+  // useMemo keeps a stable identity: this array feeds other memos, and a fresh
+  // `[]` every render invalidated them and made exhaustive-deps useless.
+  const marketSubs = useMemo(
+    () => (!isMarketAllCategory(category)
+      ? (catalog[category as typeof CATEGORIES[number]]
+        ?? SUBCATEGORIES_BY_CATEGORY[category as typeof CATEGORIES[number]]
+        ?? [])
+      : EMPTY_SUBCATEGORIES),
+    [catalog, category],
+  );
 
   useEffect(() => {
     if (!externalCategory || isMarketAllCategory(externalCategory)) return;
@@ -354,7 +381,7 @@ export function Market({
     if (!isDefaultBrowse) return;
 
     if (core.states.products === 'success') {
-      const next = visibleProducts(core.products);
+      const next = visibleProducts(products);
       setItems(next);
       setHasMore(next.length >= PAGE);
       setMarketError(undefined);
@@ -364,7 +391,7 @@ export function Market({
     if (core.states.products === 'loading' || core.states.products === 'idle') {
       setMarketState((prev) => (prev === 'success' ? prev : 'loading'));
     }
-  }, [autoDeliverOnly, category, core.products, core.states.products, query, sort, subcategory]);
+  }, [autoDeliverOnly, category, products, core.states.products, query, sort, subcategory]);
 
   useEffect(() => {
     const isDefaultBrowse =
@@ -378,7 +405,7 @@ export function Market({
       setMarketState('loading');
       const q = query.trim();
       const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
-      void core.listProducts({
+      void listProducts({
         search: searchCat ? undefined : (q || undefined),
         category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
@@ -401,7 +428,7 @@ export function Market({
       });
     }, debounceMs);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [autoDeliverOnly, category, core.listProducts, query, sort, subcategory]);
+  }, [autoDeliverOnly, category, listProducts, query, sort, subcategory]);
 
   useEffect(() => {
     const isDefaultBrowse =
@@ -410,7 +437,7 @@ export function Market({
 
     const controller = new AbortController();
     setMarketState('loading');
-    void core.listProducts({
+    void listProducts({
       sort: 'newest',
       limit: PAGE,
       offset: 0,
@@ -428,7 +455,7 @@ export function Market({
       setMarketState('error');
     });
     return () => { controller.abort(); };
-  }, [autoDeliverOnly, category, core.listProducts, core.states.products, query, sort, subcategory]);
+  }, [autoDeliverOnly, category, listProducts, core.states.products, query, sort, subcategory]);
 
   const closeLot = () => {
     const origin = lotOrigin;
@@ -448,7 +475,7 @@ export function Market({
     setSelected(null);
     setSellerTrust(null);
     setDetailReady(false);
-    const deal = await core.purchase(product.id, purchaseKey);
+    const deal = await purchase(product.id, purchaseKey);
     if (!deal) {
       // In-flight pay still owns the hide; a busy/double-click null must not restore the lot.
       if (!isCatalogHidden(product.id)) {
@@ -487,15 +514,38 @@ export function Market({
     };
   }, [active]);
 
+  /**
+   * Filters active for the current page. A load-more response is applied only
+   * while these values still match — otherwise a page fetched for the previous
+   * category/sort would be appended to a brand-new list.
+   */
+  const activeFiltersRef = useRef('');
+  const filterSignature = useMemo(
+    () => [query.trim(), category, subcategory, sort, autoDeliverOnly ? '1' : '0'].join('|'),
+    [query, category, subcategory, sort, autoDeliverOnly],
+  );
+  useEffect(() => {
+    activeFiltersRef.current = filterSignature;
+  }, [filterSignature]);
+  // Filters changed → the in-flight load-more page belongs to another list.
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    return () => loadMoreAbortRef.current?.abort();
+  }, [filterSignature]);
+
   const loadMore = async () => {
     if (loadingMore || !hasMore || !items.length) return;
     setLoadingMore(true);
+    const startedWith = filterSignature;
+    const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
     try {
       const q = query.trim();
       const searchCat = isMarketAllCategory(category) ? matchCategorySearch(q) : undefined;
       const serverSort = toServerSort(sort);
-      const last = items[items.length - 1]!;
-      const data = await core.listProducts({
+      const last = items[items.length - 1];
+      if (!last) return;
+      const data = await listProducts({
         search: searchCat ? undefined : (q || undefined),
         category: isMarketAllCategory(category) ? searchCat : category,
         subcategory: subcategory || undefined,
@@ -503,13 +553,17 @@ export function Market({
         autoDeliver: autoDeliverOnly || undefined,
         limit: PAGE,
         cursor: encodeProductListCursor(serverSort, last),
-      });
-      setItems((prev) => [...prev, ...visibleProducts(data)]);
-      setHasMore(data.length >= PAGE);
+      }, controller.signal);
+      // Filters changed while in flight: drop the stale page instead of
+      // mixing another category's lots into the current list.
+      if (startedWith !== activeFiltersRef.current) return;
+      setItems((prev) => [...prev, ...visibleProducts(data ?? [])]);
+      setHasMore((data?.length ?? 0) >= PAGE);
     } catch (error) {
-      setToast(friendlyError(error));
+      if (startedWith === activeFiltersRef.current) setToast(friendlyError(error));
     } finally {
-      setLoadingMore(false);
+      if (loadMoreAbortRef.current === controller) loadMoreAbortRef.current = null;
+      if (startedWith === activeFiltersRef.current) setLoadingMore(false);
     }
   };
 
@@ -522,14 +576,14 @@ export function Market({
       return;
     }
     const fresh = items.find((item) => item.id === selected.id)
-      ?? core.products.find((item) => item.id === selected.id);
+      ?? products.find((item) => item.id === selected.id);
     if (!fresh || fresh.favorite === selected.favorite) return;
     setSelected((prev) => (
       prev && prev.id === fresh.id ? { ...prev, favorite: fresh.favorite } : prev
     ));
-  }, [core.products, items, selected]);
+  }, [products, items, selected]);
 
-  // Live market: stock/status + soft sellers from presence map (re-render via core.presenceByOnixId).
+  // Live market: stock/status + soft sellers from presence map (re-render via presenceByOnixId).
   useEffect(() => {
     const off = getRealtimeClient().onMessage((msg) => {
       if (msg.type !== 'product.changed') return;
@@ -543,50 +597,59 @@ export function Market({
       )));
       if (msg.created) {
         // New listing — pull first page for current browse filters; drop stale/hidden rows.
-        void core.listProducts({ limit: 15, offset: 0 }, new AbortController().signal).then((data) => {
+        void listProducts({ limit: 15, offset: 0 }, new AbortController().signal).then((data) => {
           if (Array.isArray(data) && data.length) setItems(visibleProducts(data));
         }).catch(() => { /* ignore */ });
       }
     });
     return () => { off(); };
-  }, [core.listProducts]);
+  }, [listProducts]);
 
   // Re-apply presence timestamps onto visible cards when WS presence arrives.
   useEffect(() => {
-    const entries = Object.entries(core.presenceByOnixId);
+    const entries = Object.entries(presenceByOnixId);
     if (!entries.length) return;
     setItems((prev) => {
       let touched = false;
       const next = prev.map((product) => {
-        const live = core.presenceOf(product.seller.onixId);
+        const live = presenceOf(product.seller.onixId);
         if (!live || product.seller.lastOnline === live.lastOnline) return product;
         touched = true;
         return { ...product, seller: { ...product.seller, lastOnline: live.lastOnline } };
       });
       return touched ? next : prev;
     });
-  }, [core.presenceByOnixId, core.presenceOf]);
+  }, [presenceByOnixId, presenceOf]);
 
+  /**
+   * Deep-link focus (`?product=`) must run exactly once per requested id.
+   *
+   * The parent clears focusProductId in an inline arrow, so it is a new function
+   * every render — listing it in deps would re-run this effect on every render.
+   * The values it reads are therefore pulled through refs instead of captured:
+   * capturing `items`/`core.products`/`openProduct` was a stale closure that
+   * could resolve the id against an outdated list or fail to open the sheet.
+   */
   useEffect(() => {
     if (!focusProductId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const fromList = items.find((item) => item.id === focusProductId)
-          ?? core.products.find((item) => item.id === focusProductId);
+        const fromList = itemsRef.current.find((item) => item.id === focusProductId)
+          ?? coreProductsRef.current.find((item) => item.id === focusProductId);
         if (fromList) {
           if (cancelled) return;
           if (isCatalogHidden(fromList.id) || fromList.status !== 'ACTIVE') return;
-          await openProduct(fromList);
+          await openProductRef.current(fromList);
         } else {
           const product = await api.get<Product>(`${API_PATHS.products}/${encodeURIComponent(focusProductId)}`);
           if (cancelled) return;
           if (isCatalogHidden(product.id) || product.status !== 'ACTIVE') return;
-          await openProduct(product);
+          await openProductRef.current(product);
         }
       } catch { /* ignore */ }
       finally {
-        if (!cancelled) onFocusProductHandled();
+        if (!cancelled) onFocusProductHandledRef.current();
       }
     })();
     return () => { cancelled = true; };
@@ -601,13 +664,13 @@ export function Market({
       return acc;
     }
     const byId = new Map<string, Product>();
-    for (const product of [...core.products, ...items]) byId.set(product.id, product);
+    for (const product of [...products, ...items]) byId.set(product.id, product);
     const acc: Record<string, number> = {};
     for (const cat of CATEGORIES) {
       acc[cat] = [...byId.values()].filter((p) => p.category === cat).length;
     }
     return acc;
-  }, [core.categoryLotCounts, core.products, items]);
+  }, [core.categoryLotCounts, products, items]);
   const totalLots = useMemo(
     () => Object.values(categoryCounts).reduce((sum, n) => sum + n, 0),
     [categoryCounts],
@@ -620,7 +683,7 @@ export function Market({
   const subcategoryCounts = useMemo(() => {
     if (!gameView) return {} as Record<string, number>;
     const byId = new Map<string, Product>();
-    for (const product of [...core.products, ...items]) {
+    for (const product of [...products, ...items]) {
       if (product.category !== category) continue;
       byId.set(product.id, product);
     }
@@ -629,7 +692,7 @@ export function Market({
       acc[sub] = [...byId.values()].filter((p) => p.subcategory === sub).length;
     }
     return acc;
-  }, [category, core.products, gameView, items, marketSubs]);
+  }, [category, products, gameView, items, marketSubs]);
 
   const goHeroSlide = (index: number) => {
     const next = ((index % heroSlides.length) + heroSlides.length) % heroSlides.length;
@@ -680,7 +743,7 @@ export function Market({
         detailReady={detailReady}
         trust={sellerTrust}
         core={core}
-        buying={Boolean(core.actionBusy?.startsWith('purchase'))}
+        buying={core.isBusyPrefix('purchase')}
         backLabel={catalogBackLabel(category, subcategory)}
         onBack={closeLot}
         onBuy={(purchaseKey) => buySelected(selected, purchaseKey)}
@@ -843,7 +906,7 @@ export function Market({
               <span className="cat-card__name">{t('market.all')}</span>
             </button>
             {visibleCats.map((cat) => {
-              const style = CAT_STYLE[cat];
+              const style = CAT_STYLE[cat] ?? CAT_STYLE.OTHER!;
               const count = categoryCounts[cat] ?? 0;
               const image = CATEGORY_IMAGES[cat];
               return (
@@ -978,7 +1041,7 @@ export function Market({
         <ProductLotCard
           key={product.id}
           product={product}
-          online={sellerIsPresent(product.seller, core.profile, core.presenceOf(product.seller.onixId))}
+          online={sellerIsPresent(product.seller, core.profile, presenceOf(product.seller.onixId))}
           onOpen={() => void openProduct(product)}
           onFavorite={() => {
             if (!core.profile) {
