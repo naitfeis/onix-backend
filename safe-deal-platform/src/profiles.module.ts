@@ -237,21 +237,15 @@ export class ProfilesService {
       where: { sellerId: user.id, shadowBannedAt: { not: null }, status: 'ACTIVE' },
       data: { shadowBannedAt: null },
     });
-    const peers = await this.prisma.$queryRaw<Array<{ userId: bigint }>>`
-      SELECT DISTINCT cm2."userId" AS "userId"
-      FROM "ChatMember" cm1
-      INNER JOIN "ChatMember" cm2 ON cm2."chatId" = cm1."chatId"
-      WHERE cm1."userId" = ${user.id}
-        AND cm2."userId" <> ${user.id}
-      LIMIT 200
-    `;
+    // Presence is delivered to every connected socket by the hub, so no per-peer
+    // recipient list is needed here. The self-join that computed it ran on every
+    // 45s beat from every client and its result was never read by any subscriber.
     this.realtime.publish({
       kind: 'presence',
       userId: user.id,
       onixId: user.onixId,
       online: true,
       lastOnline,
-      watchers: peers.map((p) => p.userId),
     });
     lastPresenceWriteAt.set(key, { at: now.getTime(), lastOnline });
     if (lastPresenceWriteAt.size > 8_000) {

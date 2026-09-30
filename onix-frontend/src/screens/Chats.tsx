@@ -744,7 +744,7 @@ export function Chats({
           const message = messages[virtualRow.index]!;
           return <div
             className="messages__virtual-row"
-            key={`${virtualRow.index}-${message.id}`}
+            key={message.id}
             data-index={virtualRow.index}
             ref={messageVirtualizer.measureElement}
             style={{

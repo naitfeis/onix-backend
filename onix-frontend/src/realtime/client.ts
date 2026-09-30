@@ -11,6 +11,7 @@ export type RealtimeInbound =
   | { type: 'chat.typing'; chatId: string; userId: string; onixId: string; username: string }
   | { type: 'chat.read'; chatId: string; userId: string; onixId: string; username: string; lastReadAt: string }
   | { type: 'presence'; userId: string; onixId: string; online: boolean; lastOnline: string }
+  | { type: 'presence.batch'; presence: Array<{ userId: string; onixId: string; online: boolean; lastOnline: string }> }
   | { type: 'notification'; id: string; title: string; body: string; createdAt: string; data?: Record<string, unknown> }
   | { type: 'order.updated'; orderId: string; status: string; chatId?: string; sound?: 'order' }
   | {
@@ -23,6 +24,14 @@ export type RealtimeInbound =
 
 type Listener = (msg: RealtimeInbound) => void;
 type TokenProvider = () => Promise<string | null>;
+/**
+ * Fires once the socket is authenticated again after an unintended drop, so
+ * callers can refetch over HTTP. Events published while the socket was down are
+ * not replayed by the server, so a refetch is the only way to close the gap.
+ */
+type ReconnectListener = () => void;
+/** Server close code for "a newer tab replaced you" — must not trigger a reconnect. */
+const CLOSE_SUPERSEDED = 4001;
 
 function realtimeUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -36,11 +45,24 @@ export class RealtimeClient {
   private reconnectTimer: number | null = null;
   private pingTimer: number | null = null;
   private readonly listeners = new Set<Listener>();
+  private readonly reconnectListeners = new Set<ReconnectListener>();
   private tokenProvider: TokenProvider | null = null;
   private subscribedChats = new Set<string>();
   private ready = false;
   private authInFlight = false;
   private visibilityBound = false;
+  /** True once the first socket authenticated; later `ready` events are re-syncs. */
+  private everReady = false;
+  /** Set when a drop was unintentional, so the next `ready` triggers a refetch. */
+  private needsResync = false;
+  /**
+   * Set when the server closed this socket with CLOSE_SUPERSEDED because a newer
+   * tab took the user's slot. Kept separate from `intentionalClose` so the tab can
+   * still revive on explicit intent (connect() / becoming visible) while never
+   * reconnecting from background timers — otherwise the two tabs kick each other
+   * forever.
+   */
+  private superseded = false;
 
   /** True after server `ready` (authenticated). */
   isReady(): boolean {
@@ -54,6 +76,8 @@ export class RealtimeClient {
   connect(getAccessToken: TokenProvider): void {
     this.tokenProvider = getAccessToken;
     this.intentionalClose = false;
+    // Explicit intent revives a superseded tab; background timers do not.
+    this.superseded = false;
     this.bindVisibility();
     this.clearReconnectTimer();
     this.open();
@@ -62,6 +86,9 @@ export class RealtimeClient {
   disconnect(): void {
     this.intentionalClose = true;
     this.ready = false;
+    this.everReady = false;
+    this.needsResync = false;
+    this.superseded = false;
     this.unbindVisibility();
     this.clearReconnectTimer();
     this.clearPingTimer();
@@ -79,6 +106,12 @@ export class RealtimeClient {
   onMessage(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  /** Subscribe to post-reconnect resync signals (see ReconnectListener). */
+  onReconnect(listener: ReconnectListener): () => void {
+    this.reconnectListeners.add(listener);
+    return () => this.reconnectListeners.delete(listener);
   }
 
   subscribeChat(chatId: string): void {
@@ -99,8 +132,13 @@ export class RealtimeClient {
     this.send({ type: 'chat.read', chatId });
   }
 
+  /** True when a newer tab took this user's realtime slot (see CLOSE_SUPERSEDED). */
+  isSuperseded(): boolean {
+    return this.superseded;
+  }
+
   private open(): void {
-    if (this.intentionalClose || !this.tokenProvider) return;
+    if (this.intentionalClose || this.superseded || !this.tokenProvider) return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -130,6 +168,14 @@ export class RealtimeClient {
           for (const chatId of this.subscribedChats) {
             this.send({ type: 'subscribe_chat', chatId });
           }
+          // Re-subscribed chats only receive NEW events; anything published while
+          // the socket was down is gone (no server-side replay). Tell callers to
+          // refetch so the thread list / messages cannot silently lag behind.
+          if (this.everReady && this.needsResync) {
+            this.needsResync = false;
+            for (const listener of this.reconnectListeners) listener();
+          }
+          this.everReady = true;
         }
         if (msg.type === 'error' && (msg.code === 'AUTH_INVALID_TOKEN' || msg.code === 'AUTH_SESSION_REVOKED' || msg.code.startsWith('AUTH_'))) {
           this.ready = false;
@@ -141,11 +187,22 @@ export class RealtimeClient {
         /* ignore */
       }
     };
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (this.ws === ws) this.ws = null;
       this.clearPingTimer();
+      const wasReady = this.ready;
       this.ready = false;
       if (this.intentionalClose) return;
+      // A newer tab took over this user's slot. Reconnecting would kick that tab
+      // right back, so both tabs fight forever (measured: 6 tabs -> 20 auth calls,
+      // 15 reconnect cycles and 20 DB writes in 10 seconds).
+      if (event.code === CLOSE_SUPERSEDED) {
+        this.superseded = true;
+        // The tab was live and is now offline, so it must refetch when it returns.
+        if (wasReady) this.needsResync = true;
+        return;
+      }
+      if (wasReady) this.needsResync = true;
       this.scheduleReconnect();
     };
     ws.onerror = () => {
@@ -154,7 +211,7 @@ export class RealtimeClient {
   }
 
   private scheduleReconnect(): void {
-    if (this.intentionalClose || this.reconnectTimer != null) return;
+    if (this.intentionalClose || this.superseded || this.reconnectTimer != null) return;
     // Exponential backoff capped at 30s — never give up (mobile background kills WS).
     const delay = Math.min(30_000, 500 * (2 ** Math.min(this.attempt, 6)) + Math.random() * 400);
     this.attempt += 1;
@@ -178,6 +235,9 @@ export class RealtimeClient {
 
   private onVisibility = (): void => {
     if (document.hidden || this.intentionalClose) return;
+    // The tab the user is actually looking at wins the realtime slot; the tab it
+    // displaces goes quiet in the background instead of fighting back.
+    this.superseded = false;
     if (!this.isReady()) {
       this.clearReconnectTimer();
       this.open();

@@ -6,6 +6,8 @@ import { AuthPlatformError } from '../auth-v2/auth-errors';
 export type RealtimeAuthUser = {
   id: bigint;
   onixId: string;
+  /** Carried from the session lookup so typing/read fan-out needs no extra user query. */
+  displayName: string | null;
   isAdmin: boolean;
   sessionId: string;
 };
@@ -27,6 +29,7 @@ export class RealtimeAuthService {
     return {
       id: user.id,
       onixId: user.onixId,
+      displayName: user.displayName ?? null,
       isAdmin: user.isAdmin,
       sessionId: session.id,
     };

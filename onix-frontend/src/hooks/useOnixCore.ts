@@ -62,52 +62,16 @@ const emptyStore: Store = { products: [], deals: [], chats: [], notifications: [
 /** Module-level — survives React StrictMode remount (useRef would reset). */
 let coldBootstrapOnce = false;
 
-function messageKey(id: unknown): string {
-  return String(id ?? '');
-}
+// Chat thread merge/order/dedupe rules live in messageOrder so they stay unit-testable
+// outside the DOM environment (FE tests run in node).
+import {
+  appendUniqueMessage,
+  compareMessageId,
+  messageKey,
+  newClientMessageId,
+  uniqueMessages,
+} from './messageOrder';
 
-function appendUniqueMessage(list: Message[], incoming: Message): Message[] {
-  const incomingId = messageKey(incoming.id);
-  if (!incomingId) return list;
-  const normalized = { ...incoming, id: incomingId };
-  const idx = list.findIndex((row) => messageKey(row.id) === incomingId);
-  if (idx === -1) {
-    const echo = list.findIndex((row) => (
-      row.mine === normalized.mine
-      && row.sender.id === normalized.sender.id
-      && (row.text || '') === (normalized.text || '')
-      && Math.abs(new Date(row.createdAt).getTime() - new Date(normalized.createdAt).getTime()) < 4000
-    ));
-    if (echo >= 0) {
-      const copy = list.slice();
-      copy[echo] = { ...list[echo]!, ...normalized, id: messageKey(list[echo]!.id) };
-      return copy;
-    }
-    return [...list, normalized];
-  }
-  const prev = list[idx]!;
-  const nextText = normalized.text?.trim() ? normalized.text : prev.text;
-  const nextReadBy = (normalized.readBy?.length ?? 0) > (prev.readBy?.length ?? 0) ? normalized.readBy : prev.readBy;
-  const nextStatus = normalized.deliveryStatus === 'READ' || prev.deliveryStatus === 'READ'
-    ? 'READ' as const
-    : (normalized.deliveryStatus ?? prev.deliveryStatus);
-  if (nextText === prev.text && nextReadBy === prev.readBy && nextStatus === prev.deliveryStatus) return list;
-  const copy = list.slice();
-  copy[idx] = { ...prev, ...normalized, text: nextText, readBy: nextReadBy, deliveryStatus: nextStatus };
-  return copy;
-}
-
-function uniqueMessages(list: Message[]): Message[] {
-  const seen = new Set<string>();
-  const out: Message[] = [];
-  for (const row of list) {
-    const id = messageKey(row.id);
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push({ ...row, id });
-  }
-  return out;
-}
 /** Withdrawal outcome: step-up challenge must be distinguishable from a failure. */
 export type WithdrawResult =
   | { ok: true }
@@ -351,6 +315,8 @@ export function useOnixCore() {
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const activeChatIdRef = useRef<string | null>(null);
+  /** Late-bound so the realtime effect can resync without a declaration-order cycle. */
+  const loadMessagesRef = useRef<(threadId: string) => Promise<void> | void>(() => {});
   const actionBusyRef = useRef<string | null>(null);
   /** Per-action locks: one slow request must not silently swallow unrelated ones. */
   const busyKeysRef = useRef(new Set<string>());
@@ -840,6 +806,25 @@ export function useOnixCore() {
         });
         return;
       }
+      if (msg.type === 'presence.batch') {
+        // Server coalesced window: apply every beat in ONE state update so N users
+        // going online cost one render pass, not N.
+        if (msg.presence.length === 0) return;
+        startTransition(() => {
+          setPresenceByOnixId((previous) => {
+            let next = previous;
+            for (const beat of msg.presence) {
+              const key = normOnixId(beat.onixId);
+              const cur = next[key];
+              if (cur && cur.online === beat.online && cur.lastOnline === beat.lastOnline) continue;
+              if (next === previous) next = { ...previous };
+              next[key] = { online: beat.online, lastOnline: beat.lastOnline };
+            }
+            return next;
+          });
+        });
+        return;
+      }
       if (msg.type === 'order.updated') {
         if (msg.sound === 'order') playSound('order');
         void load('deals', API_PATHS.orders, { silent: true });
@@ -894,15 +879,27 @@ export function useOnixCore() {
         if (!viewing && !isOrderNotification(msg.title, msg.body)) playSound('notify');
       }
     });
-    // Keep token provider warm; reconnect if socket dropped auth.
+    // The server does not replay events published while the socket was down, so a
+    // silent reconnect left the thread list and open chat stale until the next
+    // manual refresh. Refetch the collections realtime drives, once per reconnect.
+    const offReconnect = rt.onReconnect(() => {
+      void load('chats', API_PATHS.chats, { silent: true, fresh: true });
+      void load('notifications', API_PATHS.notifications, { silent: true, fresh: true });
+      const openChatId = activeChatIdRef.current;
+      if (openChatId) void loadMessagesRef.current(openChatId);
+    });
+    // Keep token provider warm; reconnect if socket dropped auth. A superseded tab
+    // is deliberately quiet — reconnecting it here would kick the tab the user is
+    // actually using and restart the fight this close code exists to prevent.
     const tokenRefresh = window.setInterval(() => {
       void freshToken().then((token) => {
         if (!token) return;
-        if (!rt.isReady()) rt.connect(freshToken);
+        if (!rt.isReady() && !rt.isSuperseded()) rt.connect(freshToken);
       });
     }, 45_000);
     return () => {
       off();
+      offReconnect();
       window.clearInterval(tokenRefresh);
     };
   }, [isAuthenticated, ownOnixId, load]);
@@ -1193,6 +1190,7 @@ export function useOnixCore() {
       setErrors(previous => ({ ...previous, [`messages-${threadId}`]: friendlyError(error) }));
     }
   }, []);
+  loadMessagesRef.current = loadMessages;
 
   /**
    * Prepend an older page of a thread.
@@ -1221,7 +1219,7 @@ export function useOnixCore() {
           const seen = new Set(list.map((row) => row.id));
           const older = rows
             .slice()
-            .sort((a, b) => Number(a.id) - Number(b.id))
+            .sort((a, b) => compareMessageId(messageKey(a.id), messageKey(b.id)))
             .filter((row) => !seen.has(row.id));
           if (older.length === 0) return previous;
           return { ...previous, [threadId]: [...older, ...list] };
@@ -1253,7 +1251,15 @@ export function useOnixCore() {
     if (sendLock.current.has(lockKey)) return false;
     sendLock.current.add(lockKey);
     try {
-      const result = await run(lockKey, () => api.post<Message>(API_PATHS.messages(threadId), { text: trimmed }));
+      // One id per logical send. The key survives the client's own network retries
+      // (connection reset / 502-504 are retried up to 3x), so a retry can no longer
+      // create a second message; pressing send again mints a fresh id and stays a
+      // deliberate duplicate.
+      const clientMessageId = newClientMessageId();
+      const result = await run(lockKey, () => api.post<Message>(
+        API_PATHS.messages(threadId),
+        { text: trimmed, clientMessageId },
+      ));
       if (result) {
         setMessages((previous) => {
           const list = previous[threadId] || [];

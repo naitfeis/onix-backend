@@ -16,15 +16,64 @@ const MAX_CONNECTIONS_PER_USER = Number(process.env.REALTIME_MAX_CONN_PER_USER ?
 const MAX_TOTAL_CONNECTIONS = Number(process.env.REALTIME_MAX_CONNECTIONS ?? 2_000);
 const MAX_UNAUTH_PER_IP = Number(process.env.REALTIME_MAX_UNAUTH_PER_IP ?? 8);
 const PING_INTERVAL_MS = 25_000;
+/**
+ * Application-defined close code (4000–4999) meaning "a newer socket for this
+ * user replaced you". The client must NOT reconnect on it — otherwise an extra
+ * tab creates an endless kick/reconnect loop, and every cycle costs one auth,
+ * one DB write and one fan-out (measured: 6 tabs → 20 auth calls in 10s).
+ */
+const CLOSE_SUPERSEDED = 4001;
+/**
+ * Drop a socket whose outbound buffer exceeds this many bytes. Without a bound,
+ * one stalled client grew the process by ~42MB / 16MB buffered (measured) and
+ * stayed OPEN forever, since HTTP is the source of truth a reconnect + refetch
+ * recovers everything the client missed.
+ */
+const MAX_BUFFERED_BYTES = Number(process.env.REALTIME_MAX_BUFFERED_BYTES ?? 1_048_576);
+/** Frames that may be dropped instead of killing a slow socket. */
+const DROPPABLE_ON_BACKPRESSURE = new Set(['presence', 'presence.batch', 'chat.typing', 'pong']);
+/**
+ * Presence fan-out coalescing window. Small enough that "online" feels instant,
+ * large enough to collapse a reconnect storm into one frame per socket.
+ */
+const PRESENCE_FLUSH_MS = Number(process.env.REALTIME_PRESENCE_FLUSH_MS ?? 150);
+/** Min interval between WS-auth presence announces for one user. */
+const AUTH_PRESENCE_MIN_MS = Number(process.env.REALTIME_PRESENCE_ANNOUNCE_MIN_MS ?? 10_000);
+const lastAuthPresenceAt = new Map<string, number>();
 const TELEGRAM_WEB_ORIGINS = new Set([
   'https://web.telegram.org',
   'https://k.web.telegram.org',
 ]);
 
+/** One queued presence beat; `type` is added when the frame is actually sent. */
+type PresenceEntry = {
+  userId: string;
+  onixId: string;
+  online: boolean;
+  lastOnline: string;
+};
+
+/** Membership is authorized once per subscribe and cached for fan-out (bounded TTL). */
+const CHAT_PEERS_CACHE_TTL_MS = 60_000;
+/** Min interval between persisted read marks for one (socket, chat) pair. */
+const READ_MARK_MIN_MS = Number(process.env.REALTIME_READ_MARK_MIN_MS ?? 2_000);
+
+type ChatSubscription = {
+  /** Other members, resolved at subscribe time — used for typing / read fan-out. */
+  peerIds: bigint[];
+  resolvedAt: number;
+};
+
 type SocketState = {
   ws: WebSocket;
   user: RealtimeAuthUser | null;
   chats: Set<string>;
+  /** chatId → cached membership for fan-out (re-validated after TTL). */
+  subscriptions: Map<string, ChatSubscription>;
+  /** chatId → last persisted lastReadAt write, to stop write amplification. */
+  readMarks: Map<string, number>;
+  /** Pending trailing read marks so a throttled mark still lands. */
+  readTimers: Map<string, NodeJS.Timeout>;
   alive: boolean;
   peerIp?: string;
   unauthSlot?: boolean;
@@ -43,6 +92,16 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
   private readonly unauthByIp = new Map<string, number>();
   private unsubscribeBus: (() => void) | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
+  private presenceFlushTimer: NodeJS.Timeout | null = null;
+  /**
+   * Pending presence per socket, keyed by user id so a user who flips
+   * online→offline inside one window collapses to the newest state.
+   *
+   * Without this, every presence beat is sent to every connected socket:
+   * measured 100 sends per event at N=100 and 1000 at N=1000, i.e. sockets ×10
+   * gave sends/sec ×100 — quadratic in concurrent users.
+   */
+  private presencePending = new Map<SocketState, Map<string, PresenceEntry>>();
 
   constructor(
     private readonly auth: RealtimeAuthService,
@@ -59,7 +118,12 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     this.unsubscribeBus = null;
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.pingTimer = null;
+    if (this.presenceFlushTimer) clearTimeout(this.presenceFlushTimer);
+    this.presenceFlushTimer = null;
+    this.presencePending.clear();
     for (const state of this.sockets) {
+      for (const timer of state.readTimers.values()) clearTimeout(timer);
+      state.readTimers.clear();
       try { state.ws.close(1001, 'shutdown'); } catch { /* ignore */ }
     }
     this.sockets.clear();
@@ -107,7 +171,17 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
     this.unauthByIp.set(peerIp, unauth + 1);
 
-    const state: SocketState = { ws, user: null, chats: new Set(), alive: true, peerIp, unauthSlot: true };
+    const state: SocketState = {
+      ws,
+      user: null,
+      chats: new Set(),
+      subscriptions: new Map(),
+      readMarks: new Map(),
+      readTimers: new Map(),
+      alive: true,
+      peerIp,
+      unauthSlot: true,
+    };
     this.sockets.add(state);
 
     state.authTimer = setTimeout(() => {
@@ -181,7 +255,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       if (msg.type === 'unsubscribe_chat') {
-        state.chats.delete(msg.chatId);
+        this.dropChat(state, msg.chatId);
         return;
       }
       if (msg.type === 'typing') {
@@ -207,10 +281,15 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     const key = user.id.toString();
     const existing = this.byUser.get(key) ?? new Set();
     if (existing.size >= MAX_CONNECTIONS_PER_USER) {
-      // Drop oldest
+      // Drop oldest with a code the client recognises as "do not reconnect".
       const oldest = existing.values().next().value;
       if (oldest) {
-        try { oldest.ws.close(1000, 'replaced'); } catch { /* ignore */ }
+        this.send(oldest.ws, {
+          type: 'error',
+          code: 'REALTIME_SUPERSEDED',
+          message: 'Replaced by a newer tab.',
+        });
+        try { oldest.ws.close(CLOSE_SUPERSEDED, 'replaced'); } catch { /* ignore */ }
         this.detach(oldest, { silent: true });
       }
     }
@@ -227,7 +306,25 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
     set.add(state);
     this.send(state.ws, { type: 'ready', userId: key });
-    // Announce online immediately on WS auth (works even if HTTP presence is throttled in background tabs).
+    this.announceOnline(user);
+  }
+
+  /**
+   * Announce online on WS auth (works even if HTTP presence is throttled in
+   * background tabs), but at most once per user per window: each announce is one
+   * DB write plus a fan-out to every connected socket, so reconnect loops used to
+   * multiply both without changing any visible state.
+   */
+  private announceOnline(user: RealtimeAuthUser): void {
+    const key = user.id.toString();
+    const now = Date.now();
+    const last = lastAuthPresenceAt.get(key) ?? 0;
+    if (now - last < AUTH_PRESENCE_MIN_MS) return;
+    lastAuthPresenceAt.set(key, now);
+    if (lastAuthPresenceAt.size > 20_000) {
+      const oldest = lastAuthPresenceAt.keys().next().value;
+      if (oldest) lastAuthPresenceAt.delete(oldest);
+    }
     void this.prisma.user.update({
       where: { id: user.id },
       data: { lastSeenAt: new Date() },
@@ -237,8 +334,7 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
         userId: user.id,
         onixId: user.onixId,
         online: true,
-        lastOnline: new Date().toISOString(),
-        watchers: [],
+        lastOnline: new Date(now).toISOString(),
       });
     }).catch(() => { /* ignore */ });
   }
@@ -250,6 +346,8 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       this.send(state.ws, { type: 'error', code: 'REALTIME_BAD_CHAT', message: 'Invalid chatId.' });
       return;
     }
+    // One membership query + one peer query per subscribe. Typing and read marks
+    // then fan out from this cache instead of re-running both on every frame.
     const member = await this.prisma.chatMember.findUnique({
       where: { chatId_userId: { chatId: id, userId: state.user.id } },
       select: { chatId: true },
@@ -258,31 +356,81 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       this.send(state.ws, { type: 'error', code: 'REALTIME_FORBIDDEN', message: 'Not a chat member.' });
       return;
     }
+    const peerIds = await this.loadPeerIds(id, state.user.id);
     state.chats.add(id);
+    state.subscriptions.set(id, { peerIds, resolvedAt: Date.now() });
   }
 
-  private async emitTyping(state: SocketState, chatId: string): Promise<void> {
-    if (!state.user || !state.chats.has(chatId)) return;
-    const members = await this.prisma.chatMember.findMany({
-      where: { chatId, userId: { not: state.user.id } },
+  /** Other members of a chat; cached per subscription with a bounded TTL. */
+  private async loadPeerIds(chatId: string, selfId: bigint): Promise<bigint[]> {
+    const rows = await this.prisma.chatMember.findMany({
+      where: { chatId, userId: { not: selfId } },
       select: { userId: true },
       take: 50,
     });
-    const user = await this.prisma.user.findUnique({
-      where: { id: state.user.id },
-      select: { onixId: true, displayName: true },
+    return rows.map((row) => row.userId);
+  }
+
+  /**
+   * Peer list for fan-out. Membership was authorized at subscribe time; the list
+   * is refreshed after TTL so a newly added member is not silently excluded.
+   */
+  private async peerIdsFor(state: SocketState, chatId: string): Promise<bigint[] | null> {
+    if (!state.user) return null;
+    const cached = state.subscriptions.get(chatId);
+    const now = Date.now();
+    if (cached && now - cached.resolvedAt < CHAT_PEERS_CACHE_TTL_MS) return cached.peerIds;
+    // Re-validate membership before refreshing, so a removed member stops fan-out.
+    const member = await this.prisma.chatMember.findUnique({
+      where: { chatId_userId: { chatId, userId: state.user.id } },
+      select: { chatId: true },
     });
-    if (!user) return;
+    if (!member) {
+      state.chats.delete(chatId);
+      state.subscriptions.delete(chatId);
+      return null;
+    }
+    const peerIds = await this.loadPeerIds(chatId, state.user.id);
+    state.subscriptions.set(chatId, { peerIds, resolvedAt: now });
+    return peerIds;
+  }
+
+  private dropChat(state: SocketState, chatId: string): void {
+    state.chats.delete(chatId);
+    state.subscriptions.delete(chatId);
+    const timer = state.readTimers.get(chatId);
+    if (timer) {
+      clearTimeout(timer);
+      state.readTimers.delete(chatId);
+    }
+    state.readMarks.delete(chatId);
+  }
+
+  /**
+   * Hottest realtime path: one frame per typing user per chat every ~1.2s.
+   * Zero DB queries when the subscription cache is fresh (was 2 per frame).
+   */
+  private async emitTyping(state: SocketState, chatId: string): Promise<void> {
+    if (!state.user || !state.chats.has(chatId)) return;
+    const peerIds = await this.peerIdsFor(state, chatId);
+    if (!peerIds || peerIds.length === 0) return;
     this.bus.publish({
       kind: 'chat.typing',
       chatId,
-      recipientUserIds: members.map((m) => m.userId),
+      recipientUserIds: peerIds,
       userId: state.user.id,
-      onixId: user.onixId,
-      username: publicDisplayName(user.displayName, user.onixId),
+      onixId: state.user.onixId,
+      username: publicDisplayName(state.user.displayName, state.user.onixId),
     });
   }
 
+  /**
+   * Read receipts are the second-hottest path: the client fires one on every
+   * incoming message it is viewing, so an active thread produces a continuous
+   * stream of UPDATE + fan-out pairs that all carry the same meaning
+   * ("this user is up to date"). Persist at most once per window and coalesce the
+   * tail so the final mark always lands.
+   */
   private async markChatRead(state: SocketState, chatId: string): Promise<void> {
     if (!state.user) return;
     const id = chatId.trim();
@@ -290,37 +438,50 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       this.send(state.ws, { type: 'error', code: 'REALTIME_BAD_CHAT', message: 'Invalid chatId.' });
       return;
     }
-    const member = await this.prisma.chatMember.findUnique({
-      where: { chatId_userId: { chatId: id, userId: state.user.id } },
-      select: { chatId: true },
-    });
-    if (!member) {
+    const now = Date.now();
+    const lastWrite = state.readMarks.get(id) ?? 0;
+    if (now - lastWrite < READ_MARK_MIN_MS) {
+      this.scheduleTrailingReadMark(state, id);
+      return;
+    }
+    await this.persistAndPublishRead(state, id, now);
+  }
+
+  private scheduleTrailingReadMark(state: SocketState, chatId: string): void {
+    if (state.readTimers.has(chatId)) return;
+    const timer = setTimeout(() => {
+      state.readTimers.delete(chatId);
+      void this.persistAndPublishRead(state, chatId, Date.now());
+    }, READ_MARK_MIN_MS);
+    timer.unref?.();
+    state.readTimers.set(chatId, timer);
+  }
+
+  private async persistAndPublishRead(state: SocketState, id: string, nowMs: number): Promise<void> {
+    if (!state.user) return;
+    // Claim the window BEFORE the first await. A burst of read marks arrives in one
+    // tick, and checking-then-claiming across an await let every frame in the burst
+    // pass the throttle (measured: 30 marks -> 30 UPDATE + fan-out pairs).
+    state.readMarks.set(id, nowMs);
+    const peerIds = await this.peerIdsFor(state, id);
+    if (!peerIds) {
+      state.readMarks.delete(id);
       this.send(state.ws, { type: 'error', code: 'REALTIME_FORBIDDEN', message: 'Not a chat member.' });
       return;
     }
-    const lastReadAt = new Date();
+    const lastReadAt = new Date(nowMs);
     await this.prisma.chatMember.update({
       where: { chatId_userId: { chatId: id, userId: state.user.id } },
       data: { lastReadAt },
     });
-    const others = await this.prisma.chatMember.findMany({
-      where: { chatId: id, userId: { not: state.user.id } },
-      select: { userId: true },
-      take: 50,
-    });
-    const user = await this.prisma.user.findUnique({
-      where: { id: state.user.id },
-      select: { onixId: true, displayName: true },
-    });
-    if (!user) return;
     this.bus.publish({
       kind: 'chat.read',
       chatId: id,
       userId: state.user.id,
-      onixId: user.onixId,
-      username: publicDisplayName(user.displayName, user.onixId),
+      onixId: state.user.onixId,
+      username: publicDisplayName(state.user.displayName, state.user.onixId),
       lastReadAt: lastReadAt.toISOString(),
-      recipientUserIds: [state.user.id, ...others.map((m) => m.userId)],
+      recipientUserIds: [state.user.id, ...peerIds],
     });
   }
 
@@ -364,15 +525,15 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     if (event.kind === 'presence') {
-      const payload: RealtimeServerMessage = {
-        type: 'presence',
+      // Market avatars + chats need live presence, so every connected user is a
+      // recipient. Queue instead of sending: beats are coalesced into one frame
+      // per socket per window, turning N²/beat-rate sends into N per window.
+      this.queuePresence({
         userId: event.userId.toString(),
         onixId: event.onixId,
         online: event.online,
         lastOnline: event.lastOnline,
-      };
-      // Market avatars + chats need live presence — broadcast to all connected users (single-node).
-      this.broadcast(payload);
+      });
       return;
     }
     if (event.kind === 'notification') {
@@ -416,6 +577,42 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Queue one presence beat for every connected socket; flushed as one batch. */
+  private queuePresence(entry: { userId: string; onixId: string; online: boolean; lastOnline: string }): void {
+    let queued = 0;
+    for (const state of this.sockets) {
+      if (state.ws.readyState !== WebSocket.OPEN) continue;
+      let pending = this.presencePending.get(state);
+      if (!pending) {
+        pending = new Map();
+        this.presencePending.set(state, pending);
+      }
+      pending.set(entry.userId, entry);
+      queued += 1;
+    }
+    if (queued === 0) return;
+    if (this.presenceFlushTimer) return;
+    this.presenceFlushTimer = setTimeout(() => this.flushPresence(), PRESENCE_FLUSH_MS);
+    this.presenceFlushTimer.unref?.();
+  }
+
+  private flushPresence(): void {
+    this.presenceFlushTimer = null;
+    if (this.presencePending.size === 0) return;
+    const batches = this.presencePending;
+    this.presencePending = new Map();
+    for (const [state, pending] of batches) {
+      if (state.ws.readyState !== WebSocket.OPEN) continue;
+      const presence = [...pending.values()];
+      // Single beat stays a plain frame — one entry needs no envelope.
+      if (presence.length === 1) {
+        this.send(state.ws, { type: 'presence', ...presence[0]! });
+        continue;
+      }
+      this.send(state.ws, { type: 'presence.batch', presence });
+    }
+  }
+
   private sendToUser(userId: bigint, payload: RealtimeServerMessage): void {
     const set = this.byUser.get(userId.toString());
     if (!set || set.size === 0) {
@@ -439,6 +636,20 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
 
   private send(ws: WebSocket, payload: RealtimeServerMessage): void {
     if (ws.readyState !== WebSocket.OPEN) return;
+    // Backpressure: a socket that cannot drain is either a dead half-open peer or
+    // a client on a very slow link. Unbounded buffering grew the process without
+    // limit; instead drop ambient frames and terminate on sustained overflow so
+    // the client reconnects and resyncs over HTTP.
+    if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      if (DROPPABLE_ON_BACKPRESSURE.has(payload.type)) return;
+      structuredLog.warn('realtime socket buffer overflow — terminating', {
+        bufferedBytes: ws.bufferedAmount,
+        limit: MAX_BUFFERED_BYTES,
+        frameType: payload.type,
+      });
+      try { ws.terminate(); } catch { /* ignore */ }
+      return;
+    }
     try {
       ws.send(JSON.stringify(payload));
     } catch {
@@ -448,6 +659,12 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
 
   private detach(state: SocketState, opts?: { silent?: boolean }): void {
     if (state.authTimer) clearTimeout(state.authTimer);
+    for (const timer of state.readTimers.values()) clearTimeout(timer);
+    state.readTimers.clear();
+    state.readMarks.clear();
+    state.subscriptions.clear();
+    state.chats.clear();
+    this.presencePending.delete(state);
     this.releaseUnauthSlot(state);
     this.sockets.delete(state);
     const user = state.user;
@@ -460,13 +677,17 @@ export class RealtimeHubService implements OnModuleInit, OnModuleDestroy {
     }
     // Last socket gone → mark offline for market/chat peers.
     if (!opts?.silent && !this.byUser.has(key)) {
+      // Clear the announce throttle here. It exists to collapse reconnect storms,
+      // not to strand a user as "offline": without this, a close+reopen inside the
+      // window skipped the re-announce and peers kept showing offline until the
+      // next 45s HTTP presence beat.
+      lastAuthPresenceAt.delete(key);
       this.bus.publish({
         kind: 'presence',
         userId: user.id,
         onixId: user.onixId,
         online: false,
         lastOnline: new Date().toISOString(),
-        watchers: [],
       });
     }
   }

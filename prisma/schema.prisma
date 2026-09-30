@@ -466,6 +466,13 @@ model Message {
    * True when removed for everyone (not just MessageHide for one user).
    */
   deletedForAll   Boolean       @default(false)
+  /**
+   * Client-supplied id of one logical send. Unique so a network retry of the same
+   * attempt cannot insert a second row (POST bodies are retried by the client's
+   * resilient fetch on connection reset / 502-504). NULL for system and legacy
+   * messages — Postgres treats NULLs as distinct, so those stay unconstrained.
+   */
+  clientMessageId String?       @db.VarChar(64)
   chat            Chat          @relation(fields: [chatId], references: [id], onDelete: Cascade)
   sender          User?         @relation(fields: [senderId], references: [id])
   deletedBy       User?         @relation("MessageDeletedBy", fields: [deletedById], references: [id])
@@ -473,6 +480,11 @@ model Message {
   hides           MessageHide[]
 
   @@index([chatId, createdAt]) // history: WHERE chatId ORDER BY createdAt
+  // Keyset history: WHERE chatId AND id < cursor ORDER BY id DESC LIMIT n.
+  @@index([chatId, id])
+  // One logical send = one row. Scoped to a chat so a guessed id cannot block
+  // another conversation; NULLs stay distinct (system/legacy messages unaffected).
+  @@unique([chatId, clientMessageId])
   // Partial USER+senderId index: migration 20260716050000. Add more only after EXPLAIN ANALYZE.
   @@index([visibleToUserId])
   @@index([deletedAt])

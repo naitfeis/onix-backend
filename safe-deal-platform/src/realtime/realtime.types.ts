@@ -44,6 +44,14 @@ export type RealtimeServerMessage =
       online: boolean;
       lastOnline: string;
     }
+  /**
+   * Coalesced presence window. Presence is last-write-wins state, so many beats
+   * arriving inside one flush window collapse into a single frame per socket.
+   */
+  | {
+      type: 'presence.batch';
+      presence: Array<{ userId: string; onixId: string; online: boolean; lastOnline: string }>;
+    }
   | {
       type: 'notification';
       id: string;
@@ -94,8 +102,6 @@ export type RealtimeBusEvent =
       onixId: string;
       online: boolean;
       lastOnline: string;
-      /** Hint list (chat peers). Hub still broadcasts presence to all sockets. */
-      watchers: bigint[];
     }
   | {
       kind: 'notification';

@@ -28,7 +28,15 @@ import { hideReviewsForOrder, recomputeSellerRating } from './marketplace/review
 import { canLeaveReview } from './marketplace/review-policy';
 import { withSerializableTransaction } from './database/transaction-retry';
 class DirectChatDto { @IsString() @Length(1, 32) onixId!: string; }
-class MessageDto { @IsString() @Length(1, 2000) text!: string; }
+class MessageDto {
+  @IsString() @Length(1, 2000) text!: string;
+  /**
+   * Stable id for one logical send. Network retries of the same attempt reuse it,
+   * so a reset connection cannot create a second message; a deliberate second
+   * send gets a fresh id and is not deduplicated.
+   */
+  @IsOptional() @IsString() @Length(8, 64) clientMessageId?: string;
+}
 class MessagesQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 50;
   /** Cursor: load messages with id strictly less than this (older page). */
@@ -87,6 +95,15 @@ class DeleteMessageDto {
 const SENDER_SELECT = {
   id: true, onixId: true, displayName: true, telegramNick: true, avatarUrl: true, isAdmin: true, isSupport: true, platformStatus: true,
 } as const;
+
+type SentMessage = Parameters<typeof messageDto>[0];
+
+/** Prisma P2002 (unique constraint) or the equivalent raw PostgreSQL error. */
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'P2002' || code === '23505';
+}
 
 /**
  * Chat + notification domain (HTTP polling today; methods are WS-ready — no transport in service).
@@ -154,7 +171,8 @@ export class ChatService {
             OR: [{ visibleToUserId: null }, { visibleToUserId: user.id }],
             hides: { none: { userId: user.id } },
           },
-          orderBy: { createdAt: 'desc' },
+          // Same ordering as the thread itself, so the preview is the real last message.
+          orderBy: { id: 'desc' },
           take: 1,
           select: { text: true, kind: true, deletedAt: true },
         },
@@ -427,7 +445,11 @@ export class ChatService {
         ...(beforeId !== undefined ? { id: { lt: beforeId } } : {}),
         // Non-staff: still see soft-deleted as placeholder (filter none); staff see all.
       },
-      orderBy: { createdAt: 'desc' },
+      // Order by the same key the cursor filters on. `createdAt` is the transaction
+      // start time while `id` is assigned at INSERT, so two concurrent sends can
+      // commit with createdAt order inverted against id order — keyset paging on
+      // `id` then skipped or repeated a message at every page boundary.
+      orderBy: { id: 'desc' },
       take,
       include: { sender: { select: SENDER_SELECT } },
     });
@@ -447,7 +469,7 @@ export class ChatService {
     }));
   }
 
-  async send(user: AuthUser, chatId: string, text: string) {
+  async send(user: AuthUser, chatId: string, text: string, clientMessageId?: string) {
     await this.member(user.id, chatId);
     const body = sanitizeChatText(text, 2000);
     if (!body) throw new BadRequestException('Сообщение не может быть пустым.');
@@ -484,14 +506,50 @@ export class ChatService {
     }));
 
     // Keep the message write short — fan-out notifications after commit.
-    const message = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.message.create({
-        data: { chatId, senderId: user.id, kind: 'USER', text: body },
+    // clientMessageId makes one logical send insert at most one row: the client
+    // retries a POST whose response never arrived (reset / 502-504), and without a
+    // key that retry became a visible duplicate message.
+    const dedupeKey = clientMessageId?.trim() || null;
+    const selectExisting = { chatId, senderId: user.id, clientMessageId: dedupeKey };
+    let message: SentMessage;
+    let duplicateOf: SentMessage | null = null;
+    if (dedupeKey) {
+      const existing = await this.prisma.message.findFirst({
+        where: selectExisting,
         include: { sender: { select: SENDER_SELECT } },
       });
-      await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
-      return created;
-    });
+      if (existing) duplicateOf = existing;
+    }
+    if (duplicateOf) {
+      message = duplicateOf;
+    } else {
+      try {
+        message = await this.prisma.$transaction(async (tx) => {
+          const created = await tx.message.create({
+            data: { chatId, senderId: user.id, kind: 'USER', text: body, clientMessageId: dedupeKey },
+            include: { sender: { select: SENDER_SELECT } },
+          });
+          await tx.chat.update({ where: { id: chatId }, data: { updatedAt: new Date() } });
+          return created;
+        });
+      } catch (error) {
+        // Concurrent retry of the same send: the unique index is the authority.
+        if (!dedupeKey || !isUniqueViolation(error)) throw error;
+        const winner = await this.prisma.message.findFirst({
+          where: selectExisting,
+          include: { sender: { select: SENDER_SELECT } },
+        });
+        if (!winner) throw error;
+        duplicateOf = winner;
+        message = winner;
+      }
+    }
+    if (duplicateOf) {
+      // Nothing new was written, so no notification and no fan-out either — the
+      // first attempt already did both. The caller gets the original message back,
+      // in exactly the shape a fresh send would have returned.
+      return messageDto(duplicateOf, user.id, { staffViewer: false, memberReads });
+    }
 
     const notifyIds: bigint[] = [];
     try {
@@ -987,7 +1045,7 @@ export class EngagementController {
     @Param('id') id: string,
     @Body() dto: MessageDto,
   ) {
-    return this.chats.send(user, id, dto.text);
+    return this.chats.send(user, id, dto.text, dto.clientMessageId);
   }
 
   @Delete('chats/:id/messages/:messageId')

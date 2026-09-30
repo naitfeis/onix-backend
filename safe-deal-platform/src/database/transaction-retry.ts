@@ -2,24 +2,46 @@ import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma.service';
 
 const RETRYABLE_SQLSTATES = new Set(['40001', '40P01']);
+/** pg driver adapter marks a serialization/deadlock failure with this kind. */
+const RETRYABLE_CONFLICT_KINDS = new Set(['TransactionWriteConflict']);
+/**
+ * Prisma wraps driver errors: `P2010` (raw query failed) carries the real SQL state
+ * in `meta.driverAdapterError.cause.originalCode`, not in `code` or `meta.code`.
+ * Only walking the wrapper let every conflict inside `$queryRaw` escape the retry
+ * loop and surface as a 500 — which is exactly where `SELECT ... FOR UPDATE` lives.
+ */
+const MAX_CAUSE_DEPTH = 8;
 
 export function isRetryableTransactionConflict(error: unknown): boolean {
   const seen = new Set<unknown>();
   let current: unknown = error;
-  while (current && typeof current === 'object' && !seen.has(current)) {
+  let depth = 0;
+  while (current && typeof current === 'object' && !seen.has(current) && depth < MAX_CAUSE_DEPTH) {
     seen.add(current);
+    depth += 1;
     const value = current as {
       code?: unknown;
-      message?: unknown;
       meta?: unknown;
       cause?: unknown;
     };
     if (value.code === 'P2034' || RETRYABLE_SQLSTATES.has(String(value.code))) return true;
-    const meta = value.meta as { code?: unknown; database_error?: unknown } | undefined;
-    if (meta && (RETRYABLE_SQLSTATES.has(String(meta.code)) || RETRYABLE_SQLSTATES.has(String(meta.database_error)))) {
-      return true;
-    }
+    if (isRetryableMeta(value.meta, seen)) return true;
     current = value.cause;
+  }
+  return false;
+}
+
+/** Recursively scan a Prisma `meta` payload for a retryable SQL state or kind. */
+function isRetryableMeta(meta: unknown, seen: Set<unknown>, depth = 0): boolean {
+  if (!meta || typeof meta !== 'object' || seen.has(meta) || depth > MAX_CAUSE_DEPTH) return false;
+  seen.add(meta);
+  const row = meta as Record<string, unknown>;
+  for (const key of ['code', 'database_error', 'originalCode']) {
+    if (RETRYABLE_SQLSTATES.has(String(row[key]))) return true;
+  }
+  if (typeof row.kind === 'string' && RETRYABLE_CONFLICT_KINDS.has(row.kind)) return true;
+  for (const value of Object.values(row)) {
+    if (value && typeof value === 'object' && isRetryableMeta(value, seen, depth + 1)) return true;
   }
   return false;
 }
