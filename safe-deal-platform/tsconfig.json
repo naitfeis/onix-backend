@@ -16,7 +16,11 @@
     "./test/secrets-hygiene.slice5.test.ts",
     "./test/safe-error-log.test.ts",
     "./test/device-trust-privacy.test.ts",
-    "./test/admin-plane.slice6.test.ts"
+    "./test/admin-plane.slice6.test.ts",
+    "./test/fraud-full-cycle.e2e.test.ts",
+    "./test/fraud-lifecycle.e2e.test.ts",
+    "./test/refund-abuse.e2e.test.ts",
+    "./test/fraud-watch.e2e.test.ts"
   ],
   "exclude": [
     "**/node_modules/**",

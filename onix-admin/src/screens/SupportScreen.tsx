@@ -222,7 +222,13 @@ export function SupportScreen({ onOpenChat }: { onOpenChat: (chatId: string) => 
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/status`, { status: 'IN_REVIEW', comment })}>В работу</button>
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/status`, { status: 'WAITING_USER', comment })}>Ждать пользователя</button>
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/comment`, { text: comment })}>Комментарий</button>
-          <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/decision`, { decision: 'KEEP_LOCK', reason: comment })}>Оставить ограничение</button>
+          <button
+            className="ghost"
+            type="button"
+            onClick={() => void act(`/api/admin/support/tickets/${selected.id}/decision`, { decision: 'KEEP_LOCK', reason: comment })}
+          >
+            Оставить ограничение
+          </button>
           <button className="primary" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/decision`, { decision: 'UNLOCK', reason: comment })}>Снять ограничение</button>
           <button className="ghost" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/decision`, { decision: 'REDUCE_RESTRICTIONS', reason: comment })}>Смягчить</button>
           <button className="danger" type="button" onClick={() => void act(`/api/admin/support/tickets/${selected.id}/decision`, { decision: 'PERMANENT_BAN', reason: comment })}>Вечный бан</button>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
+import { EmptyRows } from '../components/EmptyRows';
 
 type Withdrawal = {
   id: string;
@@ -83,6 +84,7 @@ export function WithdrawalsScreen() {
           </tr>
         </thead>
         <tbody>
+          {items.length === 0 && <EmptyRows colSpan={6} label="Запросов на вывод нет." />}
           {items.map((w) => (
             <tr key={w.id}>
               <td>{w.onixId || '—'}</td>

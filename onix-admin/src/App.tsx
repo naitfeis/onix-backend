@@ -33,6 +33,41 @@ function adminRoleLabel(role: string) {
 }
 type Screen = 'dashboard' | 'orders' | 'support' | 'products' | 'messages' | 'audit' | 'flags' | 'withdrawals' | 'users' | 'risk' | 'payments' | 'staff';
 
+/**
+ * Navigation is role-gated in one table instead of twelve inline conditions, so the
+ * rule for a screen is readable at a glance and cannot drift from the render below.
+ */
+const NAV: Array<{ id: Screen; label: string; visibleTo: (role: string) => boolean }> = [
+  { id: 'dashboard', label: 'Дашборд', visibleTo: () => true },
+  { id: 'orders', label: 'Сделки', visibleTo: (role) => role !== 'FINANCE_ADMIN' },
+  {
+    id: 'support',
+    label: 'Поддержка и безопасность',
+    visibleTo: (role) => role === 'SUPER_ADMIN' || role === 'SUPPORT_ADMIN' || role === 'SECURITY_ADMIN',
+  },
+  { id: 'products', label: 'Лоты', visibleTo: (role) => role !== 'FINANCE_ADMIN' },
+  { id: 'messages', label: 'Чаты', visibleTo: (role) => role !== 'FINANCE_ADMIN' },
+  { id: 'audit', label: 'Аудит', visibleTo: () => true },
+  {
+    id: 'flags',
+    label: 'Алерты',
+    visibleTo: (role) => role === 'SUPER_ADMIN' || role === 'SECURITY_ADMIN',
+  },
+  { id: 'withdrawals', label: 'Выводы', visibleTo: (role) => role !== 'SUPPORT_ADMIN' },
+  {
+    id: 'payments',
+    label: 'Платежи',
+    visibleTo: (role) => role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN',
+  },
+  { id: 'users', label: 'Пользователи / баны', visibleTo: (role) => role !== 'FINANCE_ADMIN' },
+  { id: 'staff', label: 'Сотрудники', visibleTo: (role) => role === 'SUPER_ADMIN' },
+  {
+    id: 'risk',
+    label: 'Центр риска',
+    visibleTo: (role) => role === 'SUPER_ADMIN' || role === 'SECURITY_ADMIN' || role === 'SUPPORT_ADMIN',
+  },
+];
+
 export function App() {
   const [admin, setAdmin] = useState<AdminMe | null>(null);
   const [booting, setBooting] = useState(true);
@@ -103,18 +138,16 @@ export function App() {
       <nav className="admin-nav">
         <h1>Админ ONIX</h1>
         <p className="muted" style={{ marginBottom: '1rem' }}>{admin.email}<br />{adminRoleLabel(admin.role)}</p>
-        <button type="button" className={screen === 'dashboard' ? 'active' : ''} onClick={() => setScreen('dashboard')}>Дашборд</button>
-        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'orders' ? 'active' : ''} onClick={() => setScreen('orders')}>Сделки</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SUPPORT_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'support' ? 'active' : ''} onClick={() => setScreen('support')}>Поддержка и безопасность</button>}
-        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'products' ? 'active' : ''} onClick={() => setScreen('products')}>Лоты</button>}
-        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'messages' ? 'active' : ''} onClick={() => setScreen('messages')}>Чаты</button>}
-        <button type="button" className={screen === 'audit' ? 'active' : ''} onClick={() => setScreen('audit')}>Аудит</button>
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN') && <button type="button" className={screen === 'flags' ? 'active' : ''} onClick={() => setScreen('flags')}>Алерты</button>}
-        {admin.role !== 'SUPPORT_ADMIN' && <button type="button" className={screen === 'withdrawals' ? 'active' : ''} onClick={() => setScreen('withdrawals')}>Выводы</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'FINANCE_ADMIN') && <button type="button" className={screen === 'payments' ? 'active' : ''} onClick={() => setScreen('payments')}>Платежи</button>}
-        {admin.role !== 'FINANCE_ADMIN' && <button type="button" className={screen === 'users' ? 'active' : ''} onClick={() => setScreen('users')}>Пользователи / баны</button>}
-        {admin.role === 'SUPER_ADMIN' && <button type="button" className={screen === 'staff' ? 'active' : ''} onClick={() => setScreen('staff')}>Сотрудники</button>}
-        {(admin.role === 'SUPER_ADMIN' || admin.role === 'SECURITY_ADMIN' || admin.role === 'SUPPORT_ADMIN') && <button type="button" className={screen === 'risk' ? 'active' : ''} onClick={() => setScreen('risk')}>Центр риска</button>}
+        {NAV.filter((item) => item.visibleTo(admin.role)).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={screen === item.id ? 'active' : ''}
+            onClick={() => setScreen(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
         <div style={{ marginTop: '1.5rem' }}>
           <button
             type="button"

@@ -17,6 +17,7 @@ Backend remains **ENV via `SecretsProvider`** — Vault/KMS adapter is a later s
 |--------|-----|---------|-----------------|
 | Access JWT (Auth V2) | `AUTH_ED25519_CURRENT_*` (+ optional `PREVIOUS_*`) | Sign/verify short-lived EdDSA access tokens | Old access still verifies via PREVIOUS until TTL (~15m) |
 | Device trust | `DEVICE_HMAC_SECRET` | HMAC → stable `deviceId` | New secret ⇒ new deviceIds ⇒ `NEW_DEVICE` / MONITOR spike |
+| Seller phone | `PHONE_HASH_SECRET` | HMAC → `User.phoneHash` | **Destructive** — every stored hash stops matching ⇒ all sellers lose verification and must share again. No PREVIOUS-key support. |
 | Legacy Mini App | `JWT_SECRET` | HS256 paths still using legacy auth | Separate domain — **never** use as prod DEVICE_HMAC fallback |
 | Auto-delivery | `PRODUCT_DELIVERY_KEY` | AES-256-GCM for delivery secrets | Old ciphertext cannot decrypt after rotate |
 
@@ -52,6 +53,24 @@ Guard: [`ed25519-rotation-guard.ts`](../../safe-deal-platform/src/auth-v2/ed2551
 - Dump PEM into `AuthAuditLog` / `SecurityEvent` metadata
 - Expect hot-reload without process restart on Amvera/Render
 - Bypass the retire guard by hand-editing env “because it looks done”
+
+---
+
+## 2b. `PHONE_HASH_SECRET` — do not rotate casually
+
+Code: [`hashPhone`](../../safe-deal-platform/src/phone-hash.ts)
+
+- **Production:** `PHONE_HASH_SECRET` is **required**. No `JWT_SECRET` fallback — separate domain.
+- There is **no** PREVIOUS-key verification path. A hash written under key A can never be
+  matched under key B, so rotating is equivalent to wiping seller verification.
+- Impact if rotated: every seller's `phoneHash` becomes stale, `assertSellAllowed` starts
+  rejecting new listings platform-wide, and each seller must re-share their number through
+  the bot. The anti-fraud `PHONE_HASH` ban markers also stop matching, weakening
+  registration screening until numbers are re-collected.
+- If a rotation is genuinely required (key compromise), treat it as a coordinated
+  campaign: pick a low-traffic window, notify sellers in advance, and expect a support
+  spike. Re-collecting numbers is the only recovery — there is no re-hash migration,
+  because the plaintext is never stored.
 
 ---
 

@@ -1,6 +1,6 @@
 import {
-  BadRequestException, Body, ConflictException, Controller, Get, Header, Injectable,
-  Module, NotFoundException, Optional, Param, Post, Query, forwardRef,
+  BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header,
+  Injectable, Module, NotFoundException, Optional, Param, Post, Query, forwardRef,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
@@ -23,6 +23,8 @@ import {
 import { EconomyModule } from './economy/economy.module';
 import { RiskEngineService } from './risk/risk-engine.service';
 import { RiskModule } from './risk/risk.module';
+import { FraudWatchService } from './risk/fraud-watch.service';
+import { FraudWatchModule } from './risk/fraud-watch.module';
 import { BalanceService } from './economy/wallet/balance.service';
 import { ClawbackService } from './economy/wallet/clawback.service';
 import { assertSpendableBalance, warrantyWindowOpenForOrder } from './economy/wallet/sale-proceeds-hold';
@@ -137,6 +139,7 @@ export class EscrowService {
     private readonly realtime: RealtimeBus,
     private readonly support: SupportService,
     @Optional() private readonly risk?: RiskEngineService,
+    @Optional() private readonly fraudWatch?: FraudWatchService,
   ) {}
 
   private emitOrderUpdated(order: {
@@ -423,10 +426,17 @@ export class EscrowService {
   async purchase(user: AuthUser, productId: string, key: string, quantity: number) {
     const productPeek = await this.prisma.product.findUnique({
       where: { id: productId },
-      select: { priceCents: true },
+      select: { priceCents: true, sellerId: true },
     });
     if (productPeek && this.risk) {
-      await this.risk.assertPurchaseAllowed(user.id, productPeek.priceCents * BigInt(quantity));
+      // sellerId lets the engine block a second failed deal between the SAME pair —
+      // a buyer who was already cheated must not be able to be cheated again.
+      await this.risk.assertPurchaseAllowed(
+        user.id,
+        productPeek.priceCents * BigInt(quantity),
+        this.prisma,
+        productPeek.sellerId,
+      );
     }
     const { order, notifyIds } = await withSerializableTransaction(this.prisma, async (tx) =>
       this.purchaseInTx(tx, user, productId, key, quantity));
@@ -471,7 +481,7 @@ export class EscrowService {
   }
 
   async complete(user: AuthUser, id: bigint, key: string) {
-    const notifyIds = await this.finishAsCompleted(user, id, key, {
+    const { notifyIds, fraudWatchSellerId } = await this.finishAsCompleted(user, id, key, {
       allowedFrom: [...BUYER_COMPLETE_FROM],
       requireBuyer: true,
     });
@@ -481,6 +491,9 @@ export class EscrowService {
     });
     this.emitOrderUpdated(order);
     deliverTelegramAfterCommit(this.prisma, notifyIds);
+    if (fraudWatchSellerId) {
+      await this.fraudWatch?.enforceBanAfterCommit(fraudWatchSellerId, id);
+    }
     return this.one(user, id);
   }
 
@@ -490,7 +503,7 @@ export class EscrowService {
       throw new BadRequestException('Подтвердить сделку продавцу может только поддержка.');
     }
     const key = `order:${id}:admin-complete`;
-    const notifyIds = await this.finishAsCompleted(actor, id, key, {
+    const { notifyIds, fraudWatchSellerId } = await this.finishAsCompleted(actor, id, key, {
       allowedFrom: [...ADMIN_COMPLETE_FROM],
       requireBuyer: false,
       supportReason: reason?.trim() ? `Администратор: ${reason.trim()}` : 'Администратор',
@@ -527,6 +540,12 @@ export class EscrowService {
       await this.prisma.chat.update({ where: { id: order.chat.id }, data: { updatedAt: new Date() } });
     }
     deliverTelegramAfterCommit(this.prisma, notifyIds);
+    if (fraudWatchSellerId) {
+      // Post-commit on purpose: the payout and the victim repayment are already durable,
+      // so a failure here degrades to a frozen account support can finish manually
+      // instead of rolling back money the buyer depends on.
+      await this.fraudWatch?.enforceBanAfterCommit(fraudWatchSellerId, id);
+    }
     this.emitOrderUpdated({
       id: order.id,
       status: order.status,
@@ -542,15 +561,18 @@ export class EscrowService {
     id: bigint,
     key: string,
     opts: { allowedFrom: OrderStatus[]; requireBuyer: boolean; supportReason?: string },
-  ): Promise<bigint[]> {
+  ): Promise<{ notifyIds: bigint[]; fraudWatchSellerId: bigint | null }> {
     return withSerializableTransaction(this.prisma, async (tx) => {
+      let fraudWatchSellerId: bigint | null = null;
+      let fraudWatchNotifyId: bigint | null = null;
       const replay = await tx.orderTransition.findUnique({ where: { idempotencyKey: key } });
       if (replay) {
         if (replay.orderId !== id || replay.to !== 'COMPLETED') {
           throw new ConflictException('Ключ идемпотентности уже использован для другого действия.');
         }
         const existing = await tx.order.findUniqueOrThrow({ where: { id } });
-        return this.pendingOrderNotifyIds(tx, id, [existing.sellerId]);
+        // Replay: the marker was already consumed by the original payout.
+        return { notifyIds: await this.pendingOrderNotifyIds(tx, id, [existing.sellerId]), fraudWatchSellerId: null };
       }
       await lockOrderForUpdate(tx, id);
       const order = await tx.order.findUnique({ where: { id } });
@@ -559,7 +581,7 @@ export class EscrowService {
         throw new BadRequestException('Только покупатель подтверждает получение.');
       }
       if (order.status === 'COMPLETED') {
-        return this.pendingOrderNotifyIds(tx, id, [order.sellerId]);
+        return { notifyIds: await this.pendingOrderNotifyIds(tx, id, [order.sellerId]), fraudWatchSellerId: null };
       }
       assertNotTerminalForMutation(order.status, 'complete');
       assertStatusIn(order.status, opts.allowedFrom, 'complete');
@@ -612,6 +634,24 @@ export class EscrowService {
       if (order.payoutCents > 0n) {
         await this.locks.lockOnSaleComplete(tx, order.sellerId, id, order.payoutCents);
       }
+      /**
+       * Admin fraud marker ("wait for the money"): intercept this payout inside the SAME
+       * transaction that credited it, so the victim is repaid and the remainder is frozen
+       * atomically. The ban itself is applied by the caller after COMMIT — see
+       * FraudWatchService. Only sale proceeds trigger it, never a deposit.
+       */
+      if (order.payoutCents > 0n && this.fraudWatch) {
+        const consumed = await this.fraudWatch.consumeOnPayout(
+          tx,
+          order.sellerId,
+          id,
+          order.payoutCents,
+        );
+        if (consumed.armed) {
+          fraudWatchSellerId = order.sellerId;
+          fraudWatchNotifyId = consumed.notifyId;
+        }
+      }
       const product = await tx.product.findUniqueOrThrow({ where: { id: order.productId } });
       // Legacy purchases set RESERVED without decrementing; new path decrements at buy-time.
       const legacyUndecremented = product.status === 'RESERVED' && product.quantity >= order.quantity;
@@ -653,7 +693,10 @@ export class EscrowService {
         ...(opts.supportReason ? { reason: opts.supportReason } : {}),
         fromStatus: order.status,
       });
-      return [note.id];
+      return {
+        notifyIds: fraudWatchNotifyId ? [note.id, fraudWatchNotifyId] : [note.id],
+        fraudWatchSellerId,
+      };
     });
   }
 
@@ -725,6 +768,16 @@ export class EscrowService {
       if (!order) throw new NotFoundException('Сделка не найдена.');
       const participant = order.buyerId === actor.id || order.sellerId === actor.id;
       const support = canActAsSupport(actor);
+      /**
+       * A seller-initiated refund MUST come from the seller. Before this check the
+       * mismatch silently downgraded sellerInitiated to false, and the only remaining
+       * actor test (`else if (sellerInitiated && ...)`) was then skipped — so a BUYER
+       * could call POST /orders/:id/refund-request and refund themselves out of an
+       * order that auto-delivery had already handed them the secret for.
+       */
+      if (opts?.sellerInitiated && !support && order.sellerId !== actor.id) {
+        throw new ForbiddenException('Возврат может инициировать только продавец.');
+      }
       const sellerInitiated = Boolean(opts?.sellerInitiated) && order.sellerId === actor.id;
       if (!participant && !support) throw new BadRequestException('Нет доступа к сделке.');
       if (order.status === 'COMPLETED') {
@@ -792,16 +845,37 @@ export class EscrowService {
       if (order.status !== 'COMPLETED') {
         const product = await tx.product.findUniqueOrThrow({
           where: { id: order.productId },
-          select: { status: true, quantity: true },
+          select: { status: true, quantity: true, deliveryConsumedAt: true },
         });
-        // Legacy: RESERVED without stock decrement — just reopen. New: restore units.
-        const legacyUndecremented = product.status === 'RESERVED' && product.quantity >= order.quantity;
-        await tx.product.update({
-          where: { id: order.productId },
-          data: legacyUndecremented
-            ? { status: 'ACTIVE' }
-            : { quantity: { increment: order.quantity }, status: 'ACTIVE' },
-        });
+        if (product.deliveryConsumedAt) {
+          // Auto-delivery already handed the secret over and cleared the ciphertext, so
+          // there is nothing left to sell. Restoring stock would relist a lot that can
+          // never be fulfilled; make the goods+money loss visible to support instead.
+          await tx.securityEvent.create({
+            data: {
+              userId: order.sellerId,
+              type: 'FRAUD_ATTEMPT',
+              status: 'OPEN',
+              severity: 85,
+              payload: {
+                kind: 'REFUND_AFTER_AUTO_DELIVERY',
+                orderId: id.toString(),
+                refundedCents: order.totalAmountCents.toString(),
+                stockNotRestored: true,
+                actorId: actor.id.toString(),
+              },
+            },
+          });
+        } else {
+          // Legacy: RESERVED without stock decrement — just reopen. New: restore units.
+          const legacyUndecremented = product.status === 'RESERVED' && product.quantity >= order.quantity;
+          await tx.product.update({
+            where: { id: order.productId },
+            data: legacyUndecremented
+              ? { status: 'ACTIVE' }
+              : { quantity: { increment: order.quantity }, status: 'ACTIVE' },
+          });
+        }
       }
       await tx.orderTransition.create({
         data: { orderId: id, from: order.status, to: target, actorId: actor.id, idempotencyKey: key, reason },
@@ -1010,7 +1084,7 @@ export class EscrowController {
 }
 
 @Module({
-  imports: [forwardRef(() => EconomyModule), RealtimeModule, RiskModule, SupportModule],
+  imports: [forwardRef(() => EconomyModule), RealtimeModule, RiskModule, SupportModule, FraudWatchModule],
   controllers: [EscrowController],
   providers: [
     EscrowService,

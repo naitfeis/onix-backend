@@ -188,6 +188,10 @@ export interface Profile extends Seller {
   canSell?: boolean;
   hasTelegram?: boolean;
   hasGoogle?: boolean;
+  /** Seller shared their phone with the bot; only a boolean ever leaves the server. */
+  phoneVerified?: boolean;
+  /** True when the missing phone — not a ban — is the only thing blocking selling. */
+  phoneVerificationRequired?: boolean;
   securityLock?: {
     locked: boolean;
     level?: string | null;

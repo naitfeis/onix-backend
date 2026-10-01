@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ClawbackStatus } from '@prisma/client';
 import { logMoneyEvent } from '../../observability/money-event';
 import { BalanceService, type Tx } from './balance.service';
@@ -9,6 +9,8 @@ import { BalanceService, type Tx } from './balance.service';
  */
 @Injectable()
 export class ClawbackService {
+  private readonly logger = new Logger(ClawbackService.name);
+
   constructor(private readonly balance: BalanceService) {}
 
   remainingCents(row: { amountCents: bigint; recoveredCents: bigint }): bigint {
@@ -119,7 +121,29 @@ export class ClawbackService {
       return { recoveredNow: 0n, status: 'RECOVERED' };
     }
 
-    const available = await this.balance.getAvailable(tx, row.sellerId);
+    /**
+     * A banned or wiped seller cannot move money, and getAvailable refuses deleted
+     * accounts by design. Previously that refusal propagated out of the recovery loop
+     * and aborted the WHOLE batch: because the job scans oldest-first, one poisoned row
+     * blocked repayment for every other seller, permanently. Leave the debt OPEN so
+     * support still sees it, and let the rest of the batch proceed.
+     */
+    const seller = await tx.user.findUnique({
+      where: { id: row.sellerId },
+      select: { balanceCents: true, deletedAt: true, withdrawBlockedAt: true },
+    });
+    if (!seller || seller.deletedAt) {
+      this.logger.warn(JSON.stringify({
+        msg: 'clawback_recovery_seller_unavailable',
+        clawbackId: row.id,
+        sellerId: row.sellerId.toString(),
+        remainingCents: left.toString(),
+        reason: seller ? 'account banned or wiped' : 'seller row missing',
+      }));
+      return { recoveredNow: 0n, status: row.status };
+    }
+
+    const available = seller.balanceCents;
     const take = available < left ? available : left;
     if (take <= 0n) {
       return { recoveredNow: 0n, status: row.status };

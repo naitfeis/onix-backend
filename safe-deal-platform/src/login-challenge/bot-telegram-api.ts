@@ -7,6 +7,18 @@ export type InlineKeyboard = {
   inline_keyboard: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
 };
 
+/**
+ * ReplyKeyboard is the ONLY markup that can carry `request_contact`; inline buttons
+ * cannot. It is also restricted to private chats by the Bot API.
+ */
+export type ReplyKeyboard = {
+  keyboard: Array<Array<{ text: string; request_contact?: boolean }>>;
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+};
+
+export type RemoveKeyboard = { remove_keyboard: true };
+
 export type TelegramApiResult = {
   ok: boolean;
   method: string;
@@ -70,7 +82,7 @@ export async function sendTelegramMessage(input: {
   chatId: number | string;
   text: string;
   parseMode?: 'HTML';
-  replyMarkup?: InlineKeyboard;
+  replyMarkup?: InlineKeyboard | ReplyKeyboard | RemoveKeyboard;
   replyToMessageId?: number;
 }): Promise<TelegramApiResult> {
   const body: Record<string, unknown> = {

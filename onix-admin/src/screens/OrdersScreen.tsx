@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
 import { ruOrderStatus } from '../i18n';
+import { EmptyRows } from '../components/EmptyRows';
 
 type Order = {
   id: string;
@@ -108,6 +109,7 @@ export function OrdersScreen({
       <table>
         <thead><tr><th>ID</th><th>Статус</th><th>Покупатель</th><th>Продавец</th><th>Сумма</th><th>Создана</th></tr></thead>
         <tbody>
+          {orders.length === 0 && <EmptyRows colSpan={6} label="Сделок по фильтру нет." />}
           {orders.map((o) => (
             <tr key={o.id}>
               <td><button className="link-button" type="button" onClick={() => void open(o.id)}>#{o.id}</button></td>
@@ -182,6 +184,7 @@ export function OrdersScreen({
           <table>
             <thead><tr><th>Из</th><th>В</th><th>Кто</th><th>Причина</th><th>Когда</th></tr></thead>
             <tbody>
+              {detail.transitions.length === 0 && <EmptyRows colSpan={5} label="Переходов ещё не было." />}
               {detail.transitions.map((t) => (
                 <tr key={t.id}>
                   <td>{t.from ? ruOrderStatus(t.from) : 'создана'}</td>

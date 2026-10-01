@@ -6,7 +6,7 @@ Principles apply to later dedicated admin host cutovers.
 ## Principles
 
 1. **Purpose limitation** — collect only signals needed for a named security function.
-2. **Minimization** — no canvas/WebGL fingerprinting; no hidden phone harvesting.
+2. **Minimization** — no canvas/WebGL fingerprinting; no hidden phone harvesting (phone capture is consent-based and stores a keyed hash, never the number).
 3. **Retention** — raw IP and coarse network signals are time-bounded; events may outlive IPs.
 4. **Revocation** — long sessions are allowed; stolen refresh must be revocable (family revoke).
 5. **No secrets in audit** — never store access/refresh tokens or signing keys in logs.
@@ -17,7 +17,12 @@ Principles apply to later dedicated admin host cutovers.
 |--------|-----|--------|
 | `telegramUserId` | Primary identity | Via Telegram Login / Mini App |
 | Display / nick user opted in | UX | Not used as security sole factor |
-| Phone | **Not collected** | Telegram may omit; do not scrape |
+| Phone | **Keyed hash only**, sellers, with explicit consent | Telegram `requestContact` / share-contact button. Raw number never stored; `PHONE_HASH_SECRET`-keyed HMAC-SHA256 of the E.164 form in `User.phoneHash`. Never shown to other users or buyers. |
+
+Phone is captured **only** on an affirmative user action (the native Telegram popup), is
+required only to publish listings, and can be switched off deployment-wide with
+`SELLER_PHONE_REQUIRED=false`. That consent flow is distinct from scraping: nothing is
+harvested silently, from the web layer, or from any contact list.
 
 ## Device trust (Slice 1)
 
@@ -67,6 +72,21 @@ Stored as `Session.fingerprintHash` / `TrustedDevice.fingerprintHash` for schema
 |-----|------|
 | **Production** | `DEVICE_HMAC_SECRET` **required** — startup/HMAC throws if missing. **No** `JWT_SECRET` fallback (separate security domains). |
 | **Development** | `DEVICE_HMAC_SECRET` preferred; else `JWT_SECRET`; else fixed local-only string. |
+
+### Phone hash key (`PHONE_HASH_SECRET`)
+
+| Env | Rule |
+|-----|------|
+| **Production** | **Required** — `hashPhone()` throws if missing. **No** `JWT_SECRET` fallback: a different key domain protects a different asset. |
+| **Development** | Falls back to a fixed local-only string so tests stay deterministic. |
+
+A **keyed** hash is mandatory, not an optimisation: the phone number space is small and
+public, so an unkeyed SHA-256 is brute-forceable offline from a DB dump.
+
+Rotating this key is **destructive** — every stored `User.phoneHash` stops matching, so
+all sellers silently lose verification and must share their number again. Treat it as
+non-rotatable unless a re-capture campaign is planned. See
+[ONIX-KEY-ROTATION-RUNBOOK.md](./ONIX-KEY-ROTATION-RUNBOOK.md).
 
 ## Session TTLs (target)
 
@@ -262,13 +282,15 @@ Secrets stay in ENV via `SecretsProvider` (ADR-023). No Vault/AWS KMS adapter in
 | Log redaction for PEM / HMAC / JWT / delivery keys | `safe-error-log.ts` |
 | Startup inventory: secret **names** present/missing only | `secrets-inventory.ts` |
 
-Security domains must stay separate: `AUTH_ED25519_*` ≠ `DEVICE_HMAC_SECRET` ≠ `JWT_SECRET` ≠ `PRODUCT_DELIVERY_KEY`.
+Security domains must stay separate: `AUTH_ED25519_*` ≠ `DEVICE_HMAC_SECRET` ≠ `PHONE_HASH_SECRET` ≠ `JWT_SECRET` ≠ `PRODUCT_DELIVERY_KEY`.
 
 ## Explicit non-goals
 
 - Eternal cookies without server-side revoke
 - “Collect everything so the user can never leave”
-- Phone scraping
+- Phone scraping — silent harvesting from the web layer, contact lists, or any flow the
+  user did not explicitly approve. (Consent-based seller verification via Telegram's
+  native `requestContact` popup, storing a keyed hash only, is not scraping.)
 - Storing tokens in audit payloads
 - Binding production device HMAC to `JWT_SECRET`
 - TOTP / Passkey / Email MFA factors (schema ready; runtime = Telegram only in Slice 3)

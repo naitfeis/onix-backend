@@ -1,6 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional,
+} from '@nestjs/common';
 import type { PaymentWallet, PlatformStatus, Prisma, SecurityEventStatus } from '@prisma/client';
-import { BAN_CLEAR_DATA, BAN_REASON_LABELS, banDurationDays } from '../ban-policy';
+import {
+  BAN_CLEAR_DATA, BAN_REASON_LABELS, FRAUD_WATCH_CLEAR_DATA, banDurationDaysForStrike,
+} from '../ban-policy';
 import type { AuthUser } from '../common';
 import { lockUsersInIdOrder } from '../database/money-locks';
 import { withSerializableTransaction } from '../database/transaction-retry';
@@ -18,6 +22,7 @@ import { sendTelegramMessage } from '../login-challenge/bot-telegram-api';
 import { recomputeSellerRating } from '../marketplace/review-aggregate';
 import { assertOrderResolvedForTicketClose } from '../support-ticket-guard';
 import { PayoutService } from '../economy/payouts/payout.service';
+import { RiskScoreService } from '../risk-score.service';
 
 const WIPED_DISPLAY_NAME = 'Удалённый аккаунт';
 const OPEN_ORDER_STATUSES = ['PENDING', 'PAYMENT_HOLD', 'DELIVERING', 'DISPUTE'] as const;
@@ -162,6 +167,8 @@ const ALLOWED_PLATFORM_STATUS_TRANSITIONS: Readonly<Record<PlatformStatus, Reado
 
 @Injectable()
 export class AdminSecurityService {
+  private readonly logger = new Logger(AdminSecurityService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly withdrawVelocity: WithdrawVelocityService,
@@ -170,6 +177,7 @@ export class AdminSecurityService {
     private readonly payments: PaymentsService,
     private readonly pro: ProSubscriptionService,
     private readonly payouts: PayoutService,
+    @Optional() private readonly risk?: RiskScoreService,
   ) {}
 
   async dashboard() {
@@ -295,6 +303,8 @@ export class AdminSecurityService {
           payoutCents: true,
           createdAt: true,
           productId: true,
+          // A raw cuid is not readable in a support workflow: show the public lot code.
+          product: { select: { title: true, lotNumber: true } },
         },
       }),
       this.prisma.sellerSubscription.findUnique({
@@ -319,7 +329,10 @@ export class AdminSecurityService {
         },
       }),
     ]);
-    const yellow = await this.withdrawVelocity.resolveAccountSaleProtectionFlag(user.id);
+    const [yellow, linkedBannedAccounts] = await Promise.all([
+      this.withdrawVelocity.resolveAccountSaleProtectionFlag(user.id),
+      this.bannedAccountHits(user.id),
+    ]);
 
     return {
       profile: {
@@ -368,17 +381,35 @@ export class AdminSecurityService {
         id: e.id.toString(),
         createdAt: e.createdAt.toISOString(),
       })),
-      sales: sales.map((o) => ({
-        ...o,
-        id: o.id.toString(),
-        productId: o.productId.toString(),
-        totalAmountCents: o.totalAmountCents.toString(),
-        payoutCents: o.payoutCents.toString(),
-        createdAt: o.createdAt.toISOString(),
+      sales: sales.map(({ product, ...order }) => ({
+        ...order,
+        id: order.id.toString(),
+        productId: order.productId.toString(),
+        lotNumber: product.lotNumber,
+        productTitle: product.title,
+        totalAmountCents: order.totalAmountCents.toString(),
+        payoutCents: order.payoutCents.toString(),
+        createdAt: order.createdAt.toISOString(),
       })),
       purchases: purchases.map((o) => ({ ...o, id: o.id.toString(), totalAmountCents: o.totalAmountCents.toString(), createdAt: o.createdAt.toISOString(), seller: { onixId: formatOnixId(o.seller.onixId) } })),
       chats: chats.map((c) => ({ ...c, updatedAt: c.updatedAt.toISOString(), memberIds: c.members.map((m) => m.userId.toString()), lastMessage: c.messages[0] ? { ...c.messages[0], createdAt: c.messages[0].createdAt.toISOString() } : null })),
       identities: describeAdminIdentities(user, identityLinks),
+      /**
+       * Which BANNED/DELETED accounts this one is attached to, and via what signal.
+       * This is the admin's twin-account view: without it a replacement account looks
+       * brand new even when the same device/IP/Telegram was already punished.
+       */
+      linkedBannedAccounts,
+      /** Admin "wait for the money" marker + strike history, so support sees both. */
+      fraudWatch: user.fraudWatchAt
+        ? {
+          armedAt: user.fraudWatchAt.toISOString(),
+          reason: user.fraudWatchReason,
+          victimUserId: user.fraudWatchVictimUserId?.toString() ?? null,
+          claimCents: user.fraudWatchClaimCents.toString(),
+        }
+        : null,
+      banStrikeCount: user.banStrikeCount,
     };
   }
 
@@ -551,14 +582,60 @@ export class AdminSecurityService {
     if (!input.comment?.trim()) throw new BadRequestException('Нужен публичный комментарий к бану.');
     const reason = input.reason as 'MISCONDUCT' | 'THIRD_PARTY_ADS' | 'OFF_PLATFORM_DEAL' | 'FRAUD' | 'OTHER';
     if (!Object.prototype.hasOwnProperty.call(BAN_REASON_LABELS, reason)) throw new BadRequestException('Неизвестная причина блокировки.');
-    const days = banDurationDays(reason, input.durationDays);
+    // Strike escalation: prior bans make the next one longer, then permanent.
+    const priorStrikes = Math.max(0, target.banStrikeCount);
+    const days = banDurationDaysForStrike(reason, priorStrikes, input.durationDays);
     const now = new Date();
     const bannedUntil = days == null ? null : new Date(now.getTime() + days * 86_400_000);
+    const strike = priorStrikes + 1;
     const user = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.user.update({ where: { id: target.id }, data: { deletedAt: now, banReason: reason, banComment: input.comment.trim().slice(0, 1000), bannedAt: now, bannedUntil, sessionVersion: { increment: 1 } } });
+      const updated = await tx.user.update({
+        where: { id: target.id },
+        data: {
+          deletedAt: now,
+          banReason: reason,
+          banComment: input.comment.trim().slice(0, 1000),
+          bannedAt: now,
+          bannedUntil,
+          banStrikeCount: strike,
+          // The marker has fired or is superseded: the account is banned outright now.
+          ...FRAUD_WATCH_CLEAR_DATA,
+          sessionVersion: { increment: 1 },
+        },
+      });
       await tx.session.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt: now, revokeReason: 'ADMIN' } });
-      await tx.adminActionLog.create({ data: { adminUserId: actor.id, action: 'ADMIN_USER_BAN', targetType: 'User', targetId: target.id.toString(), metadataJson: { onixId: formatOnixId(target.onixId), reason, reasonLabel: BAN_REASON_LABELS[reason], comment: input.comment.trim().slice(0, 1000), bannedUntil: bannedUntil?.toISOString() ?? null } } });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_BAN',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: {
+            onixId: formatOnixId(target.onixId),
+            reason,
+            reasonLabel: BAN_REASON_LABELS[reason],
+            comment: input.comment.trim().slice(0, 1000),
+            bannedUntil: bannedUntil?.toISOString() ?? null,
+            permanent: days == null,
+            strike,
+            escalated: days == null && banDurationDaysForStrike(reason, 0, input.durationDays) != null,
+          },
+        },
+      });
       return updated;
+    });
+    /**
+     * Arm the registration filter with this account's identifiers. Without it an admin
+     * ban only deleted the row: the fraudster could mint a replacement account on the
+     * same device/IP/phone/Telegram because no AbuseMarker ever existed. The legacy
+     * OperationsService.ban path already did this — the admin plane must match.
+     */
+    await this.risk?.recordBanMarkers(this.prisma, target.id).catch((error) => {
+      this.logger.warn(JSON.stringify({
+        msg: 'admin ban marker write failed',
+        userId: target.id.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      }));
     });
     return { onixId: formatOnixId(user.onixId), banned: true, bannedUntil: user.bannedUntil?.toISOString() ?? null };
   }
@@ -584,6 +661,17 @@ export class AdminSecurityService {
         },
       });
       return updated;
+    });
+    /**
+     * Symmetric with banUser: a cleared seller must be able to register again, otherwise
+     * the markers this account contributed keep blocking it forever.
+     */
+    await this.risk?.revokeBanMarkers(this.prisma, target.id).catch((error) => {
+      this.logger.warn(JSON.stringify({
+        msg: 'admin unban marker revoke failed',
+        userId: target.id.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      }));
     });
     return { onixId: formatOnixId(user.onixId), banned: false as const };
   }
@@ -880,6 +968,148 @@ export class AdminSecurityService {
       return updated;
     });
     return { onixId: formatOnixId(result.onixId), sellBanned: Boolean(result.sellBannedAt) };
+  }
+
+  /**
+   * Arm the "wait for the money" marker: confirmed fraud, nothing to repay with yet.
+   *
+   * Selling stays OPEN on purpose — banning it would freeze the debt forever and push the
+   * seller to a fresh account. The first completed sale intercepts the payout, repays the
+   * declared victim and bans automatically (FraudWatchService).
+   *
+   * Markers are armed immediately, not at trigger time: otherwise the seller simply
+   * abandons this account, registers a replacement and never sells here again.
+   */
+  async setFraudWatch(
+    actor: AdminActor,
+    targetId: string,
+    input: { comment: string; victimOnixId?: string; claimCents?: string },
+  ) {
+    const target = await this.resolveTarget(targetId);
+    if (!input.comment?.trim()) throw new BadRequestException('Нужен комментарий к метке.');
+    if (target.deletedAt) throw new BadRequestException('Аккаунт уже заблокирован — метка не нужна.');
+
+    let victimId: bigint | null = null;
+    if (input.victimOnixId?.trim()) {
+      const victim = await this.prisma.user.findFirst({
+        where: { OR: [{ onixId: { in: onixIdLookupCandidates(input.victimOnixId.trim()) } }] },
+        select: { id: true, onixId: true, deletedAt: true },
+      });
+      if (!victim) throw new BadRequestException('Пострадавший не найден.');
+      if (victim.id === target.id) throw new BadRequestException('Пострадавший не может быть тем же аккаунтом.');
+      // A tombstoned victim cannot be credited (the debit/credit paths refuse deleted
+      // users), so refuse up front rather than arming a marker that cannot repay.
+      if (victim.deletedAt) throw new BadRequestException('Аккаунт пострадавшего стёрт — возместить автоматически нельзя.');
+      victimId = victim.id;
+    }
+
+    const claimRaw = input.claimCents?.trim();
+    if (claimRaw !== undefined && claimRaw !== '' && !/^\d+$/.test(claimRaw)) {
+      throw new BadRequestException('Сумма возмещения — целое число копеек.');
+    }
+    const claimCents = claimRaw && /^\d+$/.test(claimRaw) ? BigInt(claimRaw) : 0n;
+    if (victimId != null && claimCents <= 0n) {
+      throw new BadRequestException('Укажите сумму возмещения в копейках, если указан пострадавший.');
+    }
+
+    const now = new Date();
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.user.update({
+        where: { id: target.id },
+        data: {
+          fraudWatchAt: now,
+          fraudWatchReason: input.comment.trim().slice(0, 1000),
+          fraudWatchVictimUserId: victimId,
+          fraudWatchClaimCents: claimCents,
+        },
+      });
+      await tx.securityEvent.create({
+        data: {
+          userId: target.id,
+          type: 'FRAUD_WATCH_TRIGGERED',
+          status: 'OPEN',
+          severity: 60,
+          payload: {
+            kind: 'FRAUD_WATCH_ARMED',
+            reason: input.comment.trim().slice(0, 1000),
+            victimUserId: victimId?.toString() ?? null,
+            claimCents: claimCents.toString(),
+            actorAdminId: actor.id.toString(),
+          },
+        },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_FRAUD_WATCH',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: {
+            onixId: formatOnixId(target.onixId),
+            comment: input.comment.trim().slice(0, 1000),
+            victimUserId: victimId?.toString() ?? null,
+            claimCents: claimCents.toString(),
+          },
+        },
+      });
+      return row;
+    });
+
+    // Arm registration markers NOW so an abandoned account cannot simply re-register.
+    await this.risk?.recordBanMarkers(this.prisma, target.id).catch((error) => {
+      this.logger.warn(JSON.stringify({
+        msg: 'fraud watch marker write failed',
+        userId: target.id.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    });
+
+    return {
+      onixId: formatOnixId(updated.onixId),
+      fraudWatch: true,
+      fraudWatchAt: now.toISOString(),
+      victimUserId: victimId?.toString() ?? null,
+      claimCents: claimCents.toString(),
+    };
+  }
+
+  /** Disarm the marker (false positive, or support handled it manually). */
+  async clearFraudWatch(actor: AdminActor, targetId: string, comment?: string) {
+    const target = await this.resolveTarget(targetId);
+    if (!target.fraudWatchAt) {
+      return { onixId: formatOnixId(target.onixId), fraudWatch: false as const };
+    }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.user.update({
+        where: { id: target.id },
+        data: { ...FRAUD_WATCH_CLEAR_DATA, fraudWatchVictimUserId: null, fraudWatchClaimCents: 0n },
+      });
+      await tx.adminActionLog.create({
+        data: {
+          adminUserId: actor.id,
+          action: 'ADMIN_USER_FRAUD_WATCH_CLEAR',
+          targetType: 'User',
+          targetId: target.id.toString(),
+          metadataJson: {
+            onixId: formatOnixId(target.onixId),
+            comment: comment?.trim().slice(0, 500) ?? null,
+          },
+        },
+      });
+      return row;
+    });
+    /**
+     * Revoke the markers armed when the watch was set, so a cleared seller is not left
+     * permanently unable to register. Strike history is NOT reset.
+     */
+    await this.risk?.revokeBanMarkers(this.prisma, target.id).catch((error) => {
+      this.logger.warn(JSON.stringify({
+        msg: 'fraud watch marker revoke failed',
+        userId: target.id.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    });
+    return { onixId: formatOnixId(updated.onixId), fraudWatch: false as const };
   }
 
   async setUserRole(actor: AdminActor, targetId: string, role: string) {

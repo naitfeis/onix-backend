@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
 import { ruRiskAction, ruRiskLevel, ruRiskType } from '../i18n';
 import { RiskEvidence } from './RiskEvidence';
+import { EmptyRows } from '../components/EmptyRows';
 
 type RiskEvent = {
   id: string;
@@ -127,6 +128,7 @@ export function RiskEventsScreen({ onOpenUser }: { onOpenUser?: (onixId: string)
           </tr>
         </thead>
         <tbody>
+          {(data?.events ?? []).length === 0 && <EmptyRows colSpan={5} label="Событий риска за период нет." />}
           {(data?.events ?? []).map((e) => (
             <tr key={e.id} className="click-row" onClick={() => setOpenId(e.id)}>
               <td>{e.user?.onixId || '—'}</td>

@@ -13,6 +13,7 @@ import {
 import type { Core } from './types';
 import { emptyDraft } from './shared';
 import { categoryLabel } from '../i18n';
+import { requestTelegramContact } from '../auth/telegramEnv';
 
 const NEW_SELLER_HOLD_HINT =
   'Для безопасности новых пользователей средства с аккаунтов младше 7 дней становятся доступны для вывода через 24 часа после продажи. В будущем срок будет сокращён до 5 часов.';
@@ -102,6 +103,25 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
     setDraft({ ...draft, category, subcategory: nextSubs[0] ?? '' });
   };
   const showNewSellerNote = !profileReady || newSeller;
+  /** Seller has Telegram but no verified phone — selling is gated server-side too. */
+  const needsPhone = core.profile?.phoneVerificationRequired === true;
+  const [phoneBusy, setPhoneBusy] = useState(false);
+  const sharePhone = async () => {
+    setPhoneBusy(true);
+    try {
+      // The number goes to the BOT webhook, never to this app; a `true` result only
+      // means "accepted", so the profile must be re-read to observe phoneVerified.
+      const shared = await requestTelegramContact();
+      if (!shared) {
+        setToast('Чтобы продавать, поделитесь номером телефона.');
+        return;
+      }
+      await core.loadProfile();
+      setToast('Номер подтверждён. Можно публиковать лот.');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
 
   return (
     <div className="stack narrow lot-form">
@@ -270,6 +290,18 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
           {core.profile && core.profile.hasTelegram === false && (
             <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
           )}
+          {needsPhone && (
+            <div className="form-error" role="alert">
+              <strong>Нужна верификация продавца</strong>
+              <span>
+                — поделитесь номером телефона. Храним только хеш номера и никогда не
+                показываем его покупателям.
+              </span>
+              <Button type="button" onClick={sharePhone} busy={phoneBusy}>
+                📱 Поделиться номером
+              </Button>
+            </div>
+          )}
           <div className="summary-line">
             <span>К получению (после 5%)</span>
             <strong>{payout ? `${payout} ₽` : '—'}</strong>
@@ -279,7 +311,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
             variant="violet"
             className="lot-form__publish"
             busy={core.isBusy('product-form')}
-            disabled={core.profile?.hasTelegram === false}
+            disabled={core.profile?.hasTelegram === false || needsPhone}
           >
             Опубликовать товар
           </Button>

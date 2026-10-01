@@ -44,6 +44,31 @@ describe('Bearer auth bootstrap', () => {
     }));
   });
 
+  it('sends device signals so registration can be screened against banned accounts', async () => {
+    // localStorage-backed ids are the only durable device signal a Mini App has;
+    // without them the server falls back to IP + user agent, which is much weaker.
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => (key === 'onix_browser_id' ? 'stable-browser-id' : null),
+      setItem: () => {},
+    });
+    vi.stubGlobal('crypto', { randomUUID: () => 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { accessToken: 'jwt-token', tokenType: 'Bearer' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { bootstrapAuth } = await import('./client');
+
+    await expect(bootstrapAuth()).resolves.toBe(true);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { device?: Record<string, string> };
+    expect(body.device?.browserId).toBe('stable-browser-id');
+    // userAgent must NOT be sent: the server takes it from the request, and the API
+    // rejects unknown keys (forbidNonWhitelisted), so an extra field would break login.
+    expect(body.device?.userAgent).toBeUndefined();
+    expect(body.device?.fingerprintHash).toBeUndefined();
+  });
+
   it('refreshes an existing JWT from current Mini App initData', async () => {
     storage.set('onix.accessToken', 'stale-token');
     const fetchMock = vi.fn().mockResolvedValue({

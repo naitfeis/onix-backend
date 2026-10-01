@@ -13,7 +13,7 @@ const SECRET_PATTERNS: RegExp[] = [
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
   /-----BEGIN [A-Z0-9 ]*PUBLIC KEY-----[\s\S]*?-----END [A-Z0-9 ]*PUBLIC KEY-----/g,
   /AUTH_ED25519_(?:CURRENT|PREVIOUS)_(?:PRIVATE|PUBLIC)_PEM\s*[:=]\s*["']?[^"'\s]+/gi,
-  /(?:DEVICE_HMAC_SECRET|JWT_SECRET)\s*[:=]\s*["']?[^"'\s,;]+/gi,
+  /(?:DEVICE_HMAC_SECRET|PHONE_HASH_SECRET|JWT_SECRET)\s*[:=]\s*["']?[^"'\s,;]+/gi,
   /(?:authorization|refresh[_-]?token|access[_-]?token)\s*[:=]\s*["']?[^"'\s,;]+/gi,
   // Telegram / bot / webhook / payment secrets
   /(?:bot[_-]?token|telegram[_-]?bot[_-]?token|TELEGRAM_BOT_TOKEN|BOT_TOKEN)\s*[:=]\s*["']?\d+:[A-Za-z0-9_-]+/gi,

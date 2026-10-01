@@ -45,7 +45,10 @@ type Investigation = {
   flags: Array<Record<string, unknown>>;
   securityEvents: Array<{ id: string; type: string; severity?: string; createdAt: string }>;
   ledger: Array<{ id: string; type: string; amountCents: string; createdAt: string; fundKind?: string | null; saleKind?: string | null }>;
-  sales: Array<{ id: string; status: string; totalAmountCents: string; payoutCents: string; createdAt: string; productId: string }>;
+  sales: Array<{
+    id: string; status: string; totalAmountCents: string; payoutCents: string; createdAt: string;
+    productId: string; lotNumber?: number; productTitle?: string;
+  }>;
   purchases: Array<{ id: string; status: string; totalAmountCents: string; createdAt: string; product: { title: string }; seller: { onixId: string } }>;
   chats: Array<{ id: string; kind: string; title?: string | null; updatedAt: string; memberIds: string[]; lastMessage?: { text: string; createdAt: string } | null }>;
   identities?: Array<{
@@ -55,7 +58,32 @@ type Investigation = {
     isMain: boolean;
     wouldWipe: boolean;
   }>;
+  sessions?: Array<{
+    id: string;
+    createdAt: string;
+    lastSeenAt: string;
+    revokedAt: string | null;
+    ipAddress: string | null;
+    country: string | null;
+    browser: string | null;
+    os: string | null;
+    riskScore: number;
+    fingerprintHash: string | null;
+  }>;
+  /** BANNED/DELETED accounts this one is attached to, and via which signal. */
+  linkedBannedAccounts?: Array<{ onixId: string; via: 'device' | 'ip' | 'telegram' }>;
 };
+
+const LINK_VIA_LABEL: Record<string, string> = {
+  device: 'то же устройство',
+  ip: 'тот же IP',
+  telegram: 'тот же Telegram',
+};
+
+/** Every moderation action is scoped to one user; build the path once. */
+function userAction(onixId: string, action: string) {
+  return `/api/admin/users/${encodeURIComponent(onixId)}/${action}`;
+}
 
 function money(cents: string) {
   const n = Number(cents);
@@ -205,9 +233,43 @@ export function UsersScreen({
             </div>
             <label>Публичный комментарий<textarea value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} required /></label>
             <div className="row">
-              <button className="danger" type="button" disabled={actionBusy || data.profile.wiped} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/ban`, { method: 'PATCH', body: JSON.stringify({ reason, comment, ...(days ? { durationDays: Number(days) } : {}) }) })}>Забанить</button>
-              <button className="ghost" type="button" disabled={actionBusy || !data.profile.deletedAt || data.profile.wiped} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/unban`, { method: 'PATCH', body: JSON.stringify({ comment }) })}>Снять бан</button>
-              <button className="ghost" type="button" disabled={actionBusy} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/sell-ban`, { method: 'PATCH', body: JSON.stringify({ banned: !data.profile.sellBannedAt, comment }) })}>{data.profile.sellBannedAt ? 'Разрешить продажи' : 'Бан продаж'}</button>
+              <button
+                className="danger"
+                type="button"
+                disabled={actionBusy || data.profile.wiped}
+                onClick={() => void action(userAction(data.profile.onixId, 'ban'), {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    reason,
+                    comment,
+                    ...(days ? { durationDays: Number(days) } : {}),
+                  }),
+                })}
+              >
+                Забанить
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                disabled={actionBusy || !data.profile.deletedAt || data.profile.wiped}
+                onClick={() => void action(userAction(data.profile.onixId, 'unban'), {
+                  method: 'PATCH',
+                  body: JSON.stringify({ comment }),
+                })}
+              >
+                Снять бан
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                disabled={actionBusy}
+                onClick={() => void action(userAction(data.profile.onixId, 'sell-ban'), {
+                  method: 'PATCH',
+                  body: JSON.stringify({ banned: !data.profile.sellBannedAt, comment }),
+                })}
+              >
+                {data.profile.sellBannedAt ? 'Разрешить продажи' : 'Бан продаж'}
+              </button>
             </div>
             <div className="row">
               {adminRole === 'SUPER_ADMIN' && (
@@ -222,11 +284,38 @@ export function UsersScreen({
                       <option value="VIP">VIP</option>
                     </select>
                   </label>
-                  <button className="primary" type="button" disabled={actionBusy || status === data.profile.platformStatus} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })}>Сменить статус</button>
+                  <button
+                    className="primary"
+                    type="button"
+                    disabled={actionBusy || status === data.profile.platformStatus}
+                    onClick={() => void action(userAction(data.profile.onixId, 'status'), {
+                      method: 'PATCH',
+                      body: JSON.stringify({ status }),
+                    })}
+                  >
+                    Сменить статус
+                  </button>
                 </>
               )}
-              <label>Корректировка баланса (в копейках)<input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 или -1000" /></label>
-              <button className="primary" type="button" disabled={actionBusy || !balance} onClick={() => void action(`/api/admin/users/${encodeURIComponent(data.profile.onixId)}/balance`, { method: 'POST', body: JSON.stringify({ amountCents: balance, reason: comment, idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}` }) })}>Списать/начислить</button>
+              <label>
+                Корректировка баланса (в копейках)
+                <input value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="1000 или -1000" />
+              </label>
+              <button
+                className="primary"
+                type="button"
+                disabled={actionBusy || !balance}
+                onClick={() => void action(userAction(data.profile.onixId, 'balance'), {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    amountCents: balance,
+                    reason: comment,
+                    idempotencyKey: `admin-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+                  }),
+                })}
+              >
+                Списать/начислить
+              </button>
             </div>
           </div>
           <div className="admin-actions">
@@ -339,14 +428,93 @@ export function UsersScreen({
               </div>
             </div>
           )}
+          <div className="admin-actions">
+            <h3>Связь с забаненными аккаунтами</h3>
+            {(data.linkedBannedAccounts ?? []).length === 0 ? (
+              <p className="muted">Совпадений с заблокированными аккаунтами нет.</p>
+            ) : (
+              <>
+                <p className="error">
+                  Аккаунт связан с уже наказанными. Открыть карточку можно кликом по ONIX ID.
+                </p>
+                <table>
+                  <thead><tr><th>Забаненный аккаунт</th><th>Совпадение</th></tr></thead>
+                  <tbody>
+                    {(data.linkedBannedAccounts ?? []).map((hit) => (
+                      <tr key={`${hit.onixId}-${hit.via}`}>
+                        <td>
+                          <button className="link-button" type="button" onClick={() => void loadUser(hit.onixId)}>
+                            {hit.onixId}
+                          </button>
+                        </td>
+                        <td>{LINK_VIA_LABEL[hit.via] ?? 'совпадение'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+          <div className="admin-actions">
+            <h3>Устройства и входы</h3>
+            {(data.sessions ?? []).length === 0 ? (
+              <p className="muted">Входов нет.</p>
+            ) : (
+              <table>
+                <thead><tr><th>Когда</th><th>Устройство</th><th>IP</th><th>Риск</th><th>Состояние</th></tr></thead>
+                <tbody>
+                  {(data.sessions ?? []).map((session) => (
+                    <tr key={session.id}>
+                      <td>{new Date(session.lastSeenAt).toLocaleString('ru-RU')}</td>
+                      <td>{[session.browser, session.os].filter(Boolean).join(' · ') || '—'}</td>
+                      <td>{[session.ipAddress, session.country].filter(Boolean).join(' ') || '—'}</td>
+                      <td>{session.riskScore}</td>
+                      <td>{session.revokedAt ? 'завершён' : 'активен'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
           <h3>Покупки</h3>
-          <table><thead><tr><th>ID</th><th>Товар</th><th>Продавец</th><th>Статус</th><th>Сумма</th></tr></thead>
-            <tbody>{data.purchases.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.product.title}</td><td>{o.seller.onixId}</td><td>{ruOrderStatus(o.status)}</td><td>{money(o.totalAmountCents)}</td></tr>)}</tbody>
+          <table><thead><tr><th>Сделка</th><th>Товар</th><th>Продавец</th><th>Статус</th><th>Сумма</th></tr></thead>
+            <tbody>
+              {data.purchases.map((o) => (
+                <tr key={o.id}>
+                  <td>#{o.id}</td>
+                  <td>{o.product.title}</td>
+                  <td>
+                    <button className="link-button" type="button" onClick={() => void loadUser(o.seller.onixId)}>
+                      {o.seller.onixId}
+                    </button>
+                  </td>
+                  <td>{ruOrderStatus(o.status)}</td>
+                  <td>{money(o.totalAmountCents)}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
           <h3>Продажи</h3>
-          <table><thead><tr><th>ID</th><th>Товар</th><th>Статус</th><th>Итого</th><th>Выплата</th></tr></thead>
-            <tbody>{data.sales.map((o) => <tr key={o.id}><td>#{o.id}</td><td>{o.productId}</td><td>{ruOrderStatus(o.status)}</td><td>{money(o.totalAmountCents)}</td><td>{money(o.payoutCents)}</td></tr>)}</tbody>
-          </table>
+          {data.sales.length === 0 ? <p className="muted">Продаж нет.</p> : (
+            <table>
+              <thead><tr><th>Сделка</th><th>Лот</th><th>Статус</th><th>Итого</th><th>Выплата</th><th>Когда</th></tr></thead>
+              <tbody>
+                {data.sales.map((o) => (
+                  <tr key={o.id}>
+                    <td>#{o.id}</td>
+                    <td>
+                      {o.lotNumber ? `ONIXLOT-${o.lotNumber}` : o.productId}
+                      {o.productTitle ? <><br /><span className="muted">{o.productTitle}</span></> : null}
+                    </td>
+                    <td>{ruOrderStatus(o.status)}</td>
+                    <td>{money(o.totalAmountCents)}</td>
+                    <td>{money(o.payoutCents)}</td>
+                    <td>{new Date(o.createdAt).toLocaleString('ru-RU')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
           <h3>Чаты</h3>
           <table><thead><tr><th>Чат</th><th>Последнее</th><th>Обновлён</th></tr></thead>
             <tbody>{data.chats.map((c) => <tr key={c.id}>

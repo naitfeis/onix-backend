@@ -59,6 +59,7 @@ textarea { background: #0e1117; border: 1px solid var(--line); color: var(--text
 button.danger { background: var(--danger); color: #fff; border: 0; border-radius: 8px; padding: 0.6rem 1rem; cursor: pointer; font-weight: 600; }
 .actions-cell { display: flex; gap: 0.4rem; flex-wrap: wrap; min-width: 240px; }
 .actions-cell button { white-space: nowrap; }
+.empty-cell { padding: 1rem 0.35rem; text-align: center; }
 .click-row { cursor: pointer; }
 .click-row:hover { background: rgba(91, 141, 239, 0.08); }
 .timeline { padding-left: 1.1rem; }

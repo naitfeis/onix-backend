@@ -10,7 +10,7 @@ export type SecretInventoryItem = {
   status: SecretInventoryStatus;
   /** When true, production (or always) should treat missing as operator attention. */
   required: boolean;
-  domain: 'ed25519' | 'device' | 'legacy_jwt' | 'delivery' | 'telegram' | 'optional_rotation' | 'admin';
+  domain: 'ed25519' | 'device' | 'phone' | 'legacy_jwt' | 'delivery' | 'telegram' | 'optional_rotation' | 'admin';
 };
 
 type SecretSpec = {
@@ -26,6 +26,7 @@ const SECRET_SPECS: readonly SecretSpec[] = [
   { name: 'AUTH_ED25519_PREVIOUS_KID', required: false, domain: 'optional_rotation' },
   { name: 'AUTH_ED25519_PREVIOUS_PUBLIC_PEM', required: false, domain: 'optional_rotation' },
   { name: 'DEVICE_HMAC_SECRET', required: 'production', domain: 'device' },
+  { name: 'PHONE_HASH_SECRET', required: 'production', domain: 'phone' },
   { name: 'JWT_SECRET', required: true, domain: 'legacy_jwt' },
   { name: 'PRODUCT_DELIVERY_KEY', required: false, domain: 'delivery' },
   { name: 'BOT_TOKEN', required: true, domain: 'telegram' },

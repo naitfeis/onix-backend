@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
 import { ruAuditAction, ruMetaKey, ruRole } from '../i18n';
+import { EmptyRows } from '../components/EmptyRows';
 
 type Log = {
   id: string;
@@ -55,6 +56,7 @@ export function AuditLogScreen() {
           </tr>
         </thead>
         <tbody>
+          {logs.length === 0 && <EmptyRows colSpan={5} label="Записей аудита нет." />}
           {logs.map((l) => (
             <tr key={l.id}>
               <td>

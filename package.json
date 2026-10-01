@@ -16,6 +16,7 @@
     "test": "tsx --test \"safe-deal-platform/test/**/*.test.ts\"",
     "test:monetary": "tsx --test \"safe-deal-platform/test/monetary-invariants.e2e.test.ts\" \"safe-deal-platform/test/ledger-property.test.ts\" \"safe-deal-platform/test/idempotency-memory.test.ts\" \"safe-deal-platform/test/deposit-transfer.test.ts\" \"safe-deal-platform/test/economy-foundation.test.ts\"",
     "test:ledger-chaos": "tsx --test \"safe-deal-platform/test/ledger-chaos.e2e.test.ts\"",
+    "test:fraud-drill": "tsx --test \"safe-deal-platform/test/fraud-lifecycle.e2e.test.ts\" \"safe-deal-platform/test/refund-abuse.e2e.test.ts\"",
     "test:load": "tsx safe-deal-platform/scripts/load-test-monetary.ts",
     "test:load:websocket": "tsx safe-deal-platform/scripts/load-test-websocket.ts",
     "test:realtime-redis": "tsx --test \"safe-deal-platform/test/realtime-redis.integration.test.ts\"",

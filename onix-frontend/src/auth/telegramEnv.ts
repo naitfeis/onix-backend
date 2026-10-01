@@ -15,6 +15,8 @@ type TelegramWebAppLike = {
   platform?: string;
   ready?: () => void;
   expand?: () => void;
+  /** Bot API 6.9+. Shows the native "share your phone number" popup. */
+  requestContact?: (callback?: (shared: boolean) => void) => void;
   HapticFeedback?: {
     notificationOccurred?: (kind: 'success' | 'error' | 'warning') => void;
     impactOccurred?: (style: string) => void;
@@ -286,5 +288,35 @@ export function telegramImpact(style = 'light'): void {
     telegramWebApp()?.HapticFeedback?.impactOccurred?.(style);
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * Ask Telegram to show the native "share your phone number" popup (Bot API 6.9+).
+ *
+ * Important for seller verification: the phone number is delivered to the BOT via the
+ * webhook as `message.contact` — the Mini App only learns whether the user accepted.
+ * So a `true` result means "ask the profile again", never "we have the number".
+ *
+ * Resolves `false` outside a Mini App, on older Telegram clients, and when the user
+ * declines; callers must not treat those cases differently from each other.
+ */
+export async function requestTelegramContact(timeoutMs = 30_000): Promise<boolean> {
+  const webApp = telegramWebApp();
+  if (!webApp?.requestContact) return false;
+  try {
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (shared: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(shared);
+      };
+      // Some clients never invoke the callback if the popup is dismissed by gesture.
+      window.setTimeout(() => finish(false), timeoutMs);
+      webApp.requestContact?.(finish);
+    });
+  } catch {
+    return false;
   }
 }

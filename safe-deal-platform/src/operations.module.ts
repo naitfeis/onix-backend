@@ -399,6 +399,28 @@ class OperationsService {
     const corr = correlationId ?? resolveCorrelationId();
     const amount = BigInt(dto.amountCents);
 
+    /**
+     * Settle any open clawback debt BEFORE the risk gate. assertWithdrawAllowed treats
+     * withdrawBlockedAt as a lock, so running it first would refuse an honest seller who
+     * has the money to repay — leaving the debt unpaid until the 60s worker happens to
+     * run, and telling them "suspicious activity" instead of the truth.
+     *
+     * The cheap read keeps the hot path free of an extra Serializable transaction for
+     * the overwhelming majority of withdrawals, which have no debt at all.
+     */
+    const owesDebt = await this.prisma.orderClawback
+      .findFirst({
+        where: { sellerId: user.id, status: { in: ['OPEN', 'PARTIAL'] } },
+        select: { id: true },
+      })
+      .catch(() => null);
+    if (owesDebt) {
+      await withSerializableTransaction(this.prisma, async (tx) => {
+        await lockUsersInIdOrder(tx, [user.id]);
+        await this.clawbacks.recoverAllForSeller(tx, user.id);
+      });
+    }
+
     // Risk/MFA before money move (outside TX — may create MfaChallenge / wait for Telegram).
     await this.riskEngine.assertWithdrawAllowed({
       userId: user.id,

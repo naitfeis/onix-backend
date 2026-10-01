@@ -4,7 +4,8 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Prisma } from '@prisma/client';
-import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUrl, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from './prisma.service';
 import { AuthRequest, AuthUser, Public, resolveIsSupport } from './common';
@@ -15,7 +16,8 @@ import { AuthRolloutService } from './auth-v2/auth-rollout.service';
 import { DualAccessService, peekJwtAlg } from './auth-v2/dual-access.service';
 import { BAN_CLEAR_DATA, banPublicInfo, isBanActive } from './ban-policy';
 import { dualWriteTelegramIdentity, isDualWriteIdentityEnabled } from './identity-link';
-import { RiskScoreService } from './risk-score.service';
+import { RiskScoreService, type RiskDeviceInput } from './risk-score.service';
+import { resolveClientIp, type ClientIpRequestLike } from './http/client-ip';
 import { formatErrorForLog } from './safe-error-log';
 import { assertRateLimit } from './rate-limit';
 
@@ -28,10 +30,42 @@ interface TelegramIdentity {
   languageCode?: string | null;
 }
 
-class MiniAppDto {
-  @IsString() @MaxLength(10000) initData!: string;
+/** Client-side device signals for registration risk. IP/UA come from the request. */
+class DeviceDto {
+  @IsOptional() @IsString() @MaxLength(64) browser?: string;
+  @IsOptional() @IsString() @MaxLength(64) os?: string;
+  @IsOptional() @IsString() @MaxLength(64) platform?: string;
+  @IsOptional() @IsString() @MaxLength(64) browserId?: string;
+  @IsOptional() @IsString() @MaxLength(64) pwaInstallId?: string;
+  @IsOptional() @IsString() @MaxLength(64) timezone?: string;
+  @IsOptional() @IsString() @MaxLength(32) language?: string;
 }
 
+class MiniAppDto {
+  @IsString() @MaxLength(10000) initData!: string;
+  /** Safe: the Telegram hash is computed from initData's own params, not this DTO. */
+  @IsOptional() @ValidateNested() @Type(() => DeviceDto) device?: DeviceDto;
+}
+
+/**
+ * Build registration risk signals. IP and user agent always come from the server-side
+ * request — they are never client-controlled — while storage ids come from the client
+ * and only ever feed the server-side deviceId HMAC, never a raw trust decision.
+ */
+function registrationDevice(req: ClientIpRequestLike, client?: DeviceDto | null): RiskDeviceInput {
+  const userAgent = req.headers?.['user-agent'];
+  return {
+    ...(client ?? {}),
+    ipAddress: resolveClientIp(req),
+    userAgent: (Array.isArray(userAgent) ? userAgent[0] : userAgent)?.slice(0, 512) ?? null,
+  };
+}
+
+/**
+ * NOTE: no `device` field here on purpose. telegramLogin rebuilds the Telegram
+ * signature from every field of this DTO, so an extra key would change the hash and
+ * reject legitimate logins. Registration signals come from the request instead.
+ */
 class TelegramLoginDto {
   @IsString() @Matches(/^\d+$/) id!: string;
   @IsString() @MaxLength(120) first_name!: string;
@@ -52,7 +86,7 @@ export class AuthService {
     @Optional() private readonly risk?: RiskScoreService,
   ) {}
 
-  async miniApp(initData: string) {
+  async miniApp(initData: string, device?: RiskDeviceInput | null) {
     const params = new URLSearchParams(initData);
     const hash = params.get('hash');
     const userJson = params.get('user');
@@ -72,12 +106,12 @@ export class AuthService {
       lastName: typeof value.last_name === 'string' ? value.last_name : undefined,
       photoUrl: typeof value.photo_url === 'string' ? value.photo_url : undefined,
       languageCode: typeof value.language_code === 'string' ? value.language_code : undefined,
-    });
+    }, device);
     await this.dualIssueSession(user, 'telegram-mini');
     return this.issue(user);
   }
 
-  async telegramLogin(dto: TelegramLoginDto) {
+  async telegramLogin(dto: TelegramLoginDto, device?: RiskDeviceInput | null) {
     this.assertFresh(dto.auth_date);
     const { hash, ...data } = dto;
     const check = Object.entries(data)
@@ -89,7 +123,7 @@ export class AuthService {
     const user = await this.upsert({
       id: BigInt(dto.id), username: dto.username, firstName: dto.first_name,
       lastName: dto.last_name, photoUrl: dto.photo_url,
-    });
+    }, device);
     await this.dualIssueSession(user, 'telegram-login');
     return this.issue(user);
   }
@@ -113,7 +147,7 @@ export class AuthService {
     }
   }
 
-  private async upsert(identity: TelegramIdentity): Promise<AuthUser> {
+  private async upsert(identity: TelegramIdentity, device?: RiskDeviceInput | null): Promise<AuthUser> {
     let existing = await this.prisma.user.findUnique({ where: { telegramId: identity.id } });
     if (existing?.deletedAt) {
       if (!isBanActive(existing)) {
@@ -149,7 +183,10 @@ export class AuthService {
     } else {
       try {
         if (this.risk) {
-          await this.risk.assertNewRegistrationAllowed(this.prisma, { telegramId: identity.id });
+          // Without device signals this check is a mathematical no-op: collectSignals
+          // returns [] and the score is 0, so a banned fraudster re-registering from
+          // the Mini App was never screened at all.
+          await this.risk.assertNewRegistrationAllowed(this.prisma, { telegramId: identity.id, device });
         }
         user = await this.prisma.$transaction(async (tx) => {
           const created = await tx.user.create({
@@ -371,16 +408,18 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @Public()
   @Post('telegram-mini')
-  miniApp(@Body() dto: MiniAppDto, @Req() req: { ip?: string }) {
+  miniApp(@Body() dto: MiniAppDto, @Req() req: ClientIpRequestLike) {
     assertRateLimit(`auth:telegram-mini:${req.ip ?? 'unknown'}`, 30, 60_000);
-    return this.auth.miniApp(dto.initData);
+    return this.auth.miniApp(dto.initData, registrationDevice(req, dto.device));
   }
 
   @Public()
   @Post('telegram-login')
-  telegramLogin(@Body() dto: TelegramLoginDto, @Req() req: { ip?: string }) {
+  telegramLogin(@Body() dto: TelegramLoginDto, @Req() req: ClientIpRequestLike) {
     assertRateLimit(`auth:telegram-login:${req.ip ?? 'unknown'}`, 20, 60_000);
-    return this.auth.telegramLogin(dto);
+    // No device body on this DTO (it would break the Telegram signature);
+    // server-derived IP + user agent still feed registration risk.
+    return this.auth.telegramLogin(dto, registrationDevice(req, null));
   }
 }
 

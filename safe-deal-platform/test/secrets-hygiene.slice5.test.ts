@@ -9,11 +9,14 @@ import { SigningKeyService } from '../src/auth-v2/signing-key.service';
 import { generateEd25519PemPair } from '../src/auth-v2/token.service';
 import { redactSecrets } from '../src/safe-error-log';
 
-test('redactSecrets strips DEVICE_HMAC_SECRET and JWT_SECRET assignments', () => {
+test('redactSecrets strips DEVICE_HMAC_SECRET, PHONE_HASH_SECRET and JWT_SECRET assignments', () => {
   const raw =
-    'DEVICE_HMAC_SECRET=super-hmac-secret-value JWT_SECRET=legacy-jwt-secret-at-least-32-chars!!';
+    'DEVICE_HMAC_SECRET=super-hmac-secret-value '
+    + 'PHONE_HASH_SECRET=phone-key-must-not-appear '
+    + 'JWT_SECRET=legacy-jwt-secret-at-least-32-chars!!';
   const out = redactSecrets(raw);
   assert.equal(out.includes('super-hmac-secret-value'), false);
+  assert.equal(out.includes('phone-key-must-not-appear'), false);
   assert.equal(out.includes('legacy-jwt-secret'), false);
   assert.match(out, /\[REDACTED\]/);
 });
@@ -42,6 +45,7 @@ test('assessSecrets reports names only — never embeds env values', () => {
     AUTH_ED25519_CURRENT_PRIVATE_PEM: secret,
     AUTH_ED25519_CURRENT_PUBLIC_PEM: secret,
     DEVICE_HMAC_SECRET: secret,
+    PHONE_HASH_SECRET: secret,
     JWT_SECRET: secret,
     BOT_TOKEN: '123456789:AABBCCDDEEFFGGHHIIJJKKLLMMNNOOPPQQR',
     TELEGRAM_WEBHOOK_SECRET: 'webhook-secret',
@@ -52,6 +56,9 @@ test('assessSecrets reports names only — never embeds env values', () => {
   assert.equal(JSON.stringify(items).includes(secret), false);
   assert.ok(items.every((i) => i.name && (i.status === 'present' || i.status === 'missing')));
   assert.equal(items.find((i) => i.name === 'DEVICE_HMAC_SECRET')?.status, 'present');
+  // The phone-hash key is production-required too, and its value must stay out of the
+  // inventory exactly like every other secret.
+  assert.equal(items.find((i) => i.name === 'PHONE_HASH_SECRET')?.status, 'present');
   assert.equal(items.find((i) => i.name === 'AUTH_ED25519_PREVIOUS_KID')?.status, 'missing');
   assert.match(line, /secrets_inventory/);
   assert.match(line, /missing_required=\[\]/);
@@ -73,7 +80,10 @@ test('assessSecrets flags missing DEVICE_HMAC_SECRET as required in production',
   const device = items.find((i) => i.name === 'DEVICE_HMAC_SECRET');
   assert.equal(device?.required, true);
   assert.equal(device?.status, 'missing');
-  assert.match(formatSecretsInventoryLine(items), /missing_required=\[DEVICE_HMAC_SECRET\]/);
+  assert.match(
+    formatSecretsInventoryLine(items),
+    /missing_required=\[DEVICE_HMAC_SECRET,PHONE_HASH_SECRET\]/,
+  );
 });
 
 test('SigningKeyService verifies PREVIOUS after CURRENT rotation (Slice 5 hygiene)', () => {

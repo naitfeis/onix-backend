@@ -18,7 +18,9 @@ export type RiskFactor =
   | 'BAN_EVASION'
   | 'ACCOUNT_SALE_PROCEEDS'
   | 'SUSPICIOUS_FUNDS'
-  | 'SECURITY_LOCK_ACTIVE';
+  | 'SECURITY_LOCK_ACTIVE'
+  /** Seller already failed to deliver to THIS buyer — a second deal is a hard block. */
+  | 'REPEAT_VICTIM';
 
 export type RiskDecision = {
   action: RiskAction;

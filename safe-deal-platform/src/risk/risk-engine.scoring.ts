@@ -15,6 +15,8 @@ export const RISK_WEIGHT: Record<RiskFactor, number> = {
   ACCOUNT_SALE_PROCEEDS: 35,
   SUSPICIOUS_FUNDS: 40,
   SECURITY_LOCK_ACTIVE: 100,
+  /** Hard block: the pair already has a proven failed deal. */
+  REPEAT_VICTIM: 100,
 };
 
 export function riskMonitorThreshold(): number {
@@ -59,7 +61,12 @@ export function riskCriticalThreshold(): number {
 }
 
 export function riskLevel(score: number, factors: RiskFactor[]): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
-  if (factors.includes('BAN_EVASION') || factors.includes('SECURITY_LOCK_ACTIVE') || score >= riskCriticalThreshold()) {
+  if (
+    factors.includes('BAN_EVASION')
+    || factors.includes('SECURITY_LOCK_ACTIVE')
+    || factors.includes('REPEAT_VICTIM')
+    || score >= riskCriticalThreshold()
+  ) {
     return 'CRITICAL';
   }
   if (score >= riskLockThreshold()) return 'HIGH';
@@ -73,7 +80,13 @@ export function decideAction(score: number, factors: RiskFactor[]): RiskAction {
     if (factors.includes('CONTEXT_SHIFT') && score >= riskMonitorThreshold()) return 'MONITOR';
     return 'ALLOW';
   }
-  if (hard.includes('SECURITY_LOCK_ACTIVE') || hard.includes('BAN_EVASION')) return 'BLOCK';
+  if (
+    hard.includes('SECURITY_LOCK_ACTIVE')
+    || hard.includes('BAN_EVASION')
+    || hard.includes('REPEAT_VICTIM')
+  ) {
+    return 'BLOCK';
+  }
   if (
     score >= riskLockThreshold()
     && (hard.includes('ACCOUNT_SALE_PROCEEDS') || hard.includes('SUSPICIOUS_FUNDS'))

@@ -226,13 +226,14 @@ npm run auth:generate-ed25519 -- --render
 3. Новые access подписываются новым ключом; старые ещё ~15 мин проверяются PREVIOUS.
 4. Через час PREVIOUS можно снять.
 
-Ротация Ed25519 **не** убивает refresh-cookie. Ротация `DEVICE_HMAC_SECRET` убивает знакомство устройств (все «новые»).
+Ротация Ed25519 **не** убивает refresh-cookie. Ротация `DEVICE_HMAC_SECRET` убивает знакомство устройств (все «новые»). Ротация `PHONE_HASH_SECRET` разрушительнее: хеши не пересчитываются (номер в базе не хранится), поэтому все продавцы теряют верификацию и должны поделиться номером заново.
 
 Другие домены секретов (не мешать):
 
 | Секрет | Зачем |
 | --- | --- |
 | `DEVICE_HMAC_SECRET` | deviceId |
+| `PHONE_HASH_SECRET` | `User.phoneHash` — HMAC номера продавца |
 | `JWT_SECRET` | legacy HS256 |
 | `PRODUCT_DELIVERY_KEY` | AES-GCM автовыдачи товара |
 | `BOT_TOKEN` / `TELEGRAM_WEBHOOK_SECRET` | Telegram |

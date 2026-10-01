@@ -1,5 +1,6 @@
 import { buildApiUrl, resolveApiBase, shouldIncludeCredentials } from '../auth/apiConfig';
 import { getTelegramInitData } from '../auth/telegramEnv';
+import { collectRegistrationDevice } from '../auth/deviceInfo';
 import { peekSharedAuthManager } from '../auth/sharedAuthManager';
 import { timedApi } from '../perf/timing';
 import type { ApiEnvelope } from './contracts';
@@ -154,7 +155,13 @@ export async function bootstrapAuth(): Promise<boolean> {
   if (!data) {
     return false;
   }
-  const result = await api.post<AuthResult>('/api/auth/telegram-mini', { initData: data });
+  // Device signals let the server screen this registration against banned accounts.
+  // Without them the check degrades to IP + user agent, which is far weaker.
+  const device = collectRegistrationDevice();
+  const result = await api.post<AuthResult>('/api/auth/telegram-mini', {
+    initData: data,
+    ...(device ? { device } : {}),
+  });
   setAccessToken(result.accessToken);
   return true;
 }

@@ -1,8 +1,16 @@
 import { createHash } from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { DeviceTrustService } from './auth-v2/device-trust.service';
 import type { AbuseMarkerKind, Prisma } from '@prisma/client';
 import { AuthPlatformError } from './auth-v2/auth-errors';
 import type { DeviceContext } from './auth-v2/session.service';
+/**
+ * Value import, NOT `import type`: Nest resolves constructor dependencies from the
+ * emitted `design:paramtypes`, and a type-only import erases the reference to
+ * `Function`. Combined with @Optional() that silently injects undefined, so the
+ * evidence-survives-rollback fix below would be inert in production.
+ */
+import { PrismaService } from './prisma.service';
 
 const WEIGHT: Record<AbuseMarkerKind, number> = {
   FINGERPRINT: 40,
@@ -40,11 +48,34 @@ function hashValue(raw: string): string {
  */
 @Injectable()
 export class RiskScoreService {
+  private readonly logger = new Logger(RiskScoreService.name);
+
+  /**
+   * DeviceTrustService is optional so unit tests can construct the service directly;
+   * when absent the derived deviceId falls back to the client value (still no match,
+   * but IP/USER_AGENT/BROWSER_ID signals keep working).
+   */
+  constructor(
+    @Optional() private readonly deviceTrust?: DeviceTrustService,
+    @Optional() private readonly prisma?: PrismaService,
+  ) {}
+
+  /** Server-derived deviceId — the SAME value stored on Session.fingerprintHash. */
+  private resolveDeviceId(device?: RiskDeviceInput | null): string | null {
+    if (!device || !this.deviceTrust) return null;
+    try {
+      return this.deviceTrust.resolveDeviceId(device);
+    } catch {
+      return null;
+    }
+  }
+
   async assertNewRegistrationAllowed(
     db: Db,
     input: { telegramId: bigint; device?: RiskDeviceInput | null },
   ): Promise<{ score: number; factors: AbuseMarkerKind[] }> {
-    const signals = this.collectSignals(input.device);
+    const derivedDeviceId = this.resolveDeviceId(input.device);
+    const signals = this.collectSignals(input.device, derivedDeviceId, input.telegramId);
     if (signals.length === 0) {
       return { score: 0, factors: [] };
     }
@@ -60,7 +91,18 @@ export class RiskScoreService {
     const score = factors.reduce((sum, kind) => sum + WEIGHT[kind], 0);
 
     if (score >= BLOCK_SCORE && factors.length >= MIN_FACTORS) {
-      await db.securityEvent.create({
+      /**
+       * Evidence must outlive the rollback. Callers pass their own transaction, and the
+       * throw below rolls it back — writing this event on `db` erased the only record
+       * support had of a blocked signup attempt. Use the outer connection when present.
+       */
+      const eventDb = this.prisma ?? db;
+      if (!this.prisma) {
+        this.logger.warn(
+          'REGISTRATION_BLOCKED evidence may roll back: RiskScoreService has no PrismaService',
+        );
+      }
+      await eventDb.securityEvent.create({
         data: {
           type: 'REGISTRATION_BLOCKED',
           status: 'OPEN',
@@ -111,7 +153,8 @@ export class RiskScoreService {
       push('IP', session.ipAddress);
       push('USER_AGENT', session.userAgent);
     }
-    push('FINGERPRINT', device?.fingerprintHash);
+    // Same derivation the registration check uses, so the two spaces always agree.
+    push('FINGERPRINT', this.resolveDeviceId(device) ?? device?.fingerprintHash);
     push('BROWSER_ID', device?.browserId);
     push('IP', device?.ipAddress);
     push('USER_AGENT', device?.userAgent);
@@ -119,7 +162,7 @@ export class RiskScoreService {
     const [user, links] = await Promise.all([
       db.user.findUnique({
         where: { id: sourceUserId },
-        select: { telegramId: true },
+        select: { telegramId: true, phoneHash: true },
       }),
       db.identityLink.findMany({
         where: { userId: sourceUserId, deletedAt: null },
@@ -127,6 +170,10 @@ export class RiskScoreService {
       }),
     ]);
     push('TELEGRAM_ID', user?.telegramId?.toString() ?? null);
+    // phoneHash is already an HMAC, so it is stored directly (never re-hashed) — it is
+    // the strongest registration signal available: a fresh account with the same phone
+    // matches 40 points and, with any second marker, blocks signup.
+    if (user?.phoneHash) rows.push({ kind: 'PHONE_HASH', valueHash: user.phoneHash, sourceUserId });
     for (const link of links) {
       if (link.provider === 'TELEGRAM') push('TELEGRAM_ID', link.providerUserId);
     }
@@ -152,18 +199,33 @@ export class RiskScoreService {
     });
   }
 
-  private collectSignals(device?: RiskDeviceInput | null): Array<{ kind: AbuseMarkerKind; valueHash: string }> {
-    if (!device) return [];
+  /**
+   * Signals compared against AbuseMarker at registration.
+   *
+   * FINGERPRINT must be the SERVER-DERIVED deviceId: recordBanMarkers writes
+   * Session.fingerprintHash, which DeviceTrustService produced. Comparing it against
+   * the client-sent `fingerprintHash` never matched — clients do not send one
+   * (sanitizeDevice strips it) — so the strongest marker was dead and a banned
+   * fraudster could only ever match IP + USER_AGENT: 15 + 10 = 25, permanently
+   * below BLOCK_SCORE(50). Registration blocking was unreachable by construction.
+   */
+  private collectSignals(
+    device?: RiskDeviceInput | null,
+    derivedDeviceId?: string | null,
+    telegramId?: bigint | null,
+  ): Array<{ kind: AbuseMarkerKind; valueHash: string }> {
+    if (!device && telegramId == null) return [];
     const out: Array<{ kind: AbuseMarkerKind; valueHash: string }> = [];
     const add = (kind: AbuseMarkerKind, raw?: string | null) => {
       const value = raw?.trim();
       if (!value) return;
       out.push({ kind, valueHash: hashValue(value) });
     };
-    add('FINGERPRINT', device.fingerprintHash);
-    add('BROWSER_ID', device.browserId);
-    add('IP', device.ipAddress);
-    add('USER_AGENT', device.userAgent);
+    add('FINGERPRINT', derivedDeviceId || device?.fingerprintHash);
+    add('BROWSER_ID', device?.browserId);
+    add('IP', device?.ipAddress);
+    add('USER_AGENT', device?.userAgent);
+    add('TELEGRAM_ID', telegramId?.toString() ?? null);
     return out;
   }
 }

@@ -77,6 +77,7 @@ export class ProfilesService {
           telegramId: true, sellBannedAt: true,
           securityLockedAt: true, securityLockLevel: true, securityLockReason: true, securityCasePublicId: true,
           withdrawBlockedAt: true, suspiciousFundsHoldAt: true,
+          phoneHash: true,
           _count: { select: { followers: true } },
           sellerSubscription: { select: { status: true, endsAt: true } },
         },
@@ -105,14 +106,26 @@ export class ProfilesService {
       && (!profile.sellerSubscription.endsAt || profile.sellerSubscription.endsAt > new Date()),
     );
     const depositTotal = profile.depositAvailableCents + profile.depositLockedCents;
+    const phoneVerified = Boolean(profile.phoneHash);
     const heldInOrdersCents = heldOrders._sum.totalAmountCents ?? 0n;
     const base = profileDto(profile, ledger);
     const hasTelegram = profile.telegramId != null;
     return {
       ...base,
       heldInOrdersCents: heldInOrdersCents.toString(),
-      canSell: hasTelegram && !profile.sellBannedAt && !profile.securityLockedAt,
+      canSell: hasTelegram && !profile.sellBannedAt && !profile.securityLockedAt && phoneVerified,
       hasTelegram,
+      /**
+       * Seller verified their phone through Telegram. Only the boolean is exposed —
+       * the hash never leaves the server and the raw number is never stored.
+       */
+      phoneVerified,
+      /**
+       * Per-user "the missing phone is the ONLY thing blocking you" flag. Named
+       * differently from the server-side global policy predicate phoneRequiredToSell(),
+       * which reads SELLER_PHONE_REQUIRED and answers a deployment-wide question.
+       */
+      phoneVerificationRequired: !phoneVerified && hasTelegram && !profile.sellBannedAt && !profile.securityLockedAt,
       hasGoogle: Boolean(googleLink),
       securityLock: profile.securityLockedAt
         ? {

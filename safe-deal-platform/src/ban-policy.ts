@@ -18,6 +18,16 @@ export const BAN_CLEAR_DATA = {
   bannedUntil: null,
 } as const;
 
+/**
+ * Clearing an admin fraud marker. `banStrikeCount` is deliberately NOT reset:
+ * the strike history is the point of the escalation, and an unban that also wiped
+ * it would let a repeat offender restart at strike zero.
+ */
+export const FRAUD_WATCH_CLEAR_DATA = {
+  fraudWatchAt: null,
+  fraudWatchReason: null,
+} as const;
+
 /** Server-side ban duration policy (days). null = permanent. */
 export function banDurationDays(reason: BanReason, otherDays?: number): number | null {
   switch (reason) {
@@ -40,6 +50,32 @@ export function banDurationDays(reason: BanReason, otherDays?: number): number |
     default:
       throw new Error('Неизвестная причина блокировки.');
   }
+}
+
+/**
+ * Strike escalation for repeat offenders.
+ *
+ * `priorStrikes` is the number of bans ALREADY served, so 0 means "this is the first".
+ * A fresh ban otherwise restarts the same window every time, which lets a serial
+ * fraudster cycle through 7-day blocks indefinitely.
+ *
+ * Permanent reasons (FRAUD / OFF_PLATFORM_DEAL) never get shorter.
+ * Explicit OTHER durations are treated as the base and escalated like the rest.
+ */
+export const STRIKE_MULTIPLIER = 4;
+export const STRIKE_PERMANENT_AT = 2;
+
+export function banDurationDaysForStrike(
+  reason: BanReason,
+  priorStrikes: number,
+  otherDays?: number,
+): number | null {
+  const base = banDurationDays(reason, otherDays);
+  // Already permanent, or an invalid strike count: the base decision stands.
+  if (base === null || !Number.isFinite(priorStrikes) || priorStrikes < 0) return base;
+  if (priorStrikes >= STRIKE_PERMANENT_AT) return null;
+  if (priorStrikes === 0) return base;
+  return base * STRIKE_MULTIPLIER;
 }
 
 export const BAN_REASON_LABELS: Record<BanReason, string> = {

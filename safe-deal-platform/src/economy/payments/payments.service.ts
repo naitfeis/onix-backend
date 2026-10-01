@@ -19,6 +19,8 @@ import { TrustService } from '../trust/trust.service';
 import { spendableBalanceCents } from '../wallet/sale-proceeds-hold';
 import { releaseProductStock, reserveProductStock } from '../wallet/product-stock';
 import { CHECKOUT_SETTLEMENT, type CheckoutSettlementPort } from '../../checkout-settlement';
+import { AuthPlatformError } from '../../auth-v2/auth-errors';
+import { findPriorFailedDelivery, REPEAT_VICTIM_MESSAGE } from '../../risk/repeat-victim';
 import {
   checkoutAcquiringFeeBps,
   checkoutBindFingerprint,
@@ -75,6 +77,21 @@ export function pickProviderCheckoutMetadata(metadata: unknown): Record<string, 
     delete picked.paymentUrl;
   }
   return picked;
+}
+
+/** Carried on the refusal thrown inside the checkout transaction. */
+type RepeatVictimDetails = {
+  reason?: string;
+  sellerId?: string | null;
+  detail?: string | null;
+  productId?: string | null;
+};
+
+function isRepeatVictimRefusal(error: unknown): boolean {
+  return Boolean(
+    error instanceof AuthPlatformError
+    && (error.details as RepeatVictimDetails | undefined)?.reason === 'REPEAT_VICTIM',
+  );
 }
 
 @Injectable()
@@ -239,6 +256,19 @@ export class PaymentsService {
           if (product.sellerId === userId) {
             throw new BadRequestException('Нельзя купить собственный товар.');
           }
+          // Refuse BEFORE the provider captures funds. Card checkout settles the order
+          // only in settle(), i.e. after money has moved; checking there instead would
+          // strand the buyer's payment in a REFUNDED limbo. Same rule as wallet purchase.
+          const repeatVictim = await findPriorFailedDelivery(tx, userId, product.sellerId);
+          if (repeatVictim) {
+            // The evidence is written by the caller AFTER this transaction rolls back:
+            // writing it here would be discarded together with the refusal itself.
+            throw new AuthPlatformError(
+              'AUTH_ACCOUNT_LOCKED',
+              REPEAT_VICTIM_MESSAGE,
+              { reason: 'REPEAT_VICTIM', sellerId: product.sellerId.toString(), detail: repeatVictim, productId },
+            );
+          }
           await lockUsersInIdOrder(tx, [userId, product.sellerId]);
           const totalAmountCents = product.priceCents * BigInt(quantity);
           const spendable = await spendableBalanceCents(tx, this.balance, userId);
@@ -289,6 +319,11 @@ export class PaymentsService {
       });
       ownsClaim = true;
     } catch (error) {
+      // Record the refusal outside the rolled-back transaction so support keeps the trail.
+      if (error instanceof AuthPlatformError && isRepeatVictimRefusal(error)) {
+        await this.recordRepeatVictimAttempt(userId, (error.details ?? {}) as RepeatVictimDetails);
+        throw error;
+      }
       if (!this.isUniqueConflict(error)) throw error;
       const existing = await this.prisma.paymentIntent.findUnique({
         where: { idempotencyKey: dto.idempotencyKey },
@@ -346,6 +381,33 @@ export class PaymentsService {
     // makes both recovery calls resolve to the same provider intent.
     if (finalized.count === 0) return assertMatchingIntent(current);
     return current;
+  }
+
+  /**
+   * Persist the blocked repeat-purchase attempt on its own connection. The refusal
+   * rolls back the checkout transaction, so writing the event inside it would lose the
+   * evidence support needs. Failure here must never mask the refusal itself.
+   */
+  private async recordRepeatVictimAttempt(userId: bigint, details: RepeatVictimDetails): Promise<void> {
+    try {
+      await this.prisma.securityEvent.create({
+        data: {
+          type: 'FRAUD_ATTEMPT',
+          status: 'OPEN',
+          userId,
+          severity: 95,
+          payload: {
+            kind: 'REPEAT_VICTIM',
+            sellerId: details.sellerId ?? null,
+            productId: details.productId ?? null,
+            detail: details.detail ?? null,
+            path: 'CARD_CHECKOUT',
+          },
+        },
+      });
+    } catch {
+      /* the buyer-facing refusal still stands */
+    }
   }
 
   private isUniqueConflict(error: unknown): boolean {

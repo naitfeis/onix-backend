@@ -91,6 +91,39 @@ export function collectDeviceInfo(): AuthV2LoginRequest['device'] {
   };
 }
 
+/**
+ * Device signals accepted by POST /api/auth/telegram-mini for registration risk.
+ *
+ * Deliberately narrow: the API runs with `forbidNonWhitelisted: true`, so sending
+ * anything outside the server's DeviceDto would fail the login itself. userAgent and
+ * screenResolution are intentionally omitted — the server takes the user agent from
+ * the request and never trusts a client-supplied one.
+ */
+export type RegistrationDevicePayload = {
+  browser?: string;
+  os?: string;
+  platform?: string;
+  browserId?: string;
+  pwaInstallId?: string;
+  timezone?: string;
+  language?: string;
+};
+
+export function collectRegistrationDevice(): RegistrationDevicePayload | undefined {
+  const device = collectDeviceInfo();
+  if (!device) return undefined;
+  const { browser, os, platform, browserId, pwaInstallId, timezone, language } = device;
+  return {
+    ...(browser ? { browser } : {}),
+    ...(os ? { os } : {}),
+    ...(platform ? { platform } : {}),
+    ...(browserId ? { browserId } : {}),
+    ...(pwaInstallId ? { pwaInstallId } : {}),
+    ...(timezone ? { timezone } : {}),
+    ...(language ? { language } : {}),
+  };
+}
+
 /** Async path kept for API compatibility — server computes trust deviceId. */
 export async function collectDeviceInfoAsync(): Promise<AuthV2LoginRequest['device']> {
   return collectDeviceInfo();

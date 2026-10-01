@@ -243,6 +243,33 @@ export class AdminPlaneController {
     return this.security.sellBanUser(admin, id, body);
   }
 
+  /**
+   * Arm "wait for the money": confirmed fraud with nothing to repay yet. Selling stays
+   * open so the seller can still earn; the first sale payout repays the declared victim
+   * and bans the account automatically.
+   */
+  @Patch('users/:id/fraud-watch')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  setFraudWatch(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { comment: string; victimOnixId?: string; claimCents?: string },
+  ) {
+    return this.security.setFraudWatch(admin, id, body);
+  }
+
+  @Patch('users/:id/fraud-watch/clear')
+  @AdminRoles(AdminRole.SUPER_ADMIN, AdminRole.SECURITY_ADMIN)
+  @UseGuards(AdminRoleGuard)
+  clearFraudWatch(
+    @CurrentAdmin() admin: AdminActor,
+    @Param('id') id: string,
+    @Body() body: { comment?: string },
+  ) {
+    return this.security.clearFraudWatch(admin, id, body?.comment);
+  }
+
   @Patch('users/:id/role')
   @AdminRoles(AdminRole.SUPER_ADMIN)
   @UseGuards(AdminRoleGuard)

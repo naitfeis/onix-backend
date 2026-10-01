@@ -25,7 +25,8 @@ export type AuthErrorCode =
   | 'AUTH_LOGIN_CHALLENGE_CONSUMED'
   | 'AUTH_LOGIN_CHALLENGE_PENDING'
   | 'AUTH_LOGIN_CHALLENGE_STATE'
-  | 'AUTH_SECURITY_LOCK';
+  | 'AUTH_SECURITY_LOCK'
+  | 'AUTH_PHONE_REQUIRED';
 
 const HTTP_BY_CODE: Record<AuthErrorCode, number> = {
   AUTH_INVALID_TOKEN: 401,
@@ -50,6 +51,7 @@ const HTTP_BY_CODE: Record<AuthErrorCode, number> = {
   AUTH_LOGIN_CHALLENGE_PENDING: 409,
   AUTH_LOGIN_CHALLENGE_STATE: 409,
   AUTH_SECURITY_LOCK: 403,
+  AUTH_PHONE_REQUIRED: 403,
 };
 
 export class AuthPlatformError extends Error {

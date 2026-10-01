@@ -59,6 +59,27 @@ model User {
   bannedAt              DateTime?
   bannedUntil           DateTime?
   /**
+   * How many times this account has been banned. Drives strike escalation in
+   * ban-policy: repeat offenders get longer blocks, then a permanent one.
+   */
+  banStrikeCount        Int            @default(0)
+  /**
+   * Admin marker "wait for the money, then ban". Set when a complaint is confirmed
+   * but the account has no balance to repay with: selling stays OPEN so the seller
+   * can still earn, and the first completed sale triggers an automatic ban plus
+   * clawback. Cleared by admin, or when the debt is repaid in full.
+   */
+  fraudWatchAt          DateTime?
+  fraudWatchReason      String?        @db.VarChar(1000)
+  /**
+   * Who to repay when the marker fires, and how much. Admin-declared on purpose: the
+   * platform never infers a victim. Order refunds already credit the buyer immediately
+   * (EscrowService.refund), so this is for confirmed fraud the order flow did NOT cover —
+   * expired warranty, off-platform deal. Never declare a claim that was already refunded.
+   */
+  fraudWatchVictimUserId BigInt?
+  fraudWatchClaimCents   BigInt         @default(0)
+  /**
    * When set, user cannot create/update listings (account still works).
    */
   sellBannedAt          DateTime?
@@ -71,6 +92,13 @@ model User {
   securityCasePublicId  String?        @db.VarChar(32)
   withdrawBlockedAt     DateTime?
   suspiciousFundsHoldAt DateTime?
+  /**
+   * SHA-256 of the E.164 phone shared through the Telegram contact button. The raw
+   * number is never stored. Unique so one phone cannot back two accounts; feeds the
+   * PHONE_HASH abuse marker and gates selling.
+   */
+  phoneHash             String?   @unique @db.VarChar(64)
+  phoneSharedAt         DateTime?
   mergedIntoUserId      BigInt?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
@@ -120,6 +148,8 @@ model User {
   @@index([platformStatus])
   @@index([displayName])
   @@index([ratingAverage, ratingCount])
+  /** Admin fraud-marker queue: "watch until sale proceeds arrive". */
+  @@index([fraudWatchAt])
 }
 
 model Product {
@@ -924,6 +954,8 @@ enum SecurityEventType {
   CLAWBACK_DEBT
   DISPUTE_SLA_BREACH
   APPEAL_SLA_BREACH
+  /** Admin fraud marker fired: sale proceeds arrived, account banned automatically. */
+  FRAUD_WATCH_TRIGGERED
 }
 
 enum AbuseMarkerKind {

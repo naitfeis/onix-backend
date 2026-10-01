@@ -12,12 +12,22 @@ import {
 } from './bot-telegram-api';
 import { formatLoginConfirmPrompt } from './login-challenge-prompt';
 import { LoginChallengeService } from './login-challenge.service';
+import { PhoneCaptureService } from './phone-capture.service';
 
 type TelegramUser = {
   id: number;
   username?: string;
   first_name?: string;
   last_name?: string;
+};
+
+/**
+ * Contact shared via a ReplyKeyboard button with `request_contact: true`.
+ * Only the phone is used; Telegram may omit it when the user declines.
+ */
+type TelegramContact = {
+  phone_number?: string;
+  user_id?: number;
 };
 
 type TelegramUpdate = {
@@ -27,6 +37,7 @@ type TelegramUpdate = {
     message_id?: number;
     from?: TelegramUser;
     chat?: { id: number };
+    contact?: TelegramContact;
   };
   callback_query?: {
     id: string;
@@ -136,10 +147,15 @@ type BotStartLoginResult = {
 export class BotWebhookHandler {
   private readonly logger = new Logger(BotWebhookHandler.name);
 
+  // `phones` is declared LAST on purpose: tests construct this handler positionally
+  // (`new BotWebhookHandler(challenges, mfa, idempotency)`), and inserting an optional
+  // dependency earlier would silently shift idempotency into the wrong slot and
+  // disable update_id dedupe.
   constructor(
     private readonly challenges: LoginChallengeService,
     private readonly mfa: MfaStepUpService,
     @Optional() private readonly idempotency?: IdempotencyService,
+    @Optional() private readonly phones?: PhoneCaptureService,
   ) {}
 
   @Post('webhook')
@@ -209,6 +225,11 @@ export class BotWebhookHandler {
   }
 
   private async dispatch(update: TelegramUpdate) {
+    // A shared phone arrives as message.contact, never as text.
+    if (update.message?.contact) {
+      return this.onContactShared(update);
+    }
+
     const start = parseBotStartCommand(update.message?.text);
     if (start.kind !== 'none') {
       this.logger.log(JSON.stringify({
@@ -265,6 +286,100 @@ export class BotWebhookHandler {
         chatId,
         text: 'Не удалось открыть подтверждение. Запросите вывод ещё раз в ONIX.',
       });
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Offers seller phone verification as a separate message: a Telegram message carries
+   * exactly ONE reply_markup, and `request_contact` is only valid on a ReplyKeyboard —
+   * never on the inline keyboard the help message already uses.
+   */
+  private async promptPhoneShare(chatId: number): Promise<void> {
+    if (!this.phones) return;
+    try {
+      // Do not nag sellers who already verified; this runs on every bare /start.
+      if (await this.phones.isPhoneSharedForChat(chatId)) return;
+      await sendTelegramMessage({
+        chatId,
+        text: [
+          'Продаёте на ONIX?',
+          'Поделитесь номером телефона — это обязательная верификация продавца.',
+          'Номер хранится только в виде хеша и никогда не показывается другим пользователям.',
+        ].join('\n'),
+        replyMarkup: {
+          keyboard: [[{ text: '📱 Поделиться номером', request_contact: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      });
+    } catch (error) {
+      // A missing prompt must never break login: selling stays gated server-side.
+      this.logger.warn(JSON.stringify({
+        msg: '[Bot] phone share prompt failed',
+        chatId,
+        error: error instanceof Error ? error.message : String(error),
+      }));
+    }
+  }
+
+  /**
+   * Seller shared their phone via the ReplyKeyboard button. Telegram sends it to the
+   * bot as message.contact; the Mini App never sees the number itself.
+   */
+  private async onContactShared(update: TelegramUpdate) {
+    const chatId = update.message?.chat?.id;
+    const contact = update.message?.contact;
+    if (chatId == null) return { ok: true };
+
+    // Trust contact.user_id over from.id when present: it is the account the number
+    // belongs to, so a forwarded contact cannot bind someone else's phone.
+    const telegramId = contact?.user_id ?? update.message?.from?.id;
+    if (telegramId == null) {
+      await sendTelegramMessage({ chatId, text: '⚠️ Не удалось определить аккаунт Telegram.' });
+      return { ok: true };
+    }
+
+    if (!this.phones) {
+      await sendTelegramMessage({ chatId, text: '⚠️ Сервис верификации недоступен. Попробуйте позже.' });
+      return { ok: true };
+    }
+
+    try {
+      const result = await this.phones.capture(BigInt(telegramId), contact?.phone_number);
+      if (result.kind === 'saved') {
+        const suffix = result.alreadyVerified ? ' (уже подтверждён)' : '';
+        await sendTelegramMessage({
+          chatId,
+          text: `✅ Номер ${result.phoneMasked} привязан${suffix}. Теперь вы можете продавать на ONIX.`,
+          replyMarkup: { remove_keyboard: true },
+        });
+        return { ok: true };
+      }
+      if (result.kind === 'conflict') {
+        // Do not reveal whose account holds the number — that would leak identity.
+        await sendTelegramMessage({
+          chatId,
+          text: '⚠️ Этот номер уже привязан к другому аккаунту ONIX. Если это ошибка — напишите в поддержку.',
+          replyMarkup: { remove_keyboard: true },
+        });
+        return { ok: true };
+      }
+      if (result.kind === 'disabled') {
+        await sendTelegramMessage({ chatId, text: 'Номер телефона сейчас не требуется.' });
+        return { ok: true };
+      }
+      await sendTelegramMessage({
+        chatId,
+        text: '⚠️ Не удалось прочитать номер. Нажмите кнопку ещё раз и разрешите доступ.',
+      });
+    } catch (error) {
+      this.logger.error(JSON.stringify({
+        msg: '[Bot] phone capture failed',
+        telegramId: String(telegramId),
+        error: error instanceof Error ? error.message : String(error),
+      }));
+      await sendTelegramMessage({ chatId, text: '⚠️ Ошибка при сохранении номера. Попробуйте позже.' });
     }
     return { ok: true };
   }
@@ -360,6 +475,7 @@ export class BotWebhookHandler {
       },
     });
     this.logBotApi('[Bot] bare /start help sendMessage', sent);
+    await this.promptPhoneShare(chatId);
     return { ok: true, prompted: false, reason: 'start_format', helped: true };
   }
 

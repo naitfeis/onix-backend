@@ -26,7 +26,11 @@ import {
   inspectUserText,
   strongerHit,
 } from './moderation-engine';
+import { phoneRequiredToSell } from '../phone-hash';
+import { openClawbackDebtCents } from '../economy/wallet/sale-proceeds-hold';
+import { findPriorFailedDelivery, REPEAT_VICTIM_MESSAGE } from './repeat-victim';
 import { SecurityLockService } from './security-lock.service';
+import { structuredLog } from '../observability/structured-logger';
 import { appealSlaHours, appealSlaMessage } from '../support-sla.config';
 
 type Db = Prisma.TransactionClient | PrismaService;
@@ -363,6 +367,10 @@ export class RiskEngineService {
    * or accepts a CONFIRMED stepUpChallengeId.
    */
   async assertWithdrawAllowed(input: WithdrawRiskInput, db: Db = this.prisma): Promise<RiskDecision> {
+    // Before the generic lock check: an unpaid clawback must escalate into a REAL,
+    // appealable case (caseId + support ticket), not a dead-end "suspicious activity"
+    // error with no case to reference.
+    await this.assertNoOpenClawbackDebt(input.userId, 'WITHDRAW', db);
     if (this.locks) {
       await this.locks.assertNotLocked(input.userId, 'withdraw', db);
     }
@@ -452,8 +460,55 @@ export class RiskEngineService {
     };
   }
 
+  /**
+   * Unpaid clawback debt is fraud debt, not a technicality: the seller took money for
+   * goods they never delivered. Any attempt to move money again escalates to a full
+   * lock so there is a case id and an appeal ticket.
+   *
+   * Deliberately NOT applied to selling: recovery depends on the seller keeping their
+   * listings live, because the 60s ClawbackRecoverJob is repaid from future payouts.
+   * Banning sales would freeze the debt forever and cost the platform the refund.
+   *
+   * The seller is deliberately NOT told the amount or the reason — the debt stays
+   * invisible by design. Support sees it in the security event and the ticket subject.
+   */
+  private async assertNoOpenClawbackDebt(
+    userId: bigint,
+    eventType: string,
+    db: Db,
+  ): Promise<void> {
+    let debt = 0n;
+    let balanceCents = 0n;
+    try {
+      const row = await db.user.findUnique({
+        where: { id: userId },
+        select: { balanceCents: true },
+      });
+      balanceCents = row?.balanceCents ?? 0n;
+      debt = await openClawbackDebtCents(db, userId);
+    } catch (error) {
+      structuredLog.error('clawback debt lookup failed — treated as no debt', {
+        userId: userId.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return;
+    }
+    if (debt <= 0n) return;
+    /**
+     * A debt the balance can still cover is NOT fraud-worthy: an OPEN clawback row only
+     * flips to RECOVERED when ClawbackRecoverJob runs (up to 60s later), and a purchase
+     * already subtracts the debt via assertSpendableBalance. Locking here would punish a
+     * solvent seller for the worker's schedule. Only an unpayable debt escalates.
+     */
+    if (balanceCents >= debt) return;
+    await this.enforceBlockLock(userId, ['CLAWBACK_DEBT'], 80, eventType, [
+      `unpaidClawbackCents=${(debt - balanceCents).toString()}`,
+    ]);
+  }
+
   async assertSellAllowed(userId: bigint, title?: string, db: Db = this.prisma): Promise<void> {
     if (this.locks) await this.locks.assertNotLocked(userId, 'sell', db);
+    await this.assertPhoneShared(userId, db);
     const evasion = await this.collectBanEvasionFactors(userId, {}, db);
     if (title) {
       try {
@@ -471,11 +526,68 @@ export class RiskEngineService {
     }
   }
 
-  async assertPurchaseAllowed(userId: bigint, amountCents: bigint, db: Db = this.prisma): Promise<void> {
+
+  /**
+   * Escrow sellers must be identifiable: one Telegram account is free to create, so a
+   * verified phone is the cheapest anchor that makes a ban stick and lets support reach
+   * a real person when a deal goes wrong. Raw number is never stored — only its HMAC.
+   */
+  private async assertPhoneShared(userId: bigint, db: Db): Promise<void> {
+    if (!phoneRequiredToSell()) return;
+    try {
+      const row = await db.user.findUnique({
+        where: { id: userId },
+        select: { phoneHash: true },
+      });
+      if (row?.phoneHash) return;
+    } catch {
+      // A schema that predates phoneHash must not break selling; the webhook still
+      // captures the number as soon as the user shares it.
+      return;
+    }
+    throw new AuthPlatformError(
+      'AUTH_PHONE_REQUIRED',
+      'Чтобы продавать, поделитесь номером телефона в Telegram: откройте бота ONIX и нажмите «Поделиться номером».',
+    );
+  }
+
+  async assertPurchaseAllowed(
+    userId: bigint,
+    amountCents: bigint,
+    db: Db = this.prisma,
+    sellerId?: bigint | null,
+  ): Promise<void> {
+    // An UNPAYABLE clawback debt blocks spending too: a purchase would convert the last
+    // repayable funds into goods and leave the platform nothing to recover.
+    await this.assertNoOpenClawbackDebt(userId, 'PURCHASE', db);
     if (this.locks) await this.locks.assertNotLocked(userId, 'spend', db);
     const large = amountCents >= largeWithdrawCents();
     const evasion = await this.collectBanEvasionFactors(userId, {}, db);
     const factors: RiskFactor[] = [...evasion.factors];
+    const repeatVictim = sellerId != null
+      ? await findPriorFailedDelivery(db, userId, sellerId)
+      : null;
+    if (repeatVictim) {
+      factors.push('REPEAT_VICTIM');
+      evasion.reasons.push(repeatVictim);
+      await this.writeEvents(db, userId, null, [{
+        type: 'FRAUD_ATTEMPT',
+        severity: 95,
+        payload: {
+          kind: 'REPEAT_VICTIM',
+          sellerId: sellerId?.toString() ?? null,
+          detail: repeatVictim,
+        },
+      }]);
+      // The buyer is the VICTIM here, so enforceBlockLock must not run: it would
+      // revoke the victim's sessions and flag their own account. Refuse the deal and
+      // tell them plainly, while the event above routes it to support.
+      throw new AuthPlatformError(
+        'AUTH_ACCOUNT_LOCKED',
+        REPEAT_VICTIM_MESSAGE,
+        { reason: 'REPEAT_VICTIM', sellerId: sellerId?.toString() ?? null },
+      );
+    }
     if (large) factors.push('LARGE_AMOUNT');
     try {
       const lockRow = await db.user.findUnique({
@@ -692,11 +804,21 @@ export class RiskEngineService {
       if (ipHit) reasons.push('ip seen on banned account');
       reasons.push(...[...new Set(signals)]);
 
-      if (signals.length >= 1 && (deviceHit || ipHit || signals.length >= 2)) {
+      // User.telegramId is UNIQUE, so a "banned twin" row only exists after a hard
+      // delete — in practice the device identity is the durable signal, and requiring
+      // it here made BAN_EVASION unreachable even when both device and IP matched a
+      // banned account. IP alone stays insufficient: mobile CGNAT shares it widely.
+      const telegramHit = signals.length > 0;
+      if (telegramHit || deviceHit) {
         factors.push('BAN_EVASION');
       }
-    } catch {
-      /* tests / partial prisma mocks */
+    } catch (error) {
+      // A ban-evasion lookup that throws must not silently look like "no evasion".
+      // Failing open here is a security hole, so it is at least observable.
+      structuredLog.error('ban evasion lookup failed — treated as no signal', {
+        userId: userId.toString(),
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
     return { factors: [...new Set(factors)], reasons, bannedAccounts };
   }

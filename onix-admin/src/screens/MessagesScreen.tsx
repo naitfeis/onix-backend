@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { adminApi, AdminApiError } from '../api/client';
+import { EmptyRows } from '../components/EmptyRows';
 
 type Message = {
   id: string; chatId: string; senderId: string | null; kind: string; text: string;
@@ -48,6 +49,7 @@ export function MessagesScreen({ onOpenChat }: { onOpenChat: (chatId: string) =>
       <table>
         <thead><tr><th>ID / чат</th><th>Отправитель</th><th>Сообщение</th><th>Когда</th><th>Действия</th></tr></thead>
         <tbody>
+          {messages.length === 0 && <EmptyRows colSpan={5} label="Ничего не найдено. Измените запрос или снимите фильтр." />}
           {messages.map((message) => (
             <tr key={message.id}>
               <td>#{message.id}<br /><span className="muted">{message.chatId}</span></td>
