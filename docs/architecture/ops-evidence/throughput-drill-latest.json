@@ -1,0 +1,91 @@
+{
+  "mode": "throughput-drill",
+  "stampedAt": "2026-10-02T19:31:44.099Z",
+  "config": {
+    "msgPerSec": 100,
+    "dealsPerSec": 10,
+    "durationSec": 10,
+    "poolMax": 40
+  },
+  "chat": {
+    "total": 1000,
+    "ok": true,
+    "failed": 0,
+    "throughputPerSec": 99.9,
+    "p50Ms": 10.8,
+    "p95Ms": 440.6,
+    "p99Ms": 533.3,
+    "maxMs": 631.5,
+    "byStatus": {
+      "sent": 1000
+    },
+    "pairs": 19,
+    "sendersPerSecond": 19,
+    "messagesPersisted": 1000
+  },
+  "deals": {
+    "total": 100,
+    "ok": true,
+    "failed": 0,
+    "throughputPerSec": 10,
+    "p50Ms": 52.9,
+    "p95Ms": 70.1,
+    "p99Ms": 142,
+    "maxMs": 142,
+    "byStatus": {
+      "purchased": 100
+    },
+    "lots": 100,
+    "maxClientAttempts": 1,
+    "ordersCreated": 100,
+    "holdEntries": 100
+  },
+  "dealLifecycle": {
+    "purchased": 10,
+    "completed": 10,
+    "failed": [],
+    "maxClientAttempts": 1,
+    "payoutRows": 10,
+    "duplicatePayouts": 0,
+    "ok": true
+  },
+  "fraudWatchRace": {
+    "racingPayouts": 5,
+    "completedPayouts": 1,
+    "refusedAfterBan": 4,
+    "repayments": 1,
+    "repaidTotalCents": "95000",
+    "claimTotalCents": "95000",
+    "banned": true,
+    "frozen": true,
+    "strikes": 1,
+    "ok": true
+  },
+  "websocket": {
+    "connections": 50,
+    "authenticated": 50,
+    "fanoutReceived": 1,
+    "pings": 51,
+    "pingThroughputPerSec": 3003.7,
+    "pingP50Ms": 12.8,
+    "pingP95Ms": 13.6,
+    "ok": true
+  },
+  "mixed": {
+    "chatMessages": 500,
+    "chatFailed": 0,
+    "deals": 50,
+    "dealsFailed": 0,
+    "seconds": 10,
+    "combinedThroughputPerSec": 55,
+    "ok": true
+  },
+  "moneyAudit": {
+    "reconciliationMismatches": 0,
+    "negativeBalances": 0,
+    "duplicateIdempotencyKeys": 0,
+    "notificationsWritten": 1843,
+    "ok": true
+  },
+  "ok": true
+}

@@ -23,6 +23,7 @@
     "ops:backup-drill": "tsx safe-deal-platform/scripts/backup-restore-drill.ts",
     "ops:origin-probe": "tsx safe-deal-platform/scripts/origin-probe.ts",
     "ops:db-concurrency-drill": "tsx safe-deal-platform/scripts/db-concurrency-drill.ts",
+    "ops:throughput-drill": "tsx safe-deal-platform/scripts/throughput-drill.ts",
     "ops:money-audit": "tsx safe-deal-platform/scripts/money-audit.ts",
     "ops:payment-launch-gate": "tsx safe-deal-platform/scripts/payment-launch-gate.ts",
     "test:payment-gate": "tsx --test \"safe-deal-platform/test/payment-webhook-gate.test.ts\"",

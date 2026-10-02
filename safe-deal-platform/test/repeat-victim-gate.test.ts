@@ -18,8 +18,14 @@ function fakeDb(state: {
 }) {
   const events: Array<{ type: string; payload: unknown }> = [];
   const db = {
-    user: { findUnique: async () => ({ suspiciousFundsHoldAt: null, securityLockedAt: null }) },
+    // balanceCents is read by assertNoOpenClawbackDebt; the risk gates fail CLOSED now,
+    // so every table they touch must exist on the fake.
+    user: {
+      findUnique: async () => ({ suspiciousFundsHoldAt: null, securityLockedAt: null, balanceCents: 0n }),
+      findMany: async () => [],
+    },
     session: { findMany: async () => [] },
+    orderClawback: { findMany: async () => [] },
     order: {
       findFirst: async (args: { where?: { clawback?: unknown } }) =>
         // The relation-filtered call is the clawback-debt lookup; the plain one is REFUNDED.

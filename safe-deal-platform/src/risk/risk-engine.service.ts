@@ -487,11 +487,17 @@ export class RiskEngineService {
       balanceCents = row?.balanceCents ?? 0n;
       debt = await openClawbackDebtCents(db, userId);
     } catch (error) {
-      structuredLog.error('clawback debt lookup failed — treated as no debt', {
+      /**
+       * Fail closed. "Treated as no debt" let a broken lookup silently approve a
+       * withdraw/purchase by a seller who owes a confirmed refund — exactly the
+       * decision this gate exists to make. Observable AND blocking: the caller's
+       * transaction aborts, the user retries, support sees the real error.
+       */
+      structuredLog.error('clawback debt lookup failed — failing closed', {
         userId: userId.toString(),
         error: error instanceof Error ? error.message : String(error),
       });
-      return;
+      throw error;
     }
     if (debt <= 0n) return;
     /**
@@ -813,12 +819,17 @@ export class RiskEngineService {
         factors.push('BAN_EVASION');
       }
     } catch (error) {
-      // A ban-evasion lookup that throws must not silently look like "no evasion".
-      // Failing open here is a security hole, so it is at least observable.
-      structuredLog.error('ban evasion lookup failed — treated as no signal', {
+      /**
+       * Fail closed. A swallowed lookup error looked like "no evasion" and let a
+       * banned fraudster through whenever this query broke (the in-memory test fakes
+       * hit exactly that). Observable AND blocking: login/sell aborts instead of
+       * admitting an account that may be a punishment twin.
+       */
+      structuredLog.error('ban evasion lookup failed — failing closed', {
         userId: userId.toString(),
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
     return { factors: [...new Set(factors)], reasons, bannedAccounts };
   }

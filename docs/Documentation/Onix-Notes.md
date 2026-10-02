@@ -6,7 +6,7 @@
 > Не заменяй существующие решения на более простые только потому, что они проще.
 > ONIX — production-oriented P2P marketplace, а не учебный CRUD-проект.
 >
-> **Актуальные решения / статус gates (обновлено 2026-09-10):**  
+> **Актуальные решения / статус gates (обновлено 2026-09-10; FINAL-секция 73 от 01.10.2026):**  
 > `docs/architecture/ONIX-CURRENT-STATE-v2.0.4.md`
 
 ---
@@ -2357,6 +2357,93 @@ AI должен:
 13. Existing architecture предпочтительнее новой.
 14. Перед coding нужно search existing implementation.
 15. Минимальный безопасный patch лучше massive rewrite.
+
+---
+
+# 73. FINAL / 01.10.2026 — FRAUD WATCH, FAIL-CLOSED RISK, THROUGHPUT DRILL
+
+Статус: FINAL. Все пункты чек-листа запуска закрыты и проверены на реальном PostgreSQL.
+
+## 73.1 Fraud Watch («не банить сразу — ждать деньги»)
+
+Механизм: админ ставит маркер на аккаунт с подтверждённой жалобой и нулевым балансом.
+Продажа остаётся ОТКРЫТОЙ (бан заморозил бы долг навсегда). Первая выплата с продажи
+перехватывается ВНУТРИ той же транзакции (`FraudWatchService.consumeOnPayout`):
+
+1. пострадавший (указан админом, никогда не выводится автоматически) получает возмещение;
+2. остаток замораживается (`withdrawBlockedAt` + `suspiciousFundsHoldAt`);
+3. ПОСЛЕ COMMIT — автоматический бан со страйк-эскалацией (7д → 28д → перманент,
+   `banDurationDaysForStrike`).
+
+Триггер — только SALE_PAYOUT. Депозит собственных средств триггер НЕ запускает.
+Возмещение ровно один раз даже при 5 конкурентных выплатах (проверено drill-ом:
+`fraudWatchRace` — 1 completed payout, 4 refused после бана, repaid == claim, banned+frozen).
+
+Поля User: `fraudWatchAt`, `fraudWatchReason`, `fraudWatchVictimUserId`,
+`fraudWatchClaimCents`, `banStrikeCount`. Событие: `FRAUD_WATCH_TRIGGERED`.
+Миграция: `20261001090000_fraud_watch_and_ban_strikes`.
+
+## 73.2 Fail-closed Risk Engine
+
+`RiskEngineService.collectBanEvasionFactors` и `assertNoOpenClawbackDebt` больше НЕ
+глотают ошибки: убраны try/catch, исключения пробрасываются наверх. Ошибка инфраструктуры
+теперь блокирует операцию (fail-closed), а не превращается в «сигналов нет» (fail-open).
+
+## 73.3 DI: единственный RiskScoreService
+
+`LoginChallengeModule` больше не объявляет собственные `RiskScoreService` и
+`SecurityLockService` — получает их через импорты `AuthV2Module`/`RiskModule`.
+DI probe: SAME_INSTANCE=true.
+
+## 73.4 Phone capture (продавец делится номером)
+
+Номер приходит ТОЛЬКО в bot webhook (`message.contact` → `PhoneCaptureService.capture`),
+мини-апп видит факт согласия. Хранится HMAC-хеш (`PHONE_HASH_SECRET`), raw номер
+уничтожается. `phoneHash` уникален и переживает удаление аккаунта: повторное
+использование номера забаненного продавца → `BAN_EVASION` security event + блокировка
+продаж/вывода до проверки. Маркер `PHONE_HASH` (AbuseMarker) армится сразу при capture.
+SMS/звонков нет — всё одной кнопкой в Telegram.
+
+## 73.5 Throughput drill (реальная нагрузка, реальный PostgreSQL)
+
+Скрипт: `safe-deal-platform/scripts/throughput-drill.ts` (`npm run ops:throughput-drill`,
+требует `THROUGHPUT_DRILL_DATABASE_URL` — scratch, никогда DATABASE_URL).
+Гоняет РЕАЛЬНЫЕ сервисы (ChatService, EscrowService, FraudWatch, RealtimeHub через ws://).
+
+Результаты прогона 02.10.2026 (scratch PostgreSQL 18, pool 40):
+
+| Сценарий | Цель | Факт | Итог |
+|---|---|---|---|
+| chat | 100 msg/s × 10s | 99.9/s, 1000/1000 persisted, p50 10.8ms | ok |
+| deals | 10 deals/s × 10s | 10/s, 100/100, 100 hold-записей | ok |
+| dealLifecycle | purchase→deliver→complete | 10/10, payout ровно 1 на сделку | ok |
+| fraudWatchRace | 5 конкурентных выплат | возмещение 1 раз, бан+freeze | ok |
+| websocket | 50 conn auth+subscribe+ping | 50/50 auth, fan-out 1, ping p50 12.8ms | ok |
+| mixed | chat+deals одновременно | 55 ops/s, 0 ошибок | ok |
+| moneyAudit (post-load) | reconciliation | 0 mismatches, 0 negative, 0 dup keys | ok |
+
+Post-load `ops:money-audit` на той же БД: ok=true, 475 users, 0 wallet mismatches,
+0 duplicate payouts, 0 orphan payments. Evidence: `docs/architecture/ops-evidence/throughput-drill-latest.json`.
+
+Найден и исправлен в процессе:
+- `withSerializableTransaction` default attempts 3 → 5: 10 конкурентных complete() на
+  одного продавца исчерпывали 3 попытки и отдавали пользователю 500. Retry безопасен —
+  все колбэки защищены idempotency-ключами.
+
+## 73.6 Frontend-фиксы запуска
+
+- Плашка «Поделиться номером»: вебхук бота асинхронный, один re-read профиля почти всегда
+  показывал «не подтверждён» → баннер оставался. Теперь polling до 12с + pending-состояние
+  с кнопкой «Проверить ещё раз» + зелёная плашка «Ваш номер подтверждён».
+- Мобильный чат: при открытом диалоге (`app-shell--chat-thread`) скрываются topbar,
+  нижняя навигация и PWA-баннер ONIX — остаётся только собеседник и поле ввода.
+
+## 73.7 Тесты
+
+504 backend-теста: 457 pass / 0 fail / 47 skipped (Redis-dependent). Frontend: 173 vitest
+pass, typecheck + production build чистые. Real-DB: fraud 34/34, inventory-race 6/6,
+ledger-chaos 6/6. Фейки в тестах сделаны faithful (добавлены findMany и т.п.) —
+ассерты НЕ ослаблялись.
 
 ---
 

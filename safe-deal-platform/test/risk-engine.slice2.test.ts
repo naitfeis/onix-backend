@@ -60,12 +60,27 @@ test('largeWithdrawCents reads env', () => {
   else process.env.RISK_WITHDRAW_LARGE_CENTS = prev;
 });
 
-test('evaluateLogin: first session ALLOW, no events', async () => {
-  const prisma = {
+/**
+ * evaluateLogin runs collectBanEvasionFactors, which fails CLOSED on lookup errors,
+ * so the fake must answer both queries the way production does:
+ * - history lookup (where has no `user` relation filter) returns prior sessions;
+ * - ban-evasion lookup (where filters `user` on banned/deleted) selects user.onixId
+ *   and returns [] when no banned account shares the signal.
+ */
+function loginPrismaFake(sessionRows: unknown[] = []) {
+  return {
+    user: { findUnique: async () => null, findMany: async () => [] },
     session: {
-      findMany: async () => [],
+      findMany: async (args?: { where?: Record<string, unknown> }) => {
+        if (args?.where && 'user' in args.where) return [];
+        return sessionRows;
+      },
     },
   };
+}
+
+test('evaluateLogin: first session ALLOW, no events', async () => {
+  const prisma = loginPrismaFake([]);
   const engine = new RiskEngineService(prisma as never);
   const result = await engine.evaluateLogin({
     userId: 1n,
@@ -82,17 +97,13 @@ test('evaluateLogin: first session ALLOW, no events', async () => {
 });
 
 test('evaluateLogin: new device+IP → MONITOR events (login never STEP_UP)', async () => {
-  const prisma = {
-    session: {
-      findMany: async () => [{
-        fingerprintHash: 'old-dev',
-        ipAddress: '9.9.9.9',
-        country: 'RU',
-        timezone: 'Europe/Moscow',
-        language: 'ru',
-      }],
-    },
-  };
+  const prisma = loginPrismaFake([{
+    fingerprintHash: 'old-dev',
+    ipAddress: '9.9.9.9',
+    country: 'RU',
+    timezone: 'Europe/Moscow',
+    language: 'ru',
+  }]);
   const engine = new RiskEngineService(prisma as never);
   const result = await engine.evaluateLogin({
     userId: 1n,
@@ -117,6 +128,12 @@ test('assertWithdrawAllowed: STEP_UP throws AUTH_STEP_UP_REQUIRED', async () => 
   process.env.RISK_WITHDRAW_LARGE_CENTS = '1000';
   const events: unknown[] = [];
   const prisma = {
+    // assertWithdrawAllowed also runs the fail-closed debt + ban-evasion gates.
+    user: {
+      findUnique: async () => ({ balanceCents: 0n, securityLockedAt: null, telegramId: null }),
+      findMany: async () => [],
+    },
+    orderClawback: { findMany: async () => [] },
     session: {
       findFirst: async () => ({
         id: 'sess-1',
@@ -248,8 +265,18 @@ test('shadow mode still enforces a pre-existing security lock before evaluation'
   process.env.RISK_ENFORCEMENT_MODE = 'shadow';
   let evaluated = false;
   const existingLock = new AuthPlatformError('AUTH_SECURITY_LOCK', 'already locked');
+  // The debt gate runs BEFORE the lock check by design, so the fake must answer it
+  // cleanly (no debt) for the pre-existing lock to be the thing that throws.
+  const prisma = {
+    user: {
+      findUnique: async () => ({ balanceCents: 0n, securityLockedAt: null, telegramId: null }),
+      findMany: async () => [],
+    },
+    orderClawback: { findMany: async () => [] },
+    session: { findMany: async () => [] },
+  };
   const engine = new RiskEngineService(
-    {} as never,
+    prisma as never,
     undefined,
     {
       assertNotLocked: async () => { throw existingLock; },

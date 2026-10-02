@@ -63,10 +63,13 @@ function timeoutMs(): number {
   return Number.isFinite(v) && v > 0 ? v : 10_000;
 }
 
+/** Default 5 attempts: the throughput drill showed 10 concurrent completes on one
+ * seller exhausting 3 attempts and surfacing TransactionWriteConflict as a 500.
+ * Every retry re-runs an idempotency-key guarded callback, so retrying is safe. */
 export async function withSerializableTransaction<T>(
   prisma: Pick<PrismaService, '$transaction'>,
   execute: (tx: Prisma.TransactionClient) => Promise<T>,
-  maxAttempts = 3,
+  maxAttempts = 5,
 ): Promise<T> {
   const attempts = Math.max(1, Math.min(5, Math.trunc(maxAttempts)));
   for (let attempt = 1; ; attempt += 1) {

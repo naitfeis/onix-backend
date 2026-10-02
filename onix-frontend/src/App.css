@@ -3863,6 +3863,8 @@ html[data-theme="light"] .desc-editor__font-list button {
 html[data-theme="light"] .field__label { color: rgba(26, 22, 37, 0.88); }
 html[data-theme="light"] .field__hint { color: rgba(26, 22, 37, 0.58); }
 .form-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }.form-error { padding: 10px; display: grid; gap: 3px; color: #df8c92; border: 1px solid #422126; border-radius: 11px; font-size: 9px; }
+.form-note { padding: 10px; display: grid; gap: 3px; justify-items: start; color: #8cc9a0; border: 1px solid #1e3a29; border-radius: 11px; font-size: 9px; }
+.form-note strong { font-size: 10px; }
 .summary-line, .deal-status {
   display: flex;
   align-items: center;
@@ -6228,6 +6230,19 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .app-shell--chat .chat-edge-resizer,
   .app-shell--chat .chat-col-resizer {
     display: none !important;
+  }
+
+  /* An open conversation is the whole screen: no dock, no topbar, no ONIX banner. */
+  .app-shell--chat-thread {
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  .app-shell--chat-thread .topbar {
+    display: none;
+  }
+  .app-shell--chat-thread .viewport {
+    height: var(--tg-viewport-height, 100dvh);
+    max-height: var(--tg-viewport-height, 100dvh);
+    min-height: 0;
   }
   .thread-list {
     gap: 10px;

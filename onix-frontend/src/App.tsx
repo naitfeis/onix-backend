@@ -518,6 +518,10 @@ export default function App() {
     || core.sessionRestore === 'guest'
     || core.sessionRestore === 'network';
   const chatImmersive = screen === 'chat';
+  // A 1:1 conversation is open: on mobile the shell keeps only the peer and the composer.
+  const [chatThreadOpen, setChatThreadOpen] = useState(false);
+  const onThreadOpenChange = useCallback((open: boolean) => setChatThreadOpen(open), []);
+  const chatFocused = chatImmersive && chatThreadOpen;
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
   const showMarketRail = showRightRail;
   const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
@@ -564,7 +568,7 @@ export default function App() {
       </Suspense>
     </SoftErrorBoundary>
     <div
-      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
+      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${chatFocused ? ' app-shell--chat-thread' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
       style={{
         '--sidebar-left-w': `${rails.left}px`,
         '--sidebar-right-w': `${rails.right}px`,
@@ -760,6 +764,7 @@ export default function App() {
                 openProductCard={openProductCard}
                 openDeal={openDeal}
                 setToast={setToast}
+                onThreadOpenChange={onThreadOpenChange}
               />
             </div>
           )}
@@ -921,6 +926,7 @@ export default function App() {
       </aside>
     )}
 
+    {!chatFocused && (
     <nav className="bottom-nav mobile-only" aria-label={t('navigation.aria')}>
       <span className="nav-indicator" style={{ transform: `translateX(${activeTab * 100}%)` }} />
       {TABS.map(tab => (
@@ -937,8 +943,9 @@ export default function App() {
         </button>
       ))}
     </nav>
+    )}
     {toast && <Toast message={toast} />}
-    {!miniApp && !banNotice && !websiteLoginBridge ? <PwaInstallBanner /> : null}
+    {!miniApp && !banNotice && !websiteLoginBridge && !chatFocused ? <PwaInstallBanner /> : null}
   </div>
     <div className={`settings-overlay${settingsOpen ? ' is-open' : ''}`} aria-hidden={!settingsOpen}>
       <button

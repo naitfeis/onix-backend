@@ -106,6 +106,21 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   /** Seller has Telegram but no verified phone — selling is gated server-side too. */
   const needsPhone = core.profile?.phoneVerificationRequired === true;
   const [phoneBusy, setPhoneBusy] = useState(false);
+  const [phonePending, setPhonePending] = useState(false);
+  /**
+   * The bot webhook persists phoneHash asynchronously, so a single profile re-read
+   * right after `requestContact` usually still reports phoneVerificationRequired —
+   * that race is why the banner used to stay up after a successful share. Poll the
+   * profile until verification lands (or give up and offer a manual re-check).
+   */
+  const pollPhoneVerified = async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const latest = await core.loadProfile();
+      if (latest && latest.phoneVerificationRequired !== true) return true;
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    return false;
+  };
   const sharePhone = async () => {
     setPhoneBusy(true);
     try {
@@ -116,8 +131,34 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
         setToast('Чтобы продавать, поделитесь номером телефона.');
         return;
       }
-      await core.loadProfile();
-      setToast('Номер подтверждён. Можно публиковать лот.');
+      setPhonePending(true);
+      const verified = await pollPhoneVerified();
+      if (verified) {
+        setPhonePending(false);
+        setPhoneConfirmedNote(true);
+        setToast('Ваш номер подтверждён. Можно публиковать лот.');
+      } else {
+        // Stays pending: the banner switches to a re-check button instead of asking
+        // the seller to share the number a second time.
+        setToast('Номер отправлен. Если бот не ответил — нажмите «Проверить ещё раз».');
+      }
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+  /** Show the "number confirmed" note only after an actual share in this session. */
+  const [phoneConfirmedNote, setPhoneConfirmedNote] = useState(false);
+  const recheckPhone = async () => {
+    setPhoneBusy(true);
+    try {
+      const verified = await pollPhoneVerified();
+      setPhonePending(false);
+      if (verified) {
+        setPhoneConfirmedNote(true);
+        setToast('Ваш номер подтверждён. Можно публиковать лот.');
+      } else {
+        setToast('Подтверждение ещё не пришло. Проверьте чат с ботом ONIX.');
+      }
     } finally {
       setPhoneBusy(false);
     }
@@ -290,7 +331,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
           {core.profile && core.profile.hasTelegram === false && (
             <p className="form-error" role="alert">Чтобы продавать, привяжите Telegram в профиле. Через Google можно только покупать.</p>
           )}
-          {needsPhone && (
+          {needsPhone && !phonePending && (
             <div className="form-error" role="alert">
               <strong>Нужна верификация продавца</strong>
               <span>
@@ -300,6 +341,21 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
               <Button type="button" onClick={sharePhone} busy={phoneBusy}>
                 📱 Поделиться номером
               </Button>
+            </div>
+          )}
+          {needsPhone && phonePending && (
+            <div className="form-note" role="status">
+              <strong>Номер отправлен — ждём подтверждения</strong>
+              <span>Бот ONIX проверяет контакт. Обычно это занимает пару секунд.</span>
+              <Button type="button" variant="ghost" onClick={recheckPhone} busy={phoneBusy}>
+                Проверить ещё раз
+              </Button>
+            </div>
+          )}
+          {!needsPhone && core.profile?.phoneVerified === true && phoneConfirmedNote && (
+            <div className="form-note" role="status">
+              <strong>✅ Ваш номер подтверждён</strong>
+              <span>Верификация продавца пройдена — можно публиковать лот.</span>
             </div>
           )}
           <div className="summary-line">

@@ -68,6 +68,8 @@ function createSessionPrisma(store: Store) {
   return {
     user: {
       findUnique: async ({ where }: { where: { id: bigint } }) => store.users.get(String(where.id)) ?? null,
+      // Ban-evasion twin lookup; risk paths fail CLOSED now, fakes must be complete.
+      findMany: async () => [],
     },
     session: {
       create: async ({ data }: { data: Session }) => {

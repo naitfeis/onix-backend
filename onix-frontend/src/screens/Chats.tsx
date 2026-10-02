@@ -46,6 +46,7 @@ function readStoredChatSize(key: string, fallback: number, min: number): number 
 
 export function Chats({
   core, focusChatId, onFocusChatHandled, openDirectChat, openProductCard, openDeal, setToast, active = true,
+  onThreadOpenChange,
 }: {
   core: Core;
   focusChatId: string | null;
@@ -56,6 +57,8 @@ export function Chats({
   setToast: (text: string) => void;
   /** False while another tab is shown (keep-alive). */
   active?: boolean;
+  /** Reports whether a 1:1 conversation is open — mobile hides the shell chrome. */
+  onThreadOpenChange?: (open: boolean) => void;
 }) {
   const [threadId, setThreadId] = useState('');
   const [text, setText] = useState('');
@@ -285,6 +288,13 @@ export function Chats({
     setActiveChatId(threadId || null);
     return () => setActiveChatId(null);
   }, [active, threadId, setActiveChatId]);
+
+  // Mobile: an open conversation is the only thing the seller/buyer should see —
+  // the shell reports it upward so the dock and the ONIX banner can step aside.
+  useEffect(() => {
+    onThreadOpenChange?.(active && Boolean(threadId));
+    return () => onThreadOpenChange?.(false);
+  }, [active, threadId, onThreadOpenChange]);
 
   useEffect(() => {
     if (!active || !threadId) return;

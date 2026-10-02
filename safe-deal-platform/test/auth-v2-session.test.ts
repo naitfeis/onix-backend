@@ -65,6 +65,9 @@ function createPrismaMock(store: Store) {
   const api = {
     user: {
       findUnique: async ({ where }: { where: { id: bigint } }) => store.users.get(String(where.id)) ?? null,
+      // collectBanEvasionFactors queries banned telegram twins; the risk lookups now
+      // fail CLOSED, so every fake must answer exactly what production answers.
+      findMany: async () => [],
       update: async ({ where, data }: {
         where: { id: bigint };
         data: { sessionVersion?: { increment: number } };
