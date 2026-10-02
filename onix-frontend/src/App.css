@@ -4518,6 +4518,19 @@ html[data-theme="light"] .money-tile--deposit .money-tile__icon {
 }
 .conversation { gap: 0; }
 
+/* Chat open animation — Telegram-style slide-in from the right edge on mobile,
+   and a light scale+fade on wider screens. Applied when a conversation mounts. */
+.conversation:not(.mobile-hidden) {
+  animation: chat-conversation-in 270ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes chat-conversation-in {
+  from { opacity: 0; transform: translateX(48px) scale(0.98); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation:not(.mobile-hidden) { animation: none; }
+}
+
 /* Chat immersive: keep shell padding identical to other tabs (zeroing it shifts the dock). */
 .app-shell--chat .topbar {
   margin-bottom: 4px;
@@ -7338,4 +7351,23 @@ html[data-theme="dark"] .thread-list .chat-toolbar .button--secondary {
     padding-bottom: 96px;
   }
   .site-footer__social { grid-column: 1 / -1; }
+}
+
+/* Remove violet focus outlines on all interactive elements (button, a, input, select, textarea) */
+button:focus,
+button:focus-visible,
+a:focus,
+a:focus-visible,
+input:focus,
+input:focus-visible,
+select:focus,
+select:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+[role="button"]:focus,
+[role="button"]:focus-visible,
+[tabindex]:focus,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: none;
 }

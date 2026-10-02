@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import SiteFooter from './components/SiteFooter';
 import { api, money, moneyAmount } from './api/client';
-import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification, type Product } from './api/contracts';
+import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
@@ -885,39 +885,6 @@ export default function App() {
                       <time>{relativeTime(item.createdAt)}</time>
                     </button>
                   ))
-                )}
-              </div>
-            </div>
-            <div className="widget widget--glass widget--new-lots">
-              <h3>{t('widgets.newLots')}</h3>
-              <div className="widget-trend">
-                {core.products.length === 0 ? (
-                  <p className="widget-empty">Лотов пока нет.</p>
-                ) : (
-                  core.products.slice(0, 12).map((product: Product) => {
-                    const style = catStyleOf(product.category);
-                    const image = CATEGORY_IMAGES[product.category];
-                    return (
-                      <button
-                        type="button"
-                        className="widget-trend__row widget-trend__row--btn"
-                        key={product.id}
-                        onClick={() => openProductCard(product.id)}
-                      >
-                        {image ? (
-                          <span className="widget-trend__emblem widget-trend__emblem--photo">
-                            <img src={image} alt="" width={28} height={28} loading="lazy" decoding="async" />
-                          </span>
-                        ) : (
-                          <span className="widget-trend__emblem" style={{ background: style.bg }}>{style.letter}</span>
-                        )}
-                        <span className="widget-trend__copy">
-                          <span className="widget-trend__title">{product.title}</span>
-                          <strong>{money(product.priceCents)}</strong>
-                        </span>
-                      </button>
-                    );
-                  })
                 )}
               </div>
             </div>

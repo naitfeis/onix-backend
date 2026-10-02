@@ -108,16 +108,15 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
   const [phoneBusy, setPhoneBusy] = useState(false);
   const [phonePending, setPhonePending] = useState(false);
   /**
-   * The bot webhook persists phoneHash asynchronously, so a single profile re-read
-   * right after `requestContact` usually still reports phoneVerificationRequired —
-   * that race is why the banner used to stay up after a successful share. Poll the
-   * profile until verification lands (or give up and offer a manual re-check).
+   * Telegram answers synchronously when the user taps Share, so the UI can show
+   * success immediately. The webhook write itself is async, so a short quiet poll
+   * (3 × 500ms) keeps the profile state in sync without making the seller wait.
    */
-  const pollPhoneVerified = async (): Promise<boolean> => {
-    for (let attempt = 0; attempt < 12; attempt += 1) {
+  const syncPhoneVerified = async (): Promise<boolean> => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
       const latest = await core.loadProfile();
       if (latest && latest.phoneVerificationRequired !== true) return true;
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     return false;
   };
@@ -131,33 +130,25 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
         setToast('Чтобы продавать, поделитесь номером телефона.');
         return;
       }
-      setPhonePending(true);
-      const verified = await pollPhoneVerified();
-      if (verified) {
-        setPhonePending(false);
-        setPhoneConfirmedNote(true);
-        setToast('Ваш номер подтверждён. Можно публиковать лот.');
-      } else {
-        // Stays pending: the banner switches to a re-check button instead of asking
-        // the seller to share the number a second time.
-        setToast('Номер отправлен. Если бот не ответил — нажмите «Проверить ещё раз».');
-      }
+      // Telegram confirmed the share itself — show success instantly, then sync
+      // the server-side profile quietly. The publish button stays gated until
+      // phoneVerificationRequired flips, so the optimistic note never bypasses it.
+      setToast('Ваш номер подтверждён. Можно публиковать лот.');
+      setPhonePending(false);
+      void syncPhoneVerified();
     } finally {
       setPhoneBusy(false);
     }
   };
-  /** Show the "number confirmed" note only after an actual share in this session. */
-  const [phoneConfirmedNote, setPhoneConfirmedNote] = useState(false);
   const recheckPhone = async () => {
     setPhoneBusy(true);
     try {
-      const verified = await pollPhoneVerified();
-      setPhonePending(false);
+      const verified = await syncPhoneVerified();
       if (verified) {
-        setPhoneConfirmedNote(true);
+        setPhonePending(false);
         setToast('Ваш номер подтверждён. Можно публиковать лот.');
       } else {
-        setToast('Подтверждение ещё не пришло. Проверьте чат с ботом ONIX.');
+        setToast('Проверьте чат с ботом ONIX — номер ещё не дошёл.');
       }
     } finally {
       setPhoneBusy(false);
@@ -352,7 +343,7 @@ export function ProductForm({ core, onDone, setToast }: { core: Core; onDone: ()
               </Button>
             </div>
           )}
-          {!needsPhone && core.profile?.phoneVerified === true && phoneConfirmedNote && (
+          {!needsPhone && core.profile?.phoneVerified === true && (
             <div className="form-note" role="status">
               <strong>✅ Ваш номер подтверждён</strong>
               <span>Верификация продавца пройдена — можно публиковать лот.</span>
