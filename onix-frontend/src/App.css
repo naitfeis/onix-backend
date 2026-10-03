@@ -196,7 +196,7 @@ html[data-theme="dark"]:not([data-glass="vision"]) .settings-sheet {
   min-height: 100dvh;
   margin: 0 auto;
   padding:
-    calc(12px + env(safe-area-inset-top))
+    calc(20px + env(safe-area-inset-top))
     16px
     calc(96px + env(safe-area-inset-bottom));
   position: relative;
@@ -273,7 +273,7 @@ html[data-theme="dark"]:not([data-glass="vision"]) .settings-sheet {
   -webkit-tap-highlight-color: transparent;
 }
 .brand--button:focus-visible {
-  outline: 2px solid var(--accent-violet);
+  outline: none;
   outline-offset: 4px;
   border-radius: 8px;
 }
@@ -4521,10 +4521,11 @@ html[data-theme="light"] .money-tile--deposit .money-tile__icon {
 /* Chat open animation — Telegram-style slide-in from the right edge on mobile,
    and a light scale+fade on wider screens. Applied when a conversation mounts. */
 .conversation:not(.mobile-hidden) {
-  animation: chat-conversation-in 270ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: chat-conversation-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes chat-conversation-in {
-  from { opacity: 0; transform: translateX(48px) scale(0.98); }
+  from { opacity: 0; transform: translateX(100%) scale(0.96); }
+  60% { opacity: 1; }
   to { opacity: 1; transform: translateX(0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -6462,6 +6463,14 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     overflow-x: hidden;
     overflow-y: auto;
   }
+  .sidebar-cats {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .sidebar-cats::-webkit-scrollbar { width: 6px; background: transparent; }
+  .sidebar-cats::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+  .sidebar-cats:hover { scrollbar-color: rgba(255, 255, 255, 0.28) transparent; }
+  .sidebar-cats:hover::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.28); }
   .sidebar-spacer {
     flex: 0 0 4px;
     min-height: 4px;
@@ -6484,7 +6493,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   }
   .sidebar-resizer:hover,
   .sidebar-resizer:focus-visible {
-    background: rgba(139, 127, 245, 0.25);
+    background: transparent;
     box-shadow: none;
   }
   /* Inside the clipped frame so overflow:hidden still allows a hit target */
@@ -6559,7 +6568,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .sidebar-left--icons .sidebar-cats button:focus-visible,
   .sidebar-left--icons .sidebar-theme:focus-visible,
   .sidebar-right__icons button:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent-violet) 55%, transparent);
+    outline: none;
     outline-offset: 2px;
   }
   .sidebar-left--icons .sidebar-cats { width: 100%; }
@@ -7187,6 +7196,16 @@ html[data-theme="dark"] .sidebar-right {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+/* Visible divider between the left rail and the content column (user request). */
+html[data-theme="light"] .sidebar-left,
+html[data-theme="dark"] .sidebar-left {
+  border-right: 1px solid var(--line) !important;
+}
+/* Same divider on the right rail (user request). */
+html[data-theme="light"] .sidebar-right,
+html[data-theme="dark"] .sidebar-right {
+  border-left: 1px solid var(--line) !important;
+}
 
 html[data-theme="light"] .thread-list .thread {
   background: #fff !important;
@@ -7370,4 +7389,17 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: none;
   box-shadow: none;
+}
+
+/* Chat rounded chrome (TG-like): bubbles, composer pill, attach button. */
+.message { border-radius: 14px 18px 18px 18px; }
+.message.mine { border-radius: 18px 14px 18px 18px; }
+.composer__attach { border-radius: 999px; }
+.composer textarea, .composer input { border-radius: 999px; }
+.app-shell--chat .conversation__head { border-radius: 18px 18px 0 0; }
+.app-shell--chat .composer { border-radius: 0 0 18px 18px; }
+@media (min-width: 720px) {
+  .app-shell--chat .conversation { border-radius: 18px; overflow: hidden; }
+  .app-shell--chat .conversation__head { border-radius: 18px 18px 0 0; }
+  .app-shell--chat .composer { border-radius: 0 0 18px 18px; }
 }
