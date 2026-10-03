@@ -697,6 +697,8 @@ html[data-theme="light"] .auth-notice__command {
 /* Market / profile banners — deep black glass rim (Автовыдача material) */
 .market-hero {
   position: relative;
+  z-index: 1;
+  position: relative;
   margin-bottom: 16px;
   padding: 0;
   border-radius: var(--radius-hero);
@@ -6564,13 +6566,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     outline: none;
     transition: color 140ms, background 140ms, border-color 140ms;
   }
-  .sidebar-left--icons .sidebar-nav button:focus-visible,
-  .sidebar-left--icons .sidebar-cats button:focus-visible,
-  .sidebar-left--icons .sidebar-theme:focus-visible,
-  .sidebar-right__icons button:focus-visible {
-    outline: none;
-    outline-offset: 2px;
-  }
+
   .sidebar-left--icons .sidebar-cats { width: 100%; }
   .sidebar-left__brand { margin-bottom: 12px; padding: 4px 8px; }
   .sidebar-nav { display: grid; gap: 4px; width: 100%; max-width: 100%; min-width: 0; align-self: stretch; }
@@ -6907,7 +6903,7 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .widget-notify { display: grid; gap: 10px; max-height: none; overflow: hidden; }
+  .widget-notify { display: grid; gap: 6px; max-height: none; overflow: hidden; padding: 0; }
   .sidebar-right > .widget--notify {
     flex: 0 0 auto;
     overflow: hidden;
@@ -7196,15 +7192,20 @@ html[data-theme="dark"] .sidebar-right {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
-/* Visible divider between the left rail and the content column (user request). */
+/* Divider between left rail and center content — full height (user request). */
 html[data-theme="light"] .sidebar-left,
 html[data-theme="dark"] .sidebar-left {
   border-right: 1px solid var(--line) !important;
+  height: 100dvh !important;
+  top: 0 !important;
 }
-/* Same divider on the right rail (user request). */
+/* Divider between center content and right rail — full height (user request). */
 html[data-theme="light"] .sidebar-right,
 html[data-theme="dark"] .sidebar-right {
   border-left: 1px solid var(--line) !important;
+  border-right: none !important;
+  height: 100dvh !important;
+  top: 0 !important;
 }
 
 html[data-theme="light"] .thread-list .thread {
