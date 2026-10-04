@@ -560,7 +560,7 @@ export function Chats({
                     <small>{chat.subtitle || 'Открыть диалог'}</small>
                   </span>
                 </span>
-                {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
+                {chat.unreadCount > 0 && <em>{chat.unreadCount > 99 ? '99+' : chat.unreadCount}</em>}
               </button>
             ))}
             {favoriteWithoutChat.map((user) => (
@@ -627,7 +627,7 @@ export function Chats({
                 </small>
               </span>
             </span>
-            {chat.unreadCount > 0 && <em>{chat.unreadCount}</em>}
+            {chat.unreadCount > 0 && <em>{chat.unreadCount > 99 ? '99+' : chat.unreadCount}</em>}
           </button>
         ))
       )}

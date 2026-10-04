@@ -87,10 +87,10 @@ describe('desktop and chat layout CSS regressions', () => {
       /@media \(min-width: 1100px\)\s*\{[\s\S]*?\.market-hero\s*\{[\s\S]*?margin-bottom:\s*20px;/s,
     );
     expect(appCss).toMatch(
-      /\.cat-block--recent\s*\{[^}]*margin:\s*0 0 16px;/s,
+      /\.cat-block > \.cat-row--recent\s*\{[^}]*margin-bottom:\s*2px;/s,
     );
     expect(appCss).toMatch(
-      /\.cat-row--recent\s*\{[^}]*overflow-x:\s*auto;[\s\S]*?scrollbar-width:\s*thin;/s,
+      /@media \(min-width: 1100px\)\s*\{[\s\S]*?\.cat-block > \.cat-row--recent\s*\{[\s\S]*?scrollbar-width:\s*thin;/s,
     );
   });
 
@@ -106,9 +106,9 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('uses the deeper semantic accent behind unread counts', () => {
+  it('uses the ONIX violet accent behind unread counts', () => {
     expect(appCss).toMatch(
-      /\.thread em, \.nav-count\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,
+      /\.thread em, \.nav-count\s*\{[^}]*background:\s*var\(--accent-violet-deep\);/s,
     );
     expect(appCss).toMatch(
       /\.sidebar-nav__badge\s*\{[^}]*background:\s*var\(--accent-coral-deep\);/s,
@@ -128,7 +128,7 @@ describe('desktop and chat layout CSS regressions', () => {
 
   it('keeps the recent categories row scrollable without gaps', () => {
     expect(appCss).toMatch(/\.cat-row--recent\s*\{[^}]*overflow-x:\s*auto;/s);
-    expect(appCss).toMatch(/\.cat-row--recent\s*\{[^}]*scrollbar-width:\s*thin;/s);
+    expect(appCss).not.toMatch(/\.cat-row--recent\s*\{[^}]*scrollbar-width:\s*thin;[\s\S]*?padding-bottom:\s*2px;\n\}/s);
   });
 
   it('slides settings in from the right on desktop and from the top on phones', () => {

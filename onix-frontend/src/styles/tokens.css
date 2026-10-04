@@ -109,7 +109,6 @@ html[data-theme="dark"] {
   --shell-max: 720px;
   /* Desktop sidebars — defaults; App.tsx may override via inline style while resizing */
   --sidebar-left-w: 272px;
-  --sidebar-right-w: 320px;
   /* Chat desktop layout — Chats.tsx may override while resizing */
   --chat-list-w: 320px;
   --chat-panel-w: 100%;
@@ -662,17 +661,23 @@ html[data-glass="vision"] {
   --surface: var(--glass-card-bg);
 }
 html[data-theme="light"][data-glass="vision"] {
-  /* Opaque light surfaces — translucent Vision blur reads as purple washes */
-  --glass-bg: #ffffff;
-  --glass-fill: #ffffff;
-  --glass-thin-bg: #ffffff;
-  --glass-regular-bg: #ffffff;
-  --glass-thick-bg: #ffffff;
-  --glass-card-bg: #ffffff;
-  --glass-border: 1px solid rgba(20, 25, 35, 0.12);
-  --glass-highlight: none;
-  --glass-shadow: none;
-  --surface: #ffffff;
+  --glass-blur: 22px;
+  --glass-blur-thin: 12px;
+  --glass-blur-regular: 22px;
+  --glass-blur-thick: 32px;
+  --glass-saturate: 135%;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  /* Frosted light glass — white tint, soft ink rim */
+  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-fill: var(--glass-bg);
+  --glass-thin-bg: rgba(255, 255, 255, 0.5);
+  --glass-regular-bg: rgba(255, 255, 255, 0.68);
+  --glass-thick-bg: rgba(255, 255, 255, 0.82);
+  --glass-card-bg: rgba(255, 255, 255, 0.68);
+  --glass-border: 1px solid rgba(20, 25, 35, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --glass-shadow: var(--glass-highlight);
+  --surface: var(--glass-card-bg);
 }
 
 /* Real Vision glass — deep black + rim (Автовыдача material). */
@@ -739,7 +744,7 @@ html[data-glass="vision"] .market-hero {
   isolation: auto !important;
 }
 
-/* Light + Vision: never frosted — blur samples accents as purple bands */
+/* Light + Vision: real frosted glass on content surfaces; nav/modals stay crisp. */
 html[data-theme="light"][data-glass="vision"] .card,
 html[data-theme="light"][data-glass="vision"] .widget,
 html[data-theme="light"][data-glass="vision"] .product-card,
@@ -749,16 +754,21 @@ html[data-theme="light"][data-glass="vision"] .market-hero,
 html[data-theme="light"][data-glass="vision"] .wallet-hero,
 html[data-theme="light"][data-glass="vision"] .wallet-strip,
 html[data-theme="light"][data-glass="vision"] .money-tile,
-html[data-theme="light"][data-glass="vision"] .topbar,
-html[data-theme="light"][data-glass="vision"] .bottom-nav,
 html[data-theme="light"][data-glass="vision"] .search-bar,
 html[data-theme="light"][data-glass="vision"] .control,
 html[data-theme="light"][data-glass="vision"] .select-menu__trigger,
 html[data-theme="light"][data-glass="vision"] .auto-deliver-filter,
 html[data-theme="light"][data-glass="vision"] .deal-chip,
-html[data-theme="light"][data-glass="vision"] .input-shell,
+html[data-theme="light"][data-glass="vision"] .input-shell {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  background: var(--glass-card-bg) !important;
+  border: 1px solid rgba(20, 25, 35, 0.14) !important;
+  box-shadow: var(--glass-highlight) !important;
+}
 html[data-theme="light"][data-glass="vision"] .sidebar-left,
-html[data-theme="light"][data-glass="vision"] .sidebar-right,
+html[data-theme="light"][data-glass="vision"] .topbar,
+html[data-theme="light"][data-glass="vision"] .bottom-nav,
 html[data-theme="light"][data-glass="vision"] .modal__panel,
 html[data-theme="light"][data-glass="vision"] .auth-notice,
 html[data-theme="light"][data-glass="vision"] .settings-sheet {

@@ -850,41 +850,6 @@ export function Market({
       </section>
     ) : (
       <>
-        {recentCategories.length > 0 && (
-          <section className="cat-block cat-block--recent" aria-label="Недавние категории">
-            <div className="cat-row cat-row--recent" role="list" aria-label="Недавние категории">
-              {recentCategories.map((cat) => {
-                const image = CATEGORY_IMAGES[cat];
-                const style = CAT_STYLE[cat] ?? CAT_STYLE.OTHER!;
-                return (
-                  <button
-                    type="button"
-                    role="listitem"
-                    key={`recent-${cat}`}
-                    className={`cat-card cat-card--recent${category === cat ? ' active' : ''}`}
-                    onClick={() => {
-                      setCategory(cat);
-                      setSubcategory('');
-                      setRecentCategories(rememberRecentCategory(cat));
-                    }}
-                  >
-                    <span className="cat-card__icon">
-                      {image ? (
-                        <span className="cat-card__emblem cat-card__emblem--photo">
-                          <img src={image} alt="" width={48} height={48} loading="lazy" decoding="async" draggable={false} />
-                        </span>
-                      ) : (
-                        <span className="cat-card__emblem" style={{ background: style.bg }}>{style.letter}</span>
-                      )}
-                      <CategoryShareRing count={categoryCounts[cat] ?? 0} total={totalLots || 1} />
-                    </span>
-                    <span className="cat-card__name">{categoryLabel(cat)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
         <section className="desktop-hero market-hero" aria-roledescription="carousel" aria-label="Промо маркета">
           <div className="market-hero__track" ref={heroTrackRef}>
             {heroSlides.map((slide, index) => (
@@ -924,6 +889,43 @@ export function Market({
         </section>
 
         <div className="cat-block">
+          {recentCategories.length > 0 && (
+            <div
+              className="cat-row cat-row--recent"
+              role="list"
+              aria-label="Недавние категории"
+            >
+              {recentCategories.map((cat) => {
+                const image = CATEGORY_IMAGES[cat];
+                const style = CAT_STYLE[cat] ?? CAT_STYLE.OTHER!;
+                return (
+                  <button
+                    type="button"
+                    role="listitem"
+                    key={`recent-${cat}`}
+                    className={`cat-card cat-card--recent${category === cat ? ' active' : ''}`}
+                    onClick={() => {
+                      setCategory(cat);
+                      setSubcategory('');
+                      setRecentCategories(rememberRecentCategory(cat));
+                    }}
+                  >
+                    <span className="cat-card__icon">
+                      {image ? (
+                        <span className="cat-card__emblem cat-card__emblem--photo">
+                          <img src={image} alt="" width={48} height={48} loading="lazy" decoding="async" draggable={false} />
+                        </span>
+                      ) : (
+                        <span className="cat-card__emblem" style={{ background: style.bg }}>{style.letter}</span>
+                      )}
+                      <CategoryShareRing count={categoryCounts[cat] ?? 0} total={totalLots || 1} />
+                    </span>
+                    <span className="cat-card__name">{categoryLabel(cat)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {catScroll.max > 0 && (
             <input
               type="range"
