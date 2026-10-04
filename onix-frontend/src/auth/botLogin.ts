@@ -264,9 +264,11 @@ export function openTelegramBotLogin(
     anchor.remove();
   };
 
-  // startapp confirms via Mini App initData even when Desktop focuses an existing chat.
-  // start= is the fallback when Mini App is blocked.
-  openBlank(miniAppDeepLink || webDeepLink);
+  // Website flow stays in the browser: open the bot chat (start=), where the
+  // login confirm button completes the challenge server-side. The Mini App
+  // deep link is only used when Telegram provides no web chat fallback.
+  openBlank(webDeepLink || miniAppDeepLink || _deepLink);
+
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {

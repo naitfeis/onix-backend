@@ -1,7 +1,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import SiteFooter from './components/SiteFooter';
-import { api, money, moneyAmount } from './api/client';
-import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo, type Notification } from './api/contracts';
+import { api, money } from './api/client';
+import { CATEGORIES, API_PATHS, refreshBanInfo, type BanInfo } from './api/contracts';
 import { isTelegramMiniApp, telegramImpact } from './auth/telegramEnv';
 import SoftErrorBoundary from './components/SoftErrorBoundary';
 import UserAvatar from './components/UserAvatar';
@@ -17,9 +17,8 @@ import {
   IconProfile,
   IconSettings,
   IconSun,
-  IconWallet,
 } from './components/NavIcons';
-import { Button, Card, Skeleton, Toast } from './design-system';
+import { Card, Skeleton, Toast } from './design-system';
 import { popModal, pushModal } from './design-system/modalStack';
 import { unlockSounds } from './audio/sounds';
 import { useOnixCore } from './hooks/useOnixCore';
@@ -41,15 +40,9 @@ const Chats = lazyRetry(() => import('./screens/Chats'));
 const Profile = lazyRetry(() => import('./screens/Profile'));
 
 const LEFT_W_KEY = 'onix-sidebar-left-w';
-const RIGHT_W_KEY = 'onix-sidebar-right-w';
 /** Floor above icon-rail — prevents the crushed 72px rail + brand/icon overlap. */
 const LEFT_MIN = 220;
 const LEFT_DEFAULT = 272;
-const RIGHT_MIN = 64;
-const RIGHT_DEFAULT = 320;
-const RIGHT_ICONS_AT = 88;
-/** Below this, the right rail shows icon-only — never a crushed widget column. */
-const RIGHT_CONTENT_MIN = 240;
 /** Keep below LEFT_MIN so left never enters icon-only mode via resize. */
 const LEFT_ICONS_AT = 200;
 const DESKTOP_MAIN_MIN = 520;
@@ -111,17 +104,6 @@ function formatLotCount(n: number): string {
   return String(n);
 }
 
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(diff) || diff < 0) return '';
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return 'сейчас';
-  if (minutes < 60) return `${minutes}м`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}ч`;
-  return `${Math.floor(hours / 24)}д`;
-}
-
 function ScreenFallback() {
   return <div className="stack"><div className="product-grid"><Card><Skeleton lines={4} /></Card><Card><Skeleton lines={4} /></Card></div></div>;
 }
@@ -144,26 +126,15 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function snapRightWidth(width: number): number {
-  if (width < RIGHT_CONTENT_MIN) {
-    return width <= (RIGHT_ICONS_AT + RIGHT_CONTENT_MIN) / 2 ? RIGHT_MIN : RIGHT_CONTENT_MIN;
-  }
-  return width;
-}
-
 function clampSidebarWidths(shellWidth: number, left: number, right: number, showRight: boolean): { left: number; right: number } {
   let nextLeft = Math.max(LEFT_MIN, left);
-  let nextRight = right <= RIGHT_ICONS_AT ? RIGHT_MIN : Math.max(right, RIGHT_CONTENT_MIN);
-  if (!showRight) return { left: nextLeft, right: nextRight };
-  const budget = Math.max(LEFT_MIN + RIGHT_MIN, shellWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS);
-  if (nextLeft + nextRight > budget) {
-    nextRight = Math.max(RIGHT_MIN, budget - nextLeft);
-    if (nextRight < RIGHT_CONTENT_MIN) nextRight = RIGHT_MIN;
+  void right;
+  void showRight;
+  const budget = Math.max(LEFT_MIN, shellWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS);
+  if (nextLeft > budget) {
+    nextLeft = budget;
   }
-  if (nextLeft + nextRight > budget) {
-    nextLeft = Math.max(LEFT_MIN, budget - nextRight);
-  }
-  return { left: nextLeft, right: nextRight };
+  return { left: nextLeft, right: 0 };
 }
 
 const THEME_KEY = 'onix-theme';
@@ -246,7 +217,6 @@ export default function App() {
   const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme() ?? 'dark');
   const [openWalletTopup, setOpenWalletTopup] = useState(false);
   const [leftW, setLeftW] = useState(() => readStoredWidth(LEFT_W_KEY, LEFT_DEFAULT, LEFT_MIN));
-  const [rightW, setRightW] = useState(() => readStoredWidth(RIGHT_W_KEY, RIGHT_DEFAULT, RIGHT_MIN));
   const [shellWidth, setShellWidth] = useState(() => (
     typeof window === 'undefined' ? 1440 : window.innerWidth
   ));
@@ -271,13 +241,11 @@ export default function App() {
     };
   }, []);
 
-  const showRightRail = screen === 'market' && shellWidth >= 1280;
   const rails = useMemo(
-    () => clampSidebarWidths(shellWidth, leftW, rightW, showRightRail),
-    [shellWidth, leftW, rightW, showRightRail],
+    () => clampSidebarWidths(shellWidth, leftW, 0, false),
+    [shellWidth, leftW],
   );
   const leftIcons = rails.left <= LEFT_ICONS_AT;
-  const rightIcons = rails.right <= RIGHT_ICONS_AT;
   const [miniApp, setMiniApp] = useState(() => isTelegramMiniApp());
   const [websiteLoginBridge, setWebsiteLoginBridge] = useState(() => isWebsiteLoginStartParam());
   useEffect(() => {
@@ -300,10 +268,10 @@ export default function App() {
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
-  const startResize = useCallback((side: 'left' | 'right', event: ReactPointerEvent<HTMLButtonElement>) => {
+  const startResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
-    const startW = side === 'left' ? rails.left : rails.right;
+    const startW = rails.left;
     const target = event.currentTarget;
     const shell = target.closest('.app-shell') as HTMLElement | null;
     target.setPointerCapture(event.pointerId);
@@ -311,13 +279,12 @@ export default function App() {
 
     let latest = startW;
     let raf = 0;
-    let iconMode = side === 'left' ? leftIcons : rightIcons;
+    let iconMode = leftIcons;
 
     const applyWidth = (next: number) => {
       latest = next;
       if (!shell) return;
-      if (side === 'left') {
-        shell.style.setProperty('--sidebar-left-w', `${next}px`);
+      shell.style.setProperty('--sidebar-left-w', `${next}px`);
         const icons = next <= LEFT_ICONS_AT;
         shell.classList.toggle('app-shell--left-icons', icons);
         shell.querySelector('.sidebar-left')?.classList.toggle('sidebar-left--icons', icons);
@@ -325,36 +292,21 @@ export default function App() {
           iconMode = icons;
           setLeftW(Math.round(next));
         }
-      } else {
-        shell.style.setProperty('--sidebar-right-w', `${next}px`);
-        const icons = next <= RIGHT_ICONS_AT;
-        shell.classList.toggle('app-shell--right-icons', icons);
-        shell.querySelector('.sidebar-right')?.classList.toggle('sidebar-right--icons', icons);
-        if (icons !== iconMode) {
-          iconMode = icons;
-          setRightW(Math.round(next));
-        }
-      }
+
     };
 
     const onMove = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
       const shellWidth = shell?.clientWidth || window.innerWidth;
-      const otherWidth = side === 'left' ? rails.right : rails.left;
-      const available = shellWidth - otherWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS;
+      const available = shellWidth - DESKTOP_MAIN_MIN - DESKTOP_GAPS;
       const max = Math.max(
-        side === 'left' ? LEFT_MIN : RIGHT_MIN,
+        LEFT_MIN,
         Math.min(
           available,
-          side === 'left' ? Math.floor(shellWidth * 0.45) : Math.floor(shellWidth * 0.4),
+          Math.floor(shellWidth * 0.45),
         ),
       );
-      const raw = clamp(
-        side === 'left' ? startW + dx : startW - dx,
-        side === 'left' ? LEFT_MIN : RIGHT_MIN,
-        max,
-      );
-      const next = side === 'right' ? snapRightWidth(raw) : raw;
+      const next = clamp(startW + dx, LEFT_MIN, max);
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => applyWidth(next));
     };
@@ -365,19 +317,14 @@ export default function App() {
       document.body.classList.remove('is-resizing-sidebar');
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
-      const rounded = Math.round(side === 'right' ? snapRightWidth(latest) : latest);
-      if (side === 'left') {
-        setLeftW(rounded);
-        try { localStorage.setItem(LEFT_W_KEY, String(rounded)); } catch { /* ignore */ }
-      } else {
-        setRightW(rounded);
-        try { localStorage.setItem(RIGHT_W_KEY, String(rounded)); } catch { /* ignore */ }
-      }
+      const rounded = Math.round(latest);
+      setLeftW(rounded);
+      try { localStorage.setItem(LEFT_W_KEY, String(rounded)); } catch { /* ignore */ }
     };
 
     window.addEventListener('pointermove', onMove, { passive: true });
     window.addEventListener('pointerup', onUp);
-  }, [leftIcons, rails.left, rails.right, rightIcons]);
+  }, [leftIcons, rails.left]);
 
   const [mountedScreens, setMountedScreens] = useState<Record<Screen, boolean>>({
     market: true,
@@ -523,7 +470,6 @@ export default function App() {
   const onThreadOpenChange = useCallback((open: boolean) => setChatThreadOpen(open), []);
   const chatFocused = chatImmersive && chatThreadOpen;
   const activeTab = Math.max(0, TABS.findIndex(tab => tab.id === screen));
-  const showMarketRail = showRightRail;
   const sidebarCatCounts = CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = core.categoryLotCounts[cat]
       ?? core.products.filter((p) => p.category === cat).length;
@@ -568,10 +514,9 @@ export default function App() {
       </Suspense>
     </SoftErrorBoundary>
     <div
-      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${chatFocused ? ' app-shell--chat-thread' : ''}${showAuth ? ' app-shell--auth' : ''}${showMarketRail ? ' app-shell--market' : ''}${leftIcons ? ' app-shell--left-icons' : ''}${rightIcons && showMarketRail ? ' app-shell--right-icons' : ''}`}
+      className={`app-shell ${shellReady ? 'is-ready' : 'is-booting'}${chatImmersive ? ' app-shell--chat' : ''}${chatFocused ? ' app-shell--chat-thread' : ''}${showAuth ? ' app-shell--auth' : ''}${leftIcons ? ' app-shell--left-icons' : ''}`}
       style={{
         '--sidebar-left-w': `${rails.left}px`,
-        '--sidebar-right-w': `${rails.right}px`,
       } as CSSProperties}
     >
     <a className="skip-link" href="#content">К содержимому</a>
@@ -682,7 +627,7 @@ export default function App() {
         type="button"
         className="sidebar-resizer sidebar-resizer--left"
         aria-label={t('sidebar.resizeLeft')}
-        onPointerDown={(e) => startResize('left', e)}
+        onPointerDown={(e) => startResize(e)}
       />
     </aside>
 
@@ -804,94 +749,6 @@ export default function App() {
         />
       ) : null}
     </main>
-
-    {/* Market-only right rail */}
-    {showMarketRail && (
-      <aside
-        className={`sidebar-right desktop-only${rightIcons ? ' sidebar-right--icons' : ''}`}
-        aria-label={t('widgets.aria')}
-      >
-        <button
-          type="button"
-          className="sidebar-resizer sidebar-resizer--right"
-          aria-label={t('sidebar.resizeRight')}
-          onPointerDown={(e) => startResize('right', e)}
-        />
-        {rightIcons ? (
-          <div className="sidebar-right__icons">
-            <button type="button" aria-label={t('widgets.wallet')} onClick={() => { setOpenWalletTopup(true); switchTo('profile'); }}>
-              <IconWallet size={20} />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="widget widget--glass">
-              <p className="wallet-hero__label">{t('widgets.wallet')}</p>
-              <div className="wallet-hero__amount">
-                <span>{core.profile ? moneyAmount(core.profile.balanceCents) : '—'}</span>
-                <small>RUB</small>
-              </div>
-              <div style={{ marginTop: 14 }}>
-                <Button
-                  variant="violet"
-                  style={{ width: '100%' }}
-                  onClick={() => {
-                    setOpenWalletTopup(true);
-                    switchTo('profile');
-                  }}
-                >
-                  <IconWallet size={18} /> {t('widgets.addFunds')}
-                </Button>
-              </div>
-            </div>
-            <div className="widget widget--glass widget--notify">
-              <h3>{t('widgets.liveNotifications')}</h3>
-              <div className="widget-notify">
-                {!core.profile ? (
-                  <p className="widget-empty">Войдите, чтобы видеть личные уведомления.</p>
-                ) : core.states.notifications === 'loading' && core.notifications.length === 0 ? (
-                  <p className="widget-empty">Загрузка…</p>
-                ) : core.notifications.length === 0 ? (
-                  <p className="widget-empty">Пока нет уведомлений — здесь появятся оплаты, сделки и системные события.</p>
-                ) : (
-                  core.notifications.slice(0, 5).map((item: Notification) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`widget-notify__row${item.read ? '' : ' is-unread'}`}
-                      onClick={() => {
-                        if (item.chatId) {
-                          setFocusChatId(item.chatId);
-                          switchTo('chat');
-                          return;
-                        }
-                        if (item.orderId) {
-                          setFocusDealId(item.orderId);
-                          switchTo('deals');
-                          return;
-                        }
-                        if (item.title === 'Новое сообщение' || item.type === 'NEW_MESSAGE') {
-                          const unreadChat = core.chats.find((chat) => chat.unreadCount > 0);
-                          if (unreadChat) setFocusChatId(unreadChat.id);
-                          switchTo('chat');
-                        }
-                      }}
-                    >
-                      <UserAvatar name={item.title.slice(0, 2) || 'ON'} size="small" />
-                      <p>
-                        <b>{item.title}</b>
-                        {item.body ? <span> {item.body}</span> : null}
-                      </p>
-                      <time>{relativeTime(item.createdAt)}</time>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </aside>
-    )}
 
     {!chatFocused && (
     <nav className="bottom-nav mobile-only" aria-label={t('navigation.aria')}>

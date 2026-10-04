@@ -16,12 +16,12 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('reserves the desktop right rail for the market shell', () => {
+  it('pins the desktop left rail to the screen edge and removes the right rail', () => {
     expect(appCss).toMatch(
-      /@media \(min-width: 1280px\)\s*\{[\s\S]*?\.app-shell\.app-shell--market\s*\{[^}]*var\(--sidebar-right-w/s,
+      /\.app-shell\s*\{[^}]*grid-template-columns:\s*var\(--sidebar-left-w,[^;]*;[\s\S]*?padding:\s*0;/s,
     );
     expect(appCss).not.toMatch(
-      /\.app-shell\s*\{[^}]*grid-template-columns:[^}]*var\(--sidebar-right-w/s,
+      /--sidebar-right-w/,
     );
   });
 
@@ -79,39 +79,18 @@ describe('desktop and chat layout CSS regressions', () => {
     );
   });
 
-  it('keeps new-lot rows from collapsing and clips long titles', () => {
+  it('keeps the market hero above the category grid without overlaps', () => {
     expect(appCss).toMatch(
-      /\.widget-trend__title\s*\{[^}]*text-overflow:\s*ellipsis;/s,
+      /@media \(min-width: 1100px\)\s*\{[\s\S]*?\.market-hero\s*\{[\s\S]*?z-index:\s*1;/s,
     );
     expect(appCss).toMatch(
-      /\.widget-trend__copy\s*\{[^}]*min-width:\s*0;/s,
+      /@media \(min-width: 1100px\)\s*\{[\s\S]*?\.market-hero\s*\{[\s\S]*?margin-bottom:\s*20px;/s,
     );
     expect(appCss).toMatch(
-      /\.widget-trend__row strong\s*\{[^}]*white-space:\s*nowrap;/s,
+      /\.cat-block--recent\s*\{[^}]*margin:\s*0 0 16px;/s,
     );
     expect(appCss).toMatch(
-      /\.widget-trend__row\s*\{[^}]*flex:\s*0 0 auto;/s,
-    );
-    expect(appCss).toMatch(
-      /\.widget-trend__row\s*\{[^}]*min-height:\s*36px;/s,
-    );
-  });
-
-  it('stretches the new-lots widget to the bottom of the right rail', () => {
-    expect(appCss).toMatch(
-      /\.sidebar-right > \.widget--new-lots\s*\{[^}]*flex:\s*1 1 auto;/s,
-    );
-    expect(appCss).toMatch(
-      /\.sidebar-right > \.widget--new-lots\s*\{[^}]*min-height:\s*0;/s,
-    );
-    expect(appCss).toMatch(
-      /\.app-shell--market > \.sidebar-right\s*\{[^}]*overflow:\s*hidden;/s,
-    );
-    expect(appCss).toMatch(
-      /\.sidebar-right > \.widget--new-lots \.widget-trend\s*\{[^}]*overflow-y:\s*auto;/s,
-    );
-    expect(appCss).toMatch(
-      /\.sidebar-right > \.widget--new-lots \.widget-trend\s*\{[^}]*scrollbar-width:\s*thin;/s,
+      /\.cat-row--recent\s*\{[^}]*overflow-x:\s*auto;[\s\S]*?scrollbar-width:\s*thin;/s,
     );
   });
 
@@ -147,9 +126,9 @@ describe('desktop and chat layout CSS regressions', () => {
     expect(appCss).toMatch(/html\[data-theme="light"\] \.cat-card__dots i[\s\S]*?background:\s*#111;/);
   });
 
-  it('keeps market notifications clipped instead of scrollable', () => {
-    expect(appCss).toMatch(/\.widget-notify\s*\{[^}]*overflow:\s*hidden;/s);
-    expect(appCss).toMatch(/\.sidebar-right > \.widget--notify\s*\{[^}]*overflow:\s*hidden;/s);
+  it('keeps the recent categories row scrollable without gaps', () => {
+    expect(appCss).toMatch(/\.cat-row--recent\s*\{[^}]*overflow-x:\s*auto;/s);
+    expect(appCss).toMatch(/\.cat-row--recent\s*\{[^}]*scrollbar-width:\s*thin;/s);
   });
 
   it('slides settings in from the right on desktop and from the top on phones', () => {
