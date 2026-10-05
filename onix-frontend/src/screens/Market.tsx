@@ -18,6 +18,8 @@ import { t, categoryLabel, isMarketAllCategory, MARKET_ALL_CATEGORY } from '../i
 import { hideCatalogProduct, isCatalogHidden, visibleProducts } from '../catalogVisibility';
 import { AllGridIcon } from '../components/BrandLogos';
 import { encodeProductListCursor } from '../utils/productListCursor';
+import CategoryCountBadge from '../components/CategoryCountBadge';
+import { rememberSidebarRecentCategory } from '../utils/sidebarCategories';
 
 /** Stable empty list so memos depending on subcategories keep identity. */
 const EMPTY_SUBCATEGORIES: string[] = [];
@@ -94,23 +96,6 @@ function catalogBackLabel(category: string, subcategory: string): string {
   return sub ? `Назад в ${cat} · ${sub}` : `Назад в ${cat}`;
 }
 
-function CategoryShareRing({ count, total }: { count: number; total: number }) {
-  const shown = count > 99 ? '99+' : String(count);
-  const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
-  const degrees = fraction >= 0.999 ? 360 : fraction > 0 ? Math.max(14, fraction * 360) : 0;
-  const label = total > 0 ? `${count} из ${total} лотов` : `${count} лотов`;
-  return (
-    <span
-      className={`cat-card__share${fraction >= 0.999 ? ' cat-card__share--full' : ''}`}
-      title={label}
-      aria-label={label}
-      style={{ '--share-deg': `${degrees}deg` } as CSSProperties}
-    >
-      <span className="cat-card__share-num">{shown}</span>
-    </span>
-  );
-}
-
 function SubcategoryShareCount({ count, total }: { count: number; total: number }) {
   const shown = count > 99 ? '99+' : String(count);
   const fraction = total > 0 ? Math.min(1, Math.max(0, count / total)) : 0;
@@ -173,25 +158,6 @@ function LotViewToggle({
   );
 }
 
-
-const RECENT_CATEGORIES_KEY = 'onix-recent-categories';
-const RECENT_CATEGORIES_MAX = 8;
-
-function readRecentCategories(): string[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(RECENT_CATEGORIES_KEY) ?? '[]') as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === 'string').slice(0, RECENT_CATEGORIES_MAX);
-  } catch {
-    return [];
-  }
-}
-
-function rememberRecentCategory(category: string): string[] {
-  const next = [category, ...readRecentCategories().filter((item) => item !== category)].slice(0, RECENT_CATEGORIES_MAX);
-  try { localStorage.setItem(RECENT_CATEGORIES_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-  return next;
-}
 
 const VIEWED_LOTS_KEY = 'onix-viewed-lots';
 function readViewedLots(): Set<string> {
@@ -921,7 +887,7 @@ export function Market({
                 <span className="cat-card__emblem cat-card__emblem--all">
                   <AllGridIcon />
                 </span>
-                <CategoryShareRing count={totalLots} total={totalLots || 1} />
+                <CategoryCountBadge count={totalLots} total={totalLots || 1} />
               </span>
               <span className="cat-card__name">{t('market.all')}</span>
             </button>
@@ -938,7 +904,7 @@ export function Market({
                   onClick={() => {
                     setCategory(cat);
                     setSubcategory('');
-                    rememberRecentCategory(cat);
+                    rememberSidebarRecentCategory(cat, localStorage);
                   }}
                 >
                   <span className="cat-card__icon">
@@ -964,7 +930,7 @@ export function Market({
                         style={{ background: style.bg }}
                       >{style.letter}</span>
                     )}
-                    <CategoryShareRing count={count} total={totalLots || 1} />
+                    <CategoryCountBadge count={count} total={totalLots || 1} />
                   </span>
                   <span className="cat-card__name">{categoryLabel(cat)}</span>
                 </button>

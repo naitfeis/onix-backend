@@ -1793,6 +1793,21 @@ html[data-theme="light"] .cat-card__share--full::before {
 html[data-theme="light"] .cat-card__share-num {
   color: #111;
 }
+.cat-card__share--sidebar .cat-card__share-num {
+  font-size: 9px;
+}
+html[data-theme="light"] .sidebar-cats .cat-card__share--sidebar {
+  background: var(--glass-card-bg);
+}
+html[data-theme="light"] .sidebar-cats .cat-card__share--sidebar::before {
+  background: conic-gradient(var(--text-primary) var(--share-deg, 0deg), var(--line) 0);
+}
+html[data-theme="light"] .sidebar-cats .cat-card__share--sidebar--full::before {
+  background: var(--text-primary);
+}
+html[data-theme="light"] .sidebar-cats .cat-card__share--sidebar .cat-card__share-num {
+  color: var(--text-primary);
+}
 .cat-card__emblem--other {
   background: #0a0a0c !important;
 }
@@ -6755,15 +6770,6 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     background: rgba(255, 255, 255, 0.12);
   }
   .sidebar-cats { display: grid; gap: 0; width: 100%; max-width: 100%; min-width: 0; }
-  .sidebar-cats--recent {
-    display: grid;
-    gap: 0;
-    margin-bottom: 4px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  .sidebar-cats--recent:empty { display: none; }
-  html[data-theme="light"] .sidebar-cats--recent { border-bottom-color: rgba(17, 17, 17, 0.1); }
   .sidebar-cats button {
     height: 44px;
     width: 100%;
@@ -6791,28 +6797,24 @@ body.modal-open .toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
     box-shadow: none !important;
   }
   .sidebar-cats__count {
+    position: relative;
+    z-index: 1;
     margin-left: auto;
     margin-right: 2px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    pointer-events: none;
+    box-shadow: none;
+  }
+  .sidebar-cats .cat-card__share--sidebar {
+    position: relative;
+    top: 0;
+    right: 0;
     width: 22px;
     min-width: 22px;
     max-width: 22px;
     height: 22px;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    border-radius: 50%;
     font-size: 9px;
-    font-weight: 800;
-    font-style: normal;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    flex: 0 0 auto;
-    color: #fff;
-    background: #0b0b0c;
-    border: 2px solid #fff;
-    box-shadow: none;
   }
   .sidebar-cats__label {
     min-width: 0;

@@ -28,6 +28,12 @@ import AuthNotice, { WebsiteLoginBridge, isWebsiteLoginStartParam } from './scre
 import type { Screen } from './screens/types';
 import PwaInstallBanner from './shell/PwaInstallBanner';
 import { CATEGORY_IMAGES } from './utils/categoryImages';
+import CategoryCountBadge from './components/CategoryCountBadge';
+import {
+  orderSidebarCategories,
+  readSidebarRecentCategories,
+  rememberSidebarRecentCategory,
+} from './utils/sidebarCategories';
 import { lazyRetry } from './utils/lazyRetry';
 import './App.css';
 
@@ -96,12 +102,6 @@ const CAT_STYLE_FALLBACK: { bg: string; glow: string; letter: string } = {
 /** Never undefined — unknown categories render the neutral emblem. */
 function catStyleOf(category: string): { bg: string; glow: string; letter: string } {
   return CAT_STYLE[category] ?? CAT_STYLE_FALLBACK;
-}
-
-function formatLotCount(n: number): string {
-  if (n <= 0) return '0';
-  if (n > 99) return '99+';
-  return String(n);
 }
 
 function ScreenFallback() {
@@ -193,20 +193,6 @@ function syncThemeFromTelegram(): ThemeMode {
   return 'dark';
 }
 
-const SIDEBAR_RECENT_CATEGORIES_KEY = 'onix-recent-categories';
-function readSidebarRecentCategories(): string[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(SIDEBAR_RECENT_CATEGORIES_KEY) ?? '[]') as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === 'string').slice(0, 5);
-  } catch { return []; }
-}
-function rememberSidebarRecentCategory(category: string): string[] {
-  const next = [category, ...readSidebarRecentCategories().filter((item) => item !== category)].slice(0, 5);
-  try { localStorage.setItem(SIDEBAR_RECENT_CATEGORIES_KEY, JSON.stringify(next)); } catch { /* ignore */ }
-  return next;
-}
-
 export default function App() {
   const core = useOnixCore();
   const { locale, setLocale } = useLocale();
@@ -220,7 +206,7 @@ export default function App() {
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
   const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
-  const [sidebarRecentCategories, setSidebarRecentCategories] = useState<string[]>(() => readSidebarRecentCategories());
+  const [sidebarRecentCategories, setSidebarRecentCategories] = useState<string[]>(() => readSidebarRecentCategories(localStorage));
   const [marketHomeTick, setMarketHomeTick] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -490,6 +476,8 @@ export default function App() {
       ?? core.products.filter((p) => p.category === cat).length;
     return acc;
   }, {});
+  const sidebarTotalLots = Object.values(sidebarCatCounts).reduce((sum, count) => sum + count, 0);
+  const orderedSidebarCategories = orderSidebarCategories(CATEGORIES, sidebarRecentCategories);
 
   const settingsFields = (
     <>
@@ -590,44 +578,8 @@ export default function App() {
         ))}
       </nav>
       <div className="sidebar-divider" />
-      <div className="sidebar-cats sidebar-cats--recent" aria-label="Недавние категории">
-        {sidebarRecentCategories.map((cat) => {
-          const style = catStyleOf(cat);
-          const count = sidebarCatCounts[cat] ?? 0;
-          const image = CATEGORY_IMAGES[cat];
-          return (
-            <button
-              key={`recent-${cat}`}
-              type="button"
-              aria-label={`Недавние: ${categoryLabel(cat)}`}
-              onClick={() => {
-                setMarketCategory(cat);
-                setSidebarRecentCategories(rememberSidebarRecentCategory(cat));
-                switchTo('market');
-              }}
-            >
-              {cat === 'OTHER' ? (
-                <span className="cat-card__emblem cat-card__emblem--other" style={{ width: 34, height: 34 }}>
-                  <span className="cat-card__dots" aria-hidden="true"><i /><i /><i /></span>
-                </span>
-              ) : image ? (
-                <span className="cat-card__emblem cat-card__emblem--photo" style={{ width: 34, height: 34 }}>
-                  <img src={image} alt="" width={68} height={68} loading="lazy" decoding="async" draggable={false} />
-                </span>
-              ) : (
-                <span
-                  className="cat-card__emblem"
-                  style={{ width: 34, height: 34, fontSize: 11, background: style.bg }}
-                >{style.letter}</span>
-              )}
-              <span className="sidebar-cats__label">{categoryLabel(cat)}</span>
-              <em className="sidebar-cats__count" aria-hidden="true">{formatLotCount(count)}</em>
-            </button>
-          );
-        })}
-      </div>
       <div className="sidebar-cats">
-        {CATEGORIES.map((cat) => {
+        {orderedSidebarCategories.map((cat) => {
           const style = catStyleOf(cat);
           const count = sidebarCatCounts[cat] ?? 0;
           const image = CATEGORY_IMAGES[cat];
@@ -638,7 +590,7 @@ export default function App() {
               aria-label={categoryLabel(cat)}
               onClick={() => {
                 setMarketCategory(cat);
-                setSidebarRecentCategories(rememberSidebarRecentCategory(cat));
+                setSidebarRecentCategories(rememberSidebarRecentCategory(cat, localStorage));
                 switchTo('market');
               }}
             >
@@ -657,7 +609,12 @@ export default function App() {
                 >{style.letter}</span>
               )}
               <span className="sidebar-cats__label">{categoryLabel(cat)}</span>
-              <em className="sidebar-cats__count" aria-hidden="true">{formatLotCount(count)}</em>
+              <CategoryCountBadge
+              count={count}
+              total={sidebarTotalLots}
+              variant="sidebar"
+              className="sidebar-cats__count"
+            />
             </button>
           );
         })}
