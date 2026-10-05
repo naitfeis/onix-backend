@@ -642,41 +642,43 @@ html[data-theme="light"] .segmented button {
 }
 
 html[data-glass="vision"] {
-  --glass-blur: 28px;
-  --glass-blur-thin: 16px;
-  --glass-blur-regular: 28px;
-  --glass-blur-thick: 40px;
-  --glass-saturate: 100%;
-  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  /* Same material as «Автовыдача»: deep black + thin white rim */
-  --glass-bg: rgba(8, 8, 8, 0.72);
+  --glass-blur: 32px;
+  --glass-blur-thin: 18px;
+  --glass-blur-regular: 32px;
+  --glass-blur-thick: 44px;
+  --glass-saturate: 160%;
+  --glass-brightness: 1.04;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  /* Vision Pro liquid glass: deep black tint, bright specular rim */
+  --glass-bg: rgba(10, 10, 12, 0.62);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(6, 6, 6, 0.55);
-  --glass-regular-bg: rgba(10, 10, 10, 0.78);
-  --glass-thick-bg: rgba(12, 12, 12, 0.88);
-  --glass-card-bg: rgba(10, 10, 10, 0.82);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.14);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --glass-shadow: var(--glass-highlight);
+  --glass-thin-bg: rgba(7, 7, 9, 0.48);
+  --glass-regular-bg: rgba(10, 10, 12, 0.68);
+  --glass-thick-bg: rgba(12, 12, 14, 0.82);
+  --glass-card-bg: rgba(12, 12, 14, 0.68);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.36), var(--glass-highlight);
   --surface: var(--glass-card-bg);
 }
 html[data-theme="light"][data-glass="vision"] {
-  --glass-blur: 22px;
-  --glass-blur-thin: 12px;
-  --glass-blur-regular: 22px;
-  --glass-blur-thick: 32px;
-  --glass-saturate: 135%;
-  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  /* Frosted light glass — white tint, soft ink rim */
-  --glass-bg: rgba(255, 255, 255, 0.62);
+  --glass-blur: 30px;
+  --glass-blur-thin: 16px;
+  --glass-blur-regular: 30px;
+  --glass-blur-thick: 42px;
+  --glass-saturate: 170%;
+  --glass-brightness: 1.08;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  /* Vision Pro bright glass — white tint, specular rim, soft depth */
+  --glass-bg: rgba(255, 255, 255, 0.58);
   --glass-fill: var(--glass-bg);
-  --glass-thin-bg: rgba(255, 255, 255, 0.5);
-  --glass-regular-bg: rgba(255, 255, 255, 0.68);
-  --glass-thick-bg: rgba(255, 255, 255, 0.82);
-  --glass-card-bg: rgba(255, 255, 255, 0.68);
-  --glass-border: 1px solid rgba(20, 25, 35, 0.14);
-  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  --glass-shadow: var(--glass-highlight);
+  --glass-thin-bg: rgba(255, 255, 255, 0.46);
+  --glass-regular-bg: rgba(255, 255, 255, 0.64);
+  --glass-thick-bg: rgba(255, 255, 255, 0.78);
+  --glass-card-bg: rgba(255, 255, 255, 0.64);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.55);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 30px rgba(90, 104, 140, 0.16), var(--glass-highlight);
   --surface: var(--glass-card-bg);
 }
 
@@ -698,11 +700,11 @@ html[data-glass="vision"] .deal-chip,
 html[data-glass="vision"] .input-shell,
 html[data-glass="vision"] .sidebar-left,
 html[data-glass="vision"] .sidebar-right {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness, 1)) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness, 1)) !important;
   background: var(--glass-card-bg) !important;
   border: var(--glass-border) !important;
-  box-shadow: none !important;
+  box-shadow: var(--glass-shadow) !important;
 }
 /* Dock/topbar stay opaque — Vision blur paints blue vertical «потеки» on the nav */
 html[data-glass="vision"] .bottom-nav,
@@ -760,11 +762,11 @@ html[data-theme="light"][data-glass="vision"] .select-menu__trigger,
 html[data-theme="light"][data-glass="vision"] .auto-deliver-filter,
 html[data-theme="light"][data-glass="vision"] .deal-chip,
 html[data-theme="light"][data-glass="vision"] .input-shell {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness, 1)) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness, 1)) !important;
   background: var(--glass-card-bg) !important;
-  border: 1px solid rgba(20, 25, 35, 0.14) !important;
-  box-shadow: var(--glass-highlight) !important;
+  border: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
 }
 html[data-theme="light"][data-glass="vision"] .sidebar-left,
 html[data-theme="light"][data-glass="vision"] .topbar,

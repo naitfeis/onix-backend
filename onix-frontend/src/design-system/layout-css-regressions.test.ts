@@ -157,7 +157,7 @@ describe('desktop and chat layout CSS regressions', () => {
   it('applies Vision glass blur to the market banner and chrome', () => {
     expect(tokensCss).toMatch(/html\[data-glass="vision"\] \.market-hero/);
     expect(tokensCss).toMatch(
-      /html\[data-glass="vision"\] \.card,[\s\S]*?\.market-hero,[\s\S]*?backdrop-filter:\s*blur\(var\(--glass-blur\)\) saturate\(var\(--glass-saturate\)\) !important;/s,
+      /html\[data-glass="vision"\] \.card,[\s\S]*?\.market-hero,[\s\S]*?backdrop-filter:\s*blur\(var\(--glass-blur\)\) saturate\(var\(--glass-saturate\)\)(?: brightness\(var\(--glass-brightness, 1\)\))? !important;/s,
     );
   });
 

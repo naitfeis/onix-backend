@@ -183,7 +183,15 @@ export function IconHome({ size = 20 }: { size?: number }) {
 export function IconHeart({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />
+      <path d="M12 20.2C7.2 16.9 4 13.7 4 9.9 4 7.2 6.1 5 8.7 5c1.4 0 2.6.7 3.3 1.8C12.7 5.7 13.9 5 15.3 5 17.9 5 20 7.2 20 9.9c0 3.8-3.2 7-8 10.3z" />
+    </svg>
+  );
+}
+
+export function IconBolt({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M13 2.5 5.5 13.2h5L10.5 21.5 18.5 10.8h-5L13 2.5z" />
     </svg>
   );
 }

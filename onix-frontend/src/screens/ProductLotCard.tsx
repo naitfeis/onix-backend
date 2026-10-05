@@ -2,7 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { money } from '../api/client';
 import type { Product } from '../api/contracts';
 import UserAvatar from '../components/UserAvatar';
-import { IconHeart, IconStar } from '../components/NavIcons';
+import { IconBolt, IconHeart, IconStar } from '../components/NavIcons';
 import { Card } from '../design-system';
 import { publicAt } from '../utils/publicAt';
 import { categoryLabel, t } from '../i18n';
@@ -59,7 +59,7 @@ export const ProductLotCard = memo(function ProductLotCard({
           )}
         </div>
         {product.autoDeliver && (
-          <span className="product-card__bolt" title="Автовыдача" aria-label="Автовыдача">⚡</span>
+          <span className="product-card__bolt is-filled" title="Автовыдача" aria-label="Автовыдача"><IconBolt size={14} /></span>
         )}
         {onFavorite && (
           <button

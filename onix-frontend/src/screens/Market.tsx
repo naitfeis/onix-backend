@@ -264,7 +264,6 @@ export function Market({
   const [detailReady, setDetailReady] = useState(false);
   const [heroSlide, setHeroSlide] = useState(0);
   const [catScroll, setCatScroll] = useState({ max: 0, value: 0 });
-  const [recentCategories, setRecentCategories] = useState<string[]>(() => readRecentCategories());
   const heroTrackRef = useRef<HTMLDivElement>(null);
   const catRowRef = useRef<HTMLDivElement>(null);
   const PAGE = 15;
@@ -889,43 +888,6 @@ export function Market({
         </section>
 
         <div className="cat-block">
-          {recentCategories.length > 0 && (
-            <div
-              className="cat-row cat-row--recent"
-              role="list"
-              aria-label="Недавние категории"
-            >
-              {recentCategories.map((cat) => {
-                const image = CATEGORY_IMAGES[cat];
-                const style = CAT_STYLE[cat] ?? CAT_STYLE.OTHER!;
-                return (
-                  <button
-                    type="button"
-                    role="listitem"
-                    key={`recent-${cat}`}
-                    className={`cat-card cat-card--recent${category === cat ? ' active' : ''}`}
-                    onClick={() => {
-                      setCategory(cat);
-                      setSubcategory('');
-                      setRecentCategories(rememberRecentCategory(cat));
-                    }}
-                  >
-                    <span className="cat-card__icon">
-                      {image ? (
-                        <span className="cat-card__emblem cat-card__emblem--photo">
-                          <img src={image} alt="" width={48} height={48} loading="lazy" decoding="async" draggable={false} />
-                        </span>
-                      ) : (
-                        <span className="cat-card__emblem" style={{ background: style.bg }}>{style.letter}</span>
-                      )}
-                      <CategoryShareRing count={categoryCounts[cat] ?? 0} total={totalLots || 1} />
-                    </span>
-                    <span className="cat-card__name">{categoryLabel(cat)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
           {catScroll.max > 0 && (
             <input
               type="range"
@@ -976,7 +938,7 @@ export function Market({
                   onClick={() => {
                     setCategory(cat);
                     setSubcategory('');
-                    setRecentCategories(rememberRecentCategory(cat));
+                    rememberRecentCategory(cat);
                   }}
                 >
                   <span className="cat-card__icon">
