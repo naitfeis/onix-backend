@@ -1,0 +1,22 @@
+/** Editable aliases for the global category search (RU names + shortcuts). */
+export const CATEGORY_ALIASES: Record<string, readonly string[]> = {
+  STEAM: ['стим'],
+  CS2: ['кс', 'кс2', 'контра', 'counter strike', 'counterstrike'],
+  DOTA_2: ['дота'],
+  GTA_5: ['гта', 'gta v'],
+  GTA_6: ['гта 6'],
+  MINECRAFT: ['майн', 'майнкрафт'],
+  ROBLOX: ['роблокс', 'робукс'],
+  FORTNITE: ['фортнайт'],
+  BRAWL_STARS: ['бравл'],
+  PUBG: ['пабг'],
+  PUBG_MOBILE: ['пабг мобайл'],
+  GENSHIN: ['геншин'],
+  MOBILE_LEGENDS: ['млбб'],
+  PLAYSTATION: ['плойка', 'псн', 'ps'],
+  APP_STORE: ['апсторе', 'эпл', 'appstore'],
+  STANDOFF_2: ['стандофф'],
+  PATH_OF_EXILE_2: ['пое'],
+  STALCRAFT: ['сталкрафт', 'сталзон'],
+  RP_PROJECTS: ['рп', 'рп проекты', 'rp проекты'],
+};

@@ -177,7 +177,7 @@ function rememberViewedLot(id: string, store: Set<string>) {
 
 export function Market({
   core, switchTo, setToast, focusProductId, onFocusProductHandled, openDirectChat, openDealChat,
-  externalCategory, onExternalCategoryConsumed, marketHomeTick, onRequestLogin, active = true,
+  externalCategory, onExternalCategoryConsumed, externalQuery, onExternalQueryConsumed, marketHomeTick, onRequestLogin, active = true,
 }: {
   core: Core;
   switchTo: (screen: Screen) => void;
@@ -189,6 +189,9 @@ export function Market({
   openDealChat: (chatId: string) => void;
   externalCategory?: string;
   onExternalCategoryConsumed?: () => void;
+  /** Query pushed from the desktop global search. */
+  externalQuery?: string;
+  onExternalQueryConsumed?: () => void;
   /** Increment to force return to the main market catalog. */
   marketHomeTick?: number;
   onRequestLogin?: () => void;
@@ -320,6 +323,17 @@ export function Market({
     setSubcategory('');
     onExternalCategoryConsumed?.();
   }, [externalCategory, onExternalCategoryConsumed]);
+
+  useEffect(() => {
+    if (!externalQuery) return;
+    setQuery(externalQuery);
+    const matched = matchCategorySearch(externalQuery);
+    if (matched) {
+      setCategory(matched);
+      setSubcategory('');
+    }
+    onExternalQueryConsumed?.();
+  }, [externalQuery, onExternalQueryConsumed]);
 
   useEffect(() => {
     if (!marketHomeTick) return;

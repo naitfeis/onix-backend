@@ -35,6 +35,9 @@ import {
   rememberSidebarRecentCategory,
 } from './utils/sidebarCategories';
 import { lazyRetry } from './utils/lazyRetry';
+import GlobalSearch from './components/search/GlobalSearch';
+import BalancePill from './components/search/BalancePill';
+import './components/search/search.css';
 import './App.css';
 
 /** AuthGate is eager — lazy chunk ERR_CONNECTION_RESET was blanking the whole app in RU. */
@@ -206,6 +209,7 @@ export default function App() {
   const [focusProductId, setFocusProductId] = useState<string | null>(null);
   const [focusDealId, setFocusDealId] = useState<string | null>(null);
   const [marketCategory, setMarketCategory] = useState<string>(MARKET_ALL_CATEGORY);
+  const [marketSearchQuery, setMarketSearchQuery] = useState('');
   const [sidebarRecentCategories, setSidebarRecentCategories] = useState<string[]>(() => readSidebarRecentCategories(localStorage));
   const [marketHomeTick, setMarketHomeTick] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -661,6 +665,46 @@ export default function App() {
 
     <main id="content" className="viewport" style={{ '--direction': direction } as CSSProperties}>
       <div className="screen-transition">
+      {screen === 'market' && !chatImmersive ? (
+        <div className="content-head desktop-only" role="search">
+          <span aria-hidden="true" />
+          <div className="content-head__search">
+            <GlobalSearch
+              counts={sidebarCatCounts}
+              total={sidebarTotalLots}
+              catalog={core.catalogSubcategories ?? {}}
+              recent={sidebarRecentCategories}
+              onOpenCategory={(cat) => {
+                setMarketCategory(cat);
+                setSidebarRecentCategories(rememberSidebarRecentCategory(cat, localStorage));
+                switchTo('market');
+              }}
+              onOpenSubcategory={(cat, sub) => {
+                setMarketCategory(cat);
+                setSidebarRecentCategories(rememberSidebarRecentCategory(cat, localStorage));
+                switchTo('market');
+                setToast('Подразделение выбрано: ' + sub);
+              }}
+              onSearchLots={(query) => {
+                setMarketSearchQuery(query);
+                switchTo('market');
+              }}
+            />
+          </div>
+          <div className="content-head__balance">
+            {core.profile ? (
+              <BalancePill
+                avatarUrl={core.profile.avatarUrl}
+                userId={core.profile.id}
+                username={core.profile.username}
+                balanceCents={core.profile.balanceCents}
+                online={Boolean(core.presenceOf(core.profile.onixId)?.online)}
+                onClick={() => switchTo('profile')}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
         <SoftErrorBoundary label="Экран не загрузился (сеть). Нажмите «Обновить».">
         <Suspense fallback={<ScreenFallback />}>
           {mountedScreens.market && (
@@ -680,8 +724,10 @@ export default function App() {
                   switchTo('chat');
                 }}
                 externalCategory={marketCategory}
+                externalQuery={marketSearchQuery}
                 marketHomeTick={marketHomeTick}
                 onExternalCategoryConsumed={() => setMarketCategory(MARKET_ALL_CATEGORY)}
+                onExternalQueryConsumed={() => setMarketSearchQuery('')}
               />
             </div>
           )}

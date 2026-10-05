@@ -638,7 +638,7 @@ export function Chats({
       aria-label="Изменить ширину списка чатов"
       onPointerDown={startListResize}
     />
-    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><Button variant="ghost" className="back" onClick={() => setThreadId('')}>←</Button>
+    <div className={`conversation ${!thread ? 'mobile-hidden' : ''}`}>{thread ? <><div className="conversation__head"><span className="conversation__back-group"><Button variant="ghost" className="back" onClick={() => setThreadId('')} aria-label="Назад">←</Button>{(() => { const others = totalUnread - (thread.unreadCount > 0 ? thread.unreadCount : 0); return others > 0 ? <em className="conversation__unread-pill" aria-label={`Непрочитанных в других диалогах: ${others}`}>{others > 999 ? '999+' : others}</em> : null; })()}</span>
       <button
         type="button"
         className="conversation__peer"
