@@ -115,9 +115,7 @@ export default function GlobalSearch({
         />
         {query ? (
           <button type="button" className="gsearch__clear" aria-label="Очистить" onClick={() => { setQuery(''); inputRef.current?.focus(); }}>×</button>
-        ) : (
-          <span className="gsearch__key" aria-hidden="true">/</span>
-        )}
+        ) : null}
       </div>
       {open && (
         <div className="gsearch__panel" id={listId} role="listbox" ref={panelRef}>

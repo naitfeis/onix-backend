@@ -4858,30 +4858,35 @@ html[data-theme="light"] .app-shell--chat .conversation__head {
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
 }
-.app-shell--chat .conversation__peer .user-avatar-wrap {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  padding: 2px;
-  border: var(--glass-subtle-border);
-  background: var(--glass-subtle-bg);
+.app-shell--chat .conversation__peer {
+  justify-content: center;
+  text-align: center;
 }
-.app-shell--chat .conversation__peer > div { min-width: 0; }
+.app-shell--chat .conversation__peer-text { min-width: 0; text-align: center; }
 .app-shell--chat .conversation__peer b,
 .app-shell--chat .conversation__peer small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-shell--chat .conversation__peer b { font-size: 14px; color: var(--text-primary); }
+.app-shell--chat .conversation__peer b { font-size: 14px; font-weight: 700; color: var(--text-primary); }
 .app-shell--chat .conversation__peer small { font-size: 11px; color: var(--text-secondary); }
-.app-shell--chat .conversation__more {
-  width: 44px;
-  height: 44px;
+.app-shell--chat .conversation__head-avatar {
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
+  order: 2;
+}
+.app-shell--chat .conversation__head-avatar .user-avatar-wrap { align-self: center; justify-self: center; }
+.app-shell--chat .conversation__head-avatar .user-avatar { width: 36px; height: 36px; border: 0; }
+.app-shell--chat .conversation__more { order: 1; margin-right: 10px; }
+.app-shell--chat .conversation__more .more-menu__trigger {
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: var(--glass-border);
   background: var(--glass-bg);
   box-shadow: var(--glass-shadow);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
+  color: var(--text-primary);
+  font-size: 18px;
 }
 .app-shell--chat .composer {
   position: sticky;
@@ -4934,6 +4939,14 @@ html[data-theme="light"] .app-shell--chat .conversation__head {
   background: var(--accent-violet);
   color: var(--text-on-accent);
   transition: opacity 180ms ease, transform 180ms ease;
+  font-size: 0;
+}
+.app-shell--chat .composer .button--primary svg,
+.app-shell--chat .composer button[type="submit"] svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  stroke: none;
 }
 .app-shell--chat .composer .button--primary:disabled { opacity: 0; transform: scale(0.8); pointer-events: none; }
 .app-shell--chat .messages { padding: 64px 0 72px; }
@@ -4942,7 +4955,7 @@ html[data-theme="light"] .app-shell--chat .conversation__head {
   .app-shell--chat .conversation__back-group .back,
   .app-shell--chat .conversation__unread-pill,
   .app-shell--chat .conversation__peer,
-  .app-shell--chat .conversation__more,
+  .app-shell--chat .conversation__more .more-menu__trigger,
   .app-shell--chat .composer__attach,
   .app-shell--chat .composer textarea,
   .app-shell--chat .composer input {

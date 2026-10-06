@@ -11,6 +11,7 @@ import { publicAt } from '../utils/publicAt';
 import type { Core } from './types';
 import { MessageText, PublicProfileModal, ReportUserModal, StaffBadge } from './shared';
 import { MoreActionsMenu } from '../components/MoreActionsMenu';
+import { IconSend } from '../components/NavIcons';
 import { playSound, unlockSounds } from '../audio/sounds';
 import { getRealtimeClient } from '../realtime/client';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -649,22 +650,7 @@ export function Chats({
           await openOnixProfile(thread.peerOnixId);
         }}
       >
-        {(thread.kind === 'AI' || thread.peerAvatarUrl !== undefined || thread.title) ? (
-          <UserAvatar
-            userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
-            avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
-            name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
-            initials={thread.kind === 'AI' ? 'AI' : undefined}
-            online={thread.kind === 'AI' || !thread.peerOnixId
-              ? undefined
-              : sellerIsPresent(
-                { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
-                core.profile,
-                core.presenceOf(thread.peerOnixId),
-              )}
-          />
-        ) : null}
-        <div>
+        <div className="conversation__peer-text">
           <b title={thread.kind === 'AI' ? 'Onix AI' : thread.title}>
             {thread.kind === 'AI' ? 'Onix AI' : thread.title} <StaffBadge badge={thread.peerBadge} />
           </b>
@@ -730,6 +716,23 @@ export function Chats({
           ]}
         />
       )}
+      <span className="conversation__head-avatar">
+          {(thread.kind === 'AI' || thread.peerAvatarUrl !== undefined || thread.title) ? (
+            <UserAvatar
+              userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
+              avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
+              name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
+              initials={thread.kind === 'AI' ? 'AI' : undefined}
+              online={thread.kind === 'AI' || !thread.peerOnixId
+                ? undefined
+                : sellerIsPresent(
+                  { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
+                  core.profile,
+                  core.presenceOf(thread.peerOnixId),
+                )}
+            />
+          ) : null}
+      </span>
       </div>
       <div className="messages-wrap">
       <div
@@ -927,7 +930,7 @@ export function Chats({
           placeholder={t('chat.messagePlaceholder')}
           aria-label={t('chat.messageAria')}
         />
-        <Button type="submit" disabled={!text.trim()} busy={core.isBusy(`message-${thread.id}`)}>{t('chat.send')}</Button>
+        <Button type="submit" disabled={!text.trim()} busy={core.isBusy(`message-${thread.id}`)} aria-label={t('chat.send')} title={t('chat.send')}><IconSend size={20} /></Button>
       </form>
       {typingLabel ? <p className="muted chat-typing">{typingLabel}</p> : null}
     </> : <StateView title={t('chat.chooseTitle')} text={t('chat.chooseText')} />}</div>
