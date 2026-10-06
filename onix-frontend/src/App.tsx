@@ -673,7 +673,6 @@ export default function App() {
               counts={sidebarCatCounts}
               total={sidebarTotalLots}
               catalog={core.catalogSubcategories ?? {}}
-              recent={sidebarRecentCategories}
               onOpenCategory={(cat) => {
                 setMarketCategory(cat);
                 setSidebarRecentCategories(rememberSidebarRecentCategory(cat, localStorage));

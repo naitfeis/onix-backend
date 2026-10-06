@@ -14,14 +14,13 @@ type GlobalSearchProps = {
   counts: Record<string, number>;
   total: number;
   catalog: SubcategoryCatalog;
-  recent: readonly string[];
   onOpenCategory: (category: string) => void;
   onOpenSubcategory: (category: string, subcategory: string) => void;
   onSearchLots: (query: string) => void;
 };
 
 export default function GlobalSearch({
-  counts, total, catalog, recent, onOpenCategory, onOpenSubcategory, onSearchLots,
+  counts, total, catalog, onOpenCategory, onOpenSubcategory, onSearchLots,
 }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -30,16 +29,11 @@ export default function GlobalSearch({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const options = useMemo(() => {
-    if (!query.trim()) {
-      return recent.map((category) => ({ category, label: category, subcategories: [] as string[] }));
-    }
-    return matchCategories(query, counts).map((match) => ({
-      category: match.category,
-      label: match.label,
-      subcategories: (catalog[match.category] ?? []).slice(0, 8),
-    }));
-  }, [query, counts, catalog, recent]);
+  const options = useMemo(() => matchCategories(query, counts).map((match) => ({
+    category: match.category,
+    label: match.label,
+    subcategories: (catalog[match.category] ?? []).slice(0, 8),
+  })), [query, counts, catalog]);
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -109,8 +103,8 @@ export default function GlobalSearch({
           aria-activedescendant={activeId}
           aria-label="Поиск игр и категорий"
           placeholder="Поиск игр и категорий…"
-          onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
+          onChange={(event) => { setQuery(event.target.value); setOpen(event.target.value.trim().length > 0); }}
+          onFocus={() => { if (query.trim()) setOpen(true); }}
           onKeyDown={onKeyDown}
         />
         {query ? (

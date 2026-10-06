@@ -650,6 +650,21 @@ export function Chats({
           await openOnixProfile(thread.peerOnixId);
         }}
       >
+        {(thread.kind === 'AI' || thread.peerAvatarUrl !== undefined || thread.title) ? (
+        <UserAvatar
+        userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
+        avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
+        name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
+        initials={thread.kind === 'AI' ? 'AI' : undefined}
+        online={thread.kind === 'AI' || !thread.peerOnixId
+        ? undefined
+        : sellerIsPresent(
+        { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
+        core.profile,
+        core.presenceOf(thread.peerOnixId),
+        )}
+        />
+        ) : null}
         <div className="conversation__peer-text">
           <b title={thread.kind === 'AI' ? 'Onix AI' : thread.title}>
             {thread.kind === 'AI' ? 'Onix AI' : thread.title} <StaffBadge badge={thread.peerBadge} />
@@ -716,23 +731,6 @@ export function Chats({
           ]}
         />
       )}
-      <span className="conversation__head-avatar">
-          {(thread.kind === 'AI' || thread.peerAvatarUrl !== undefined || thread.title) ? (
-            <UserAvatar
-              userId={thread.kind === 'AI' ? undefined : thread.peerUserId}
-              avatarUrl={thread.kind === 'AI' ? undefined : thread.peerAvatarUrl}
-              name={thread.kind === 'AI' ? 'Onix AI' : thread.title}
-              initials={thread.kind === 'AI' ? 'AI' : undefined}
-              online={thread.kind === 'AI' || !thread.peerOnixId
-                ? undefined
-                : sellerIsPresent(
-                  { onixId: thread.peerOnixId, lastOnline: thread.peerLastOnline },
-                  core.profile,
-                  core.presenceOf(thread.peerOnixId),
-                )}
-            />
-          ) : null}
-      </span>
       </div>
       <div className="messages-wrap">
       <div

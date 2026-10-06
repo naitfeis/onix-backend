@@ -19,16 +19,16 @@ export default function BalancePill({
   const content = (
     <>
       <UserAvatar avatarUrl={avatarUrl} userId={userId} name={username} size="small" online={online} />
-      <span className="balance-pill__sum">{money(balanceCents)}</span>
+      <strong>{money(balanceCents)}</strong>
       {children}
     </>
   );
   if (onClick) {
     return (
-      <button type="button" className="balance-pill" onClick={onClick} aria-label="Баланс">
+      <button type="button" className="user-summary balance-pill" onClick={onClick} aria-label="Баланс">
         {content}
       </button>
     );
   }
-  return <span className="balance-pill">{content}</span>;
+  return <span className="user-summary balance-pill">{content}</span>;
 }

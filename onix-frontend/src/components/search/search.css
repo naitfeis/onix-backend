@@ -75,7 +75,9 @@
   backdrop-filter: none;
   z-index: 40;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
+.gsearch__group, .gsearch__group-head, .gsearch__name { min-width: 0; max-width: 100%; }
 
 .gsearch__group + .gsearch__group { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 4px; }
 
@@ -175,44 +177,26 @@
   outline-offset: 2px;
 }
 
-/* Balance pill — mirrors the mobile identity-user capsule. */
-.balance-pill {
-  height: 44px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px 0 8px;
-  border-radius: 999px;
-  border: var(--glass-border);
-  background: var(--glass-bg);
-  box-shadow: var(--glass-shadow);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
-  color: var(--text-primary);
-  font: inherit;
-  cursor: pointer;
-  box-sizing: border-box;
-}
+/* Balance pill — layout wrapper only; visuals come from the mobile identity-user capsule. */
+.balance-pill { cursor: pointer; }
 span.balance-pill { cursor: default; }
 .balance-pill:hover { background: var(--glass-regular-bg); }
-.balance-pill .user-avatar-wrap { align-self: center; justify-self: center; }
-.balance-pill__sum { font-weight: 500; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-/* Content header row — search centered to the content column, balance flush right. */
+/* Content header row — one flex row aligned to the banner edges. */
 .content-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 640px) minmax(0, 1fr);
-  grid-template-areas: "left search balance";
-  grid-template-rows: 1fr;
+  --topbar-control-height: 44px;
+  display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 16px;
   padding: 0 24px 16px;
   min-height: 60px;
 }
-.content-head__search { grid-area: search; display: flex; justify-content: center; align-items: center; width: 100%; }
-.content-head__search .gsearch { justify-self: center; width: 100%; }
-.content-head__balance { grid-area: balance; display: flex; justify-content: flex-end; align-items: center; }
-.content-head > span:first-child { grid-area: left; }
+.content-head > span:first-child { display: none; }
+.content-head__search { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.content-head__search .gsearch { width: 100%; max-width: 640px; flex: 0 1 640px; }
+.content-head__balance { flex: 0 0 auto; display: flex; align-items: center; margin-left: auto; }
+.gsearch__field, .balance-pill { height: var(--topbar-control-height); }
 
 @media (max-width: 1099px) { .content-head { display: none; } }
 
