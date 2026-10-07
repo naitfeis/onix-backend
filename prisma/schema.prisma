@@ -118,8 +118,8 @@ model User {
   sellerAnalyticsDaily  SellerAnalyticsDaily[]
   productViewUniques    ProductViewUnique[]    @relation("ViewViewer")
   favorites             Favorite[]
-  userFavoritesMade     UserFavorite[]         @relation("UserFavoritesMade")
-  userFavoritesReceived UserFavorite[]         @relation("UserFavoritesReceived")
+  userPinsMade          UserPin[]              @relation("UserPinsMade")
+  userPinsReceived      UserPin[]              @relation("UserPinsReceived")
   following             Follow[]               @relation("Following")
   followers             Follow[]               @relation("Followers")
   chatMembers           ChatMember[]
@@ -223,14 +223,14 @@ model Follow {
 }
 
 /**
- * Favorite person (not product) — used by chat «Избранное».
+ * Pinned chat peer — replaces chat «Избранное».
  */
-model UserFavorite {
+model UserPin {
   userId    BigInt
   targetId  BigInt
   createdAt DateTime @default(now())
-  user      User     @relation("UserFavoritesMade", fields: [userId], references: [id], onDelete: Cascade)
-  target    User     @relation("UserFavoritesReceived", fields: [targetId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserPinsMade", fields: [userId], references: [id], onDelete: Cascade)
+  target    User     @relation("UserPinsReceived", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@id([userId, targetId])
   @@index([targetId])

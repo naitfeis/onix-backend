@@ -1100,11 +1100,11 @@ export function useOnixCore() {
     });
   }, [run]);
 
-  const toggleUserFavorite = useCallback((onixId: string, favorited = false) => run(
-    `user-favorite-${onixId}`,
-    () => (favorited
-      ? api.delete<{ onixId: string; favorited: boolean }>(API_PATHS.userFavorite(onixId))
-      : api.post<{ onixId: string; favorited: boolean }>(API_PATHS.userFavorite(onixId))),
+  const toggleUserPin = useCallback((onixId: string, pinned = false) => run(
+    `user-pin-${onixId}`,
+    () => (pinned
+      ? api.delete<{ onixId: string; pinned: boolean }>(API_PATHS.userPin(onixId))
+      : api.post<{ onixId: string; pinned: boolean }>(API_PATHS.userPin(onixId))),
   ), [run]);
 
   const toggleUserBlock = useCallback((onixId: string, blocked = false) => run(
@@ -1114,7 +1114,7 @@ export function useOnixCore() {
       : api.post<{ onixId: string; blocked: boolean }>(API_PATHS.userBlock(onixId))),
   ), [run]);
 
-  const listFavoriteUsers = useCallback(() => api.get<Seller[]>(API_PATHS.favoriteUsers), []);
+  const listPinnedUsers = useCallback(() => api.get<Seller[]>(API_PATHS.pinnedUsers), []);
   const listBlockedUsers = useCallback(() => api.get<Seller[]>(API_PATHS.blocks), []);
   const listFollowers = useCallback((onixId: string) => api.get<Seller[]>(API_PATHS.userFollowers(onixId)), []);
   const listFollowing = useCallback((onixId: string) => api.get<Seller[]>(API_PATHS.userFollowing(onixId)), []);
@@ -1541,7 +1541,7 @@ export function useOnixCore() {
     sessionRestore,
     presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadPaymentMethods, loadMessages, refreshChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
+    toggleFollow, toggleUserPin, toggleUserBlock, listPinnedUsers, listBlockedUsers, listFollowers, listFollowing,
     purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,
@@ -1553,7 +1553,7 @@ export function useOnixCore() {
     unread, banFromAuth,
     sessionRestore, presenceByOnixId, presenceOf,
     refreshAll, loadProfile, loadPaymentMethods, loadMessages, refreshChats, listProducts, listFavorites, listDeals, createProduct, updateProduct, archiveProduct, toggleFavorite,
-    toggleFollow, toggleUserFavorite, toggleUserBlock, listFavoriteUsers, listBlockedUsers, listFollowers, listFollowing,
+    toggleFollow, toggleUserPin, toggleUserBlock, listPinnedUsers, listBlockedUsers, listFollowers, listFollowing,
     purchase, dealAction, openSupport, sellerRefund, startChat, sendMessage, withdraw, submitReview,
     reportUser, signOut,
     subscribeRealtimeChat, unsubscribeRealtimeChat, sendRealtimeTyping, setActiveChatId,

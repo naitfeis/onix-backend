@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { api, friendlyError } from '../api/client';
+import { api, friendlyError, money } from '../api/client';
 import {
   API_PATHS, CATEGORIES, SUBCATEGORIES_BY_CATEGORY, SUBCATEGORY_LABELS,
   sellerIsPresent, type Product, type PublicProfile, type TrustCard,
@@ -20,6 +20,8 @@ import { AllGridIcon } from '../components/BrandLogos';
 import { encodeProductListCursor } from '../utils/productListCursor';
 import CategoryCountBadge from '../components/CategoryCountBadge';
 import { rememberSidebarRecentCategory } from '../utils/sidebarCategories';
+import UserAvatar from '../components/UserAvatar';
+import GlobalSearch from '../components/search/GlobalSearch';
 
 /** Stable empty list so memos depending on subcategories keep identity. */
 const EMPTY_SUBCATEGORIES: string[] = [];
@@ -238,6 +240,21 @@ export function Market({
   const PAGE = 15;
   const visibleCats = CATEGORIES;
   const greetName = core.profile ? publicAt(core.profile.username) : 'гость';
+  const marketCategoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const cat of CATEGORIES) counts[cat] = 0;
+    for (const product of products) {
+      if (product.category in counts) counts[product.category]! += 1;
+    }
+    return counts;
+  }, [products]);
+  const marketTotalLots = useMemo(
+    () => Object.values(marketCategoryCounts).reduce((sum, count) => sum + count, 0),
+    [marketCategoryCounts],
+  );
+  const setSidebarRecentCategory = useCallback((category: string) => {
+    rememberSidebarRecentCategory(category, localStorage);
+  }, []);
   const heroSlides = [
     {
       id: 'hello',
@@ -778,6 +795,51 @@ export function Market({
       />
     )}
     {!selected && <>
+    <div className="market-topbar desktop-only" role="region" aria-label="Профиль и поиск">
+      <div className="market-topbar__search">
+        {core.profile ? (
+          <GlobalSearch
+            counts={marketCategoryCounts}
+            total={marketTotalLots}
+            catalog={core.catalogSubcategories ?? {}}
+            onOpenCategory={(cat) => {
+              setCategory(cat);
+              setSidebarRecentCategory(cat);
+              onExternalCategoryConsumed?.();
+            }}
+            onOpenSubcategory={(cat, sub) => {
+              setCategory(cat);
+              setSidebarRecentCategory(cat);
+              setSubcategory(sub);
+              onExternalCategoryConsumed?.();
+            }}
+            onSearchLots={(searchQuery) => {
+              setQuery(searchQuery);
+              onExternalQueryConsumed?.();
+            }}
+          />
+        ) : (
+          <button type="button" className="market-topbar__login" onClick={() => onRequestLogin?.()}>
+            Войти в ONIX
+          </button>
+        )}
+      </div>
+      {core.profile ? (
+        <button type="button" className="market-topbar__profile" onClick={() => switchTo('profile')}>
+          <UserAvatar
+            userId={core.profile.id}
+            avatarUrl={core.profile.avatarUrl}
+            name={core.profile.username}
+            size="small"
+            online={Boolean(core.presenceOf(core.profile.onixId)?.online)}
+          />
+          <span className="market-topbar__meta">
+            <b>{publicAt(core.profile.username)}</b>
+            <small>{money(core.profile.balanceCents)}</small>
+          </span>
+        </button>
+      ) : null}
+    </div>
     {gameView ? (
       <section className="game-page" aria-label={categoryLabel(category)}>
         <div className="game-page__banner">

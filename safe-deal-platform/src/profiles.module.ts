@@ -168,7 +168,7 @@ export class ProfilesService {
         createdAt: true, isAdmin: true, isSupport: true, platformStatus: true, deletedAt: true, sellBannedAt: true,
         _count: { select: { followers: true, following: true } },
         followers: { where: { followerId: viewer.id }, select: { followerId: true }, take: 1 },
-        userFavoritesReceived: { where: { userId: viewer.id }, select: { userId: true }, take: 1 },
+        userPinsReceived: { where: { userId: viewer.id }, select: { userId: true }, take: 1 },
         blocksReceived: { where: { blockerId: viewer.id }, select: { blockerId: true }, take: 1 },
         products: {
           where: {
@@ -202,7 +202,7 @@ export class ProfilesService {
         followers: profile.followers,
       }),
       followingCount: profile._count.following,
-      favorited: profile.userFavoritesReceived.length > 0,
+      pinned: profile.userPinsReceived.length > 0,
       blocked: profile.blocksReceived.length > 0,
       bio: profile.bio,
       createdAt: profile.createdAt.toISOString(),

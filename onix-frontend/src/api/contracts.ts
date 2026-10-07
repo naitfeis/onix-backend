@@ -110,6 +110,8 @@ export interface ChatThread {
   subtitle?: string;
   kind?: 'DIRECT' | 'GROUP' | 'AI';
   unreadCount: number;
+  /** Chat list ordering timestamp (last activity). */
+  updatedAt?: string;
   dealId?: string;
   peerOnixId?: string;
   peerLastOnline?: string;
@@ -462,6 +464,8 @@ export const API_PATHS = {
   favoriteUsers: '/api/users/me/favorite-users',
   blocks: '/api/users/me/blocks',
   userFavorite: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/favorite`,
+  userPin: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/pin`,
+  pinnedUsers: '/api/users/me/pinned-users',
   userBlock: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/block`,
   userFollowers: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/followers`,
   userFollowing: (onixId: string) => `/api/users/${encodeURIComponent(onixId)}/following`,

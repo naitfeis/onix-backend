@@ -25,13 +25,11 @@ const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_LIST_DEFAULT = 320;
 const CHAT_LIST_MIN = 220;
 
-type ChatFilter = 'all' | 'direct' | 'orders' | 'favorites' | 'blacklist';
+type ChatFilter = 'direct' | 'orders' | 'blacklist';
 
-const CHAT_FILTERS: Array<{ id: ChatFilter; labelKey: 'chat.filterAll' | 'chat.filterDirect' | 'chat.filterOrders' | 'chat.filterFavorites' | 'chat.filterBlacklist' }> = [
-  { id: 'all', labelKey: 'chat.filterAll' },
+const CHAT_FILTERS: Array<{ id: ChatFilter; labelKey: 'chat.filterDirect' | 'chat.filterOrders' | 'chat.filterBlacklist' }> = [
   { id: 'direct', labelKey: 'chat.filterDirect' },
   { id: 'orders', labelKey: 'chat.filterOrders' },
-  { id: 'favorites', labelKey: 'chat.filterFavorites' },
   { id: 'blacklist', labelKey: 'chat.filterBlacklist' },
 ];
 
@@ -67,8 +65,8 @@ export function Chats({
   const [reportOnixId, setReportOnixId] = useState<string | null>(null);
   const [menuMessageId, setMenuMessageId] = useState<string | null>(null);
   const [pendingNewCount, setPendingNewCount] = useState(0);
-  const [filter, setFilter] = useState<ChatFilter>('all');
-  const [favoriteUsers, setFavoriteUsers] = useState<Seller[]>([]);
+  const [filter, setFilter] = useState<ChatFilter>('direct');
+  const [pinnedUsers, setPinnedUsers] = useState<Seller[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<Seller[]>([]);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
@@ -80,9 +78,9 @@ export function Chats({
     () => core.chats.filter((chat) => chat.kind !== 'GROUP'),
     [core.chats],
   );
-  const favoriteIds = useMemo(
-    () => new Set(favoriteUsers.map((u) => u.onixId)),
-    [favoriteUsers],
+  const pinnedIds = useMemo(
+    () => new Set(pinnedUsers.map((u) => u.onixId)),
+    [pinnedUsers],
   );
   const blockedIds = useMemo(
     () => new Set(blockedUsers.map((u) => u.onixId)),
@@ -99,40 +97,37 @@ export function Chats({
     const notBlocked = (chat: (typeof visibleChats)[number]) => (
       !chat.peerOnixId || !blockedIds.has(chat.peerOnixId)
     );
+    const isDirect = (chat: (typeof visibleChats)[number]) => (
+      notBlocked(chat)
+      && chat.kind !== 'AI'
+      && (chat.kind === 'DIRECT' || chat.kind == null)
+    );
+    const byPinnedThenUpdated = (a: (typeof visibleChats)[number], b: (typeof visibleChats)[number]) => {
+      const aPinned = Boolean(a.peerOnixId && pinnedIds.has(a.peerOnixId));
+      const bPinned = Boolean(b.peerOnixId && pinnedIds.has(b.peerOnixId));
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      const aTime = new Date(a.updatedAt ?? 0).getTime();
+      const bTime = new Date(b.updatedAt ?? 0).getTime();
+      if (aTime !== bTime) return bTime - aTime;
+      return b.id.localeCompare(a.id);
+    };
     switch (filter) {
       case 'direct':
-        return visibleChats.filter((chat) => (
-          notBlocked(chat)
-          && chat.kind !== 'AI'
-          && (chat.kind === 'DIRECT' || chat.kind == null)
-          && !chat.dealId
-          && !chat.orderCard
-        ));
+        return visibleChats
+          .filter(isDirect)
+          .sort(byPinnedThenUpdated);
       case 'orders':
         return visibleChats.filter((chat) => (
           notBlocked(chat)
           && chat.kind !== 'AI'
           && Boolean(chat.dealId || chat.orderCard)
         ));
-      case 'favorites':
-        return visibleChats.filter((chat) => (
-          Boolean(chat.peerOnixId && favoriteIds.has(chat.peerOnixId))
-        ));
       case 'blacklist':
         return [];
-      case 'all':
       default:
-        return visibleChats.filter(notBlocked);
+        return [];
     }
-  }, [filter, visibleChats, favoriteIds, blockedIds]);
-  const chatPeerIds = useMemo(
-    () => new Set(visibleChats.map((chat) => chat.peerOnixId).filter(Boolean) as string[]),
-    [visibleChats],
-  );
-  const favoriteWithoutChat = useMemo(
-    () => favoriteUsers.filter((user) => !chatPeerIds.has(user.onixId)),
-    [favoriteUsers, chatPeerIds],
-  );
+  }, [filter, visibleChats, pinnedIds, blockedIds]);
   const thread = visibleChats.find(item => item.id === threadId);
   // useMemo (not a per-render conditional array) so the dedupe memo below has
   // a stable dependency identity.
@@ -169,12 +164,12 @@ export function Chats({
     getItemKey: (index) => messages[index]?.id ?? index,
   });
   // Destructured (not `core.x`) so effects can list stable identities in deps:
-  // referencing `core.listFavoriteUsers` inside a body but omitting `core`
+  // referencing `core` social list methods inside a body but omitting `core`
   // itself is exactly the stale-closure shape exhaustive-deps guards against.
   const {
     loadMessages, refreshChats, sendMessage,
     subscribeRealtimeChat, unsubscribeRealtimeChat,
-    listFavoriteUsers, listBlockedUsers, setActiveChatId,
+    listPinnedUsers, listBlockedUsers, setActiveChatId,
     sendRealtimeTyping,
     messagesHasOlder, messagesOlderLoading, notifications,
     // Renamed: the local scroll handler below owns the name loadOlderMessages.
@@ -252,30 +247,16 @@ export function Chats({
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([listFavoriteUsers(), listBlockedUsers()])
-      .then(([favs, blocks]) => {
+    void Promise.all([listPinnedUsers(), listBlockedUsers()])
+      .then(([pins, blocks]) => {
         if (!cancelled) {
-          setFavoriteUsers(favs);
+          setPinnedUsers(pins);
           setBlockedUsers(blocks);
         }
       })
       .catch(() => { /* optional social lists */ });
     return () => { cancelled = true; };
-  }, [listFavoriteUsers, listBlockedUsers]);
-
-  useEffect(() => {
-    if (filter !== 'favorites' && filter !== 'blacklist') return;
-    let cancelled = false;
-    void Promise.all([listFavoriteUsers(), listBlockedUsers()])
-      .then(([favs, blocks]) => {
-        if (!cancelled) {
-          setFavoriteUsers(favs);
-          setBlockedUsers(blocks);
-        }
-      })
-      .catch(() => { /* optional social lists */ });
-    return () => { cancelled = true; };
-  }, [filter, listFavoriteUsers, listBlockedUsers]);
+  }, [listPinnedUsers, listBlockedUsers]);
 
   useEffect(() => {
     if (threadId) void loadMessages(threadId);
@@ -482,7 +463,7 @@ export function Chats({
             onClick={() => setFilter(id)}
           >
             <span className="game-page__sub-label">{t(labelKey)}</span>
-            {id === 'all' && totalUnread > 0 && (
+            {id === 'direct' && totalUnread > 0 && (
               <span className="game-page__sub-share" aria-hidden="true">
                 <span className="game-page__sub-share-num">{totalUnread > 99 ? '99+' : totalUnread}</span>
               </span>
@@ -530,68 +511,6 @@ export function Chats({
               >{t('social.unblock')}</Button>
             </div>
           ))
-        )
-      ) : filter === 'favorites' ? (
-        filteredChats.length === 0 && favoriteWithoutChat.length === 0 ? (
-          <StateView title={t('chat.emptyFavorites')} text="" />
-        ) : (
-          <>
-            {filteredChats.map((chat) => (
-              <button
-                className={`thread${threadId === chat.id ? ' active' : ''}`}
-                key={chat.id}
-                type="button"
-                onClick={() => setThreadId(chat.id)}
-              >
-                <span className="thread-peer">
-                  <UserAvatar
-                    userId={chat.peerUserId}
-                    avatarUrl={chat.peerAvatarUrl}
-                    name={chat.title}
-                    online={!chat.peerOnixId
-                      ? undefined
-                      : sellerIsPresent(
-                        { onixId: chat.peerOnixId, lastOnline: chat.peerLastOnline },
-                        core.profile,
-                        core.presenceOf(chat.peerOnixId),
-                      )}
-                  />
-                  <span>
-                    <b title={chat.title}>{chat.title} <StaffBadge badge={chat.peerBadge} /></b>
-                    <small>{chat.subtitle || 'Открыть диалог'}</small>
-                  </span>
-                </span>
-                {chat.unreadCount > 0 && <em>{chat.unreadCount > 99 ? '99+' : chat.unreadCount}</em>}
-              </button>
-            ))}
-            {favoriteWithoutChat.map((user) => (
-              <div className="thread" key={`fav-${user.onixId}`}>
-                <button
-                  type="button"
-                  className="thread-peer-hit"
-                  onClick={() => void openOnixProfile(user.onixId)}
-                >
-                  <span className="thread-peer">
-                    <UserAvatar
-                      userId={user.id}
-                      avatarUrl={user.avatarUrl}
-                      name={user.username}
-                      online={sellerIsPresent(user, core.profile, core.presenceOf(user.onixId))}
-                    />
-                    <span>
-                      <b title={user.username}>{publicAt(user.username)} <StaffBadge badge={user.badge} /></b>
-                      <small>{formatOnixId(user.onixId)}</small>
-                    </span>
-                  </span>
-                </button>
-                <Button
-                  variant="ghost"
-                  busy={core.isBusy(`chat-${user.onixId}`)}
-                  onClick={() => { void openDirectChat(user.onixId); }}
-                >Написать</Button>
-              </div>
-            ))}
-          </>
         )
       ) : visibleChats.length === 0 ? (
         <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} />
@@ -681,20 +600,20 @@ export function Chats({
           className="conversation__more"
           items={[
             {
-              id: 'favorite',
-              label: favoriteIds.has(thread.peerOnixId) ? t('social.favoriteRemove') : t('social.favoriteAdd'),
-              disabled: core.isBusy(`user-favorite-${thread.peerOnixId}`),
+              id: 'pin',
+              label: pinnedIds.has(thread.peerOnixId) ? 'Открепить' : 'Закрепить',
+              disabled: core.isBusy(`user-pin-${thread.peerOnixId}`),
               onSelect: () => {
                 const peerId = thread.peerOnixId!;
-                const wasFavorited = favoriteIds.has(peerId);
+                const wasPinned = pinnedIds.has(peerId);
                 void (async () => {
-                  const result = await core.toggleUserFavorite(peerId, wasFavorited);
+                  const result = await core.toggleUserPin(peerId, wasPinned);
                   if (!result) return;
-                  if (wasFavorited) {
-                    setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                  if (wasPinned) {
+                    setPinnedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
                   } else {
                     try {
-                      setFavoriteUsers(await listFavoriteUsers());
+                      setPinnedUsers(await listPinnedUsers());
                     } catch { /* keep optimistic */ }
                   }
                 })();
@@ -713,7 +632,7 @@ export function Chats({
                   if (wasBlocked) {
                     setBlockedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
                   } else {
-                    setFavoriteUsers((prev) => prev.filter((item) => item.onixId !== peerId));
+                    setPinnedUsers((prev) => prev.filter((item) => item.onixId !== peerId));
                     try {
                       setBlockedUsers(await listBlockedUsers());
                     } catch { /* keep local */ }
@@ -936,9 +855,9 @@ export function Chats({
       profile={peerProfile}
       onClose={() => {
         setPeerProfile(null);
-        void Promise.all([listFavoriteUsers(), listBlockedUsers()])
-          .then(([favs, blocks]) => {
-            setFavoriteUsers(favs);
+        void Promise.all([listPinnedUsers(), listBlockedUsers()])
+          .then(([pins, blocks]) => {
+            setPinnedUsers(pins);
             setBlockedUsers(blocks);
           })
           .catch(() => { /* ignore */ });

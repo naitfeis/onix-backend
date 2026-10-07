@@ -92,28 +92,28 @@ export class SocialService {
     return { onixId, followed: false, followersCount };
   }
 
-  async favoriteUser(user: AuthUser, onixId: string) {
+  async pinUser(user: AuthUser, onixId: string) {
     const target = await this.target(onixId);
-    if (target.id === user.id) throw new BadRequestException('Нельзя добавить себя в избранное.');
+    if (target.id === user.id) throw new BadRequestException('Нельзя закрепить чат с собой.');
     if (await areUsersBlocked(this.prisma, user.id, target.id)) {
-      throw new BadRequestException('Нельзя добавить в избранное: пользователь в чёрном списке.');
+      throw new BadRequestException('Нельзя закрепить: пользователь в чёрном списке.');
     }
-    await this.prisma.userFavorite.upsert({
+    await this.prisma.userPin.upsert({
       where: { userId_targetId: { userId: user.id, targetId: target.id } },
       create: { userId: user.id, targetId: target.id },
       update: {},
     });
-    return { onixId: target.onixId, favorited: true };
+    return { onixId: target.onixId, pinned: true };
   }
 
-  async unfavoriteUser(user: AuthUser, onixId: string) {
+  async unpinUser(user: AuthUser, onixId: string) {
     const target = await this.target(onixId);
-    await this.prisma.userFavorite.deleteMany({ where: { userId: user.id, targetId: target.id } });
-    return { onixId: target.onixId, favorited: false };
+    await this.prisma.userPin.deleteMany({ where: { userId: user.id, targetId: target.id } });
+    return { onixId: target.onixId, pinned: false };
   }
 
-  async listFavoriteUsers(user: AuthUser) {
-    const rows = await this.prisma.userFavorite.findMany({
+  async listPinnedUsers(user: AuthUser) {
+    const rows = await this.prisma.userPin.findMany({
       where: { userId: user.id, target: { deletedAt: null } },
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -121,7 +121,7 @@ export class SocialService {
         target: { select: sellerPublicSelect(user.id) },
       },
     });
-    return rows.map((row) => ({ ...sellerDto(row.target), favorited: true }));
+    return rows.map((row) => ({ ...sellerDto(row.target), pinned: true }));
   }
 
   async block(user: AuthUser, onixId: string) {
@@ -133,7 +133,7 @@ export class SocialService {
         create: { blockerId: user.id, blockedId: target.id },
         update: {},
       }),
-      this.prisma.userFavorite.deleteMany({
+      this.prisma.userPin.deleteMany({
         where: {
           OR: [
             { userId: user.id, targetId: target.id },
@@ -256,8 +256,8 @@ export class SocialController {
     return this.favorites.unfavorite(user, id);
   }
 
-  @Get('users/me/favorite-users') listFavoriteUsers(@CurrentUser() user: AuthUser) {
-    return this.social.listFavoriteUsers(user);
+  @Get('users/me/pinned-users') listPinnedUsers(@CurrentUser() user: AuthUser) {
+    return this.social.listPinnedUsers(user);
   }
   @Get('users/me/blocks') listBlocks(@CurrentUser() user: AuthUser) {
     return this.social.listBlockedUsers(user);
@@ -269,11 +269,11 @@ export class SocialController {
   @Delete('users/:onixId/follow') unfollow(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.unfollow(user, id);
   }
-  @Post('users/:onixId/favorite') favoriteUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
-    return this.social.favoriteUser(user, id);
+  @Post('users/:onixId/pin') pinUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.pinUser(user, id);
   }
-  @Delete('users/:onixId/favorite') unfavoriteUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
-    return this.social.unfavoriteUser(user, id);
+  @Delete('users/:onixId/pin') unpinUser(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
+    return this.social.unpinUser(user, id);
   }
   @Post('users/:onixId/block') block(@CurrentUser() user: AuthUser, @Param('onixId') id: string) {
     return this.social.block(user, id);
