@@ -667,7 +667,6 @@ export default function App() {
       <div className="screen-transition">
       {screen === 'market' && !chatImmersive ? (
         <div className="content-head desktop-only" role="search">
-          <span aria-hidden="true" />
           <div className="content-head__search">
             <GlobalSearch
               counts={sidebarCatCounts}
