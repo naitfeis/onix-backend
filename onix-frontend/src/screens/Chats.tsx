@@ -25,12 +25,11 @@ const CHAT_LIST_W_KEY = 'onix-chat-list-w';
 const CHAT_LIST_DEFAULT = 320;
 const CHAT_LIST_MIN = 220;
 
-type ChatFilter = 'direct' | 'orders' | 'blacklist';
+type ChatFilter = 'direct' | 'orders';
 
-const CHAT_FILTERS: Array<{ id: ChatFilter; labelKey: 'chat.filterDirect' | 'chat.filterOrders' | 'chat.filterBlacklist' }> = [
+const CHAT_FILTERS: Array<{ id: ChatFilter; labelKey: 'chat.filterDirect' | 'chat.filterOrders' }> = [
   { id: 'direct', labelKey: 'chat.filterDirect' },
   { id: 'orders', labelKey: 'chat.filterOrders' },
-  { id: 'blacklist', labelKey: 'chat.filterBlacklist' },
 ];
 
 function readStoredChatSize(key: string, fallback: number, min: number): number {
@@ -98,8 +97,7 @@ export function Chats({
       !chat.peerOnixId || !blockedIds.has(chat.peerOnixId)
     );
     const isDirect = (chat: (typeof visibleChats)[number]) => (
-      notBlocked(chat)
-      && chat.kind !== 'AI'
+      chat.kind !== 'AI'
       && (chat.kind === 'DIRECT' || chat.kind == null)
     );
     const byPinnedThenUpdated = (a: (typeof visibleChats)[number], b: (typeof visibleChats)[number]) => {
@@ -122,8 +120,6 @@ export function Chats({
           && chat.kind !== 'AI'
           && Boolean(chat.dealId || chat.orderCard)
         ));
-      case 'blacklist':
-        return [];
       default:
         return [];
     }
@@ -473,47 +469,6 @@ export function Chats({
       </div>
       {core.states.chats === 'error' ? (
         <StateView title="Чаты недоступны" text={core.errors.chats || ''} />
-      ) : filter === 'blacklist' ? (
-        blockedUsers.length === 0 ? (
-          <StateView title={t('chat.emptyBlacklist')} text="" />
-        ) : (
-          blockedUsers.map((user) => (
-            <div className="thread" key={user.onixId}>
-              <button
-                type="button"
-                className="thread-peer-hit"
-                onClick={() => void openOnixProfile(user.onixId)}
-              >
-                <span className="thread-peer">
-                  <UserAvatar
-                    userId={user.id}
-                    avatarUrl={user.avatarUrl}
-                    name={user.username}
-                    online={sellerIsPresent(user, core.profile, core.presenceOf(user.onixId))}
-                  />
-                  <span>
-                    <b title={user.username}>{publicAt(user.username)} <StaffBadge badge={user.badge} /></b>
-                    <small>{formatOnixId(user.onixId)}</small>
-                  </span>
-                </span>
-              </button>
-              <Button
-                variant="ghost"
-                busy={core.isBusy(`user-block-${user.onixId}`)}
-                onClick={() => {
-                  void (async () => {
-                    const result = await core.toggleUserBlock(user.onixId, true);
-                    if (!result) return;
-                    setBlockedUsers((prev) => prev.filter((item) => item.onixId !== user.onixId));
-                    setToast(t('social.unblock'));
-                  })();
-                }}
-              >{t('social.unblock')}</Button>
-            </div>
-          ))
-        )
-      ) : visibleChats.length === 0 ? (
-        <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} />
       ) : filteredChats.length === 0 ? (
         <StateView title={t('chat.emptyTitle')} text={t('chat.emptyText')} />
       ) : (
@@ -543,7 +498,11 @@ export function Chats({
                   {chat.kind === 'AI' ? 'Onix AI' : chat.title} <StaffBadge badge={chat.peerBadge} />
                 </b>
                 <small>
-                  {chat.kind === 'AI' ? (chat.subtitle || 'Помощник') : (chat.subtitle || 'Открыть диалог')}
+                  {chat.kind === 'AI'
+                    ? (chat.subtitle || 'Помощник')
+                    : (chat.peerOnixId && blockedIds.has(chat.peerOnixId)
+                      ? 'Заблокирован'
+                      : (chat.subtitle || 'Открыть диалог'))}
                 </small>
               </span>
             </span>
